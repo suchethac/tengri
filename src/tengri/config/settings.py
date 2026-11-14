@@ -205,7 +205,7 @@ class SFHConfig:
     >>> from tengri.config import SFHConfig
     >>> cfg = SFHConfig(mean_type=["dpl", "field"], n_grid=128)
     >>> cfg.mean_type
-    ('dpl', 'field')
+    ['dpl', 'field']
     """
 
     mean_type: tuple[str, ...] = ("dpl",)

@@ -414,7 +414,9 @@ def run_hmc_is(
         log_norm=log_prior_norm,
         batch_size=chunk_size,
     )
-    log_z = is_result.log_z
+    # The importance sum is over the χ²-form likelihood; the published ln Z adds the Gaussian
+    # normalization it omits, as NSS and Laplace do (#3427).
+    log_z = is_result.log_z + context.log_evidence_normalization
     log_z_err = is_result.log_z_err
     ess = is_result.ess
     max_weight_frac = is_result.max_weight_frac

@@ -554,6 +554,9 @@ class Uniform(Distribution):
     def __eq__(self, other) -> bool:
         return isinstance(other, Uniform) and self._lo == other._lo and self._hi == other._hi
 
+    def __hash__(self) -> int:
+        return hash((Uniform, self._lo, self._hi))
+
 
 class Gaussian(Distribution):
     """Gaussian (normal) prior, optionally clipped to [lo, hi].
@@ -816,6 +819,9 @@ class Gaussian(Distribution):
             and self._hi == other._hi
         )
 
+    def __hash__(self) -> int:
+        return hash((Gaussian, self._mu, self._sigma, self._lo, self._hi))
+
 
 class LogUniform(Distribution):
     """Uniform in log10 space on [lo, hi].
@@ -1036,6 +1042,9 @@ class LogUniform(Distribution):
 
     def __eq__(self, other) -> bool:
         return isinstance(other, LogUniform) and self._lo == other._lo and self._hi == other._hi
+
+    def __hash__(self) -> int:
+        return hash((LogUniform, self._lo, self._hi))
 
 
 class LogNormal(Distribution):
@@ -1284,6 +1293,9 @@ class LogNormal(Distribution):
             and self._lo == other._lo
             and self._hi == other._hi
         )
+
+    def __hash__(self) -> int:
+        return hash((LogNormal, self._mu, self._sigma, self._lo, self._hi))
 
 
 # ── StudentT quantile machinery (module level: jax.custom_jvp cannot wrap a
@@ -1808,6 +1820,9 @@ class StudentT(Distribution):
             and self._hi == other._hi
         )
 
+    def __hash__(self) -> int:
+        return hash((StudentT, self._mu, self._sigma, self._df, self._lo, self._hi))
+
 
 def _laplace_cdf_float(x: float, mu: float, b: float) -> float:
     """Laplace CDF at a Python float; handles ±inf exactly."""
@@ -2010,6 +2025,9 @@ class Laplace(Distribution):
             and self._lo == other._lo
             and self._hi == other._hi
         )
+
+    def __hash__(self) -> int:
+        return hash((Laplace, self._mu, self._b, self._lo, self._hi))
 
 
 #: Raised by :class:`Fixed`'s readers when an unresolved ``Fixed(DEFAULT)``
@@ -2256,6 +2274,9 @@ class Fixed(Distribution):
 
     def __eq__(self, other) -> bool:
         return isinstance(other, Fixed) and self._value == other._value
+
+    def __hash__(self) -> int:
+        return hash((Fixed, self._value))
 
 
 # ── Shorthand resolution ──────────────────────────────────────────

@@ -526,7 +526,10 @@ def run_nss(
     _require_converged_evidence(n_iter, max_iterations, remaining, log_evidence_tol, "nss")
 
     wall_time = time.time() - t0
+    # The sampler integrates the χ²-form likelihood; the published ln Z adds the Gaussian
+    # normalization it omits, so it is the evidence of the exact density (#3427).
     logZ = float(jnp.logaddexp(live.integrator.logZ, live.integrator.logZ_live))
+    logZ += context.log_evidence_normalization
 
     all_ps = [*dead_particles_list, live.particles]
     del dead_particles_list

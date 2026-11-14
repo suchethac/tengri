@@ -224,7 +224,8 @@ def test_range_below_floor_is_refused_for_filter(filter_name):
 
 
 def test_range_above_ceiling_is_refused_for_filter(filter_name):
-    wave_above = np.linspace(2.0e9, 3.0e9, 20)
+    # Above the forward model's radio extent (3e11 A); 2-3 GHz is now a valid band.
+    wave_above = np.linspace(4.0e11, 6.0e11, 20)
     with pytest.raises(ValueError, match="outside the plausible Angstrom range"):
         register_filter(filter_name, wave_above, np.ones(20))
 

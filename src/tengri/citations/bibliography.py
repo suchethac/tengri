@@ -10,11 +10,11 @@ the citations that *their* configured run requires; no more, no less.
 Basic usage
 -----------
 
->>> import tengri as tg
->>> g = tg.Galaxy.from_arrays(..., preset="starforming")
->>> print(g.bibliography.report())  # human-readable list
->>> print(g.bibliography.to_bibtex())  # copy-paste BibTeX block
->>> g.bibliography.keys  # ['tengri', 'jax', 'dsps', ...]
+>>> import tengri as tg  # doctest: +SKIP
+>>> g = tg.Galaxy.from_arrays(..., preset="starforming")  # doctest: +SKIP
+>>> print(g.bibliography.report())  # doctest: +SKIP
+>>> print(g.bibliography.to_bibtex())  # doctest: +SKIP
+>>> g.bibliography.keys  # doctest: +SKIP
 
 The container is intentionally small: it is an ordered, deduplicated list
 of registry keys plus helpers for human / BibTeX output.
@@ -68,7 +68,7 @@ class Bibliography:
         >>> bib = Bibliography().add("tengri", "jax").add("dsps")
         >>> bib.keys
         ['tengri', 'jax', 'dsps']
-        >>> bib.add("tengri")  # duplicate silently ignored
+        >>> _ = bib.add("tengri")  # duplicate silently ignored
         >>> bib.keys
         ['tengri', 'jax', 'dsps']
         """

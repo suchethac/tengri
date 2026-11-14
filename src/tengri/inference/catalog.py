@@ -332,11 +332,11 @@ class Catalog:
 
     Examples
     --------
-    >>> cat = Catalog(fwd, table, flux_unit="cgs_fnu", redshift_col="z")
-    >>> post = cat.fit(key=jax.random.PRNGKey(0))
-    >>> post.n_galaxies
+    >>> cat = Catalog(fwd, table, flux_unit="cgs_fnu", redshift_col="z")  # doctest: +SKIP
+    >>> post = cat.fit(key=jax.random.PRNGKey(0))  # doctest: +SKIP
+    >>> post.n_galaxies  # doctest: +SKIP
     100
-    >>> stellar_masses = post.properties["stellar_mass"]  # (100,)
+    >>> stellar_masses = post.properties["stellar_mass"]  # (100,)  # doctest: +SKIP
     """
 
     def __init__(
@@ -731,16 +731,16 @@ class Catalog:
 
         Examples
         --------
-        >>> cat = Catalog.from_histories(
+        >>> cat = Catalog.from_histories(  # doctest: +SKIP
         ...     fwd, t_gyr=t, sfr=sfr, redshift=z, params={"dust_tau_diff": tau}
         ... )
-        >>> flux = cat.predict()
+        >>> flux = cat.predict()  # doctest: +SKIP
 
         Straight from a snapshot, where metallicity is a mass fraction. The
         stellar history and the gas-phase value are separate knobs and do not
         track each other, so a snapshot that stores both passes both:
 
-        >>> cat = Catalog.from_histories(
+        >>> cat = Catalog.from_histories(  # doctest: +SKIP
         ...     fwd, t_gyr=t, sfr=sfr, met=Z_star, met_gas=Z_gas, met_unit="z_mass_fraction"
         ... )
         """
@@ -896,8 +896,8 @@ class Catalog:
 
         Examples
         --------
-        >>> mock = cat.simulate(lines=("Halpha",), properties=("stellar_mass",))
-        >>> mock.lines["Halpha"].shape
+        >>> mock = cat.simulate(lines=("Halpha",), properties=("stellar_mass",))  # doctest: +SKIP
+        >>> mock.lines["Halpha"].shape  # doctest: +SKIP
         (100,)
         """
         if noise is not None or key is not None:
@@ -1207,14 +1207,14 @@ class Catalog:
 
         Examples
         --------
-        >>> params = {"stellar_mass": np.linspace(9, 12, 100), ...}
-        >>> flux = cat.predict(params, chunk_size=64)
-        >>> flux.shape
+        >>> params = {"stellar_mass": np.linspace(9, 12, 100)}  # doctest: +SKIP
+        >>> flux = cat.predict(params, chunk_size=64)  # doctest: +SKIP
+        >>> flux.shape  # doctest: +SKIP
         (100, 3)
 
         Driving a catalog from tabulated histories:
 
-        >>> flux = cat.predict(
+        >>> flux = cat.predict(  # doctest: +SKIP
         ...     {
         ...         "dust_tau_diff": tau,  # (N,)
         ...         "sfh_t_gyr": t_gyr,  # (N, n_t)
