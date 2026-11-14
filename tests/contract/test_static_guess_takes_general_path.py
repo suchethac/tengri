@@ -133,6 +133,11 @@ ALLOWLIST: dict[str, str] = {
         "is static and the eager call on the same model runs the check"
     ),
     "forward/sed_model.py::redshift_is_runtime": "unknown distribution -> runtime (#2858)",
+    "forward/sed_model.py::_alpha_fe_redshift_ends": (
+        "catalog model -> both ends of the catalog z range, never the placeholder; free "
+        "redshift -> both ends of its prior; only a non-catalog Fixed redshift gives its "
+        "one value (#3487 warning)"
+    ),
     "observation/spectroscopy.py::Spectroscopy.resolve_conserving": (
         "traced grid -> resample mode resolved on the configured grid (see gap below)"
     ),
