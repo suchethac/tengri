@@ -243,6 +243,25 @@ def _nebular_continuum_consumers(chain):
     ]
 
 
+def _met_scatter_declared(spec) -> bool:
+    """True when the user declared the metallicity scatter (#3434).
+
+    A declaration is ``met_logzsol_scatter`` named by the user (a value, a prior,
+    or a wildcard ``FREE``) or the flat ``lgmet_scatter`` kwarg. The grammar fills
+    ``met_logzsol_scatter`` with its registry default whenever a ``met`` block
+    omits it, and that fill-in is recorded in ``_group_provenance`` as
+    ``registry_default``, so it does not count. A spec with no provenance (the flat
+    ``Parameters(...)`` escape hatch) falls back to ``_user_provided``.
+    """
+    flat_kwarg = getattr(spec, "_lgmet_scatter_for_fix", None) is not None
+    if flat_kwarg:
+        return True
+    provenance = getattr(spec, "_group_provenance", None)
+    if provenance is None:
+        return "met_logzsol_scatter" in getattr(spec, "_user_provided", frozenset())
+    return provenance.get("met_logzsol_scatter") in _SCATTER_DECLARING_PROVENANCE
+
+
 def _chain_consumes(chain, key: str) -> bool:
     """Does any component in ``chain`` declare ``key`` as a (possibly optional) input?
 
@@ -1351,6 +1370,10 @@ def _validate_fracagn_requires_dust(spec) -> None:
 #: the grammar filling a slot in, which a guard about a *stated* value must
 #: not read as a statement.
 _USER_PROVIDED_PROVENANCE = frozenset({"user_prior", "user_fixed", "user_free", "user_free_grid"})
+#: Provenance tags under which the user named a metallicity scatter: a value or
+#: prior (``user_*``), or a wildcard ``FREE`` that freed it (``wildcard_free``).
+#: A ``registry_default`` or wildcard ``Fixed(DEFAULT)`` fill-in is not a declaration.
+_SCATTER_DECLARING_PROVENANCE = _USER_PROVIDED_PROVENANCE | {"wildcard_free"}
 
 
 def _param_is_user_provided(spec, name: str) -> bool:
@@ -9056,7 +9079,15 @@ class SEDModel:
         return line_ratio_data.model_ratio(num_flux, den_flux)
 
     def predict_spectral_indices(
-        self, params, index_defs, *, state=None, approx=False, fast=UNSET, fixed_values=None
+        self,
+        params,
+        index_defs,
+        *,
+        state=None,
+        approx=False,
+        fast=UNSET,
+        fixed_values=None,
+        broaden=True,
     ):
         """Predict spectral index values from the model SED.
 
@@ -9102,6 +9133,15 @@ class SEDModel:
             Spelled ``fast`` until 2026-08.
         fast : bool, optional
             Deprecated spelling of `approx`. Removed in v1.0.
+        broaden : bool, default True
+            Measure each index on the rest-frame SED broadened by the model's
+            ``sigma_v_kms`` (#3466), so the model index is comparable with an observed
+            index measured at its own dispersion. ``broaden=False`` measures the
+            unbroadened SED, the :math:`\\sigma = 0` index, for data already corrected
+            to :math:`\\sigma = 0`. At ``sigma_v_kms = 0`` the two are identical. The
+            broadening is :func:`~tengri.observation.spectral_indices.broaden_index_sed`.
+            The window-LUT path (``approx=True``) does not broaden, so it raises for a
+            broadened measurement with a nonzero ``sigma_v_kms``.
 
         Returns
         -------
@@ -9122,7 +9162,7 @@ class SEDModel:
         :attr:`~tengri.SpectralIndexDef.pseudo_continuum`).
         """
         from tengri.forward.result import SEDResult
-        from tengri.observation.spectral_indices import measure_index_jax
+        from tengri.observation.spectral_indices import broaden_index_sed, measure_index_jax
 
         approx = resolve_renamed_flag(
             approx,
@@ -9136,7 +9176,24 @@ class SEDModel:
         # grid path gutted (#1665). Same guard as predict_spectrum, this
         # consumer was simply missing from that census.
 
+        # The model's own velocity dispersion (#3466), read from the merged params so a
+        # Fixed or evaluation-time sigma_v_kms is seen the same way as a free one. Only a
+        # broadened measurement needs it, so broaden=False never reads it.
+        sigma_v_kms = (
+            self._get_sigma_v_kms(self._evaluation_params(params, fixed_values))
+            if broaden
+            else 0.0
+        )
+
         if approx:
+            # Decided from the spec, not the value: under jit sigma_v is a tracer even when
+            # it is Fixed at 0, and the window LUT is exact for that case.
+            if broaden and self._fixed_sigma_v_kms() != 0.0:
+                raise ValueError(
+                    "predict_spectral_indices(approx=True) measures the window LUT, which "
+                    "does not broaden the SED by sigma_v_kms. Use approx=False, or pass "
+                    "broaden=False for the sigma = 0 index (#3466)."
+                )
             return self._feature_fast_indices(params, tuple(index_defs), fixed_values=fixed_values)
 
         # Spectral indices (D4000 / Balmer break / Lick EW) are rest-frame
@@ -9160,6 +9217,8 @@ class SEDModel:
         else:
             rest = SEDResult(wavelength=state.wave, sed=state.sed_intrinsic)
         wave_rest, flux_rest = rest.wavelength, rest.sed
+        if broaden:
+            flux_rest = broaden_index_sed(wave_rest, flux_rest, sigma_v_kms)
 
         indices = [measure_index_jax(wave_rest, flux_rest, idx_def) for idx_def in index_defs]
         return jnp.array(indices)
@@ -12857,7 +12916,8 @@ class SEDModel:
             metallicity_model=getattr(self, "_met_mode", "delta"),
             n_grid=int(getattr(self.spec, "n_grid", 256)),
             alpha_fe_evolving=bool(getattr(self, "_alpha_fe_evolving", False)),
-            lgmet_scatter=float(getattr(self, "_lgmet_scatter", 0.2)),
+            lgmet_scatter=float(getattr(self, "_lgmet_scatter", 0.1)),
+            lgmet_scatter_declared=_met_scatter_declared(self.spec),
             age_kernel=getattr(self.spec, "age_kernel", None),
             sfh_bin_edges_gyr=getattr(self.spec, "bin_edges_gyr", None),
             met_bin_edges_log_yr=getattr(self.spec, "met_bin_edges_log_yr", None),

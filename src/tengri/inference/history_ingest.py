@@ -414,6 +414,48 @@ def _warn_young_top_metallicity(logzsol, top_z):
         warn_measured(text, YoungTopMetallicityWarning, max_logzsol=highest, stacklevel=4)
 
 
+#: Slack on the observation-time comparison [Gyr] (#3468).
+_OBS_TIME_TOL_GYR = 1e-6
+
+
+def refuse_history_past_obs_time(t_gyr, redshift):
+    """Refuse a history tabulated after the observation time ``age_at_z(z)`` (#3468).
+
+    SFR after the observation time cannot form stars that are visible at ``z``,
+    so a table running past it loses that mass without a word on the catalog
+    path. Each galaxy row is checked against its own redshift.
+
+    Parameters
+    ----------
+    t_gyr : ndarray, shape (N, n_t)
+        Cosmic time [Gyr] per galaxy, as :func:`ingest_histories` returns it.
+    redshift : ndarray, shape (N,), or None
+        Per-galaxy redshift. ``None`` (a free redshift, not known until predict)
+        skips the check.
+
+    Raises
+    ------
+    ValueError
+        If the last node of any galaxy row is later than ``age_at_z(z)`` by more
+        than ``1e-6`` Gyr.
+    """
+    if redshift is None:
+        return
+    from tengri.cosmology import age_at_z
+
+    for row, (t_row, z) in enumerate(zip(np.asarray(t_gyr, dtype=float), redshift)):
+        t_max = float(t_row.max())
+        t_obs = float(age_at_z(float(z)))
+        if t_max > t_obs + _OBS_TIME_TOL_GYR:
+            raise ValueError(
+                f"galaxy row {row}: the history is tabulated to max(t_gyr) = {t_max:.6g} Gyr, "
+                f"after the observation time age_at_z(z={float(z):g}) = {t_obs:.6g} Gyr. "
+                f"SFR after the observation time cannot form stars visible at this redshift, "
+                f"so that mass would be dropped without a word. Truncate the history at "
+                f"age_at_z(z), or set the redshift it is observed at."
+            )
+
+
 def ingest_histories(
     *,
     t_gyr,
