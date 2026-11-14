@@ -163,6 +163,12 @@ _CASES = [
         _SDSS, None, 150.0, "single", True, id="sdss-1screen-cue-nores-sv150"
     ),
     pytest.param(
+        _SDSS, ("banded", 2000.0), 0.0, "two", True, id="sdss-2comp-cue-banded-R2000-sv0"
+    ),
+    pytest.param(
+        _DESI, ("banded", 3000.0), 150.0, "two", True, id="desi-2comp-cue-banded-R3000-sv150"
+    ),
+    pytest.param(
         _SDSS, None, 0.0, "two", True, id="sdss-2comp-cue-nores-sv0"
     ),
     pytest.param(
@@ -213,6 +219,12 @@ def _family_model(
         spectro["resolution_matrix"] = gaussian_resolution_bands(jnp.asarray(_SDSS), 2000.0)
         if family == "banded-point":
             spectro["resample"] = "point"
+        sigma_v = 150.0
+    elif family == "banded-cue":
+        from tengri.observation.banded import gaussian_resolution_bands
+
+        spectro["resolution_matrix"] = gaussian_resolution_bands(jnp.asarray(_SDSS), 2000.0)
+        extra["neb"] = {"type": "cue", "all_params": Fixed(DEFAULT)}
         sigma_v = 150.0
     elif family == "cue-R2000-sv150":
         extra["neb"] = {"type": "cue", "all_params": Fixed(DEFAULT)}
@@ -335,6 +347,16 @@ def test_nebular_scalar_resolution_routes_to_table_under_auto():
     _require_data(True)
     ssp = load_ssp_data(_BARE_SSP)
     assert _spectrum_lut_for_auto(_family_model(ssp, "cue-R2000-sv150", None)) is not None
+
+
+def test_banded_nebular_routes_to_table_under_auto():
+    """A nebular family under a banded matrix on fixed-z pixel means is served (#3413)."""
+    from tengri import load_ssp_data
+    from tengri.inference.fitter import _spectrum_lut_for_auto
+
+    _require_data(True)
+    ssp = load_ssp_data(_BARE_SSP)
+    assert _spectrum_lut_for_auto(_family_model(ssp, "banded-cue", None)) is not None
 
 
 def test_banded_resolution_routes_to_table_under_auto():

@@ -3328,8 +3328,7 @@ class SEDModel:
                     f"{observation.spectroscopy.resample!r} needs the flux-conserving pixel "
                     f"integral, which the table does not carry for this model: a free redshift "
                     f"or sigma_v_kms, a free lsf_scale with a "
-                    f"resolution, a nebular family with a banded resolution "
-                    f"matrix, IGM or dust emission (#2530, #3413). Use "
+                    f"resolution, IGM or dust emission (#2530, #3413). Use "
                     f"approx=None for the "
                     f"exact spectrum, or Spectroscopy(resample='point') to accept point sampling."
                 )
@@ -3406,10 +3405,6 @@ class SEDModel:
         ):
             # The fixed Gaussian kernel is baked into a stellar-only table (#3413). A nebular
             # family or a free lsf_scale has no such table yet.
-            return True
-        if self._spectrum_nebular_family() and spectro.resolution_matrix is not None:
-            # The nebular family is projected exactly on the pixels without a resolution
-            # matrix only; a banded matrix is not measured with it (#3413).
             return True
         # A fixed-redshift table with a fixed sigma_v stores the pixel moments itself (#3413).
         # A free redshift or a free sigma_v has no such table.
