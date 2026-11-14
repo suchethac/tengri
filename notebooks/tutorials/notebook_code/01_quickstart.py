@@ -46,6 +46,7 @@ from tengri import (
     Parameters,
     Uniform,
     load_ssp_data,
+    vmap_chunked,
 )
 
 import sys, os  # noqa: E401
@@ -566,12 +567,10 @@ mask_200 = t_gyr_s < 0.2
 if hasattr(t_gyr_s, "__len__") and np.any(mask_200):
     t_inset = t_gyr_s[mask_200] * 1e3
     if result_lap_stoch.samples is not None:
-        n_samp = len(next(iter(result_lap_stoch.samples.values())))
-        sfh_draws = []
-        for i in range(n_samp):
-            s_i = {k: result_lap_stoch.samples[k][i] for k in result_lap_stoch.samples}
-            sfh_draws.append(np.array(model_stoch.predict_sfh(s_i)[sfr_key_s])[mask_200])
-        sfh_arr = np.array(sfh_draws)
+        # Every posterior draw, evaluated in compiled chunks of draws.
+        sfh_arr = np.asarray(
+            vmap_chunked(lambda p: model_stoch.predict_sfh(p)[sfr_key_s])(result_lap_stoch.samples)
+        )[:, mask_200]
         lo, hi = np.percentile(sfh_arr, [16, 84], axis=0)
         median = np.median(sfh_arr, axis=0)
         inset.fill_between(t_inset, lo, hi, color=LAPLACE_COLOR, alpha=0.3, lw=0)
