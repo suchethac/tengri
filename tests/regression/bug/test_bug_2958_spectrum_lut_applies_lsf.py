@@ -267,6 +267,33 @@ def test_d_resolution_none_is_bit_for_bit_prefix(ssp_data_wne):
     np.testing.assert_allclose(s[_IDX], np.asarray(_PREFIX_LUT_WNE_RNONE), rtol=_PIN_RTOL, atol=0)
 
 
+def test_d_sigma_v_broadens_the_lut_without_resolution(ssp_data_wne):
+    """#3436: with no instrument resolution, sigma_v broadens the LUT at library resolution.
+
+    The sigma = 0 pin above is unchanged. At sigma_v = 150 km/s the LUT must broaden (the
+    pre-#3436 output was sigma_v-blind) and must agree with the exact path, which the
+    #3436 tests check against a brute-force ln-lambda reference.
+    """
+    sv = Uniform(0.0, 2000.0)
+    exact = _build(ssp_data_wne, None, spectro=_spec(resolution=None), igm=_MADAU, sigma_v=sv)
+    lut = _build(
+        ssp_data_wne, SpectrumPrecomp(), spectro=_spec(resolution=None), igm=_MADAU, sigma_v=sv
+    )
+    s_lut_0, s_lut_150 = _spectrum(lut, 0.0), _spectrum(lut, 150.0)
+    s_exact_0, s_exact_150 = _spectrum(exact, 0.0), _spectrum(exact, 150.0)
+    peak = float(np.max(np.abs(s_exact_0)))
+    moved_lut = float(np.max(np.abs(s_lut_150 - s_lut_0))) / peak
+    moved_exact = float(np.max(np.abs(s_exact_150 - s_exact_0))) / peak
+    print(f"NUMBERS #3436 LUT moved by sigma_v=150 vs 0: {moved_lut:.6e} of peak")
+    print(f"NUMBERS #3436 exact moved by sigma_v=150 vs 0: {moved_exact:.6e} of peak")
+    gap = float(np.max(np.abs(s_lut_150 - s_exact_150))) / peak
+    print(f"NUMBERS #3436 LUT vs exact at sigma_v=150, resolution=None: {gap:.6e} of peak")
+    # The LUT broadens, by the same amount as the exact path. Its pixel-level agreement with
+    # the exact path without a resolution is the #3413 table's job (see the PR body).
+    assert moved_lut > 1e-3
+    assert abs(moved_lut - moved_exact) <= 0.02 * moved_exact
+
+
 # ── (e) exact path bit-for-bit across the extraction ──────────────────────────
 
 _PINNED_EXACT = {
