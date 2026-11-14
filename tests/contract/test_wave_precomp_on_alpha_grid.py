@@ -245,3 +245,167 @@ def test_free_z_table_round_trips_through_disk_cache(ssp4d, observation, tmp_pat
     assert list(tmp_path.glob("ztable_*.npz")), "the 4D z-table was not written to the cache"
     second = _phot(build(), 0.3, 0.2)
     assert np.array_equal(first, second)
+
+
+# --- The exact IGM fold on a 4D grid (#2250) -------------------------------------------
+# The exact sub-band fold (WavePrecomp(igm_fold="exact")) multiplies per-node tables that
+# carry the alpha axis. These tests put the Lyman break inside sdss_u at z = 3.5 and
+# require the 4D fold to be as accurate as the 3D fold on the same alpha = 0 slab.
+
+IGM_BANDS = ["sdss_u", "sdss_g", "sdss_r"]
+IGM_ALPHAS = (0.0, 0.3, 0.6)
+IGM_RTOL = 1e-2
+N_Z_EXACT = 16
+
+
+@pytest.fixture(scope="module")
+def ssp4d_uv():
+    """3 Z x 5 [alpha/Fe] x 20 ages x 300 wavelengths reaching 800 A (Lyman limit in grid)."""
+    n_met, n_age, n_wave = 3, 20, 300
+    wave = jnp.linspace(800.0, 10000.0, n_wave)
+    ages = jnp.linspace(-1.0, 1.14, n_age)
+    key = jax.random.PRNGKey(11)
+    base = jnp.abs(jax.random.normal(key, (n_met, n_age, n_wave))) * 1e-3 + 1e-3
+    feature = jnp.exp(-0.5 * ((wave - 1500.0) / 300.0) ** 2)
+    cubes = [base * (1.0 + 0.3 * a * feature)[None, None, :] for a in ALPHA_NODES]
+    flux = jnp.stack(cubes, axis=1)
+    lgmet = jnp.array([-1.5, -0.5, 0.0]) + LOG10_ZSUN
+    return SSPData(
+        ssp_wave=wave,
+        ssp_flux=flux,
+        ssp_lg_age_gyr=ages,
+        ssp_lgmet=lgmet,
+        ssp_alpha_fe=jnp.asarray(ALPHA_NODES),
+    )
+
+
+@pytest.fixture(scope="module")
+def uv_observation():
+    return tengri.Observation(photometry=tengri.Photometry.from_names(IGM_BANDS))
+
+
+def _igm_model(ssp, observation, *, alpha_spec, redshift, approx):
+    met = {"logzsol": Fixed(-0.2), "all_params": Fixed(DEFAULT)}
+    if alpha_spec is not None:
+        met["alpha_fe"] = alpha_spec
+    kwargs = dict(
+        ssp_data=ssp,
+        observation=observation,
+        sfh={
+            "type": "delayed",
+            "all_params": Fixed(DEFAULT),
+            "log_total_mass": Uniform(9.0, 11.0),
+        },
+        met=met,
+        redshift=redshift,
+        neb={"type": "none"},
+        igm={"type": "inoue"},
+    )
+    if approx is not None:
+        kwargs["approx"] = approx
+    return SEDModel.build(**kwargs)
+
+
+def _exact_lut(n_z=N_Z_EXACT):
+    return WavePrecomp(igm_fold="exact", n_z=n_z)
+
+
+def _worst_rel(lut_m, exact_m, alphas, zs):
+    return max(_max_rel(_phot(lut_m, a, z), _phot(exact_m, a, z)) for z in zs for a in alphas)
+
+
+def _slab3d(ssp, index):
+    return ssp._replace(ssp_flux=ssp.ssp_flux[:, index], ssp_alpha_fe=None)
+
+
+def test_exact_igm_fixed_z_4d_as_accurate_as_3d(ssp4d_uv, uv_observation):
+    alpha_spec = Uniform(-0.2, 0.6)
+    lut4 = _igm_model(
+        ssp4d_uv, uv_observation, alpha_spec=alpha_spec, redshift=Fixed(3.5), approx=_exact_lut()
+    )
+    exact4 = _igm_model(
+        ssp4d_uv, uv_observation, alpha_spec=alpha_spec, redshift=Fixed(3.5), approx=None
+    )
+    err4 = _worst_rel(lut4, exact4, IGM_ALPHAS, (None,))
+    slab = _slab3d(ssp4d_uv, 1)
+    lut3 = _igm_model(
+        slab, uv_observation, alpha_spec=None, redshift=Fixed(3.5), approx=_exact_lut()
+    )
+    exact3 = _igm_model(slab, uv_observation, alpha_spec=None, redshift=Fixed(3.5), approx=None)
+    err3 = _worst_rel(lut3, exact3, (None,), (None,))
+    assert err4 < IGM_RTOL, f"4D exact-IGM fixed-z error {err4:.3e} >= {IGM_RTOL}"
+    assert err4 <= 2.0 * err3, f"4D error {err4:.3e} exceeds twice the 3D error {err3:.3e}"
+
+
+def test_exact_igm_free_z_4d_as_accurate_as_3d(ssp4d_uv, uv_observation):
+    z_spec = Uniform(2.5, 4.0)
+    zs = (3.0, 3.5)
+    lut4 = _igm_model(
+        ssp4d_uv,
+        uv_observation,
+        alpha_spec=Uniform(-0.2, 0.6),
+        redshift=z_spec,
+        approx=_exact_lut(),
+    )
+    exact4 = _igm_model(
+        ssp4d_uv, uv_observation, alpha_spec=Uniform(-0.2, 0.6), redshift=z_spec, approx=None
+    )
+    err4 = _worst_rel(lut4, exact4, IGM_ALPHAS, zs)
+    slab = _slab3d(ssp4d_uv, 1)
+    lut3 = _igm_model(slab, uv_observation, alpha_spec=None, redshift=z_spec, approx=_exact_lut())
+    exact3 = _igm_model(slab, uv_observation, alpha_spec=None, redshift=z_spec, approx=None)
+    err3 = _worst_rel(lut3, exact3, (None,), zs)
+    assert err4 < IGM_RTOL, f"4D exact-IGM free-z error {err4:.3e} >= {IGM_RTOL}"
+    assert err4 <= 2.0 * err3, f"4D free-z error {err4:.3e} exceeds twice the 3D error {err3:.3e}"
+
+
+@pytest.mark.parametrize("redshift", [Fixed(3.5), Uniform(2.5, 4.0)], ids=["fixed_z", "free_z"])
+def test_exact_igm_on_node_equals_the_node_slab(ssp4d_uv, uv_observation, redshift):
+    z = 3.5
+    m4 = _igm_model(
+        ssp4d_uv,
+        uv_observation,
+        alpha_spec=Uniform(-0.2, 0.6),
+        redshift=redshift,
+        approx=_exact_lut(),
+    )
+    m3 = _igm_model(
+        _slab3d(ssp4d_uv, 2),
+        uv_observation,
+        alpha_spec=None,
+        redshift=redshift,
+        approx=_exact_lut(),
+    )
+    fixed = isinstance(redshift, Fixed)
+    z_arg = None if fixed else z
+    np.testing.assert_allclose(_phot(m4, 0.2, z_arg), _phot(m3, None, z_arg), rtol=1e-10, atol=0)
+
+
+def test_exact_igm_disk_cache_second_build_loads_identical(
+    ssp4d_uv, uv_observation, tmp_path, monkeypatch
+):
+    from tengri.components.igm import _subband_cache
+
+    monkeypatch.delenv("TENGRI_DISABLE_PRECOMP_CACHE", raising=False)
+    monkeypatch.setenv("TENGRI_PRECOMP_CACHE_DIR", str(tmp_path))
+    z_spec = Uniform(2.5, 4.0)
+    alpha_spec = Uniform(-0.2, 0.6)
+
+    def build(redshift):
+        return _igm_model(
+            ssp4d_uv,
+            uv_observation,
+            alpha_spec=alpha_spec,
+            redshift=redshift,
+            approx=_exact_lut(),
+        )
+
+    for redshift, z in ((z_spec, 3.5), (Fixed(3.5), None)):
+        _subband_cache.clear_memo()
+        first = _phot(build(redshift), 0.3, z)
+        assert list(tmp_path.glob(f"{_subband_cache.EXACT_FOLD_PREFIX}_*.npz")), (
+            "the exact-fold table was not written to the cache"
+        )
+        _subband_cache.clear_memo()
+        second = _phot(build(redshift), 0.3, z)
+        assert np.array_equal(first, second)
