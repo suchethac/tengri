@@ -82,8 +82,9 @@ def test_alpha_fe_is_fixed_by_default_even_with_a_spectrum(ssp4d, observation):
 
 @pytest.mark.parametrize("observation", [_photometry_only, _with_spectrum], ids=["phot", "spec"])
 def test_a_bare_free_is_refused_by_name(ssp4d, observation):
-    with pytest.raises(ParameterError, match="met_alpha_fe"):
+    with pytest.raises(ParameterError, match="met_alpha_fe") as err:
         _model(ssp4d, observation(), {"alpha_fe": FREE})
+    assert "Uniform(-0.2, 0.6)" in str(err.value)  # names this grid's node range
 
 
 @pytest.mark.parametrize("observation", [_photometry_only, _with_spectrum], ids=["phot", "spec"])
