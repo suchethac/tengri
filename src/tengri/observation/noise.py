@@ -53,6 +53,7 @@ from dataclasses import dataclass
 
 import jax
 import jax.numpy as jnp
+from jax.core import Tracer
 
 from tengri.utils.scale import whiten
 
@@ -889,13 +890,16 @@ def apply_zp_floor(
     noise_arr = jnp.asarray(noise)
     floor_arr = jnp.asarray(floor)
 
+    # A traced floor (a fitted systematic) has no host value to range-check; the
+    # sign check runs only on concrete floors, so eager calls are unchanged.
+    concrete = not isinstance(floor_arr, Tracer)
     if floor_arr.ndim == 0:
-        if float(floor_arr) < 0.0:
+        if concrete and float(floor_arr) < 0.0:
             raise ValueError("zp floor must be non-negative (got < 0)")
     else:
         if floor_arr.shape != flux_arr.shape:
             raise ValueError(f"floor shape {floor_arr.shape} != flux shape {flux_arr.shape}")
-        if not bool(jnp.all(floor_arr >= 0.0)):
+        if concrete and not bool(jnp.all(floor_arr >= 0.0)):
             raise ValueError("zp floor must be non-negative (got < 0 in some band)")
 
     sys_term = floor_arr * jnp.abs(flux_arr)

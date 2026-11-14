@@ -394,7 +394,6 @@ from tengri.components.stellar.sfh.registry import (
 from tengri.components.stellar.sps.dsps_wrapper import (
     SSPData,
     compute_surviving_mass,
-    effective_metallicity,
     has_alpha_grid,
     interpolate_mass_remaining,
     interpolate_met_alpha,

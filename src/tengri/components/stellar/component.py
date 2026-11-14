@@ -25,6 +25,8 @@ not an output of a separate precompute step.
 
 from __future__ import annotations
 
+import logging
+import math
 import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -32,6 +34,7 @@ from typing import Any, NamedTuple
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 from tengri._x64_hold import hold_x64_preference
 from tengri.components.stellar.age_boundary import (
@@ -143,7 +146,6 @@ from tengri.components.stellar.sps.dsps_wrapper import (
     SSPData,
     canonical_dsps_kwargs,
     compute_log_z_evolving,
-    effective_metallicity,
     enforce_increasing_cosmic_time,
     has_alpha_grid,
 )
@@ -2204,6 +2206,10 @@ class StellarSEDComponentConfig(SEDComponentConfig):
     age_kernel: str | None = None
     field_centering: float = 1.0
     use_alpha_grid: bool = False
+    #: True when [alpha/Fe] is a per-age ramp (``met_alpha_fe_old`` to ``met_alpha_fe_young``,
+    #: #2250, #1767) instead of the scalar ``met_alpha_fe``. Set by the model; on a 4D grid it
+    #: makes every alpha bracket per-age.
+    alpha_fe_evolving: bool = False
     lgmet_scatter: float = 0.2
     # Maximum number of declared ``met_bin_<i>`` parameters (the
     # largest ladder the grammar accepts). The physics derives the
@@ -2432,6 +2438,130 @@ class _CompositePopulation(NamedTuple):
     wave: Any
     sed_intrinsic: Any
     derived_overrides: Any
+    #: ``(ia, fa)`` of ``met_alpha_fe`` on a 4D grid, else None (see ``alpha_bracket``).
+    alpha_bracket: Any = None
+
+
+# Photometry LUT fields that carry the [alpha/Fe] axis on a 4D grid, shaped
+# (n_met, n_alpha, n_age, ...). The alpha axis sits at position 1.
+_FIXED_Z_LUT_ALPHA_FIELDS = (
+    "ssp_phot",
+    "ssp_phot_moment",
+    "ssp_subband_phot",
+    "ssp_subband_waves_rest",
+    "ssp_subband_phot_igm",
+    "ssp_subband_waves_rest_igm",
+    "ssp_phot_lyc",
+    "ssp_phot_nolyc",
+)
+# Free-z table fields, shaped (n_z, n_met, n_alpha, n_age, ...): the alpha axis is at 2.
+_FREE_Z_TABLE_ALPHA_FIELDS = (
+    "ssp_phot_table",
+    "ssp_phot_moment_table",
+    "ssp_subband_phot_table",
+    "subband_waves_rest_table",
+    "ssp_subband_phot_igm_table",
+    "subband_waves_rest_igm_table",
+    "ssp_phot_lyc_table",
+    "ssp_phot_nolyc_table",
+)
+# Rest-band LUT fields, shaped (n_met, n_alpha, n_age, ...).
+_RESTBAND_ALPHA_FIELDS = (
+    "ssp_restband_phot",
+    "ssp_restband_subband_phot",
+    "ssp_restband_subband_waves",
+)
+
+
+#: Sub-band wavelength field -> the sub-band flux field it is the flux-weighted mean of.
+_FLUX_WEIGHTED_WAVE_FIELDS = {
+    "ssp_subband_waves_rest": "ssp_subband_phot",
+    "ssp_subband_waves_rest_igm": "ssp_subband_phot_igm",
+    "subband_waves_rest_table": "ssp_subband_phot_table",
+    "subband_waves_rest_igm_table": "ssp_subband_phot_igm_table",
+    "ssp_restband_subband_waves": "ssp_restband_subband_phot",
+}
+
+
+#: Log the pre-broadened SSP cube's size at build above this many megabytes.
+_BROADENED_CUBE_LOG_MB = 300.0
+
+
+def _alpha_fe_at_ages(params, ssp, *, evolving: bool, t_universe_gyr):
+    """[alpha/Fe] that sets the alpha bracket: a scalar, or one value per SSP age.
+
+    Not evolving: the scalar ``met_alpha_fe`` (unchanged). Evolving: the linear lookback-time
+    ramp of :func:`~tengri.components.stellar.sps.dsps_wrapper.compute_alpha_fe_evolving`
+    from ``met_alpha_fe_old`` (oldest) to ``met_alpha_fe_young`` (present), with the age of the
+    universe at the model redshift ``t_universe_gyr`` [Gyr] as the ramp's full lookback.
+
+    Returns
+    -------
+    ndarray, shape () or (n_age,)
+        [alpha/Fe] (dimensionless).
+    """
+    if not evolving:
+        return jnp.asarray(params.get("met_alpha_fe", _ALPHA_FE_DEFAULT))
+    from tengri.components.stellar.sps.dsps_wrapper import compute_alpha_fe_evolving
+
+    return compute_alpha_fe_evolving(
+        ssp.ssp_lg_age_gyr,
+        jnp.asarray(params["met_alpha_fe_old"]),
+        jnp.asarray(params["met_alpha_fe_young"]),
+        t_universe_gyr,
+    )
+
+
+def _collapse_alpha_plane(x, alpha_bracket, axis: int = 1):
+    """Collapse one 4D [alpha/Fe] array at the model's bracket; a 3D array passes through.
+
+    Linear, so collapsing a template cube before a metallicity contraction gives the
+    same spectrum as contracting each alpha node and interpolating the results.
+    """
+    if x.ndim < 4:
+        return x
+    if alpha_bracket is None:
+        raise ValueError("a 4D [alpha/Fe] array reached the spectrum tables without a bracket")
+    from tengri.components.stellar.sps.dsps_wrapper import collapse_alpha_axis
+
+    ia, fa = alpha_bracket
+    return collapse_alpha_axis(x, ia, fa, axis=axis)
+
+
+def _collapse_alpha_fields(tables, names, alpha_bracket, axis: int):
+    """Collapse the named [alpha/Fe] array fields of a LUT at the model's bracket.
+
+    Fluxes are linear in the spectrum, so they are interpolated directly. A sub-band
+    wavelength is the flux-weighted mean wavelength of its sub-band, so the quantity
+    that is linear is ``wavelength * flux``: it is interpolated and divided by the
+    interpolated flux, which is the sub-band wavelength of the interpolated spectrum.
+    Where the interpolated flux is zero the wavelength is interpolated directly.
+    Fields that are None are left alone. ``alpha_bracket`` is the ``(ia, fa)`` pair from
+    :func:`~tengri.components.stellar.sps.dsps_wrapper.alpha_bracket`.
+    """
+    from tengri.components.stellar.sps.dsps_wrapper import collapse_alpha_axis
+
+    ia, fa = alpha_bracket
+
+    def collapse(x):
+        return collapse_alpha_axis(x, ia, fa, axis=axis)
+
+    collapsed = {}
+    for name in names:
+        value = getattr(tables, name)
+        if value is None:
+            continue
+        flux_name = _FLUX_WEIGHTED_WAVE_FIELDS.get(name)
+        flux = getattr(tables, flux_name, None) if flux_name is not None else None
+        if flux is None:
+            collapsed[name] = collapse(value)
+            continue
+        den = collapse(flux)
+        nonzero = den != 0.0
+        collapsed[name] = jnp.where(
+            nonzero, collapse(value * flux) / jnp.where(nonzero, den, 1.0), collapse(value)
+        )
+    return tables._replace(**collapsed)
 
 
 @dataclass(frozen=True)
@@ -2592,6 +2722,20 @@ class StellarSEDComponent:
                 "dex",
                 "log10(total_mass x L_sun): the float32-safe mass scale; the linear "
                 "erg/s form overflows float32",
+            ),
+            DerivedKey(
+                "stellar_alpha_bracket_index",
+                "",
+                "Lower [alpha/Fe] node index on a 4D grid, shape () or (n_age,) under "
+                "alpha_fe_evolving; the "
+                "dust energy-balance LUT collapses its alpha axis at this bracket. Absent "
+                "on a 3D grid",
+            ),
+            DerivedKey(
+                "stellar_alpha_bracket_fraction",
+                "",
+                "Interpolation fraction within the [alpha/Fe] bracket, shape () or (n_age,); "
+                "pairs with stellar_alpha_bracket_index. Absent on a 3D grid",
             ),
             DerivedKey("ssp_ages_yr", "yr", "SSP age axis"),
             DerivedKey(
@@ -2895,11 +3039,18 @@ class StellarSEDComponent:
         if (
             spec_sigma_v_fixed is not None
             and spec_sigma_v_fixed > 0.0
-            and not has_alpha_grid(self.ssp_data)
             and self.agb_dust_ratio is None
         ):
             from tengri.components.stellar.sps.precompute import broaden_template_cube
 
+            # A grid with an [alpha/Fe] axis is broadened plane by plane (every leading
+            # axis is mapped over), so the cube is n_alpha times the 3D one.
+            cube_shape = tuple(self.ssp_data.ssp_flux.shape)
+            cube_mb = math.prod(cube_shape) * 8.0 / 1e6
+            if cube_mb > _BROADENED_CUBE_LOG_MB:
+                logging.getLogger(__name__).info(
+                    "pre-broadened SSP cube: shape %s, %.0f MB", cube_shape, cube_mb
+                )
             broadened = broaden_template_cube(
                 self.ssp_data.ssp_flux, self.ssp_data.ssp_wave, spec_sigma_v_fixed, spec_lsf_n_bins
             )
@@ -2910,6 +3061,46 @@ class StellarSEDComponent:
             spec_lsf_n_bins=spec_lsf_n_bins,
             spec_ssp_broadened=broadened,
         )
+
+    def fixed_z_luts_for_threading(self) -> dict | None:
+        """Array fields of the fixed-z stellar LUTs, for threading as runtime inputs.
+
+        #2812: the per-redshift SSP x filter / SSP x pixel tables were read off
+        the closure, so under ``jit`` they were baked into the HLO as constants
+        and every fixed redshift compiled from scratch. Threaded through
+        ``template_data`` they are Parameters, not Constants, so two fixed-z
+        models lower to the same HLO. Only array fields are returned; Python
+        scalars (``redshift``, ``n_filters``, ...) and ``None`` fields stay
+        static on the closure.
+        """
+        if self._state is None:
+            return None
+        out: dict[str, dict] = {}
+        for name in ("ssp_phot_lut", "ssp_spec_lut"):
+            lut = getattr(self._state, name)
+            if lut is None:
+                continue
+            arrays = {
+                field_name: value
+                for field_name, value in lut._asdict().items()
+                if isinstance(value, (np.ndarray, jax.Array))
+            }
+            out[name] = arrays
+        return out or None
+
+    def _threaded_lut(self, template_data, name: str):
+        """Return the fixed-z LUT ``name``, with runtime array fields from ``template_data``.
+
+        ``template_data["stellar"][name]`` (#2812) overrides the closure's array
+        fields via ``_replace``; with no threaded entry the closure LUT is
+        returned unchanged.
+        """
+        lut = getattr(self._state, name)
+        if isinstance(template_data, dict):
+            stellar = template_data.get("stellar")
+            if isinstance(stellar, dict) and name in stellar:
+                return lut._replace(**stellar[name])
+        return lut
 
     def apply(
         self,
@@ -3090,12 +3281,58 @@ class StellarSEDComponent:
         sed_intrinsic = c.sed_intrinsic
         derived_overrides = c.derived_overrides
 
+        derived_overrides.update(
+            self._precomputed_tables(
+                state=state,
+                params=params,
+                wave=wave,
+                ssp_flux_for_csp=ssp_flux_for_csp,
+                joint_weights=joint_weights,
+                total_mass=total_mass,
+                _alpha_collapse_active=_alpha_collapse_active,
+                alpha_bracket=c.alpha_bracket,
+                _agb_dust_cube=_agb_dust_cube,
+                template_data=template_data,
+                ztable_data=ztable_data,
+            )
+        )
+
+        # ── 12. Assemble new state ──────────────────────────────────────
+        return state.with_(
+            sed_intrinsic=sed_intrinsic,
+            derived=state.derived.with_(**derived_overrides),
+        )
+
+    def _precomputed_tables(
+        self,
+        *,
+        state: ForwardState,
+        params: Mapping[str, jnp.ndarray],
+        wave,
+        ssp_flux_for_csp,
+        joint_weights,
+        total_mass,
+        _alpha_collapse_active,
+        alpha_bracket,
+        _agb_dust_cube,
+        template_data,
+        ztable_data,
+    ) -> dict:
+        """Publish the precomputed photometry, spectrum and sub-band tables (phase F)."""
+        derived_overrides: dict = {}
         # ── 12b. Stellar photometry LUT (WavePrecomp) ──────────────────
         # When eager precomputation is enabled and the LUT is available,
         # compute stellar_phot_lnu_precomp and publish it to derived.
         if self._state is not None and self._state.ssp_phot_lut is not None:
+            phot_lut = self._threaded_lut(template_data, "ssp_phot_lut")
+            if alpha_bracket is not None:
+                # 4D grid: the LUT carries the [alpha/Fe] axis at position 1. Collapse it at
+                # the model's bracket, so every contraction below sees the 3D layout.
+                phot_lut = _collapse_alpha_fields(
+                    phot_lut, _FIXED_Z_LUT_ALPHA_FIELDS, alpha_bracket, axis=1
+                )
             # Fixed-z path; LUT built at source's z in precompute()
-            ssp_phot = self._state.ssp_phot_lut.ssp_phot
+            ssp_phot = phot_lut.ssp_phot
             # (n_met, n_age, n_filt) in Lsun/Hz/Msun; sum over metallicity and
             # age axes weighted by joint distribution × total mass.
             # Convert to erg/s/Hz to match sed_intrinsic units.
@@ -3105,7 +3342,7 @@ class StellarSEDComponent:
             derived_overrides["stellar_phot_lnu_precomp"] = stellar_phot_lnu_precomp_rest
             # Lyman continuum photometry: rest λ < 912 Å. Used by the nebular
             # component to apply the neb_fesc mask (#2439, #2427).
-            ssp_phot_lyc = self._state.ssp_phot_lut.ssp_phot_lyc
+            ssp_phot_lyc = phot_lut.ssp_phot_lyc
             if ssp_phot_lyc is not None:
                 stellar_phot_lnu_precomp_lyc = _mass_scale_lnu(
                     jnp.einsum("ma,maf->f", joint_weights, ssp_phot_lyc), total_mass
@@ -3115,9 +3352,7 @@ class StellarSEDComponent:
                 # integral: the escape-fraction mask adds to it rather than
                 # subtracting from the whole (see ``PhotometricPrecomputation``).
                 derived_overrides["stellar_phot_lnu_precomp_nolyc"] = _mass_scale_lnu(
-                    jnp.einsum(
-                        "ma,maf->f", joint_weights, self._state.ssp_phot_lut.ssp_phot_nolyc
-                    ),
+                    jnp.einsum("ma,maf->f", joint_weights, phot_lut.ssp_phot_nolyc),
                     total_mass,
                 )
             # Age-resolved per-filter LUT for two-component
@@ -3145,13 +3380,11 @@ class StellarSEDComponent:
                     stellar_phot_lnu_per_age_lyc
                 )
                 derived_overrides["stellar_phot_lnu_per_age_precomp_nolyc"] = _mass_scale_lnu(
-                    jnp.einsum(
-                        "ma,maf->af", joint_weights, self._state.ssp_phot_lut.ssp_phot_nolyc
-                    ),
+                    jnp.einsum("ma,maf->af", joint_weights, phot_lut.ssp_phot_nolyc),
                     total_mass,
                 )
             # Taylor moment Ψ: same einsum, units erg/s/Hz × Å.
-            ssp_phot_moment = self._state.ssp_phot_lut.ssp_phot_moment
+            ssp_phot_moment = phot_lut.ssp_phot_moment
             if ssp_phot_moment is not None:
                 stellar_phot_moment_precomp = _mass_scale_lnu(
                     jnp.einsum("ma,maf->f", joint_weights, ssp_phot_moment), total_mass
@@ -3166,9 +3399,9 @@ class StellarSEDComponent:
             # Sub-band quadrature tensors (#1122). Φ_k carries the same mass and
             # L_sun scaling as Φ; the node λ_k is a RATIO, so those scalings cancel
             # and it is computed from the unscaled sums.
-            ssp_sub_phot = self._state.ssp_phot_lut.ssp_subband_phot
+            ssp_sub_phot = phot_lut.ssp_subband_phot
             if ssp_sub_phot is not None:
-                ssp_sub_waves = self._state.ssp_phot_lut.ssp_subband_waves_rest
+                ssp_sub_waves = phot_lut.ssp_subband_waves_rest
                 sub_phi = jnp.einsum("ma,mafk->afk", joint_weights, ssp_sub_phot)
                 sub_num = jnp.einsum("ma,mafk->afk", joint_weights, ssp_sub_waves * ssp_sub_phot)
                 derived_overrides["stellar_phot_lnu_per_age_subband_precomp"] = _mass_scale_lnu(
@@ -3182,7 +3415,7 @@ class StellarSEDComponent:
                 derived_overrides["stellar_subband_waves_rest_precomp"] = jnp.where(
                     live,
                     _flux_weighted_node(sub_num, jnp.where(live, sub_phi, 1.0)),
-                    jnp.asarray(self._state.ssp_phot_lut.effective_wavelengths_rest)[:, None],
+                    jnp.asarray(phot_lut.effective_wavelengths_rest)[:, None],
                 )
                 # The same tensor with the IGM folded in at the nodes (#1135).
                 # Identical einsum, on a constant that already carries T: the met
@@ -3190,14 +3423,14 @@ class StellarSEDComponent:
                 # moves with the free met_logzsol). Kept alongside the IGM-free
                 # tensor rather than replacing it: phot_rest_fnu is projected at
                 # z=0 and carries no IGM.
-                ssp_sub_phot_igm = self._state.ssp_phot_lut.ssp_subband_phot_igm
+                ssp_sub_phot_igm = phot_lut.ssp_subband_phot_igm
                 if ssp_sub_phot_igm is not None:
                     derived_overrides["stellar_phot_lnu_per_age_subband_igm_precomp"] = (
                         _mass_scale_lnu(
                             jnp.einsum("ma,mafk->afk", joint_weights, ssp_sub_phot_igm), total_mass
                         )
                     )
-                    waves_igm = self._state.ssp_phot_lut.ssp_subband_waves_rest_igm
+                    waves_igm = phot_lut.ssp_subband_waves_rest_igm
                     _publish_igm_nodes(
                         derived_overrides,
                         jnp.einsum("ma,mafk->afk", joint_weights, ssp_sub_phot_igm),
@@ -3210,7 +3443,7 @@ class StellarSEDComponent:
             # Publish filter pivot wavelengths so the dust LUT
             # (and future per-filter consumers like AGN and IGM) can use them.
             derived_overrides["filter_eff_waves"] = jnp.asarray(
-                self._state.ssp_phot_lut.effective_wavelengths_rest
+                phot_lut.effective_wavelengths_rest
             )
             if self._state.phot_fw_padded is not None:
                 derived_overrides["phot_filter_waves_padded"] = self._state.phot_fw_padded
@@ -3238,6 +3471,12 @@ class StellarSEDComponent:
             # Use ztable_data if threaded as JIT input, otherwise fall
             # back to the closure (for non-JIT paths).
             ztable = ztable_data if ztable_data is not None else self._state.ssp_phot_ztable
+            if alpha_bracket is not None:
+                # 4D grid: collapse the [alpha/Fe] axis (position 2 after z and metallicity)
+                # before the z read, so the reads below see the 3D layout.
+                ztable = _collapse_alpha_fields(
+                    ztable, _FREE_Z_TABLE_ALPHA_FIELDS, alpha_bracket, axis=2
+                )
             z = jnp.asarray(require_redshift(params, "components.stellar.component.apply"))
             z_grid = ztable.z_grid
 
@@ -3362,6 +3601,8 @@ class StellarSEDComponent:
         # rest band does not move with redshift, so there is nothing to interpolate.
         if self._state is not None and self._state.restband_lut is not None:
             rb = self._state.restband_lut
+            if alpha_bracket is not None:
+                rb = _collapse_alpha_fields(rb, _RESTBAND_ALPHA_FIELDS, alpha_bracket, axis=1)
             derived_overrides["stellar_restband_lnu_precomp"] = _mass_scale_lnu(
                 jnp.einsum("ma,maf->f", joint_weights, rb.ssp_restband_phot), total_mass
             )
@@ -3415,15 +3656,13 @@ class StellarSEDComponent:
                     ssp_flux_for_csp=ssp_flux_for_csp,
                     joint_weights=joint_weights,
                     total_mass=total_mass,
-                    cube_modified=_alpha_collapse_active or _agb_dust_cube is not None,
+                    cube_modified=_agb_dust_cube is not None,
+                    template_data=template_data,
+                    alpha_bracket=alpha_bracket,
                 )
             )
 
-        # ── 12. Assemble new state ──────────────────────────────────────
-        return state.with_(
-            sed_intrinsic=sed_intrinsic,
-            derived=state.derived.with_(**derived_overrides),
-        )
+        return derived_overrides
 
     def _sfh_on_ssp_ages(
         self,
@@ -3650,13 +3889,21 @@ class StellarSEDComponent:
             # shared constant.
             from tengri.components.stellar.sps.dsps_wrapper import alpha_bracket
 
-            _alpha_fe_value = jnp.asarray(params.get("met_alpha_fe", _ALPHA_FE_DEFAULT))
+            _alpha_fe_value = _alpha_fe_at_ages(
+                params,
+                ssp,
+                evolving=self.config.alpha_fe_evolving,
+                t_universe_gyr=t_obs_gyr,
+            )
             _alpha_ia, _alpha_fa = alpha_bracket(ssp.ssp_alpha_fe, _alpha_fe_value)
             ssp_flux_for_csp = (
                 ssp.ssp_flux
             )  # 4D (n_met, n_alpha, n_age, n_wave); collapsed after each contraction
+            # The same bracket collapses the photometry LUTs in _precomputed_tables.
+            _alpha_bracket = (_alpha_ia, _alpha_fa)
         else:
             ssp_flux_for_csp = ssp.ssp_flux
+            _alpha_bracket = None
 
         # AGB circumstellar dust-shell weighting (#2534), FREE-weight path
         # only (a Fixed weight is already baked into ``ssp.ssp_flux`` by
@@ -3675,7 +3922,13 @@ class StellarSEDComponent:
         # 3D model; a Fixed weight or no AGB shell keeps the shared 4D constant.
         _csp_cube_is_4d = _alpha_collapse_active and _agb_dust_cube is None
         if _agb_dust_cube is not None:
-            if _alpha_collapse_active:
+            if _alpha_collapse_active and self.config.alpha_fe_evolving:
+                # Per-age [alpha/Fe]: the ratio has no alpha axis, so the 4D cube takes it
+                # plane by plane and the CSP collapses each age at its own bracket.
+                _agb_dust_cube = self._agb_dust_cube_ratio(params, ssp.ssp_flux)
+                ssp_flux_for_csp = ssp.ssp_flux * _agb_dust_cube
+                _csp_cube_is_4d = True
+            elif _alpha_collapse_active:
                 from tengri.components.stellar.sps.dsps_wrapper import interpolate_alpha_only
 
                 ssp_flux_for_csp = (
@@ -3686,18 +3939,10 @@ class StellarSEDComponent:
                 ssp_flux_for_csp = ssp_flux_for_csp * _agb_dust_cube
 
         if self.config.metallicity_model == "delta":
-            # Apply alpha-Fe enhancement via effective_metallicity for
-            # 3D SSP grids (no native α axis): the α-shift is folded
-            # into log_z via the Salaris+05 / DSPS canonical relation.
-            # For 4D α-grid SSPs the α axis has already been collapsed
-            # above, so we use ``met_logzsol`` directly without the
-            # effective-Z approximation.
-            alpha_fe = jnp.asarray(params.get("met_alpha_fe", _ALPHA_FE_DEFAULT))
-            if _alpha_collapse_active:
-                log_z_abs_scalar = jnp.asarray(params["met_logzsol"]) + LOG10_ZSUN
-            else:
-                log_z_eff = effective_metallicity(jnp.asarray(params["met_logzsol"]), alpha_fe)
-                log_z_abs_scalar = log_z_eff + LOG10_ZSUN
+            # ``met_logzsol`` is the total metallicity on every grid. On a 4D
+            # grid the [alpha/Fe] axis has already been collapsed above; a 3D
+            # grid has no such axis and ``met_alpha_fe`` is refused at build.
+            log_z_abs_scalar = jnp.asarray(params["met_logzsol"]) + LOG10_ZSUN
             log_metallicity_history = jnp.full(n_grid, log_z_abs_scalar)
             lgmet_on_ssp_ages = jnp.full_like(ssp_ages_yr, log_z_abs_scalar)
         elif self.config.metallicity_model == "ramp":
@@ -4112,8 +4357,18 @@ class StellarSEDComponent:
         log_mstar_formed = jnp.log10(jnp.maximum(jnp.sum(age_weights), 1e-30))
         if ssp.ssp_mass_remaining is not None:
             # Surviving mass is the joint-weight contraction with each (age, Z) node
-            # at its own remaining-mass fraction.
-            mstar_surv_age = jnp.sum(joint_weights * ssp.ssp_mass_remaining, axis=0) * total_mass
+            # at its own remaining-mass fraction. On an [alpha/Fe] grid that embeds its alpha
+            # table (#2250) the fraction follows the alpha bracket; the 2-D table is the alpha = 0
+            # plane, so it is used otherwise.
+            if _alpha_collapse_active and ssp.ssp_mass_remaining_alpha is not None:
+                from tengri.components.stellar.sps.dsps_wrapper import collapse_alpha_axis
+
+                _mass_remaining = collapse_alpha_axis(
+                    ssp.ssp_mass_remaining_alpha, _alpha_ia, _alpha_fa, axis=1
+                )
+            else:
+                _mass_remaining = ssp.ssp_mass_remaining
+            mstar_surv_age = jnp.sum(joint_weights * _mass_remaining, axis=0) * total_mass
             mstar_surv = jnp.sum(mstar_surv_age)
             log_mstar = jnp.log10(jnp.maximum(mstar_surv, 1e-30))
             log_mstar_surviving = log_mstar
@@ -4362,9 +4617,14 @@ class StellarSEDComponent:
             derived_overrides["age_boundary_younger_fraction"] = younger_fraction
         if lnu_interval is not None:
             derived_overrides["lnu_interval"] = lnu_interval
+        if _alpha_bracket is not None:
+            # The bracket the dust energy-balance LUT collapses its alpha axis at (#2250).
+            derived_overrides["stellar_alpha_bracket_index"] = _alpha_bracket[0]
+            derived_overrides["stellar_alpha_bracket_fraction"] = _alpha_bracket[1]
         return _CompositePopulation(
             ssp_flux_for_csp=ssp_flux_for_csp,
             alpha_collapse_active=_alpha_collapse_active,
+            alpha_bracket=_alpha_bracket,
             agb_dust_cube=_agb_dust_cube,
             joint_weights=joint_weights,
             total_mass=total_mass,
@@ -4383,6 +4643,8 @@ class StellarSEDComponent:
         joint_weights,
         total_mass,
         cube_modified=False,
+        template_data=None,
+        alpha_bracket=None,
     ):
         r"""Stellar spectrum LUT families at the pixels, with the velocity dispersion applied.
 
@@ -4404,7 +4666,7 @@ class StellarSEDComponent:
             Model rest wavelength grid [Angstrom].
         ssp_flux_for_csp : ndarray, shape (n_met, n_age, n_wave) or (n_met, n_alpha, n_age, n_wave)
             The SSP cube the per-draw sum uses (AGB-weighted). A 4D [alpha/Fe] cube is
-            passed uncollapsed and is supported only by the pre-broadened LUT route.
+            passed uncollapsed and is collapsed at ``alpha_bracket`` here.
         joint_weights : ndarray, shape (n_met, n_age)
             Metallicity-by-age weights.
         total_mass : float or traced scalar
@@ -4413,6 +4675,9 @@ class StellarSEDComponent:
             True when ``ssp_flux_for_csp`` differs from the library cube for this draw
             (alpha collapse, free AGB weight); the build-time broadened cube is then
             not valid and the per-draw broadening is used.
+        alpha_bracket : tuple or None
+            ``(ia, fa)`` of ``met_alpha_fe`` on a 4D grid, used to collapse a 4D
+            ``ssp_flux_for_csp`` or a 4D lookup table; None on a 3D grid.
 
         Returns
         -------
@@ -4425,8 +4690,6 @@ class StellarSEDComponent:
         ValueError
             If the model seeded no dispersion for a free sigma_v, or a concrete draw
             dispersion differs from the one the pre-broadened table was built with.
-        NotImplementedError
-            If a 4D [alpha/Fe] cube reaches the per-draw (free-redshift or unbroadened) route.
 
         Notes
         -----
@@ -4441,7 +4704,11 @@ class StellarSEDComponent:
         )
 
         spec_state = self._state
-        lut = spec_state.ssp_spec_lut
+        lut = (
+            self._threaded_lut(template_data, "ssp_spec_lut")
+            if spec_state.ssp_spec_lut is not None
+            else None
+        )
         seeded = state.derived.get("spec_sigma_v_kms")
         if lut is not None and lut.sigma_v_kms is not None:
             if (
@@ -4453,7 +4720,9 @@ class StellarSEDComponent:
                     f"the spectrum LUT was built with sigma_v_kms={lut.sigma_v_kms} but "
                     f"the draw has {float(seeded)}; rebuild the model."
                 )
-            on_pix = lut.ssp_on_pixels  # (n_met, n_age, n_pix), broadened at build
+            # (n_met, n_age, n_pix), broadened at build; (n_met, n_alpha, n_age, n_pix) on a
+            # 4D grid, collapsed at the bracket before the metallicity contraction.
+            on_pix = _collapse_alpha_plane(lut.ssp_on_pixels, alpha_bracket)
             return {
                 "stellar_spec_lnu_precomp": _mass_scale_lnu(
                     jnp.einsum("ma,map->p", joint_weights, on_pix), total_mass
@@ -4464,15 +4733,9 @@ class StellarSEDComponent:
                 "spec_eff_waves": jnp.asarray(lut.wave_rest_pixels),
             }
 
-        if ssp_flux_for_csp.ndim == 4:
-            # A 4D [alpha/Fe] grid reaches here uncollapsed (the CSP einsums contract it over
-            # metallicity per alpha node, then interpolate; see ``apply``). The per-draw families
-            # below sum a 3D cube, so the free-redshift table and the unbroadened fixed-redshift
-            # LUT do not support a 4D grid yet (``cube_modified`` is True).
-            raise NotImplementedError(
-                "the per-draw spectrum LUT / free-redshift table path does not support a 4D "
-                "[alpha/Fe] SSP grid yet"
-            )
+        # A 4D [alpha/Fe] cube is collapsed at the bracket first: the per-draw families below
+        # are linear in the cube, so this equals contracting each alpha node and interpolating.
+        ssp_flux_for_csp = _collapse_alpha_plane(ssp_flux_for_csp, alpha_bracket)
         if lut is not None:
             spec_eff = jnp.asarray(lut.wave_rest_pixels)
         else:
@@ -4488,7 +4751,9 @@ class StellarSEDComponent:
             # Free redshift, fixed sigma_v: the cube was broadened once at build, so the
             # per-draw work is the weighted sum and the interpolation, as before sigma_v
             # was applied.
-            cube = spec_state.spec_ssp_broadened
+            # On a grid with an [alpha/Fe] axis the broadened cube carries it; collapse it
+            # at the model's bracket first (broadening and the collapse are both linear).
+            cube = _collapse_alpha_plane(spec_state.spec_ssp_broadened, alpha_bracket)
             tot_b = jnp.einsum("ma,maw->w", joint_weights, cube)
             age_b = jnp.einsum("ma,maw->aw", joint_weights, cube)
             return {
@@ -4623,9 +4888,12 @@ class StellarSEDComponent:
 
         Restricted to the supported configuration: **delta** metallicity, a
         **closed-form parametric** SFH (with or without the GP field, #1204),
-        **no** alpha-Fe SSP grid; and raises for anything else, so the fast
-        path can never silently diverge from the exact forward. Callers must
-        fall back to the exact path.
+        and any [alpha/Fe] axis (the weights do not depend on [alpha/Fe]; the
+        alpha dependence is applied by the consumers, which contract the 4D
+        cube over metallicity and age and then collapse the alpha axis exactly
+        as :meth:`apply` does). Raises for anything else, so the fast path can
+        never silently diverge from the exact forward. Callers must fall back
+        to the exact path.
 
         The non-parametric families and the **tabulated** SFH are both refused
         via :data:`_FAST_PATH_UNSUPPORTED_SFH_FNS`, which carries a per-family
@@ -4653,7 +4921,7 @@ class StellarSEDComponent:
         ------
         ValueError
             For any configuration outside delta metallicity / closed-form
-            parametric SFH / no alpha-Fe grid: including the tabulated SFH
+            parametric SFH: including the tabulated SFH
             (#1395). The caller must use the exact forward there.
         """
         return self._joint_weights_impl(params, ssp_data)[:3]
@@ -4666,7 +4934,6 @@ class StellarSEDComponent:
         unless ``config.age_boundaries_yr`` is set.
         """
         from tengri.components.stellar.sfh.registry import SFH_REGISTRY
-        from tengri.components.stellar.sps.dsps_wrapper import has_alpha_grid
         from tengri.cosmology import age_at_z as _age_at_z
 
         ssp = ssp_data if ssp_data is not None else self.ssp_data
@@ -4696,10 +4963,6 @@ class StellarSEDComponent:
                     f"sfh_model={self.config.sfh_model!r}: {unsupported_reason}; "
                     f"use the exact forward."
                 )
-        if has_alpha_grid(ssp):
-            raise ValueError(
-                "compute_joint_weights does not support alpha-Fe SSP grids; use the exact forward."
-            )
 
         ssp_ages_yr = (10.0**ssp.ssp_lg_age_gyr) * 1e9
 
@@ -4763,10 +5026,7 @@ class StellarSEDComponent:
                 params, self.config, ssp.ssp_lg_age_gyr, _tab_lbt_yr, _tab_order
             )
         else:
-            alpha_fe = jnp.asarray(params.get("met_alpha_fe", _ALPHA_FE_DEFAULT))
-            log_z_abs_scalar = (
-                effective_metallicity(jnp.asarray(params["met_logzsol"]), alpha_fe) + LOG10_ZSUN
-            )
+            log_z_abs_scalar = jnp.asarray(params["met_logzsol"]) + LOG10_ZSUN
 
         # The age-integrand function both kernels consume: the field draw as the
         # piecewise-linear interpolant of its own lookback nodes (#2684), the
@@ -4927,10 +5187,14 @@ class StellarSEDComponent:
             # max/argmax over zero-size arrays (#1193 fallout, #1207 fix).
             return jnp.full((), -jnp.inf)
 
+        evolving_alpha = has_alpha_grid(ssp) and self.config.alpha_fe_evolving
         agb_dust_cube = self._agb_dust_cube_ratio(
-            params, ssp.ssp_flux[:, 0] if has_alpha_grid(ssp) else ssp.ssp_flux
+            params,
+            ssp.ssp_flux
+            if evolving_alpha
+            else (ssp.ssp_flux[:, 0] if has_alpha_grid(ssp) else ssp.ssp_flux),
         )
-        if agb_dust_cube is not None and has_alpha_grid(ssp):
+        if agb_dust_cube is not None and has_alpha_grid(ssp) and not evolving_alpha:
             from tengri.components.stellar.sps.dsps_wrapper import interpolate_alpha_only
 
             _alpha_fe_value = jnp.asarray(params.get("met_alpha_fe", _ALPHA_FE_DEFAULT))
@@ -4940,11 +5204,37 @@ class StellarSEDComponent:
                 ]
                 * agb_dust_cube[..., :n_ion]
             )
+            sed_ion = jnp.tensordot(joint_weights, ssp_flux_ion, axes=([0, 1], [0, 1]))
+        elif has_alpha_grid(ssp):
+            # Same order as :meth:`apply`: contract over metallicity per age, collapse
+            # the [alpha/Fe] axis at met_alpha_fe, then sum over age.
+            from tengri.components.stellar.sps.dsps_wrapper import (
+                alpha_bracket,
+                collapse_alpha_axis,
+            )
+            from tengri.cosmology import age_at_z
+
+            _alpha_fe_value = _alpha_fe_at_ages(
+                params,
+                ssp,
+                evolving=self.config.alpha_fe_evolving,
+                t_universe_gyr=age_at_z(require_redshift(params, "compute_log_nion")),
+            )
+            _alpha_ia, _alpha_fa = alpha_bracket(ssp.ssp_alpha_fe, _alpha_fe_value)
+            ssp_flux_ion = ssp.ssp_flux[..., :n_ion]
+            if agb_dust_cube is not None:
+                ssp_flux_ion = ssp_flux_ion * agb_dust_cube[..., :n_ion]
+            lnu_age_ion = collapse_alpha_axis(
+                jnp.einsum("ma,mkai->kai", joint_weights, ssp_flux_ion),
+                _alpha_ia,
+                _alpha_fa,
+            )
+            sed_ion = jnp.sum(lnu_age_ion, axis=0)
         else:
             ssp_flux_ion = ssp.ssp_flux[:, :, :n_ion]
             if agb_dust_cube is not None:
                 ssp_flux_ion = ssp_flux_ion * agb_dust_cube[..., :n_ion]
-        sed_ion = jnp.tensordot(joint_weights, ssp_flux_ion, axes=([0, 1], [0, 1]))
+            sed_ion = jnp.tensordot(joint_weights, ssp_flux_ion, axes=([0, 1], [0, 1]))
         log10_scale = jnp.log10(total_mass.astype(jnp.result_type(float))) + jnp.log10(
             LSUN_ERG_PER_S
         )

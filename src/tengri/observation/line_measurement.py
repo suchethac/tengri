@@ -321,7 +321,7 @@ _LSUN_POW2: float = math.ldexp(1.0, _LSUN_EXP2)
 
 
 def measure_line_fluxes_from_window_lut(
-    joint_weights, total_mass, transmission, precomp, log10_four_pi_dl2
+    joint_weights, total_mass, transmission, precomp, log10_four_pi_dl2, alpha=None
 ):
     r"""Fast catalog-style line fluxes from the SSP window-integral LUT.
 
@@ -347,6 +347,9 @@ def measure_line_fluxes_from_window_lut(
     log10_four_pi_dl2 : ndarray, shape ()
         :math:`\log_{10}(4\pi d_L^2)` [dex] at the evaluation redshift, from
         :func:`tengri.utils.scale.log10_four_pi_dl2`.
+    alpha : tuple of (ndarray, ndarray), optional
+        ``(ia, fa)`` [alpha/Fe] bracket at ``met_alpha_fe``, required when ``precomp``
+        is a 4D table built by :func:`~tengri.observation.spectral_indices.stack_alpha_planes`.
 
     Returns
     -------
@@ -369,7 +372,7 @@ def measure_line_fluxes_from_window_lut(
     # reassociated by XLA into an ``inf`` constant in float32).
     window_means = (
         window_means_with_dust(
-            joint_weights, transmission, precomp.points, precomp.window_norms, scale
+            joint_weights, transmission, precomp.points, precomp.window_norms, scale, alpha
         )
         * _LSUN_POW2
     )

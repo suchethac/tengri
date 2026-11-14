@@ -201,6 +201,17 @@ def profile_memory(model) -> MemoryReport:
             )
         )
 
+    # Alpha-dependent surviving-mass table (#2250), embedded on some 4-D grids.
+    if getattr(ssp, "ssp_mass_remaining_alpha", None) is not None:
+        entries.append(
+            MemoryEntry(
+                name="SSP surviving-mass alpha table",
+                shape=_shape_str(ssp.ssp_mass_remaining_alpha),
+                f64_mb=_arr_mb(ssp.ssp_mass_remaining_alpha),
+                category="ssp",
+            )
+        )
+
     # --- Precompute LUTs ---
     # The legacy ``PrecomputedData`` container (fixed-z photometry, spectroscopy,
     # z-table, dust-age-weights arrays) was retired (#620). The active LUTs now
