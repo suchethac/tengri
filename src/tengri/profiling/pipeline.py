@@ -166,11 +166,15 @@ def _profile_exact_path(model, params, n: int = 200) -> PipelineReport:
     from tengri.components.stellar.sps.dsps_wrapper import (
         compute_csp_sed,
         compute_csp_weights,
-        interpolate_metallicity,
+        interpolate_metallicity_smooth,
     )
+    from tengri.forward.sed_model import _met_scatter_declared
     from tengri.observation.photometry import compute_flux_density
 
     p = model._get_internal_params(params)
+    # The forward model's fixed-Z rule (#3434): a declared scatter is the kernel,
+    # an undeclared one reads the SSP grid node-exactly.
+    met_scatter = float(model._lgmet_scatter) if _met_scatter_declared(model.spec) else 0.0
     steps = []
 
     # 1. Param conversion
@@ -210,18 +214,20 @@ def _profile_exact_path(model, params, n: int = 200) -> PipelineReport:
     steps.append(
         _time_step(
             "metallicity_interp",
-            lambda: interpolate_metallicity(
+            lambda: interpolate_metallicity_smooth(
                 model.ssp_data.ssp_flux,
                 model.ssp_data.ssp_lgmet,
                 p.get("log_z_abs", p.get("log_z_abs_final", -1.8477)),
+                met_scatter,
             ),
             n=n,
         )
     )
-    ssp_at_z = interpolate_metallicity(
+    ssp_at_z = interpolate_metallicity_smooth(
         model.ssp_data.ssp_flux,
         model.ssp_data.ssp_lgmet,
         p.get("log_z_abs", p.get("log_z_abs_final", -1.8477)),
+        met_scatter,
     )
 
     # 6. Dust attenuation

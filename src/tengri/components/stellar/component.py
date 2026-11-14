@@ -141,6 +141,7 @@ from tengri.components.stellar.sfh.registry import SFH_REGISTRY
 from tengri.components.stellar.sps.dsps_wrapper import (
     LSUN_ERG_PER_S,
     SSPData,
+    _lgmet_hermite_weights,
     canonical_dsps_kwargs,
     compute_log_z_evolving,
     effective_metallicity,
@@ -1412,91 +1413,6 @@ def _lgmet_weights(log_z, lgmet_scatter, ssp_lgmet):
             "(n_parcel, n_met) instead of silently dropping all but the first."
         )
     return _lgmet_weights_parcels(jnp.atleast_1d(log_z), lgmet_scatter, ssp_lgmet)[0]
-
-
-def _fd_node_slopes(xs, ys):
-    """Non-uniform finite-difference slopes on a window of ``m`` nodes (#3434).
-
-    Linear in ``ys``: each slope is a fixed combination of the node values, so
-    the cubic read built from it is a weight vector over the nodes. Interior
-    slopes are the width-weighted mean of the two bracketing secants (the
-    Catmull-Rom form on a non-uniform grid); the two window edges use the
-    one-sided three-point form on the boundary interval pair. Both reduce to
-    the usual central and one-sided differences on a uniform grid. A two-node
-    window has only the secant.
-    """
-    m = xs.shape[0]  # static
-    h = jnp.diff(xs)  # (m-1,)
-    d = jnp.diff(ys, axis=0) / h[:, None]  # (m-1, k) secants
-    if m == 2:
-        return jnp.broadcast_to(d, (2, *d.shape[1:]))
-    first = ((2.0 * h[0] + h[1]) * d[0] - h[0] * d[1]) / (h[0] + h[1])
-    interior = (h[1:, None] * d[:-1] + h[:-1, None] * d[1:]) / (h[:-1] + h[1:])[:, None]
-    last = ((2.0 * h[-1] + h[-2]) * d[-1] - h[-1] * d[-2]) / (h[-2] + h[-1])
-    return jnp.concatenate([first[None], interior, last[None]], axis=0)
-
-
-def _lgmet_hermite_weights(log_z, ssp_lgmet):
-    """Node-exact local cubic-Hermite metallicity weights for a fixed Z (#3434).
-
-    Returns the ``(n_met,)`` weight vector ``w`` such that ``w @ table`` reads the
-    SSP table at ``log_z`` for any table whose leading axis is metallicity. The
-    cubic uses the finite-difference slopes of :func:`_fd_node_slopes` on the
-    window of four nodes that brackets ``log_z`` (the whole axis when it has fewer
-    than four nodes). Because the read is linear in the
-    node values, it contracts with the age weights exactly like the lognormal
-    MDF weights it replaces.
-
-    Parameters
-    ----------
-    log_z : array_like, scalar
-        Absolute ``log10(Z)`` of the parcel. [dex]
-    ssp_lgmet : array_like, shape (n_met,)
-        SSP metallicity axis, absolute ``log10(Z)``, ascending, ``n_met >= 2``.
-
-    Returns
-    -------
-    ndarray, shape (n_met,)
-        Weights summing to 1. Exactly one-hot at every node. Outside the grid the
-        query is held at the edge node, so the weight is one-hot there too.
-
-    Notes
-    -----
-    **JIT/grad/vmap-safe**: yes. The stencil start is an integer; the derivative
-    flows through the Hermite basis and the node spacing only. Between nodes the
-    weights can be negative, so the cubic may overshoot the node values; the
-    lognormal MDF it replaces is positive everywhere.
-    """
-    if jnp.ndim(log_z) != 0:
-        raise ValueError(
-            f"_lgmet_hermite_weights takes a scalar log_z; got shape {jnp.shape(log_z)}."
-        )
-    args = canonical_dsps_kwargs(log_z=log_z, ssp_lgmet=ssp_lgmet)
-    log_z, x = args["log_z"], args["ssp_lgmet"]
-    n = x.shape[0]
-    if n < 2:
-        raise ValueError(f"_lgmet_hermite_weights needs at least 2 SSP nodes, got {n}")
-    m = min(4, n)  # window: four nodes, or the whole axis for a short grid
-    # Hold the query at the node hull with a where, not a clip (no halved slope).
-    xq = jnp.where(log_z < x[0], x[0], jnp.where(log_z > x[-1], x[-1], log_z))
-    pos = jnp.searchsorted(x, xq) - 1
-    i = jax.lax.clamp(jnp.zeros_like(pos), pos, jnp.full_like(pos, n - 2))
-    start = jax.lax.clamp(jnp.zeros_like(i), i - 1, jnp.full_like(i, n - m))
-    xs = jax.lax.dynamic_slice_in_dim(x, start, m, axis=0)
-    cell = i - start
-    # Slope operator: row k holds the slope at window node k per unit node value.
-    slope_op = _fd_node_slopes(xs, jnp.eye(m, dtype=x.dtype))
-    h = jnp.take(xs, cell + 1) - jnp.take(xs, cell)
-    t = (xq - jnp.take(xs, cell)) / h
-    t2 = t * t
-    t3 = t2 * t
-    w4 = (
-        (2.0 * t3 - 3.0 * t2 + 1.0) * jax.nn.one_hot(cell, m, dtype=x.dtype)
-        + (t3 - 2.0 * t2 + t) * h * jnp.take(slope_op, cell, axis=0)
-        + (-2.0 * t3 + 3.0 * t2) * jax.nn.one_hot(cell + 1, m, dtype=x.dtype)
-        + (t3 - t2) * h * jnp.take(slope_op, cell + 1, axis=0)
-    )
-    return jnp.zeros(n, dtype=w4.dtype).at[start + jnp.arange(m)].add(w4)
 
 
 def _delta_met_weights(log_z, lgmet_scatter, ssp_lgmet, *, declared):

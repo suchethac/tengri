@@ -1528,7 +1528,7 @@ def compute_dsps_native_weights(
     ssp_flux: jnp.ndarray,
     t_obs_gyr: float,
     lgmet: float,
-    lgmet_scatter: float = 0.2,
+    lgmet_scatter: float = 0.1,
 ) -> tuple:
     """Compute CSP age weights and metallicity-marginalized SSP flux via DSPS.
 
@@ -1570,8 +1570,8 @@ def compute_dsps_native_weights(
     lgmet : float
         log10(Z) metallicity of the galaxy (absolute, same units as ssp_lgmet).
     lgmet_scatter : float, optional
-        Gaussian scatter in log10(Z) (dex). Default 0.2 dex, matching DSPS
-        and Prospector conventions (Conroy & van Dokkum 2009; Johnson+2021).
+        Gaussian scatter in log10(Z) (dex). Default 0.1 dex, the one scatter
+        default in tengri (``SFHConfig.lgmet_scatter``).
 
     Returns
     -------
@@ -1787,7 +1787,7 @@ def compute_dsps_met_table_weights(
     ssp_lg_age_gyr: jnp.ndarray,
     ssp_flux: jnp.ndarray,
     t_obs_gyr: float,
-    lgmet_scatter: float = 0.2,
+    lgmet_scatter: float = 0.1,
 ) -> tuple:
     """Compute CSP age weights and metallicity-marginalized SSP flux via DSPS.
 
@@ -1824,7 +1824,7 @@ def compute_dsps_met_table_weights(
     t_obs_gyr : float
         Age of the universe in Gyr at the observation redshift.
     lgmet_scatter : float, optional
-        Gaussian scatter in log10(Z) per age bin (dex). Default 0.2 dex.
+        Gaussian scatter in log10(Z) per age bin (dex). Default 0.1 dex.
 
     Returns
     -------
@@ -2474,10 +2474,92 @@ def interpolate_metallicity(
     return (1.0 - frac) * ssp_flux[idx] + frac * ssp_flux[idx + 1]
 
 
-# ── Smooth metallicity interpolation (triweight kernel, DSPS-compatible)
+def _fd_node_slopes(xs, ys):
+    """Non-uniform finite-difference slopes on a window of ``m`` nodes (#3434).
 
-_LGMET_LO = -4.0
-_LGMET_HI = 0.5
+    Linear in ``ys``: each slope is a fixed combination of the node values, so
+    the cubic read built from it is a weight vector over the nodes. Interior
+    slopes are the width-weighted mean of the two bracketing secants (the
+    Catmull-Rom form on a non-uniform grid); the two window edges use the
+    one-sided three-point form on the boundary interval pair. Both reduce to
+    the usual central and one-sided differences on a uniform grid. A two-node
+    window has only the secant.
+    """
+    m = xs.shape[0]  # static
+    h = jnp.diff(xs)  # (m-1,)
+    d = jnp.diff(ys, axis=0) / h[:, None]  # (m-1, k) secants
+    if m == 2:
+        return jnp.broadcast_to(d, (2, *d.shape[1:]))
+    first = ((2.0 * h[0] + h[1]) * d[0] - h[0] * d[1]) / (h[0] + h[1])
+    interior = (h[1:, None] * d[:-1] + h[:-1, None] * d[1:]) / (h[:-1] + h[1:])[:, None]
+    last = ((2.0 * h[-1] + h[-2]) * d[-1] - h[-1] * d[-2]) / (h[-2] + h[-1])
+    return jnp.concatenate([first[None], interior, last[None]], axis=0)
+
+
+def _lgmet_hermite_weights(log_z, ssp_lgmet):
+    """Node-exact local cubic-Hermite metallicity weights for a fixed Z (#3434).
+
+    Returns the ``(n_met,)`` weight vector ``w`` such that ``w @ table`` reads the
+    SSP table at ``log_z`` for any table whose leading axis is metallicity. The
+    cubic uses the finite-difference slopes of :func:`_fd_node_slopes` on the
+    window of four nodes that brackets ``log_z`` (the whole axis when it has fewer
+    than four nodes). Because the read is linear in the
+    node values, it contracts with the age weights exactly like the lognormal
+    MDF weights it replaces.
+
+    Parameters
+    ----------
+    log_z : array_like, scalar
+        Absolute ``log10(Z)`` of the parcel. [dex]
+    ssp_lgmet : array_like, shape (n_met,)
+        SSP metallicity axis, absolute ``log10(Z)``, ascending, ``n_met >= 2``.
+
+    Returns
+    -------
+    ndarray, shape (n_met,)
+        Weights summing to 1. Exactly one-hot at every node. Outside the grid the
+        query is held at the edge node, so the weight is one-hot there too.
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: yes. The stencil start is an integer; the derivative
+    flows through the Hermite basis and the node spacing only. Between nodes the
+    weights can be negative, so the cubic may overshoot the node values; the
+    lognormal MDF it replaces is positive everywhere.
+    """
+    if jnp.ndim(log_z) != 0:
+        raise ValueError(
+            f"_lgmet_hermite_weights takes a scalar log_z; got shape {jnp.shape(log_z)}."
+        )
+    args = canonical_dsps_kwargs(log_z=log_z, ssp_lgmet=ssp_lgmet)
+    log_z, x = args["log_z"], args["ssp_lgmet"]
+    n = x.shape[0]
+    if n < 2:
+        raise ValueError(f"_lgmet_hermite_weights needs at least 2 SSP nodes, got {n}")
+    m = min(4, n)  # window: four nodes, or the whole axis for a short grid
+    # Hold the query at the node hull with a where, not a clip (no halved slope).
+    xq = jnp.where(log_z < x[0], x[0], jnp.where(log_z > x[-1], x[-1], log_z))
+    pos = jnp.searchsorted(x, xq) - 1
+    i = jax.lax.clamp(jnp.zeros_like(pos), pos, jnp.full_like(pos, n - 2))
+    start = jax.lax.clamp(jnp.zeros_like(i), i - 1, jnp.full_like(i, n - m))
+    xs = jax.lax.dynamic_slice_in_dim(x, start, m, axis=0)
+    cell = i - start
+    # Slope operator: row k holds the slope at window node k per unit node value.
+    slope_op = _fd_node_slopes(xs, jnp.eye(m, dtype=x.dtype))
+    h = jnp.take(xs, cell + 1) - jnp.take(xs, cell)
+    t = (xq - jnp.take(xs, cell)) / h
+    t2 = t * t
+    t3 = t2 * t
+    w4 = (
+        (2.0 * t3 - 3.0 * t2 + 1.0) * jax.nn.one_hot(cell, m, dtype=x.dtype)
+        + (t3 - 2.0 * t2 + t) * h * jnp.take(slope_op, cell, axis=0)
+        + (-2.0 * t3 + 3.0 * t2) * jax.nn.one_hot(cell + 1, m, dtype=x.dtype)
+        + (t3 - t2) * h * jnp.take(slope_op, cell + 1, axis=0)
+    )
+    return jnp.zeros(n, dtype=w4.dtype).at[start + jnp.arange(m)].add(w4)
+
+
+# ── Smooth metallicity interpolation (triweight kernel, DSPS-compatible)
 
 
 @jax.jit
@@ -2513,61 +2595,65 @@ def _tw_cuml_kern(x, m, h):
     return val
 
 
-@jax.jit
-def _get_lgmet_bin_edges(grid, lo=_LGMET_LO, hi=_LGMET_HI):
-    """Bin edges from midpoints, matching DSPS convention.
+def _dsps_lgmet_bin_edges(grid):
+    """Metallicity bin edges of the DSPS kernel: ``dsps.utils._get_bin_edges``.
 
-    Uses half-spacing on each side, with outer edges clamped.
+    Uses DSPS's own ``LGMET_LO`` / ``LGMET_HI`` outer edges (the same ones
+    :func:`~tengri.components.stellar.component._lgmet_weights_parcels` reads), so
+    the wrapper and the component cannot disagree on the bin edges. A local copy
+    with a narrower lower edge gave negative weights for nodes below it (#3434).
     """
-    edges = jnp.concatenate([jnp.array([lo]), 0.5 * (grid[:-1] + grid[1:]), jnp.array([hi])])
-    return edges
+    with hold_x64_preference():
+        from dsps.constants import LGMET_HI, LGMET_LO
+        from dsps.utils import _get_bin_edges
+
+    return _get_bin_edges(grid, LGMET_LO, LGMET_HI)
 
 
 @jax.jit
 def compute_lgmet_weights(log_z, ssp_lgmet, lgmet_scatter=0.1):
-    """Metallicity weights via triweight CDF integration (DSPS-compatible).
+    """Metallicity weights of one parcel, on the fixed-Z rule (#3434).
 
-    Integrates the triweight kernel CDF between bin edges, exactly
-    matching the DSPS ``triweighted_histogram`` approach. The kernel
-    has support at |z| < 3σ, giving smooth multi-bin weights.
+    A declared scatter (``lgmet_scatter > 0``) gives the triweight-kernel weights:
+    the kernel CDF integrated over DSPS's bin edges, matching DSPS
+    ``triweighted_histogram``. Non-negative, summing to 1. A zero scatter is
+    undeclared and reads the SSP grid node-exactly in log Z by cubic Hermite
+    (:func:`_lgmet_hermite_weights`): one-hot at every node.
 
     Parameters
     ----------
     log_z : float
-        Target log10(Z/Zsun) (dimensionless).
+        Target log10(Z/Zsun) (dimensionless), a scalar.
     ssp_lgmet : array, shape (n_met,)
         SSP metallicity grid [log10(Z/Zsun)], sorted ascending.
     lgmet_scatter : float
-        Kernel bandwidth [dex]. DSPS default: 0.1.
+        Declared metallicity scatter [dex]. Zero means undeclared. Default 0.1.
 
     Returns
     -------
     array, shape (n_met,)
-        Normalized weights summing to 1 (dimensionless).
+        Weights summing to 1 (dimensionless).
 
     Notes
     -----
-    **JIT-compatible**: yes, uses ``jnp`` primitives and custom kernel CDF.
-    **Gradient-safe**: yes.
+    **JIT-compatible**: yes; the rule is a ``jnp.where`` on the traced scatter.
+    **Gradient-safe**: yes. The kernel bandwidth is replaced by 1 where the
+    scatter is zero, so the unselected kernel branch stays finite.
 
     """
-    edges = _get_lgmet_bin_edges(ssp_lgmet)
-    # CDF difference: probability mass in each bin
-    # Note: CDF(lo) - CDF(hi) gives the mass between lo and hi
-    # because _tw_cuml_kern returns CDF of the flipped kernel.
-    # DSPS convention: _tw_cuml_kern(x, lo, sig) - _tw_cuml_kern(x, hi, sig)
-    # where x is the galaxy metallicity, lo/hi are bin edges.
-    #
+    declared = lgmet_scatter > 0.0
+    bandwidth = jnp.where(declared, lgmet_scatter, 1.0)
+    edges = _dsps_lgmet_bin_edges(ssp_lgmet)
     # Evaluated once per edge, not once per (bin, side): bin k's upper edge is
-    # bin k+1's lower edge, so slicing the CDF at `edges[:-1]` and `edges[1:]`
-    # separately would compute every interior edge twice for the same operands.
-    cdf = _tw_cuml_kern(log_z, edges, lgmet_scatter)
+    # bin k+1's lower edge, so the CDF is differenced on adjacent entries.
+    cdf = _tw_cuml_kern(log_z, edges, bandwidth)
     raw = cdf[:-1] - cdf[1:]
 
     total = jnp.sum(raw)
     nearest = jnp.argmin(jnp.abs(ssp_lgmet - log_z))
     fallback = jnp.zeros_like(raw).at[nearest].set(1.0)
-    return jnp.where(total > 0, raw / total, fallback)
+    kernel = jnp.where(total > 0, raw / total, fallback)
+    return jnp.where(declared, kernel, _lgmet_hermite_weights(log_z, ssp_lgmet))
 
 
 @jax.jit
