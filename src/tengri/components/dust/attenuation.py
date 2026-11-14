@@ -123,6 +123,8 @@ DUST_LAW_BREAKPOINTS_AA: dict[str, tuple[float, ...]] = {
     "leitherer02": (1800.0, 6300.0),
     "noll09": (1800.0, 6300.0),
     "salim_sbl18": (1800.0, 6300.0),
+    "reddy15": (25737.28,),
+    "hd23_mwrv31": (2300.68,),
 }
 
 

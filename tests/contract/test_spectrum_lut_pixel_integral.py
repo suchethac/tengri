@@ -33,24 +33,28 @@ _SDSS = np.linspace(3800.0, 9200.0, 200)  # 27 Angstrom pixels
 _DESI = np.linspace(6000.0, 6048.0, 61)  # 0.8 Angstrom pixels
 _PRISM = np.geomspace(6000.0, 9000.0, 40)  # constant R_pix ~ 100
 _IR = np.geomspace(2.0e4, 2.0e5, 60)  # 3.9 % pixels across the Calzetti clip at 3.115 um rest
+_UV = np.linspace(1000.0, 3500.0, 100)  # 25 Angstrom pixels, the hd23 tabulated-node band
 
 _TWO_COMP_FREE = ("sfh_dpl_alpha", "dust_tau_bc", "dust_tau_diff")
 _SINGLE_FREE = ("sfh_dpl_alpha", "dust_tau_v")
 
 
 def _dust(kind):
+    """Dust block for ``kind``: ``"single"``/``"two"``, optionally ``"single:<law>"``."""
     from tengri import DEFAULT, Fixed, Uniform
 
+    kind, _, law = kind.partition(":")
+    law = law or "calzetti"
     if kind == "single":
         return {
             "type": "single_component",
-            "law": "calzetti",
+            "law": law,
             "all_params": Fixed(DEFAULT),
             "tau_v": Uniform(0.0, 1.5, "dust_tau_v"),
         }
     return {
         "type": "two_component",
-        "law": "calzetti",
+        "law": law,
         "all_params": Fixed(DEFAULT),
         "tau_bc": Uniform(0.0, 2.0, "dust_tau_bc"),
         "tau_diff": Uniform(0.0, 1.5, "dust_tau_diff"),
@@ -115,7 +119,7 @@ def _flux_and_jacobian(model, names, base):
 
 def pair_errors(ssp, wave_obs, resolution, sigma_v, dust_kind, with_cue):
     """Return ``(flux_err, jacobian_err)`` of the LUT against the exact conserving path."""
-    names = _SINGLE_FREE if dust_kind == "single" else _TWO_COMP_FREE
+    names = _SINGLE_FREE if dust_kind.startswith("single") else _TWO_COMP_FREE
     exact = _model(ssp, wave_obs, resolution, sigma_v, dust_kind, with_cue, None)
     lut = _model(ssp, wave_obs, resolution, sigma_v, dust_kind, with_cue, SpectrumPrecomp())
     base = {
@@ -511,6 +515,38 @@ def test_calzetti_clip_zero_is_a_breakpoint():
     assert any(abs(bp - 31149.76) < 1.0 for bp in law_breakpoints("calzetti"))
     assert float(calzetti(jnp.asarray(31160.0))) == 0.0
     assert float(calzetti(jnp.asarray(31100.0))) > 0.0
+
+
+def test_reddy15_clip_zero_is_a_breakpoint():
+    """The Reddy+15 red branch is clipped at zero near 2.574 um rest; the table splits there (#3413)."""
+    from tengri.components.dust.attenuation import law_breakpoints, reddy15
+
+    assert any(abs(bp - 25737.28) < 0.1 for bp in law_breakpoints("reddy15"))
+    assert float(reddy15(jnp.asarray(25760.0))) == 0.0
+    assert float(reddy15(jnp.asarray(25700.0))) > 0.0
+
+
+#: Single-screen laws whose tabulated or piecewise curve has a kink the table must split (#3413).
+#: Each band is the one where the law sat closest to the bar before the reach-aware flag.
+_LAW_KINK_CASES = [
+    pytest.param("single:reddy15", _IR, id="reddy15-ir"),
+    pytest.param("single:reddy15", _UV, id="reddy15-uv"),
+    pytest.param("single:hd23_mwrv31", _UV, id="hd23-uv"),
+    pytest.param("single:hd23_mwrv31", _SDSS, id="hd23-sdss"),
+]
+
+
+@pytest.mark.parametrize(("dust_kind", "wave_obs"), _LAW_KINK_CASES)
+def test_law_kink_pixels_match_conserving_exact(dust_kind, wave_obs):
+    """A law's kinks, breakpoints or tabulated nodes, stay within the bar on flux and Jacobian."""
+    from tengri import load_ssp_data
+
+    _require_data(False)
+    ssp = load_ssp_data(_BARE_SSP)
+    flux_err, jac_err = pair_errors(ssp, wave_obs, None, 150.0, dust_kind, False)
+    print(f"\nflux max rel err = {flux_err:.3e}   gradient max rel err = {jac_err:.3e}")
+    assert flux_err <= _TOL, f"flux max per-pixel rel err {flux_err:.3e} > {_TOL:g}"
+    assert jac_err <= _TOL, f"gradient max per-pixel rel err {jac_err:.3e} > {_TOL:g}"
 
 
 def test_segment_expansion_point_lies_in_its_segment():

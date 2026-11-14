@@ -911,9 +911,10 @@ def _flagged_layout(
             "redshift": float(redshift),
         }
     width_kms = float(np.hypot(sigma if on_grid else 0.0, sigma_inst))
-    flags = flagged_pixel_mask(edges, bps, kernel_reach_pad_aa(centres, width_kms))
+    reach_pad = kernel_reach_pad_aa(centres, width_kms)
+    flags = flagged_pixel_mask(edges, bps, reach_pad)
     if len(screen_curves):
-        flags = flags | curvature_flag_mask(edges, screen_curves)
+        flags = flags | curvature_flag_mask(edges, screen_curves, pad_aa=reach_pad)
     return build_flagged_pixels(
         wave_model,
         wave_ssp,

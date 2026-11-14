@@ -135,22 +135,24 @@ _SIGMA_REACH = 5.0
 _WINDOW_SIGMAS = 8.0
 
 #: A pixel is flagged when the second-order remainder of a dust factor's first-order
-#: expansion across it, relative to the factor, exceeds this. The table's expansion error
-#: on the Jacobian is about a third of this bound, which keeps unflagged pixels well under
-#: the 1e-4 bar.
+#: expansion across it, relative to the factor, exceeds this. A kink (a slope jump between
+#: sub-grid samples) can cost the table about twice this bound, so laws with known kinks
+#: declare them in ``DUST_LAW_BREAKPOINTS_AA`` instead of relying on the bound.
 CURVATURE_BOUND = 1e-4
 _CURVATURE_SUBNODES = 9
 
 
-def curvature_flag_mask(edges_rest, curves, bound=CURVATURE_BOUND):
+def curvature_flag_mask(edges_rest, curves, bound=CURVATURE_BOUND, pad_aa=None):
     r"""Pixels where a dust curve's curvature defeats the first-order screen expansion.
 
     The table carries :math:`T(c) M_0 + T'(c) M_1`; the remainder is
     :math:`\tfrac12 T''\,\overline{S(\mu-c)^2}`. Its size relative to the factor is
-    estimated from second differences of each curve on a fine sub-grid of the pixel,
+    estimated from second differences of each curve on a uniform sub-grid,
     :math:`8\,\max|\Delta^2 k| / \overline{|k|}` (the :math:`w^2/8` bound on the remainder
-    of a quadratic over a pixel of width :math:`w`). It is large where a curve is steep
-    relative to its own value on a wide pixel, and where it nears zero.
+    of a quadratic over a pixel of width :math:`w`). The maximum runs over the pixel's source
+    range, its edges widened by ``pad_aa`` (the broadening's reach), because a kink outside
+    the pixel still moves the pixel's source mean; the scale is the curve over the pixel
+    itself. Each pixel's sub-grid spacing is one eighth of its own width.
 
     Parameters
     ----------
@@ -160,6 +162,8 @@ def curvature_flag_mask(edges_rest, curves, bound=CURVATURE_BOUND):
         Each maps rest wavelengths [Angstrom] (ndarray) to a curve value ``k``.
     bound : float
         Relative remainder above which a pixel is flagged.
+    pad_aa : float or ndarray, shape (n_pix,), optional
+        Half-width [Angstrom] of each pixel's source reach. Default 0 (the pixel alone).
 
     Returns
     -------
@@ -167,15 +171,24 @@ def curvature_flag_mask(edges_rest, curves, bound=CURVATURE_BOUND):
     """
     edges = np.asarray(edges_rest, dtype=np.float64)
     n_pix = edges.size - 1
-    flags = np.zeros(n_pix, dtype=bool)
+    pad = np.zeros(n_pix) if pad_aa is None else np.broadcast_to(
+        np.asarray(pad_aa, dtype=np.float64), (n_pix,)
+    )
     u = np.linspace(0.0, 1.0, _CURVATURE_SUBNODES)
-    lam = edges[:-1, None] + (edges[1:] - edges[:-1])[:, None] * u[None, :]
+    flags = np.zeros(n_pix, dtype=bool)
     for curve in curves:
-        g = np.asarray(curve(jnp.asarray(lam.reshape(-1))), dtype=np.float64).reshape(lam.shape)
-        d2 = np.abs(g[:, :-2] - 2.0 * g[:, 1:-1] + g[:, 2:]).max(axis=1)
-        scale = np.abs(g).mean(axis=1)
-        ratio = np.where(scale > 0.0, 8.0 * d2 / np.where(scale > 0.0, scale, 1.0), 0.0)
-        flags |= ratio > bound
+        for p in range(n_pix):
+            width = edges[p + 1] - edges[p]
+            step = width / (_CURVATURE_SUBNODES - 1)
+            reach_lo = edges[p] - pad[p]
+            n_reach = int(np.ceil((width + 2.0 * pad[p]) / step)) + 1
+            lam = reach_lo + step * np.arange(n_reach)
+            g = np.asarray(curve(jnp.asarray(lam)), dtype=np.float64)
+            d2 = np.abs(g[:-2] - 2.0 * g[1:-1] + g[2:]).max(initial=0.0)
+            own = np.asarray(curve(jnp.asarray(edges[p] + width * u)), dtype=np.float64)
+            scale = float(np.abs(own).mean())
+            if scale > 0.0 and 8.0 * d2 / scale > bound:
+                flags[p] = True
     return flags
 
 

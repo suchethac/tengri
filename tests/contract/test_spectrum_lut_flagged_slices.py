@@ -137,6 +137,20 @@ def test_curvature_flag_marks_wide_pixels_and_zero_crossings_only():
     assert not flags[kink + 1 :].any()  # above the clip the curve is identically zero
 
 
+def test_curvature_flag_covers_a_kink_inside_the_source_reach():
+    """A kink just outside a pixel still flags it when the broadening reaches across (#3413)."""
+    from tengri.components.stellar.sps.flagged_pixels import curvature_flag_mask
+
+    edges = np.array([5000.0, 5100.0, 5200.0])
+
+    def kinked(lam):
+        return 1.0 + 0.5 * jnp.maximum(lam - 5130.0, 0.0) / 100.0
+
+    assert not curvature_flag_mask(edges, [kinked])[0]
+    flags = curvature_flag_mask(edges, [kinked], pad_aa=np.array([40.0, 40.0]))
+    assert flags[0]
+
+
 def test_cube_interpolation_matches_model_grid_projection():
     """The window cube is the exact path's interpolation of the library onto the model nodes."""
     from tengri.components.stellar.sps.flagged_pixels import interpolate_cube_onto
