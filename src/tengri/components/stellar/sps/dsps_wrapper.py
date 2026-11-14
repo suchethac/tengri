@@ -880,8 +880,8 @@ def load_ssp_data(
         # in-memory arrays are IAU-Lsun-normalized and every downstream
         # conversion is exact.
         # Known single-cell grid defects (#3406) are repaired in float64 from the age
-        # neighbours before the working-precision cast: a float32 cast underflows the wNE
-        # grid's ~1e-70 neighbour flux to zero. The repair commutes with the unit rescale.
+        # neighbors before the working-precision cast: a float32 cast underflows the wNE
+        # grid's ~1e-70 neighbor flux to zero. The repair commutes with the unit rescale.
         flux_raw, repaired_cells = repair_known_grid_defects(
             fp.stem, f["ssp_flux"][:], ssp_lgmet, ssp_lg_age_gyr
         )

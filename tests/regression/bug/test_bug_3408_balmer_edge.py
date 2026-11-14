@@ -77,4 +77,5 @@ def test_gradient_wrt_bcnorm_is_finite():
         return jnp.sum(_balmer_continuum(wave, cont, b, TBC, 1.0, WAVBE))
 
     grad = jax.grad(total)(1.0)
-    assert np.isfinite(float(grad))
+    assert np.isfinite(float(grad)), "a non-finite bcnorm gradient: the continuum is singular"
+    assert float(grad) != 0.0, "an identically zero bcnorm gradient: the continuum ignores bcnorm"

@@ -1,8 +1,9 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Contract: no bundled SSP grid carries a single-cell outlier at 6200 A (#3406).
 
 Each grid is loaded through :func:`load_ssp_data`, so the load-time repair of known
 defects is included. A cell at age >= 30 Myr is flagged when it deviates by more than
-30% from BOTH its metallicity-neighbour and its age-neighbour geometric means.
+30% from BOTH its metallicity-neighbor and its age-neighbor geometric means.
 """
 
 import numpy as np
@@ -10,6 +11,8 @@ import pytest
 
 from tengri._data_setup import find_ssp_files
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
+
+pytestmark = pytest.mark.contract
 
 REF_WAVE_AA = 6200.0
 MIN_AGE_YR = 30e6

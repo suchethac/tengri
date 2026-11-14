@@ -1,16 +1,17 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Known single-cell defects in bundled SSP grids, repaired at load (#3406).
 
 Provenance. In the four bundled Padova grids (``fsps_prsc_miles_{chabrier,kroupa,salpeter}``
 and ``fsps_prsc_c3k_a_chabrier``) the cell at lgmet = -3.301 (Z = 0.0005) and 1.000 Gyr
-is about 2.8x brighter at 6200 A than its metallicity and age neighbours, at every
+is about 2.8x brighter at 6200 A than its metallicity and age neighbors, at every
 wavelength. The MIST grids have no such cell. The grids were built with python-fsps and no
 Padova FSPS build is recorded in this checkout (the installed python-fsps is MIST-only),
 so the defect could not be reproduced upstream; it is repaired here instead.
 
 The repair replaces the flux of each listed cell by the geometric mean of its two age
-neighbours at the same metallicity (linear interpolation of log flux in age). It applies to
+neighbors at the same metallicity (linear interpolation of log flux in age). It applies to
 every wavelength and leaves ``ssp_mass_remaining`` untouched, which is consistent with the
-neighbours at that cell. The table is explicit: spikes are not detected at run time.
+neighbors at that cell. The table is explicit: spikes are not detected at run time.
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ _KNOWN_GRID_DEFECTS: dict[str, tuple[tuple[float, float], ...]] = {
     "fsps_prsc_miles_salpeter": ((-3.30103, 0.0),),
     "fsps_prsc_c3k_a_chabrier": ((-3.30103, 0.0),),
     # wNE copy of the Padova MILES Chabrier grid: nebular emission is negligible at 1 Gyr,
-    # and the cell ratio matches the bare grid (2.766 vs age, 2.787 vs metallicity neighbours).
+    # and the cell ratio matches the bare grid (2.766 vs age, 2.787 vs metallicity neighbors).
     "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0": ((-3.30103, 0.0),),
 }
 
@@ -66,7 +67,7 @@ def repair_known_grid_defects(
     Raises
     ------
     ValueError
-        If a listed node sits on the age edge, or has negative neighbour flux
+        If a listed node sits on the age edge, or has negative neighbor flux
         (the geometric mean is undefined).
     """
     defects = _KNOWN_GRID_DEFECTS.get(stem, ())
@@ -85,11 +86,11 @@ def repair_known_grid_defects(
             continue
         if not 0 < i < flux.shape[1] - 1:
             raise ValueError(f"known grid defect at age edge: {stem} age index {i}")
-        neighbours = flux[k, i - 1 : i + 2 : 2]
-        if np.any(neighbours < 0.0):
-            raise ValueError(f"known grid defect in {stem}: negative age-neighbour flux")
-        # A zero neighbour (float32 underflow of ~1e-70 flux) gives a zero repaired cell.
-        flux[k, i] = np.sqrt(neighbours[0] * neighbours[1])
+        neighbors = flux[k, i - 1 : i + 2 : 2]
+        if np.any(neighbors < 0.0):
+            raise ValueError(f"known grid defect in {stem}: negative age-neighbor flux")
+        # A zero neighbor (float32 underflow of ~1e-70 flux) gives a zero repaired cell.
+        flux[k, i] = np.sqrt(neighbors[0] * neighbors[1])
         repaired.append((float(lgmet[k]), float(lg_age_gyr[i])))
 
     return flux, tuple(repaired)

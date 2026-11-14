@@ -1,9 +1,10 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression for #3406: the Padova SSP grids carry a single-cell spike.
 
 Cell lgmet = -3.301 (Z = 0.0005) at age 1.000 Gyr is ~2.8x brighter at 6200 A
-than its metallicity and age neighbours in every bundled Padova grid. The
+than its metallicity and age neighbors in every bundled Padova grid. The
 loader repairs that cell (see ``_KNOWN_GRID_DEFECTS`` in ``dsps_wrapper``), so
-the loaded grid must be smooth there and a constant-SFH colour sweep must be
+the loaded grid must be smooth there and a constant-SFH color sweep must be
 monotone in metallicity.
 """
 
@@ -14,6 +15,8 @@ from tengri._data_setup import find_ssp_files
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.components.stellar.sps.grid_defects import repair_known_grid_defects
 from tengri.utils.physics_constants import LOG10_ZSUN
+
+pytestmark = pytest.mark.regression_bug
 
 SPIKE_LGMET = -3.301
 SPIKE_LG_AGE_GYR = 0.0
@@ -65,7 +68,7 @@ def _const_sfh_gr(ssp, lgmet, filter_dir):
 
 
 @pytest.mark.parametrize("stem", ["fsps_prsc_miles_chabrier"])
-def test_repaired_spike_cell_matches_its_neighbours(stem):
+def test_repaired_spike_cell_matches_its_neighbors(stem):
     path = _grid_path(stem)
     ssp = load_ssp_data(str(path))
     flux = np.asarray(ssp.ssp_flux)
@@ -77,14 +80,14 @@ def test_repaired_spike_cell_matches_its_neighbours(stem):
     vs_age = cell / np.sqrt(flux[k, i - 1, j] * flux[k, i + 1, j])
     vs_met = cell / np.sqrt(flux[k - 1, i, j] * flux[k + 1, i, j])
 
-    assert abs(vs_age - 1.0) < MAX_DEV, f"age neighbours ratio {vs_age:.3f}"
-    assert abs(vs_met - 1.0) < MAX_DEV, f"metallicity neighbours ratio {vs_met:.3f}"
+    assert abs(vs_age - 1.0) < MAX_DEV, f"age neighbors ratio {vs_age:.3f}"
+    assert abs(vs_met - 1.0) < MAX_DEV, f"metallicity neighbors ratio {vs_met:.3f}"
     assert len(ssp.repaired_cells) == 1
     assert ssp.repaired_cells[0][0] == pytest.approx(SPIKE_LGMET, abs=1e-3)
     assert ssp.repaired_cells[0][1] == pytest.approx(SPIKE_LG_AGE_GYR, abs=1e-3)
 
 
-def test_repair_is_geometric_mean_of_age_neighbours_at_every_wavelength():
+def test_repair_is_geometric_mean_of_age_neighbors_at_every_wavelength():
     lgmet = np.array([-3.30103, -3.0])
     lg_age = np.array([-0.05, 0.0, 0.05])
     flux = np.ones((2, 3, 4))
