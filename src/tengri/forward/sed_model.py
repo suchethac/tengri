@@ -6755,6 +6755,68 @@ class SEDModel:
             approx=self.approx_configs or None,
         )
 
+    def with_catalog_z_range(self, z_range):
+        """Return a copy of this model whose WavePrecomp tables cover ``z_range``.
+
+        The twin of :meth:`with_fixed_redshift`. A fixed-z ``WavePrecomp`` model bakes
+        its photometry LUT at the fixed value, so every galaxy would be projected at
+        that redshift. The copy carries ``WavePrecomp(catalog_z_range=z_range)``
+        instead: its photometry LUT is a redshift table over ``z_range``, and the
+        redshift is a runtime input, read from each galaxy's ``params["redshift"]``.
+        The spec's fixed redshift is kept as the placeholder.
+
+        Parameters
+        ----------
+        z_range : tuple of float
+            ``(z_min, z_max)`` [dimensionless] covering every redshift the copy will
+            be evaluated at.
+
+        Returns
+        -------
+        SEDModel
+            A new model sharing ``ssp_data``, ``observation`` and build settings.
+            ``self`` when this model already covers ``z_range`` with its
+            ``catalog_z_range``.
+
+        Raises
+        ------
+        ValueError
+            If ``z_range`` is not an ordered pair of finite values, or this model
+            has no ``WavePrecomp`` configured (the redshift table is that LUT).
+
+        Notes
+        -----
+        Build-time only: costs one model construction, the same as
+        :meth:`with_fixed_redshift`. The copy's compile signature depends on
+        ``z_range``, so two spans compile separately. **JIT-compatible**: no, this
+        is a build-time Python method.
+        """
+        z_lo, z_hi = (float(z_range[0]), float(z_range[1]))
+        if not (np.isfinite(z_lo) and np.isfinite(z_hi) and z_lo <= z_hi):
+            raise ValueError(f"z_range must be an ordered finite pair, got {z_range!r}")
+        cfg = self._approx_config_wave
+        if cfg is None:
+            raise ValueError(
+                "with_catalog_z_range needs a WavePrecomp configured on this model; "
+                "build it with approx=WavePrecomp()"
+            )
+        current = self._catalog_z_range
+        if current is not None and current[0] <= z_lo and z_hi <= current[1]:
+            return self
+        new_cfg = dataclasses.replace(cfg, catalog_z_range=(z_lo, z_hi))
+        others = tuple(c for c in self.approx_configs if c is not cfg)
+        return SEDModel(
+            self.spec,
+            self.ssp_data,
+            observation=self.observation,
+            forward_dtype=str(self._forward_dtype),
+            csp_integration=str(self._csp_integration),
+            wave_chunk_size=self._wave_chunk_size,
+            agn_config=self._agn_config,
+            compile=str(self._compile_mode),
+            approx=(new_cfg, *others),
+        )
+
     # ── Predictions (public API) ──────────────────────────────────────
 
     # Per-draw maps for posterior plots, evaluated by

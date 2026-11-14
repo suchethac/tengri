@@ -322,6 +322,14 @@ class SpectroBatchSpec:
     cov_offsets : tuple of int
         Diagonal offsets ``(0, -1, ..., -p)`` of the banded Cholesky factor of the
         pixel covariance; ``()`` (default) when the bucket has no covariance.
+    z_span : tuple of float or None
+        ``(z_min, z_max)`` [dimensionless] spanning every galaxy of the
+        :func:`build_spectro_batches` call that built the bucket, set only for a
+        fixed-z template with ``WavePrecomp``. All buckets of one call share it, so
+        they share one twin and one compile per bucket. The batched entry points evaluate
+        the bucket on :meth:`~tengri.forward.sed_model.SEDModel.with_catalog_z_range`
+        of this span, so each galaxy's photometry is projected at its own ``obs.z``.
+        ``None`` (default) when the template needs no such twin.
 
     Raises
     ------
@@ -349,6 +357,7 @@ class SpectroBatchSpec:
     n_lines: int = 0
     n_segments: int = 0
     cov_offsets: tuple[int, ...] = ()
+    z_span: tuple[float, float] | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.n_max, int) or self.n_max < 1:
@@ -1122,6 +1131,22 @@ def _require_common_covariance_offsets(galaxies: Sequence[GalaxySpectrum]) -> No
             )
 
 
+def _needs_z_twin(model) -> bool:
+    """Whether the template's photometry LUT bakes its fixed redshift.
+
+    A fixed-z model with ``WavePrecomp`` and no ``catalog_z_range`` builds its
+    stellar photometry LUT at the fixed value. The batched path then needs the
+    catalog twin (:meth:`~tengri.forward.sed_model.SEDModel.with_catalog_z_range`)
+    over the bucket's galaxies. Every other template reads each galaxy's ``obs.z``
+    directly, or is exact.
+    """
+    return (
+        model.z_fixed is not None
+        and bool(model._approx.get("wave_precomp"))
+        and model._catalog_z_range is None
+    )
+
+
 def _require_z_in_window(galaxies: Sequence[GalaxySpectrum], z_window: tuple) -> None:
     """Refuse any galaxy whose redshift lies outside the template's ``catalog_z_range``.
 
@@ -1320,11 +1345,17 @@ def build_spectro_batches(
             if offenders:
                 raise _padding_error(spec, offenders)
 
+    call_span = None
+    if model is not None and _needs_z_twin(model):
+        zs = [float(g.z) for g in galaxies]
+        call_span = (min(zs), max(zs))
     out = []
     for spec, members in buckets.items():
         rows = [row for _, row, _, _ in members]
         if model is not None:
-            spec = replace(spec, lsf_pad_pixels=_bucket_lsf_pad(model, spec, rows))
+            spec = replace(
+                spec, lsf_pad_pixels=_bucket_lsf_pad(model, spec, rows), z_span=call_span
+            )
         out.append(
             (spec, _stack_bucket(rows), np.asarray([i for i, _, _, _ in members], dtype=int))
         )

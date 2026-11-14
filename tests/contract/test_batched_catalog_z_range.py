@@ -242,28 +242,83 @@ def _batched_phot(template, wave, z):
     return np.asarray(out["phot_fnu"])[0]
 
 
-_FIXED_LUT_XFAIL = pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "fixed-z WavePrecomp bakes stellar_phot_lnu_precomp at the template's fixed z "
-        "(components/stellar/component.py, fixed-z LUT branch, z_source = fixed value); "
-        "the batched path reads that LUT for every galaxy, so obs.z is ignored in photometry"
-    ),
-)
-
-
-@pytest.mark.parametrize(
-    "approx",
-    [None, pytest.param(_PHOT_LUT, marks=_FIXED_LUT_XFAIL)],
-    ids=["exact", "wave_precomp"],
-)
-def test_fixed_z_photometry_uses_obs_z(synthetic_ssp, grid, approx):
+def test_fixed_z_exact_photometry_uses_obs_z(synthetic_ssp, grid):
     """A template fixed at 0.05 gives galaxy photometry at its own z (0.2), not the fixed one."""
-    template = _phot_model(synthetic_ssp, grid, redshift=Fixed(0.05), approx=approx)
-    per_galaxy = _phot_model(synthetic_ssp, grid, redshift=Fixed(0.2), approx=approx)
+    template = _phot_model(synthetic_ssp, grid, redshift=Fixed(0.05))
+    per_galaxy = _phot_model(synthetic_ssp, grid, redshift=Fixed(0.2))
     batched = _batched_phot(template, grid, 0.2)
     reference = np.asarray(per_galaxy.predict_photometry({_MASS: _MASS_VALUE}))
     np.testing.assert_allclose(batched, reference, rtol=1e-10, atol=0.0)
+
+
+_PHOT_ZS = (0.05, 0.2)
+_PHOT_SPAN = (min(_PHOT_ZS), max(_PHOT_ZS))
+# Documented worst-case error of the photometric LUT (predict_via_precomp), as in
+# tests/contract/test_batched_wave_precomp_photometry.py.
+_LUT_RTOL = 6e-3
+
+
+def _batched_phot_many(template, wave, zs):
+    """Batched ``phot_fnu`` of galaxies at ``zs`` (one call, so one span) under ``template``."""
+    [(spec, batch, _)] = build_spectro_batches([_phot_record(wave, z) for z in zs], model=template)
+    params = {_MASS: jnp.full((len(zs),), _MASS_VALUE)}
+    return np.asarray(make_batched_predict(template, spec)(params, batch)["phot_fnu"])
+
+
+def test_fixed_z_wave_precomp_photometry_uses_each_galaxys_z(synthetic_ssp, grid):
+    """Fixed-z LUT template: batched photometry equals the catalog twin at each obs.z.
+
+    The template is fixed at 0.05 with its photometry LUT baked there. The batched
+    path projects each galaxy on the catalog twin over the batch span, so every
+    galaxy matches the per-galaxy catalog model with that span, and sits within the
+    LUT accuracy of the exact per-galaxy photometry.
+    """
+    template = _phot_model(synthetic_ssp, grid, redshift=Fixed(0.05), approx=_PHOT_LUT)
+    batched = _batched_phot_many(template, grid, _PHOT_ZS)
+    twin = _phot_model(
+        synthetic_ssp,
+        grid,
+        redshift=Uniform(*_PHOT_SPAN),
+        approx=WavePrecomp(z_min=0.0, z_max=0.6, n_z=_N_Z, catalog_z_range=_PHOT_SPAN),
+    )
+    for i, z in enumerate(_PHOT_ZS):
+        reference = np.asarray(twin.predict_photometry({_MASS: _MASS_VALUE, "redshift": z}))
+        np.testing.assert_allclose(batched[i], reference, rtol=1e-10, atol=0.0)
+        exact = _phot_model(synthetic_ssp, grid, redshift=Fixed(z))
+        exact_ref = np.asarray(exact.predict_photometry({_MASS: _MASS_VALUE}))
+        np.testing.assert_allclose(batched[i], exact_ref, rtol=_LUT_RTOL, atol=0.0)
+
+
+def test_with_catalog_z_range_is_the_catalog_twin(synthetic_ssp, grid):
+    """with_catalog_z_range keeps the model, drops the fixed-z LUT and is idempotent."""
+    template = _phot_model(synthetic_ssp, grid, redshift=Fixed(0.05), approx=_PHOT_LUT)
+    twin = template.with_catalog_z_range(_PHOT_SPAN)
+    assert twin._catalog_z_range == _PHOT_SPAN
+    assert twin.z_fixed is None
+    assert twin.with_catalog_z_range((0.1, 0.15)) is twin
+    with pytest.raises(ValueError, match="ordered"):
+        template.with_catalog_z_range((0.3, 0.1))
+    exact = _phot_model(synthetic_ssp, grid, redshift=Fixed(0.05))
+    with pytest.raises(ValueError, match="WavePrecomp"):
+        exact.with_catalog_z_range(_PHOT_SPAN)
+
+
+def test_fixed_z_wave_precomp_batches_compile_once(synthetic_ssp, grid):
+    """Two batches of one span, at different redshifts, add no compilation-cache miss."""
+    template = _phot_model(synthetic_ssp, grid, redshift=Fixed(0.05), approx=_PHOT_LUT)
+    [(spec_a, data_a, _)] = build_spectro_batches(
+        [_phot_record(grid, z) for z in (0.05, 0.12, 0.2)], model=template
+    )
+    [(spec_b, data_b, _)] = build_spectro_batches(
+        [_phot_record(grid, z) for z in (0.05, 0.1, 0.2)], model=template
+    )
+    assert spec_a == spec_b, "the two batches must share one bucket spec"
+    predict = make_batched_predict(template, spec_a)
+    params = {_MASS: jnp.full((3,), _MASS_VALUE)}
+    predict(params, data_a)["phot_fnu"].block_until_ready()
+    with jtu.count_jit_compilation_cache_miss() as misses:
+        predict(params, data_b)["phot_fnu"].block_until_ready()
+    assert misses() == 0, f"second batch recompiled {misses()} programs"
 
 
 @pytest.mark.parametrize("z", [0.05, 0.2])

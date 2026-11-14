@@ -243,6 +243,82 @@ def require_model_spec(model, spec) -> SpectroBatchSpec:
     return spec
 
 
+# Catalog twins of fixed-z templates, keyed by (id(template), z span). The template is
+# kept in the value so its id cannot be reused while the twin is cached.
+_TWINS: dict[tuple[int, tuple[float, float]], tuple[Any, Any]] = {}
+
+
+def batched_template(model, spec):
+    """Return the template that the batch of ``spec`` is evaluated on.
+
+    A fixed-z template with ``WavePrecomp`` bakes its photometry LUT at the fixed
+    value (see :meth:`~tengri.forward.sed_model.SEDModel.with_catalog_z_range`).
+    For such a bucket, ``spec.z_span`` names the span of its galaxies, and the
+    evaluation uses the catalog twin over that span, so each galaxy's photometry is
+    projected at its own ``obs.z``. Every other bucket gets ``model`` back.
+
+    Parameters
+    ----------
+    model : SEDModel
+        Template model.
+    spec : SpectroBatchSpec
+        Bucket key; its ``z_span`` is ``None`` unless the template needs a twin.
+
+    Returns
+    -------
+    SEDModel
+        ``model``, or its cached catalog twin over ``spec.z_span``.
+
+    Notes
+    -----
+    Build-time Python, not JIT-compatible. The twin is built once per template and
+    span, so every entry point that takes the same template and bucket evaluates the
+    same model object and compiles once.
+    """
+    span = getattr(spec, "z_span", None)
+    if span is None or model._catalog_z_range is not None:
+        return model
+    key = (id(model), span)
+    hit = _TWINS.get(key)
+    if hit is None:
+        hit = (model, model.with_catalog_z_range(span))
+        _TWINS[key] = hit
+    return hit[1]
+
+
+def batched_template_for_batches(model, batches):
+    """Return the template for a list of buckets, which must share one ``z_span``.
+
+    Parameters
+    ----------
+    model : SEDModel
+        Template model.
+    batches : sequence of (SpectroBatchSpec, SpectroBatch, ndarray)
+        Buckets from one :func:`~tengri.observation.batched.build_spectro_batches` call.
+
+    Returns
+    -------
+    SEDModel
+        The template twin shared by every bucket, or ``model`` when there are none
+        or the template needs no twin.
+
+    Raises
+    ------
+    ValueError
+        If the buckets carry different ``z_span`` values. They then come from
+        different builds and would need different twins; build the catalog in one call.
+    """
+    if not batches:
+        return model
+    spans = {getattr(spec, "z_span", None) for spec, _, _ in batches}
+    if len(spans) > 1:
+        raise ValueError(
+            f"buckets carry {len(spans)} different redshift spans {sorted(map(str, spans))}; "
+            "build the whole catalog in one build_spectro_batches call"
+        )
+    return batched_template(model, batches[0][0])
+
+
 @dataclass(frozen=True)
 class BatchedLineSet:
     """Emission-line data of a template, read once outside the trace.
@@ -472,6 +548,7 @@ def predict_batched_observables(
     from tengri.observation.photometry import project_photometry
     from tengri.observation.spectrum import resolve_sigma_lib_kms
 
+    model = batched_template(model, spec)
     require_model_spec(model, spec)
     conserving = spec.conserving
     observation = model.observation
@@ -606,6 +683,7 @@ def make_batched_predict(
     The template's component chain is built here, outside the trace, so that
     the first call does not build it inside ``jit``.
     """
+    model = batched_template(model, spec)
     check_template_model(model)
     require_model_spec(model, spec)
     threaded = model.threaded_template_inputs()

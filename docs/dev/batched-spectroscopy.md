@@ -67,7 +67,11 @@ of them is a new bucket and a new compile.
 batch is evaluated. Each refusal below is raised as a `ValueError` unless noted.
 
 The redshift is not a refusal: a free, fixed or `catalog_z_range` template evaluates each
-galaxy at its own `obs.z`. A galaxy whose `z` lies outside the template's `catalog_z_range`
+galaxy at its own `obs.z`. A fixed-z template with `WavePrecomp` bakes its photometry LUT at
+the fixed value, so `build_spectro_batches` records the span of the call's galaxies in
+`SpectroBatchSpec.z_span`, and every batched entry point evaluates the bucket on
+`SEDModel.with_catalog_z_range(z_span)` (cached per template and span). Buckets with
+different spans from different builds are refused by the fit entry points. A galaxy whose `z` lies outside the template's `catalog_z_range`
 is refused at `build_spectro_batches(..., model=...)`, naming its index, its `z` and the range.
 
 | Refused setting | Reason | What lifts it |
