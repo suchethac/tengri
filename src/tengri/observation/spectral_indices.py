@@ -909,7 +909,9 @@ def stack_window_points(waves: list, integrands: list, n_met: int, n_age: int, d
     )
 
 
-def window_point_terms(joint_weights, transmission_at_points, points: WindowPoints, scale=1.0):
+def window_point_terms(
+    joint_weights, transmission_at_points, points: WindowPoints, scale=1.0, alpha=None
+):
     """SFH-weighted, dust-screened window integrand at every window grid point.
 
     :math:`\\sum_a T(a,\\lambda_p) \\sum_m w_{ma}\\,\\mathrm{SSP}_{ma}(\\lambda_p)
@@ -926,17 +928,43 @@ def window_point_terms(joint_weights, transmission_at_points, points: WindowPoin
     points : WindowPoints
     scale : float or ndarray, shape (), default 1.0
         See :func:`window_means_with_dust`.
+    alpha : tuple of (ndarray, ndarray), optional
+        ``(ia, fa)`` from :func:`~tengri.components.stellar.sps.dsps_wrapper.alpha_bracket`
+        at ``met_alpha_fe``. Required when ``points.integrands`` carries an [alpha/Fe]
+        axis (4D table, shape ``(n_met, n_alpha, n_age, n_point)``) and ignored on a 3D
+        table. The metallicity contraction runs per [alpha/Fe] node first, the alpha
+        axis is then linearly interpolated at ``(ia, fa)``, and the age sum with the
+        transmission comes last: the order the exact forward uses.
 
     Returns
     -------
     ndarray, shape (n_point,)
+
+    Raises
+    ------
+    ValueError
+        If the table has an [alpha/Fe] axis and ``alpha`` is not given. There is no
+        silent fallback to one node.
     """
-    wint = jnp.einsum("ma,map->ap", joint_weights * scale, points.integrands)
+    if points.integrands.ndim == 4:
+        if alpha is None:
+            raise ValueError(
+                "window_point_terms: a 4D window table (with an [alpha/Fe] axis) needs "
+                "alpha=(ia, fa) from alpha_bracket; refusing to pick one node silently."
+            )
+        ia, fa = alpha
+        per_node = jnp.einsum("ma,mkap->kap", joint_weights * scale, points.integrands)
+        # Same linear weights as dsps_wrapper.collapse_alpha_axis (axis 0 here).
+        wint = (1.0 - fa) * jnp.take(per_node, ia, axis=0) + fa * jnp.take(
+            per_node, ia + 1, axis=0
+        )
+    else:
+        wint = jnp.einsum("ma,map->ap", joint_weights * scale, points.integrands)
     return jnp.sum(transmission_at_points * wint, axis=0)
 
 
 def window_means_with_dust(
-    joint_weights, transmission_at_points, points: WindowPoints, norms, scale=1.0
+    joint_weights, transmission_at_points, points: WindowPoints, norms, scale=1.0, alpha=None
 ):
     """SFH-weighted window means with the dust screen applied inside each window.
 
@@ -960,12 +988,16 @@ def window_means_with_dust(
         product (~1e44) overflows float32 although every true value is in range
         (#2677). Entering through the weights puts the contraction between them.
 
+    alpha : tuple of (ndarray, ndarray), optional
+        ``(ia, fa)`` [alpha/Fe] bracket for a 4D window table; see
+        :func:`window_point_terms`.
+
     Returns
     -------
     ndarray, shape (n_window,)
         Window means, per unit weight times ``scale`` [erg/s/Hz].
     """
-    per_point = window_point_terms(joint_weights, transmission_at_points, points, scale)
+    per_point = window_point_terms(joint_weights, transmission_at_points, points, scale, alpha)
     integral = jax.ops.segment_sum(per_point, points.window, num_segments=norms.shape[0])
     return integral / norms
 
@@ -1060,6 +1092,50 @@ def precompute_index_windows(
         names=tuple(names),
         points=stack_window_points(
             pt_waves, pt_integrands, ssp_flux.shape[0], ssp_flux.shape[1], ssp_flux.dtype
+        ),
+    )
+
+
+def stack_alpha_planes(per_plane: list):
+    """Stack per-[alpha/Fe]-node window tables on a new axis 1.
+
+    Each entry is the 3D result of :func:`precompute_index_windows` or
+    :func:`~tengri.observation.line_measurement.precompute_line_windows` for one node of
+    the [alpha/Fe] axis. The window recipe, the point grid and the window slots depend
+    only on the wavelength grid, so they are taken from the first plane and checked
+    against the rest. Window integrals and point integrands gain an [alpha/Fe] axis:
+    ``(n_met, n_alpha, n_age, ...)``.
+
+    Parameters
+    ----------
+    per_plane : list
+        One precomputation per [alpha/Fe] node, all built on the same wavelength grid
+        and index / line set.
+
+    Returns
+    -------
+    IndexWindowPrecomputation or LineWindowPrecomputation
+        The same type as the inputs, with the 4D tables.
+
+    Raises
+    ------
+    ValueError
+        If the planes do not share the window point grid.
+    """
+    first = per_plane[0]
+    for other in per_plane[1:]:
+        if not (
+            np.array_equal(np.asarray(other.points.waves), np.asarray(first.points.waves))
+            and np.array_equal(np.asarray(other.points.window), np.asarray(first.points.window))
+        ):
+            raise ValueError("stack_alpha_planes: the [alpha/Fe] planes differ in window grid")
+    return dataclasses.replace(
+        first,
+        window_integrals=jnp.stack([p.window_integrals for p in per_plane], axis=1),
+        points=WindowPoints(
+            waves=first.points.waves,
+            integrands=jnp.stack([p.points.integrands for p in per_plane], axis=1),
+            window=first.points.window,
         ),
     )
 
@@ -1206,6 +1282,7 @@ def measure_indices_from_window_lut(
     scale: jnp.ndarray,
     transmission_at_points: jnp.ndarray,
     precomp: IndexWindowPrecomputation,
+    alpha=None,
 ) -> jnp.ndarray:
     """Measure break/EW features from the per-(met,age) window LUT with dust.
 
@@ -1247,7 +1324,11 @@ def measure_indices_from_window_lut(
         ``precomp.points.waves``, so the screen acts inside each window as in the
         exact path (#2677).
     precomp : IndexWindowPrecomputation
-        Per-(met, age) window integrals from :func:`precompute_index_windows`.
+        Per-(met, age) window integrals from :func:`precompute_index_windows`, or the
+        4D per-[alpha/Fe] table from :func:`stack_alpha_planes`.
+    alpha : tuple of (ndarray, ndarray), optional
+        ``(ia, fa)`` [alpha/Fe] bracket, required for a 4D table; see
+        :func:`window_point_terms`.
 
     Returns
     -------
@@ -1267,7 +1348,9 @@ def measure_indices_from_window_lut(
     ~17x per-evaluation win end-to-end (~58x for the measurement step in
     isolation).
     """
-    point_terms = scale * window_point_terms(joint_weights, transmission_at_points, precomp.points)
+    point_terms = scale * window_point_terms(
+        joint_weights, transmission_at_points, precomp.points, alpha=alpha
+    )
     return measure_indices_from_point_terms(point_terms, precomp)
 
 

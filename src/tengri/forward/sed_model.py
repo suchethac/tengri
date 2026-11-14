@@ -8985,7 +8985,7 @@ class SEDModel:
             grid points, as the exact path evaluates it), **stellar + two-component (or no) dust +
             baked-in (or no) nebular, delta metallicity, parametric non-field SFH**. Any
             other configuration (additive nebular, AGN, non-delta metallicity,
-            GP-field SFH, alpha-Fe grid) **raises** ``ValueError`` rather than
+            GP-field SFH, an evolving [alpha/Fe]) **raises** ``ValueError`` rather than
             silently falling back, because ``approx=True`` is an explicit opt-in;
             use ``approx=False`` there. Slope indices are filled from the exact
             SED (they are not window-LUT-expressible).
@@ -9119,9 +9119,7 @@ class SEDModel:
             # under a joint-then-standalone call order). Same fix as
             # :meth:`_line_window_precomp`.
             with jax.ensure_compile_time_eval():
-                pc = precompute_index_windows(
-                    self.ssp_data.ssp_wave, self.ssp_data.ssp_flux, index_defs
-                )
+                pc = self._alpha_window_table(precompute_index_windows, index_defs)
             cache[key] = pc
         return pc
 
@@ -9147,11 +9145,43 @@ class SEDModel:
             # UnexpectedTracerError. Inputs are the concrete build-time SSP grid,
             # so this is a genuine compile-time constant.
             with jax.ensure_compile_time_eval():
-                pc = precompute_line_windows(
-                    self.ssp_data.ssp_wave, self.ssp_data.ssp_flux, line_defs
-                )
+                pc = self._alpha_window_table(precompute_line_windows, line_defs)
             cache[key] = pc
         return pc
+
+    def _alpha_window_table(self, build, defs):
+        """Window table of ``build(ssp_wave, flux, defs)`` on the model's SSP grid.
+
+        A 3D grid is built directly. A 4D grid (``(n_met, n_alpha, n_age, n_wave)``) is built
+        one [alpha/Fe] plane at a time through the same 3D builder and stacked on axis 1 by
+        :func:`~tengri.observation.spectral_indices.stack_alpha_planes`; the consumers then
+        collapse that axis at ``met_alpha_fe``.
+        """
+        from tengri.components.stellar.sps.dsps_wrapper import has_alpha_grid
+        from tengri.observation.spectral_indices import stack_alpha_planes
+
+        ssp = self.ssp_data
+        if not has_alpha_grid(ssp):
+            return build(ssp.ssp_wave, ssp.ssp_flux, defs)
+        return stack_alpha_planes(
+            [build(ssp.ssp_wave, ssp.ssp_flux[:, k], defs) for k in range(ssp.ssp_flux.shape[1])]
+        )
+
+    def _fast_alpha_bracket(self, full_params):
+        """``(ia, fa)`` of ``met_alpha_fe`` on the 4D grid's [alpha/Fe] axis, else ``None``.
+
+        Reads ``met_alpha_fe`` from the merged parameter dict (free or Fixed) with the same
+        default :meth:`StellarSEDComponent.apply` uses, so the fast path and the exact forward
+        collapse the alpha axis at the same node weights.
+        """
+        from tengri.components.stellar.component import _ALPHA_FE_DEFAULT
+        from tengri.components.stellar.sps.dsps_wrapper import alpha_bracket, has_alpha_grid
+
+        ssp = self.ssp_data
+        if not has_alpha_grid(ssp):
+            return None
+        alpha_fe = jnp.asarray(full_params.get("met_alpha_fe", _ALPHA_FE_DEFAULT))
+        return alpha_bracket(ssp.ssp_alpha_fe, alpha_fe)
 
     def _require_feature_fast_eligible(self, chain, *, caller="predict_spectral_indices"):
         r"""Return the stellar component, or raise if the chain is unsupported.
@@ -9202,6 +9232,11 @@ class SEDModel:
             raise ValueError(f"{caller}(approx=True) requires a stellar component.")
         if self._has_free_agb_dust_weight():
             raise self._free_agb_dust_lut_error(f"{caller}(approx=True) SSP window")
+        if getattr(self, "_alpha_fe_evolving", False):
+            raise ValueError(
+                f"{caller}(approx=True) does not support an evolving [alpha/Fe]; "
+                f"use the exact path (approx=None)."
+            )
         for c in chain:
             if not isinstance(c, allowed):
                 raise ValueError(
@@ -9273,7 +9308,9 @@ class SEDModel:
         # No mass scale: every break and EW index is a ratio of window means, so
         # total_mass x L_sun cancels. Applied here it is ~1e43 for a 1e10 Msun
         # galaxy and overflows float32 in the F_lambda conversion (#3149).
-        values = measure_indices_from_window_lut(joint_weights, 1.0, transmission, pc)
+        values = measure_indices_from_window_lut(
+            joint_weights, 1.0, transmission, pc, alpha=self._fast_alpha_bracket(full_params)
+        )
 
         # Slope indices are not a single-window functional → the LUT leaves NaN
         # in those slots; fill them from one exact rest-frame SED measurement.
@@ -9554,7 +9591,12 @@ class SEDModel:
                     stellar.compute_age_boundary_fractions(full_params),
                 )
             fluxes = measure_line_fluxes_from_window_lut(
-                joint_weights, total_mass, transmission, pc, log10_4pi_dl2
+                joint_weights,
+                total_mass,
+                transmission,
+                pc,
+                log10_4pi_dl2,
+                alpha=self._fast_alpha_bracket(full_params),
             )
             return fluxes * igm_T
 
