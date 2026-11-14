@@ -192,11 +192,6 @@ def test_pixel_integral_lut_matches_conserving_exact(
 
     _require_data(with_cue)
     ssp = load_ssp_data(_BARE_SSP)
-    if resolution is not None and with_cue:
-        # A nebular family under a fixed instrument kernel has no per-draw kernel: refused.
-        with pytest.raises(ValueError, match="pixel integral"):
-            _model(ssp, wave_obs, resolution, sigma_v, dust_kind, with_cue, SpectrumPrecomp())
-        return
     flux_err, jac_err = pair_errors(ssp, wave_obs, resolution, sigma_v, dust_kind, with_cue)
     print(f"\nflux max rel err = {flux_err:.3e}   gradient max rel err = {jac_err:.3e}")
     assert flux_err <= _TOL, f"flux max per-pixel rel err {flux_err:.3e} > {_TOL:g}"
@@ -251,7 +246,7 @@ def _family_model(ssp, family, approx):
     return type(base)(spec, ssp, observation=obs, approx=approx)
 
 
-_STATIC_REFUSED = ["cue-R2000-sv150", "agn", "dust-emission", "radio", "xray", "igm"]
+_STATIC_REFUSED = ["agn", "dust-emission", "radio", "xray", "igm"]
 
 
 @pytest.mark.parametrize("family", _STATIC_REFUSED)
@@ -265,6 +260,16 @@ def test_refused_family_routes_exact_under_auto(family):
     assert _spectrum_lut_for_auto(_family_model(ssp, family, None)) is None
     with pytest.raises(ValueError, match="pixel integral"):
         _family_model(ssp, family, SpectrumPrecomp())
+
+
+def test_nebular_scalar_resolution_routes_to_table_under_auto():
+    """A nebular family under a scalar resolution is served: auto takes the table (#3413)."""
+    from tengri import load_ssp_data
+    from tengri.inference.fitter import _spectrum_lut_for_auto
+
+    _require_data(True)
+    ssp = load_ssp_data(_BARE_SSP)
+    assert _spectrum_lut_for_auto(_family_model(ssp, "cue-R2000-sv150", None)) is not None
 
 
 def test_banded_resolution_routes_to_table_under_auto():

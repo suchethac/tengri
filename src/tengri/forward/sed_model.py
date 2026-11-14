@@ -3328,7 +3328,7 @@ class SEDModel:
                     f"{observation.spectroscopy.resample!r} needs the flux-conserving pixel "
                     f"integral, which the table does not carry for this model: a free redshift "
                     f"or sigma_v_kms, a free lsf_scale with a "
-                    f"resolution, a nebular family with a resolution or a banded resolution "
+                    f"resolution, a nebular family with a banded resolution "
                     f"matrix, IGM, AGN, dust emission, radio or X-ray (#2530, #3413). Use "
                     f"approx=None for the "
                     f"exact spectrum, or Spectroscopy(resample='point') to accept point sampling."
@@ -3503,16 +3503,13 @@ class SEDModel:
     def _spectrum_lsf_bakeable(self) -> bool:
         """Whether a fixed instrument kernel can be baked into the stellar spectrum table (#3413).
 
-        Needs a fixed ``lsf_scale`` and no nebular emission family (its instrument-only bucket
-        would need the kernel per draw).
+        Needs a fixed ``lsf_scale``. The nebular instrument-only group is not baked: it is
+        projected per draw with the exact projector, which applies the kernel on the lattice.
 
         Returns
         -------
         bool
         """
-        # The backend is built after the spectrum LUT is resolved, so the declared mode decides.
-        if getattr(self.spec, "nebular_mode", "off") not in ("off", "ssp"):
-            return False
         try:
             dist = self.spec.get_distribution("lsf_scale")
         except (AttributeError, KeyError):
