@@ -2918,6 +2918,14 @@ def feature_lut_serves_line_channel(model) -> bool:
     return not (callable(has_catalog) and has_catalog())
 
 
+#: Largest fraction of a spectrum's pixels that a pixel-moment table may compute exactly per
+#: draw before ``approx="auto"`` keeps the spectrum on the exact path (#3413). The flagged
+#: pixels cost about 0.06 ms of jit(grad) each at 200 pixels (about 0.13 ms with an instrument
+#: kernel), against a fixed saving of about 2 ms (about 1 ms with a kernel); the table and the
+#: exact path meet near 5-10 % flagged. An explicit ``SpectrumPrecomp()`` is not gated.
+SPECTRUM_LUT_MAX_FLAGGED_FRACTION = 0.05
+
+
 class SEDModel:
     """Differentiable SED forward model with modular physics and clean API.
 
@@ -3226,6 +3234,9 @@ class SEDModel:
           model grid every draw, which is slower than the exact path);
         - no banded resolution matrix is attached (the LUT applies only a per-pixel
           instrument kernel);
+        - the table computes at most :data:`SPECTRUM_LUT_MAX_FLAGGED_FRACTION` of the
+          pixels exactly per draw (:meth:`_spectrum_flagged_fraction`); above it the
+          batched window pass costs more than the exact path (#3413);
         - no dust-emission component is declared: its light is projected per draw
           from the full grid either way, so the table only adds its own stellar sum
           and is slower than the exact path (#3413).
@@ -3253,7 +3264,38 @@ class SEDModel:
             self._spectrum_lut_pixel_integral()
         ):
             return False
-        return self._fixed_sigma_v_kms() is not None
+        if self._fixed_sigma_v_kms() is None:
+            return False
+        return self._spectrum_flagged_fraction() <= SPECTRUM_LUT_MAX_FLAGGED_FRACTION
+
+    def _spectrum_flagged_fraction(self) -> float:
+        """Fraction of the spectrum's pixels a pixel-moment table computes exactly per draw.
+
+        Known from the geometry, the dust curves and the broadening alone, so the routing
+        decides before any table is built (#3413). 0 for a point table.
+
+        Returns
+        -------
+        float
+            Flagged pixels over all pixels, in [0, 1].
+        """
+        if not self._spectrum_lut_pixel_integral():
+            return 0.0
+        import numpy as _np
+
+        from tengri.components.stellar.sps.flagged_pixels import table_flag_mask
+
+        spectro = self.observation.spectroscopy
+        centres = _np.asarray(spectro.wave_obs, dtype=_np.float64) / (1.0 + self._resample_z_ref())
+        lsf = self._spectrum_lsf_model()
+        flags, _ = table_flag_mask(
+            centres,
+            self._spectrum_breakpoints(),
+            self._spectrum_screen_curves(),
+            0.0 if self._spectrum_banded_pixel_integral() else (self._fixed_sigma_v_kms() or 0.0),
+            None if lsf is None else float(_np.min(_np.asarray(lsf[0], dtype=_np.float64))),
+        )
+        return float(flags.mean())
 
     def _resolve_wave_precomp(self, cfg) -> None:
         """Activate the photometry SSP × filter LUT for one ``WavePrecomp`` config.

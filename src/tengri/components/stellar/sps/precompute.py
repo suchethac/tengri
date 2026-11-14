@@ -880,20 +880,12 @@ def _flagged_layout(
     """
     from tengri.components.stellar.sps.flagged_pixels import (
         build_flagged_pixels,
-        curvature_flag_mask,
-        flagged_pixel_mask,
-        kernel_reach_pad_aa,
+        table_flag_mask,
     )
-    from tengri.observation.spectrum import _FWHM_TO_SIGMA, _pixel_edges
-    from tengri.utils.physics_constants import C_KM_S
 
     centres = np.asarray(centres_rest, dtype=np.float64)
-    edges = np.asarray(_pixel_edges(jnp.asarray(centres)))
-    sigma_inst = 0.0
     instrument = None
     if lsf is not None:
-        res = np.asarray(lsf[0], dtype=np.float64)
-        sigma_inst = float(C_KM_S / (_FWHM_TO_SIGMA * np.min(res)))
         # The kernel of the exact path: pixel-grid curves, read at the lattice cells.
         read = lsf_pixels or {
             "resolution": lsf[0],
@@ -910,11 +902,13 @@ def _flagged_layout(
             "wave_obs": jnp.asarray(read["wave_obs"]),
             "redshift": float(redshift),
         }
-    width_kms = float(np.hypot(sigma if on_grid else 0.0, sigma_inst))
-    reach_pad = kernel_reach_pad_aa(centres, width_kms)
-    flags = flagged_pixel_mask(edges, bps, reach_pad)
-    if len(screen_curves):
-        flags = flags | curvature_flag_mask(edges, screen_curves, pad_aa=reach_pad)
+    flags, width_kms = table_flag_mask(
+        centres,
+        bps,
+        screen_curves,
+        sigma if on_grid else 0.0,
+        None if lsf is None else float(np.min(np.asarray(lsf[0], dtype=np.float64))),
+    )
     return build_flagged_pixels(
         wave_model,
         wave_ssp,

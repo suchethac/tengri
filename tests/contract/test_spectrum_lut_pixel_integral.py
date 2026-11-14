@@ -404,6 +404,51 @@ def test_dust_emission_routes_exact_under_auto():
     assert _spectrum_lut_for_auto(_family_model(ssp, "dust-emission", None)) is None
 
 
+@pytest.mark.parametrize(
+    ("wave_obs", "dust_kind", "resolution", "served"),
+    [
+        pytest.param(_SDSS, "single", None, True, id="calzetti-sdss-1pct-flagged"),
+        pytest.param(_SDSS, "single", 2000.0, True, id="calzetti-sdss-R2000"),
+        pytest.param(_SDSS, "single:hd23_mwrv31", None, False, id="hd23-sdss-30pct-flagged"),
+        pytest.param(_UV, "single:hd23_mwrv31", None, False, id="hd23-uv-93pct-flagged"),
+        pytest.param(_SDSS, "single:hd23_mwrv31", 2000.0, False, id="hd23-sdss-R2000"),
+    ],
+)
+def test_heavily_flagged_spectrum_routes_by_flagged_fraction_under_auto(
+    wave_obs, dust_kind, resolution, served
+):
+    """auto keeps a spectrum whose flagged fraction exceeds the crossover on the exact path (#3413).
+
+    The decision is static: the flagged fraction comes from the geometry, the dust curves and
+    the broadening, before any table is built. The built table's flagged count agrees with it.
+    """
+    from tengri import load_ssp_data
+    from tengri.forward.sed_model import SPECTRUM_LUT_MAX_FLAGGED_FRACTION
+    from tengri.inference.fitter import _spectrum_lut_for_auto
+
+    _require_data(False)
+    ssp = load_ssp_data(_BARE_SSP)
+    exact = _model(ssp, wave_obs, resolution, 150.0, dust_kind, False, None)
+    fraction = exact._spectrum_flagged_fraction()
+    assert (fraction <= SPECTRUM_LUT_MAX_FLAGGED_FRACTION) is served
+    assert (_spectrum_lut_for_auto(exact) is not None) is served
+    lut = _model(ssp, wave_obs, resolution, 150.0, dust_kind, False, SpectrumPrecomp())
+    layout = lut._spectrum_flagged_pixels()
+    built = 0 if layout is None else layout.pixels.size
+    assert built / wave_obs.size == pytest.approx(fraction)
+
+
+def test_explicit_spectrum_precomp_serves_a_heavily_flagged_spectrum():
+    """An explicit SpectrumPrecomp() stays on the table above the crossover (#3413)."""
+    from tengri import load_ssp_data
+
+    _require_data(False)
+    ssp = load_ssp_data(_BARE_SSP)
+    lut = _model(ssp, _UV, None, 150.0, "single:hd23_mwrv31", False, SpectrumPrecomp())
+    assert lut._spectrum_lut_active()
+    assert lut._spectrum_flagged_pixels() is not None
+
+
 def test_dust_emission_explicit_spectrum_precomp_still_serves():
     """An explicit SpectrumPrecomp() keeps dust emission on the table (#3413)."""
     from tengri import load_ssp_data

@@ -201,6 +201,47 @@ def kernel_reach_pad_aa(centres_rest, sigma_kms, reach=_SIGMA_REACH):
     )
 
 
+def table_flag_mask(centres_rest, breakpoints, screen_curves, sigma_v_kms, resolution_min):
+    """Pixels a pixel-moment table computes exactly, and the width of their windows.
+
+    The table build and the ``approx="auto"`` routing share this: the flag depends on the
+    geometry, the dust curves and the broadening only, so it is known before any table is
+    built.
+
+    Parameters
+    ----------
+    centres_rest : ndarray, shape (n_pix,)
+        Rest-frame pixel centres [Angstrom].
+    breakpoints : ndarray
+        Rest-frame dust-law breakpoints [Angstrom].
+    screen_curves : sequence of callable
+        The dust curves ``k(lambda)`` of the model's screens.
+    sigma_v_kms : float
+        Velocity dispersion that the lattice correction applies [km/s]; 0 when none.
+    resolution_min : float or None
+        Smallest resolving power of the instrument kernel, ``None`` without one.
+
+    Returns
+    -------
+    flags : ndarray of bool, shape (n_pix,)
+    width_kms : float
+        Total broadening width [km/s], the reach the flag and the windows are sized for.
+    """
+    from tengri.observation.spectrum import _FWHM_TO_SIGMA, _pixel_edges
+
+    centres = np.asarray(centres_rest, dtype=np.float64)
+    edges = np.asarray(_pixel_edges(jnp.asarray(centres)))
+    sigma_inst = 0.0
+    if resolution_min is not None:
+        sigma_inst = float(C_KM_S / (_FWHM_TO_SIGMA * resolution_min))
+    width_kms = float(np.hypot(float(sigma_v_kms), sigma_inst))
+    reach_pad = kernel_reach_pad_aa(centres, width_kms)
+    flags = flagged_pixel_mask(edges, np.sort(np.asarray(breakpoints, dtype=np.float64)), reach_pad)
+    if len(screen_curves):
+        flags = flags | curvature_flag_mask(edges, screen_curves, pad_aa=reach_pad)
+    return flags, width_kms
+
+
 @dataclass(frozen=True)
 class FlaggedPixels:
     """Static layout of the pixels the table computes exactly per draw (#3413).
