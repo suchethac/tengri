@@ -3329,7 +3329,7 @@ class SEDModel:
                     f"integral, which the table does not carry for this model: a free redshift "
                     f"or sigma_v_kms, a free lsf_scale with a "
                     f"resolution, a nebular family with a banded resolution "
-                    f"matrix, IGM, AGN, dust emission, radio or X-ray (#2530, #3413). Use "
+                    f"matrix, IGM or dust emission (#2530, #3413). Use "
                     f"approx=None for the "
                     f"exact spectrum, or Spectroscopy(resample='point') to accept point sampling."
                 )
