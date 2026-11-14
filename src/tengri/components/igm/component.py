@@ -795,7 +795,7 @@ class IGMSEDComponent(TemplateThreading):
             # The mean IGM is already in the build-time tensor (#1135, and for a
             # patchy or DLA model the exact fold of the fixed part, #3505). Only
             # the free factor is left, and only at the nodes the exact fold
-            # published, since those are where its tensor's flux is centred.
+            # published, since those are where its tensor's flux is centered.
             if not (self.config.igm_patchy or self.config.use_dla):
                 return derived
             nodes = derived.get("stellar_subband_waves_rest_igm_precomp")

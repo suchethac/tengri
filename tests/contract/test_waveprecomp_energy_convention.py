@@ -100,7 +100,7 @@ def test_energy_lut_differs_from_the_bessell_lut(synthetic_ssp_wide):
 
 
 def test_default_convention_is_bessell(synthetic_ssp_wide):
-    """Omitting convention reproduces the Bessell LUT exactly (no behaviour change)."""
+    """Omitting convention reproduces the Bessell LUT exactly (no behavior change)."""
     ssp = synthetic_ssp_wide
     fw = [np.asarray(c.wave) for c in _curves()]
     ft = [np.asarray(c.trans) for c in _curves()]
