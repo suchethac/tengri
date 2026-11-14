@@ -52,7 +52,7 @@ A four-dimensional SSP grid with axes $(\log Z_{\rm total},\, [\alpha/\mathrm{Fe
 
 #### Surviving mass.
 
-The sMILES and $\alpha$-MC grids embed a surviving-mass table on the $[\alpha/\mathrm{Fe}]$ axis, so `stellar_mass_surviving` follows $[\alpha/\mathrm{Fe}]$ on them. The BPASS v2.3 release has no surviving-mass table; on those grids the loader falls back to the Chabrier-based DSPS fit with a warning, and the surviving mass does not follow $[\alpha/\mathrm{Fe}]$.
+The sMILES, MILES $[\alpha/\mathrm{Fe}]$ and $\alpha$-MC grids embed a surviving-mass table on the $[\alpha/\mathrm{Fe}]$ axis, so `stellar_mass_surviving` follows $[\alpha/\mathrm{Fe}]$ on them. The hosted BPASS v2.3 grids (`bpss_v23_{bin,sin}_imf135_300_afe`) have no surviving-mass table: their `ssp_mass_living_stars` counts living stars only, without remnants, and tengri does not read it. Loading one is refused by default, naming the opt-in `load_ssp_data(..., mass_remaining='dsps_fit')`. With the opt-in, the surviving mass comes from the DSPS fit for the Chabrier IMF, which is not BPASS's IMF (a warning says so); that fit depends on age only, so the surviving mass follows neither $[\alpha/\mathrm{Fe}]$ nor $Z$.
 
 #### Metallicity convention.
 
