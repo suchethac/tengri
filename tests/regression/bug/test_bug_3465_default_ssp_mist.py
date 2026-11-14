@@ -17,9 +17,9 @@ from tengri._data_setup import DEFAULT_SSP, data_dirs, find_data_str
 
 pytestmark = pytest.mark.regression_bug
 
-MIST_C3K = "fsps_mist_c3k_a_chabrier"
+MIST_C3K = "mist_c3k_hr_chabrier_wNE"  # re-pinned from fsps_mist_c3k_a_chabrier (#3465)
 LOG10_ZSUN = -1.8477  # Asplund+2009, matches the grid's solar node
-DEFAULT_GRID_FILE = "fsps_mist_c3k_a_chabrier.h5"
+DEFAULT_GRID_FILE = "ssp_mist_c3k_hr_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 
 
 def _require_default_grid() -> str:

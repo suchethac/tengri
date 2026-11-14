@@ -565,14 +565,15 @@ def _build_nb00_today(ssp):
     ``notebooks/00_quickstart.py`` at all*, which is how #2044 moved the
     quickstart on 2026-08-23 without a single row noticing.
 
-    Note the SSP grid: ``prsc_miles_chabrier_wNE``, not the bare-stellar
+    Note the SSP grid: ``mist_c3k_hr_chabrier_wNE`` (the hr twin of the grid
+    the notebook loads, #3465), not the bare-stellar
     ``fsps_prsc_miles_chabrier`` the ``00``/``00pre`` fixtures use. #2096
     enumerated four differences between ``_build_nb00`` and today's quickstart
     (SFH family, dust component count, nebular treatment, dimension); the grid
     is a fifth, and it is the one that makes ``neb={"type": "ssp"}`` mean
     anything -- the nebular contribution is baked into this file at logU = -3.0.
 
-    Requires ``ssp="prsc_miles_chabrier_wNE"`` in its :data:`NOTEBOOKS` entry;
+    Requires ``ssp="mist_c3k_hr_chabrier_wNE"`` in its :data:`NOTEBOOKS` entry;
     building it against the bare-stellar grid would silently drop the nebular
     emission and is what ``tools/check_harness_parity.py`` would catch.
 
@@ -800,7 +801,7 @@ NOTEBOOKS = {
     "00now": dict(
         build=_build_nb00_today,
         parity=dict(kind="mirrors", notebook="notebooks/00_quickstart.py"),
-        ssp="prsc_miles_chabrier_wNE",
+        ssp="mist_c3k_hr_chabrier_wNE",
         # The notebook's own PRNGKey(6), SNR and 4 chains. Its truth is
         # hand-picked rather than a prior draw (see the builder's docstring), so
         # this row's mock is the harness's, not the notebook's.

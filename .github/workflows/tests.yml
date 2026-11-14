@@ -1000,17 +1000,37 @@ jobs:
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: ssp_cache
         with:
-          path: data/fsps_mist_c3k_a_chabrier.h5
-          key: ssp-fsps_mist_c3k_a_chabrier-v1
-      - name: Download the default SSP grid (cache miss only)
+          path: data/ssp_mist_c3k_hr_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5
+          key: ssp-mist_c3k_hr_wNE-v1
+      - name: Download the nebular-baked hr wNE SSP grid (cache miss only)
         id: ssp_download
         if: steps.ssp_cache.outputs.cache-hit != 'true'
-        run: python -c "from tengri._data_setup import download_ssp, DEFAULT_SSP; download_ssp(DEFAULT_SSP)"
+        run: python -c "from tengri._data_setup import download_ssp; download_ssp('mist_c3k_hr_chabrier_wNE')"
       - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         if: steps.ssp_download.outcome == 'success' && github.ref == 'refs/heads/main'
         with:
-          path: data/fsps_mist_c3k_a_chabrier.h5
-          key: ssp-fsps_mist_c3k_a_chabrier-v1
+          path: data/ssp_mist_c3k_hr_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5
+          key: ssp-mist_c3k_hr_wNE-v1
+      # The default SSP grid (#3465). `data/*.h5` is git-ignored, so the grid is not in
+      # the checkout; it is fetched from the public mirror into data/, where the
+      # loaders look (download_dir() is ./data here, and TENGRI_DATA_DIR is unset).
+      # One fixed key: a miss downloads, and only a `main` run saves, so PR branches
+      # do not each write an entry. A save is skipped when the download did not
+      # succeed, so a partial file is never cached.
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: ssp_cache_noNE
+        with:
+          path: data/ssp_mist_c3k_hr_chabrier_noNE.h5
+          key: ssp-mist_c3k_hr_noNE-v1
+      - name: Download the bare hr twin of the default grid (nebular backends pair with it) (cache miss only)
+        id: ssp_download_noNE
+        if: steps.ssp_cache_noNE.outputs.cache-hit != 'true'
+        run: python -c "from tengri._data_setup import download_ssp; download_ssp('mist_c3k_hr_chabrier_noNE')"
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: steps.ssp_download_noNE.outcome == 'success' && github.ref == 'refs/heads/main'
+        with:
+          path: data/ssp_mist_c3k_hr_chabrier_noNE.h5
+          key: ssp-mist_c3k_hr_noNE-v1
       # Every grid the examples need except the default SSP is committed (#1146). The
       # default SSP is not, so it is fetched above (#3465).
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -1061,17 +1081,37 @@ jobs:
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: ssp_cache
         with:
-          path: data/fsps_mist_c3k_a_chabrier.h5
-          key: ssp-fsps_mist_c3k_a_chabrier-v1
-      - name: Download the default SSP grid (cache miss only)
+          path: data/ssp_mist_c3k_hr_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5
+          key: ssp-mist_c3k_hr_wNE-v1
+      - name: Download the nebular-baked hr wNE SSP grid (cache miss only)
         id: ssp_download
         if: steps.ssp_cache.outputs.cache-hit != 'true'
-        run: python -c "from tengri._data_setup import download_ssp, DEFAULT_SSP; download_ssp(DEFAULT_SSP)"
+        run: python -c "from tengri._data_setup import download_ssp; download_ssp('mist_c3k_hr_chabrier_wNE')"
       - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         if: steps.ssp_download.outcome == 'success' && github.ref == 'refs/heads/main'
         with:
-          path: data/fsps_mist_c3k_a_chabrier.h5
-          key: ssp-fsps_mist_c3k_a_chabrier-v1
+          path: data/ssp_mist_c3k_hr_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5
+          key: ssp-mist_c3k_hr_wNE-v1
+      # The default SSP grid (#3465). `data/*.h5` is git-ignored, so the grid is not in
+      # the checkout; it is fetched from the public mirror into data/, where the
+      # loaders look (download_dir() is ./data here, and TENGRI_DATA_DIR is unset).
+      # One fixed key: a miss downloads, and only a `main` run saves, so PR branches
+      # do not each write an entry. A save is skipped when the download did not
+      # succeed, so a partial file is never cached.
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: ssp_cache_noNE
+        with:
+          path: data/ssp_mist_c3k_hr_chabrier_noNE.h5
+          key: ssp-mist_c3k_hr_noNE-v1
+      - name: Download the bare hr twin of the default grid (nebular backends pair with it) (cache miss only)
+        id: ssp_download_noNE
+        if: steps.ssp_cache_noNE.outputs.cache-hit != 'true'
+        run: python -c "from tengri._data_setup import download_ssp; download_ssp('mist_c3k_hr_chabrier_noNE')"
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: steps.ssp_download_noNE.outcome == 'success' && github.ref == 'refs/heads/main'
+        with:
+          path: data/ssp_mist_c3k_hr_chabrier_noNE.h5
+          key: ssp-mist_c3k_hr_noNE-v1
       # Validate that all grammar blocks in documentation are complete and consistent.
       - run: python tools/check_doc_grammar_keys.py
       - run: python tools/check_param_prefixes.py
@@ -1349,17 +1389,37 @@ jobs:
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: ssp_cache
         with:
-          path: data/fsps_mist_c3k_a_chabrier.h5
-          key: ssp-fsps_mist_c3k_a_chabrier-v1
-      - name: Download the default SSP grid (cache miss only)
+          path: data/ssp_mist_c3k_hr_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5
+          key: ssp-mist_c3k_hr_wNE-v1
+      - name: Download the nebular-baked hr wNE SSP grid (cache miss only)
         id: ssp_download
         if: steps.ssp_cache.outputs.cache-hit != 'true'
-        run: python -c "from tengri._data_setup import download_ssp, DEFAULT_SSP; download_ssp(DEFAULT_SSP)"
+        run: python -c "from tengri._data_setup import download_ssp; download_ssp('mist_c3k_hr_chabrier_wNE')"
       - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         if: steps.ssp_download.outcome == 'success' && github.ref == 'refs/heads/main'
         with:
-          path: data/fsps_mist_c3k_a_chabrier.h5
-          key: ssp-fsps_mist_c3k_a_chabrier-v1
+          path: data/ssp_mist_c3k_hr_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5
+          key: ssp-mist_c3k_hr_wNE-v1
+      # The default SSP grid (#3465). `data/*.h5` is git-ignored, so the grid is not in
+      # the checkout; it is fetched from the public mirror into data/, where the
+      # loaders look (download_dir() is ./data here, and TENGRI_DATA_DIR is unset).
+      # One fixed key: a miss downloads, and only a `main` run saves, so PR branches
+      # do not each write an entry. A save is skipped when the download did not
+      # succeed, so a partial file is never cached.
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: ssp_cache_noNE
+        with:
+          path: data/ssp_mist_c3k_hr_chabrier_noNE.h5
+          key: ssp-mist_c3k_hr_noNE-v1
+      - name: Download the bare hr twin of the default grid (nebular backends pair with it) (cache miss only)
+        id: ssp_download_noNE
+        if: steps.ssp_cache_noNE.outputs.cache-hit != 'true'
+        run: python -c "from tengri._data_setup import download_ssp; download_ssp('mist_c3k_hr_chabrier_noNE')"
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: steps.ssp_download_noNE.outcome == 'success' && github.ref == 'refs/heads/main'
+        with:
+          path: data/ssp_mist_c3k_hr_chabrier_noNE.h5
+          key: ssp-mist_c3k_hr_noNE-v1
       # Persist the XLA compile cache. Measured locally at -n 2: 468 s cold vs 307 s
       # warm -- a ~1.5x saving.
       #
@@ -1814,17 +1874,37 @@ jobs:
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: ssp_cache
         with:
-          path: data/fsps_mist_c3k_a_chabrier.h5
-          key: ssp-fsps_mist_c3k_a_chabrier-v1
-      - name: Download the default SSP grid (cache miss only)
+          path: data/ssp_mist_c3k_hr_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5
+          key: ssp-mist_c3k_hr_wNE-v1
+      - name: Download the nebular-baked hr wNE SSP grid (cache miss only)
         id: ssp_download
         if: steps.ssp_cache.outputs.cache-hit != 'true'
-        run: python -c "from tengri._data_setup import download_ssp, DEFAULT_SSP; download_ssp(DEFAULT_SSP)"
+        run: python -c "from tengri._data_setup import download_ssp; download_ssp('mist_c3k_hr_chabrier_wNE')"
       - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         if: steps.ssp_download.outcome == 'success' && github.ref == 'refs/heads/main'
         with:
-          path: data/fsps_mist_c3k_a_chabrier.h5
-          key: ssp-fsps_mist_c3k_a_chabrier-v1
+          path: data/ssp_mist_c3k_hr_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5
+          key: ssp-mist_c3k_hr_wNE-v1
+      # The default SSP grid (#3465). `data/*.h5` is git-ignored, so the grid is not in
+      # the checkout; it is fetched from the public mirror into data/, where the
+      # loaders look (download_dir() is ./data here, and TENGRI_DATA_DIR is unset).
+      # One fixed key: a miss downloads, and only a `main` run saves, so PR branches
+      # do not each write an entry. A save is skipped when the download did not
+      # succeed, so a partial file is never cached.
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: ssp_cache_noNE
+        with:
+          path: data/ssp_mist_c3k_hr_chabrier_noNE.h5
+          key: ssp-mist_c3k_hr_noNE-v1
+      - name: Download the bare hr twin of the default grid (nebular backends pair with it) (cache miss only)
+        id: ssp_download_noNE
+        if: steps.ssp_cache_noNE.outputs.cache-hit != 'true'
+        run: python -c "from tengri._data_setup import download_ssp; download_ssp('mist_c3k_hr_chabrier_noNE')"
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: steps.ssp_download_noNE.outcome == 'success' && github.ref == 'refs/heads/main'
+        with:
+          path: data/ssp_mist_c3k_hr_chabrier_noNE.h5
+          key: ssp-mist_c3k_hr_noNE-v1
       # `${{ matrix.nproc }}` (not `-n auto`): `--cov` adds ~30–50 % memory on top of
       # the test job, so this job OOM-killed the runner even more often than `test`
       # (the dominant cause of red `main`). Sharding does not change peak RSS per
@@ -1982,17 +2062,37 @@ jobs:
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: ssp_cache
         with:
-          path: data/fsps_mist_c3k_a_chabrier.h5
-          key: ssp-fsps_mist_c3k_a_chabrier-v1
-      - name: Download the default SSP grid (cache miss only)
+          path: data/ssp_mist_c3k_hr_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5
+          key: ssp-mist_c3k_hr_wNE-v1
+      - name: Download the nebular-baked hr wNE SSP grid (cache miss only)
         id: ssp_download
         if: steps.ssp_cache.outputs.cache-hit != 'true'
-        run: python -c "from tengri._data_setup import download_ssp, DEFAULT_SSP; download_ssp(DEFAULT_SSP)"
+        run: python -c "from tengri._data_setup import download_ssp; download_ssp('mist_c3k_hr_chabrier_wNE')"
       - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         if: steps.ssp_download.outcome == 'success' && github.ref == 'refs/heads/main'
         with:
-          path: data/fsps_mist_c3k_a_chabrier.h5
-          key: ssp-fsps_mist_c3k_a_chabrier-v1
+          path: data/ssp_mist_c3k_hr_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5
+          key: ssp-mist_c3k_hr_wNE-v1
+      # The default SSP grid (#3465). `data/*.h5` is git-ignored, so the grid is not in
+      # the checkout; it is fetched from the public mirror into data/, where the
+      # loaders look (download_dir() is ./data here, and TENGRI_DATA_DIR is unset).
+      # One fixed key: a miss downloads, and only a `main` run saves, so PR branches
+      # do not each write an entry. A save is skipped when the download did not
+      # succeed, so a partial file is never cached.
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: ssp_cache_noNE
+        with:
+          path: data/ssp_mist_c3k_hr_chabrier_noNE.h5
+          key: ssp-mist_c3k_hr_noNE-v1
+      - name: Download the bare hr twin of the default grid (nebular backends pair with it) (cache miss only)
+        id: ssp_download_noNE
+        if: steps.ssp_cache_noNE.outputs.cache-hit != 'true'
+        run: python -c "from tengri._data_setup import download_ssp; download_ssp('mist_c3k_hr_chabrier_noNE')"
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: steps.ssp_download_noNE.outcome == 'success' && github.ref == 'refs/heads/main'
+        with:
+          path: data/ssp_mist_c3k_hr_chabrier_noNE.h5
+          key: ssp-mist_c3k_hr_noNE-v1
       # Persist the JAX/XLA compilation cache across slow-tier runs.
       # `import tengri` auto-enables the on-disk cache
       # (~/.cache/tengri_jax_cache), but ephemeral runners start cold, so
@@ -2134,17 +2234,37 @@ jobs:
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: ssp_cache
         with:
-          path: data/fsps_mist_c3k_a_chabrier.h5
-          key: ssp-fsps_mist_c3k_a_chabrier-v1
-      - name: Download the default SSP grid (cache miss only)
+          path: data/ssp_mist_c3k_hr_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5
+          key: ssp-mist_c3k_hr_wNE-v1
+      - name: Download the nebular-baked hr wNE SSP grid (cache miss only)
         id: ssp_download
         if: steps.ssp_cache.outputs.cache-hit != 'true'
-        run: python -c "from tengri._data_setup import download_ssp, DEFAULT_SSP; download_ssp(DEFAULT_SSP)"
+        run: python -c "from tengri._data_setup import download_ssp; download_ssp('mist_c3k_hr_chabrier_wNE')"
       - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         if: steps.ssp_download.outcome == 'success' && github.ref == 'refs/heads/main'
         with:
-          path: data/fsps_mist_c3k_a_chabrier.h5
-          key: ssp-fsps_mist_c3k_a_chabrier-v1
+          path: data/ssp_mist_c3k_hr_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5
+          key: ssp-mist_c3k_hr_wNE-v1
+      # The default SSP grid (#3465). `data/*.h5` is git-ignored, so the grid is not in
+      # the checkout; it is fetched from the public mirror into data/, where the
+      # loaders look (download_dir() is ./data here, and TENGRI_DATA_DIR is unset).
+      # One fixed key: a miss downloads, and only a `main` run saves, so PR branches
+      # do not each write an entry. A save is skipped when the download did not
+      # succeed, so a partial file is never cached.
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: ssp_cache_noNE
+        with:
+          path: data/ssp_mist_c3k_hr_chabrier_noNE.h5
+          key: ssp-mist_c3k_hr_noNE-v1
+      - name: Download the bare hr twin of the default grid (nebular backends pair with it) (cache miss only)
+        id: ssp_download_noNE
+        if: steps.ssp_cache_noNE.outputs.cache-hit != 'true'
+        run: python -c "from tengri._data_setup import download_ssp; download_ssp('mist_c3k_hr_chabrier_noNE')"
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: steps.ssp_download_noNE.outcome == 'success' && github.ref == 'refs/heads/main'
+        with:
+          path: data/ssp_mist_c3k_hr_chabrier_noNE.h5
+          key: ssp-mist_c3k_hr_noNE-v1
       # Persist the JAX compile cache (same pattern as the `test` job).
       - id: jaxver
         run: echo "v=$(python -c "from importlib.metadata import version; print(version('jax'))")" >> "$GITHUB_OUTPUT"

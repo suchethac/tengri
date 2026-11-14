@@ -5,11 +5,16 @@ import os
 
 import pytest
 
-from tengri._data_setup import DEFAULT_SSP, download_ssp, list_known_ssps
+from tengri._data_setup import _HOSTED_SSPS, DEFAULT_SSP, download_ssp, list_known_ssps
 
 pytestmark = pytest.mark.contract
 
-DEFAULT_FILENAME = f"{DEFAULT_SSP}.h5"
+# The default is the hosted nebular-baked grid (#3465); its file name is in the hosted table.
+DEFAULT_FILENAME = _HOSTED_SSPS[DEFAULT_SSP].filename
+# The mocked-download tests below fake the bytes of a catalog grid, which has no checksum,
+# so the SHA-256 check on the default (hosted) grid does not apply to them.
+MOCK_NAME = "fsps_mist_c3k_a_chabrier"
+MOCK_FILENAME = f"{MOCK_NAME}.h5"
 
 
 @pytest.mark.unit
@@ -85,10 +90,10 @@ def test_download_ssp_uses_env_var(tmp_path, monkeypatch):
     monkeypatch.setattr("urllib.request.urlopen", mock_urlopen)
 
     # Call download_ssp with force=True (to override any existing file)
-    result = download_ssp(force=True)
+    result = download_ssp(MOCK_NAME, force=True)
 
     # Verify file was created in the env var directory
-    expected_path = tmp_path / DEFAULT_FILENAME
+    expected_path = tmp_path / MOCK_FILENAME
     assert result == expected_path
     assert expected_path.exists()
     assert expected_path.stat().st_size == 16
@@ -149,12 +154,12 @@ def test_download_ssp_default_dest_uses_cwd(tmp_path, monkeypatch):
     monkeypatch.setattr("urllib.request.urlopen", mock_urlopen)
 
     # Call with force=True to override any existing file
-    result = download_ssp(force=True)
+    result = download_ssp(MOCK_NAME, force=True)
 
     # Verify file was created in data/ directory (relative to tmp_path)
-    expected_file = tmp_path / "data" / DEFAULT_FILENAME
+    expected_file = tmp_path / "data" / MOCK_FILENAME
     assert expected_file.exists()
-    assert result.name == DEFAULT_FILENAME
+    assert result.name == MOCK_FILENAME
     assert result.parent.name == "data"
 
 
@@ -189,8 +194,45 @@ def test_download_ssp_creates_dest_directory(tmp_path, monkeypatch):
     monkeypatch.setattr("urllib.request.urlopen", mock_urlopen)
 
     # Call download_ssp
-    result = download_ssp(dest=dest, force=True)
+    result = download_ssp(MOCK_NAME, dest=dest, force=True)
 
     # Verify directory was created
     assert dest.exists()
     assert result.parent == dest
+
+
+@pytest.mark.unit
+def test_hosted_download_with_wrong_bytes_is_refused_and_leaves_nothing(tmp_path, monkeypatch):
+    """A hosted grid that fails its SHA-256 is discarded, with no partial file left (#3465)."""
+
+    class WrongBytes:
+        status = 200
+
+        def __init__(self):
+            self._sent = False
+
+        def read(self, chunk_size):
+            if self._sent:
+                return b""
+            self._sent = True
+            return b"not the grid"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+    seen = []
+
+    def mock_urlopen(url, timeout=None):
+        seen.append(url)
+        return WrongBytes()
+
+    monkeypatch.setattr("urllib.request.urlopen", mock_urlopen)
+    with pytest.raises(RuntimeError, match="SHA-256 mismatch"):
+        download_ssp(DEFAULT_SSP, dest=tmp_path, force=True, progress=False)
+    # The downloader sends a HEAD (a Request) and then the GET; the GET names the hosted URL.
+    assert seen[-1] == _HOSTED_SSPS[DEFAULT_SSP].base_url + DEFAULT_FILENAME
+    assert not (tmp_path / DEFAULT_FILENAME).exists()
+    assert not (tmp_path / (DEFAULT_FILENAME + ".partial")).exists()

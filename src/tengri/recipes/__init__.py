@@ -52,12 +52,13 @@ def star_forming_photometry() -> dict:
     Suitable for optical+NIR+MIR photometry fits of star-forming galaxies
     at low-to-intermediate redshift.
 
-    **SSP requirement:** bare-stellar (e.g., ``fsps_prsc_miles_chabrier.h5``,
-    ``fsps_mist_c3k_a_chabrier.h5``). The Cue nebular backend cannot be paired
-    with wNE (with-nebular-emission) SSP files; doing so raises
-    ``CueWNESSPError``.
+    **SSP requirement:** the default grid (``load_ssp()``, nebular-baked
+    ``mist_c3k_hr_chabrier_wNE``) or any bare-stellar grid. Cue and CLOUDY need the
+    bare stellar grid: a model on the default is built on its bare twin
+    (``mist_c3k_hr_chabrier_noNE``) automatically (#3465). Naming a wNE grid
+    explicitly with the Cue backend raises ``CueWNESSPError``.
 
-    **To download the bare-stellar SSP:**
+    **To download a bare-stellar SSP by name:**
 
     .. code-block:: python
 
@@ -627,10 +628,11 @@ def dust_demo() -> dict:
     that :func:`~tengri.analysis.plotting.sweep_parameter` can override
     one knob at a time without touching the rest.
 
-    **SSP requirement:** wNE (with-nebular-emission), i.e.
-    ``load_ssp("mist_c3k_a_chabrier_wNE")``. Uses the BakedIn nebular path
+    **SSP requirement:** wNE (with-nebular-emission), i.e. the default
+    ``load_ssp()`` (``mist_c3k_hr_chabrier_wNE``). Uses the BakedIn nebular path
     bundled with the SSP, so optical emission lines render in the SED plots.
-    (The bare-stellar ``load_ssp()`` default carries no baked nebular lines.)
+    A recipe that asks for Cue or CLOUDY nebular emission is built on the bare
+    twin of the default instead (#3465).
 
     **Configuration:**
 
