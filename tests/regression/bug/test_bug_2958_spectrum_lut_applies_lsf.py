@@ -305,19 +305,12 @@ def _igm_case_reference(exact_model, sigma_v_kms):
     return ref_b * (base / ref_0)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "#3436 lattice point readout misses the brute-force reference by 3.7e-3 of peak at "
-        "lattice spacing 5e-5 (1.3e-3 at 2.5e-5) on this wNE SSP's unresolved lines; "
-        "the 1e-3 bar is not met yet"
-    ),
-)
 def test_d_sigma_v_exact_path_matches_brute_force_without_resolution(ssp_data_wne):
     """#3436: the exact path with IGM and no resolution broadens at library resolution.
 
     Resample mode: point (``_spec`` uses ``resample="point"``). Reference: the brute-force
     ln-lambda broadening of the stellar light, times the IGM, at the pixel centres (1e-3).
+    The point readout is the closed-form Gaussian of #3512 (measured 7.2e-5 of peak).
     """
     exact = _build(
         ssp_data_wne,

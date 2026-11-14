@@ -6304,14 +6304,18 @@ class SEDModel:
         ``apply_lsf`` clamps via ``jnp.maximum`` so traced values flow
         through without breaking JIT.
         """
-        if "sigma_v_kms" in params:
-            return params["sigma_v_kms"]
         try:
             dist = self.spec.get_distribution("sigma_v_kms")
         except KeyError:
-            return 0.0
-        if dist.is_fixed:
+            dist = None
+        # A declared Fixed value is static even when the merged params carry it as a traced
+        # value, so the projection routes on a concrete sigma_v (#3512).
+        if dist is not None and dist.is_fixed:
             return float(dist.bounds[0])
+        if "sigma_v_kms" in params:
+            return params["sigma_v_kms"]
+        if dist is None:
+            return 0.0
         raise ValueError(_free_lsf_param_missing("sigma_v_kms"))
 
     def _get_lsf_scale(self, params):
@@ -7405,6 +7409,12 @@ class SEDModel:
         lut_sigma_v_kms = self._spectrum_lut_sigma_v_kms()
         if lut_sigma_v_kms is not None:
             tail = (*tail, ("spec_lut_sigma_v_kms", lut_sigma_v_kms))
+        # The projection takes a Fixed sigma_v as a static Python value (#3512), so a nonzero one
+        # is part of the compiled structure. Zero (undeclared or Fixed(0)) takes the same
+        # unbroadened path and keeps the signature unchanged; a free sigma_v is traced.
+        static_sigma_v_kms = self._fixed_sigma_v_kms()
+        if static_sigma_v_kms:
+            tail = (*tail, ("spec_static_sigma_v_kms", static_sigma_v_kms))
         signature = derive_key(
             self,
             SIGNATURE_POLICY,
