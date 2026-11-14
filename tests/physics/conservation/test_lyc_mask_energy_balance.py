@@ -267,9 +267,15 @@ class TestGoldenValues:
     # wg00 7.022833393235165e59 -> 7.015195688643668e59 (-0.109 %). two_component
     # and single_screen read no tabulated tau_V axis and did not move.
     GOLDEN_L_ABSORBED: ClassVar[dict[str, float]] = {
-        "two_component": 5.93036676326139e59,
-        "single_screen": 7.4319301202253715e59,
-        "wg00": 7.015195688643668e59,
+        # Re-pinned 2026-11-15 after #3434 (in #3462): no metallicity scatter at fixed Z
+        # moves this by -3.554%.
+        "two_component": 5.719589629790734e59,
+        # Re-pinned 2026-11-15 after #3434 (in #3462): no metallicity scatter at fixed Z
+        # moves this by -3.554%.
+        "single_screen": 7.167784422527992e59,
+        # Re-pinned 2026-11-15 after #3434 (in #3462): no metallicity scatter at fixed Z
+        # moves this by -3.554%.
+        "wg00": 6.765861552822812e59,
     }
 
     @pytest.mark.parametrize(

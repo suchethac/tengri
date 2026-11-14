@@ -61,6 +61,8 @@ _RTOL = 1.0e-6
 #: The polar-dust window root is solved to this relative residual in the window fraction.
 _ROOT_RTOL = 1.0e-9
 _BAND = (5.0, 20.0)
+# Re-pinned 2026-11-15 after #3434 (in #3462): no metallicity scatter at fixed Z
+# moves this by -3.554%. Regenerated with generate.py at e6e2d71ff (source_sha in the file).
 _REFERENCE = (
     Path(__file__).resolve().parents[1]
     / "data"
