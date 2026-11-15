@@ -321,3 +321,18 @@ def test_build_time_met_table_is_read(built):
     delta = np.asarray(built("dpl", False, "delta")["w_apply"])
     table = np.asarray(built("dpl", False, "table_build")["w_apply"])
     assert np.max(np.abs(delta - table)) > 1e-3 * np.max(delta)
+
+
+def test_prior_draws_are_independent_of_the_chunk_size(monkeypatch):
+    """Chunking the draw evaluation (bounded memory) changes no curve, with a ragged tail."""
+    from tengri.components.stellar.sfh import _prior_sampling as P
+
+    key = jax.random.PRNGKey(5)
+    _age, whole = sample_sfh_prior(["dpl", "field"], key, n=11, redshift=Z_OBS)
+    monkeypatch.setattr(P, "_DRAW_CHUNK", 4)
+    _age, chunked = sample_sfh_prior(["dpl", "field"], key, n=11, redshift=Z_OBS)
+    # Scale-relative, as in the prior sweep: the far-past tail is 0 against ~1e-20 roundoff.
+    peak = float(np.max(np.abs(np.asarray(whole))))
+    np.testing.assert_allclose(
+        np.asarray(chunked), np.asarray(whole), rtol=1e-12, atol=1e-12 * peak
+    )

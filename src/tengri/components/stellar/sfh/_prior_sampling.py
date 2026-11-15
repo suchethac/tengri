@@ -43,6 +43,9 @@ DEFAULT_AGE_GRID_YR: np.ndarray = host_array(
     10.0 ** np.linspace(DEFAULT_LOG_AGE_MIN, DEFAULT_LOG_AGE_MAX, DEFAULT_N_GRID)
 )
 
+#: Draws evaluated together by :func:`sample_sfh_prior`; bounds its peak memory.
+_DRAW_CHUNK = 64
+
 #: The GP-field modulator's registry key: a modulator, not a family.
 _FIELD = "field"
 
@@ -263,5 +266,7 @@ def sample_sfh_prior(
         params_i = {**params_i, "redshift": redshift_value}
         return evaluate_sfh(config, params_i, jnp.asarray(age_grid_yr), n_grid).sfr_on_ssp
 
-    sfr_curves = jax.vmap(_one)(publics)
+    # Chunked vmap: each draw's evaluation state (the SSP-age integrand, the field
+    # latent and its history) is held for ``_DRAW_CHUNK`` draws at a time, not for all ``n``.
+    sfr_curves = jax.lax.map(_one, publics, batch_size=_DRAW_CHUNK)
     return age_grid_yr, sfr_curves
