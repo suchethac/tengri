@@ -487,26 +487,32 @@ _AGN_MBH_DUST = {
 #: At log M_BH 10, log L_bol 11 (lambda_Edd = 3.0e-4) r_sg = 21.1 R_g, the hot flow fills the disc
 #: and the corona keeps its own scale; 0.01 A is 1e-8 of the peak there.
 _REF_F64_AGN_BLACK_HOLE_MASS = {
+    # Re-pinned 2026-11-15 after #3434 (in #3462): no metallicity scatter at fixed Z
+    # moves this by +0.045% (rest_sed_sum; photometry from -0.14% to +2.3%).
     6.0: {
-        "rest_sed_sum": 1.5594106637385598e32,
-        "rest_sed_0": 108204047441390.98,
-        "rest_sed_mid": 2.8914653865344756e28,
-        "rest_sed_last": 8.773438001349959e21,
-        "photometry": (1.099527068736421e-27, 1.5613865677248782e-27, 1.7704391179433187e-27),
+        "rest_sed_sum": 1.5601101218617673e32,
+        "rest_sed_0": 108269409639268.17,
+        "rest_sed_mid": 2.8867877243280944e28,
+        "rest_sed_last": 8.778715573550576e21,
+        "photometry": (1.0980302522512905e-27, 1.5902998357982673e-27, 1.8115853932361007e-27),
     },
+    # Re-pinned 2026-11-15 after #3434 (in #3462): no metallicity scatter at fixed Z
+    # moves this by +0.046% (rest_sed_sum; photometry from -0.12% to +2.3%).
     8.0: {
-        "rest_sed_sum": 1.679343795103247e32,
-        "rest_sed_0": 3.066520170192709e16,
-        "rest_sed_mid": 3.162729319130743e28,
-        "rest_sed_last": 8.839446872961821e21,
-        "photometry": (1.2090083783122584e-27, 1.5635657807593619e-27, 1.7710697344413592e-27),
+        "rest_sed_sum": 1.68011570864303e32,
+        "rest_sed_0": 3.0683725454309556e16,
+        "rest_sed_mid": 3.1582155177711467e28,
+        "rest_sed_last": 8.84476431876264e21,
+        "photometry": (1.2075776955734298e-27, 1.5924803652174903e-27, 1.812216390667034e-27),
     },
+    # Re-pinned 2026-11-15 after #3434 (in #3462): no metallicity scatter at fixed Z
+    # moves this by +0.038% (rest_sed_sum; photometry from -0.11% to +2.3%).
     10.0: {
-        "rest_sed_sum": 1.8419135502708347e32,
+        "rest_sed_sum": 1.8426110302155777e32,
         "rest_sed_0": 7.652309097363384e17,
-        "rest_sed_mid": 3.4635035564355416e28,
-        "rest_sed_last": 8.772828236359366e21,
-        "photometry": (1.3263179247375802e-27, 1.5821712950270997e-27, 1.770779108245779e-27),
+        "rest_sed_mid": 3.45882234945612e28,
+        "rest_sed_last": 8.778105440222744e21,
+        "photometry": (1.3248196098614281e-27, 1.6110845503703137e-27, 1.8119253799405172e-27),
     },
 }
 

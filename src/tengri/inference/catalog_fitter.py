@@ -1937,7 +1937,6 @@ class _CatalogFitterOriginal:
         reduction (galaxies are independent). Bit-parity with the single-device
         path holds up to float round-off.
         """
-        self._refuse_all_absent_rows()
         from tengri.inference.backends.mcmc._shared import _CHEES_JITTER_SCALE
         from tengri.inference.backends.mcmc.catalog import (
             build_catalog_mcmc_engine,
@@ -1981,6 +1980,9 @@ class _CatalogFitterOriginal:
                 "method='mcmc_nuts'/'mcmc_hmc' if you specifically want a dense "
                 "mass matrix estimated from warmup instead."
             )
+        # Argument refusals first, then the data: a bad argument is named whatever
+        # the catalog holds.
+        self._refuse_all_absent_rows()
         t0 = time.time()
         n_gal = self.n_galaxies
         # K galaxies per dispatch (#1189). AUTO by default: one galaxy per

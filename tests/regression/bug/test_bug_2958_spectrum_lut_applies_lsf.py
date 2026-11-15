@@ -239,16 +239,19 @@ def test_h_lut_matches_exact_at_r5000_without_fallback(ssp_data_wne):
 # Re-captured on main ac75d42fe: the SFH timing parameters became fractions of
 # age(z) (#2748), which moves the fixture's default tsnorm SFH at z = 0.1, so the
 # arrays pinned before it (and the ones below in _PINNED_EXACT) no longer apply.
+# Re-captured again on main debe80a55 (2026-11-15) after #3434 (in #3462): fixed
+# metallicity carries no metallicity scatter, which moves these spectra by up to
+# 0.36% (test d), 0.37% (wne_B) and 3.6% (synth_B, the synthetic grid's coarse Z nodes).
 # The pins still guard the LUT-with-no-instrument and the exact path against
 # unintended change; a ruled physics change re-captures them.
 _PREFIX_LUT_WNE_RNONE = [
-    8.832206167702604e-29,
-    3.165934477902422e-28,
-    5.070904983979376e-28,
-    7.318035949559824e-28,
-    8.560968754669802e-28,
-    1.1660212420805499e-27,
-    1.4095711285515449e-27,
+    8.80056622757287e-29,
+    3.1569992671959488e-28,
+    5.065115284705094e-28,
+    7.303427672123216e-28,
+    8.535438229987707e-28,
+    1.1659108866197943e-27,
+    1.4105053361574834e-27,
 ]
 
 
@@ -268,22 +271,22 @@ def test_d_resolution_none_is_bit_for_bit_prefix(ssp_data_wne):
 
 _PINNED_EXACT = {
     "synth_B": [
-        2.6005432403292307e-12,
-        1.905869690855171e-12,
-        1.463844810911483e-12,
-        1.162784433602384e-12,
-        9.467437807646447e-13,
-        7.873430053226903e-13,
-        6.6513321392689e-13,
+        2.5081147137035423e-12,
+        1.8381312565409746e-12,
+        1.4118168280720108e-12,
+        1.1214567408671232e-12,
+        9.130946064725257e-13,
+        7.593592545423278e-13,
+        6.414930444347694e-13,
     ],
     "wne_B": [
-        8.84153748248348e-29,
-        3.105164351808286e-28,
-        4.976330494264325e-28,
-        7.382143463596137e-28,
-        8.807978458553114e-28,
-        1.1653075487088356e-27,
-        1.4096784141453878e-27,
+        8.809203342893736e-29,
+        3.0969623889873714e-28,
+        4.971145874795721e-28,
+        7.367522021059879e-28,
+        8.779184093178668e-28,
+        1.1651714505513803e-27,
+        1.4106343713004515e-27,
     ],
 }
 

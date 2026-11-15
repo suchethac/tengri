@@ -511,7 +511,9 @@ def batched_log_likelihood(
     ``calibration_marginalize=True`` the spectral term is a marginal likelihood and
     keeps that constant, as the per-galaxy ``CalibrationMarginalizedLikelihood`` does,
     so the two settings differ by that constant and by nothing else. The photometric
-    term is unchanged in both. With ``eline_mode="marginalized"`` the spectral term is
+    term is unchanged in both. The photometry is projected through the template's
+    ``WavePrecomp`` LUT when it has one (see :mod:`tengri.forward.batched_spectrum`). With
+    ``eline_mode="marginalized"`` the spectral term is
     the marginal over the line amplitudes, and over the calibration polynomial too when
     ``calibration_marginalize=True``, with the normalization constant dropped.
     """

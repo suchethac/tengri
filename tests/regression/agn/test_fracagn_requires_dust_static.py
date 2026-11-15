@@ -35,8 +35,12 @@ pytestmark = pytest.mark.regression_bug
 
 # Pre-change photometry of the dust-free, fracAGN-free composable AGN below
 # (PRNGKey(0) sample), recorded on origin/main 7b2a7fbdf.
-_REFERENCE_SUM = 1.2075885176529603e-11
-_REFERENCE_FIRST = (5.455126164444879e-12, 2.9004212662948855e-12, 1.7384032925551905e-12)
+# Re-pinned 2026-11-15 after #3434 (in #3462): no metallicity scatter at fixed Z
+# moves this by -3.554%.
+_REFERENCE_SUM = 1.1646683978388357e-11
+# Re-pinned 2026-11-15 after #3434 (in #3462): no metallicity scatter at fixed Z
+# moves this by -3.554%.
+_REFERENCE_FIRST = (5.261240030917992e-12, 2.797334472704961e-12, 1.6766169501786093e-12)
 
 
 def _agn(frac):
