@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 r"""The PCHIP slope limiter compares signs, so scaling monotone data keeps its slopes.
 
-The limiter decides whether two neighbouring secants share a sign. A product of the two
+The limiter decides whether two neighboring secants share a sign. A product of the two
 secants underflows to zero in float32 once both are below ~1e-19 (1e-25 squared), so
 same-signed secants were read as a sign change and the interior slope was set to 0.
 Scaling monotone increasing data by a constant must scale its slopes by the same constant.
