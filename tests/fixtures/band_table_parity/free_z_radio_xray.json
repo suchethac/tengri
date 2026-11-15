@@ -5,7 +5,7 @@
   "xray_delta_alpha_ox": -1.8986232452627305
  },
  "platform": "darwin-arm64",
- "repin_note": "Re-pinned 2026-11-15: monotone PCHIP metallicity read (#3434, owner ruling 'True PCHIP on the spectra'). Against real main: the PCHIP move is up to 4.1e-4 relative (dust_fixed_z, exact, shock) and 3.3e-5 (free_z_radio_xray); the re-pinned arrays also carry 1-6 ulp (max 1.3e-15 relative) from the restructured contraction order, measured on a Hermite control.",
+ "repin_note": "Re-pinned 2026-11-15: monotone PCHIP metallicity read (#3434, owner ruling 'True PCHIP on the spectra'). Against real main: the PCHIP move is up to 4.1e-4 relative (dust_fixed_z, exact, shock) and 3.3e-5 (free_z_radio_xray); the re-pinned arrays also carry 1-6 ulp (max 1.3e-15 relative) from the restructured contraction order, measured on a Hermite control. | Re-captured 2026-11-16 for #3541 (native-slope read of the SSP metallicity axis). Structure: the only added leaves are the native-slope siblings (the nested 'slopes' arrays of the stellar photometry LUT, and of the energy-balance and dust tables when present), threaded through the same channel; no existing leaf changed beyond round-off. Measured moves: photometry max rel 7.8e-7. The move is the undeclared metallicity read: PCHIP of stored values before, the Hermite of native PCHIP slopes now.",
  "signature_sha256": "f592fe1c26925711388cccec26cb573bdd50086eea94749395803f76b1453b22",
  "summary": "Precompute Engagement Summary\n===========================\n\n\u2022 Energy-balance LUT: ENGAGED\n\u2022 Dust band response: ENGAGED\n\n\u2022 Emitter term responses:\n  - agn: ENGAGED\n  - radio: ENGAGED\n  - xray: DECLINED\n    Reason: free xray parameters: ['xray_delta_alpha_ox']\n\n\u2022 Observed facts:\n  components: stellar, nebular, dust, dust_emission, agn, radio, xray\n  dust_emission_configured: True\n  free_params: redshift, sfh_dpl_log_total_mass, xray_delta_alpha_ox\n  igm_fold: declared=auto, resolved=None\n  redshift_free: True\n  wave_precomp_enabled: True\n  ztable_enabled: True",
  "tree": [
@@ -94,6 +94,98 @@
   {
    "kind": "scalar",
    "path": "/dust_ir/energy_balance_lut/10",
+   "repr": "None"
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/dust_ir/energy_balance_lut/11/0",
+   "sha256": "b3d16eafec7b297b650b895f7166ccad810cc4916b63df83dbd5d28dd9ad2592",
+   "shape": [
+    15,
+    93
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/dust_ir/energy_balance_lut/11/1",
+   "sha256": "111edb1901d129b62437aa4fe0ee5ef4bfbaa786df6802aea24f83dfabb73a88",
+   "shape": [
+    15,
+    93,
+    1,
+    1
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/dust_ir/energy_balance_lut/11/2",
+   "sha256": "6c3c396ed6b5c36dcae172271f462051b1266b851e92df3deea8ac65478fd712",
+   "shape": [
+    1
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/dust_ir/energy_balance_lut/11/3",
+   "sha256": "785532c46fac2acf9272cc7399f550747206622e1d56fc7379f34628e071c80a",
+   "shape": [
+    1
+   ]
+  },
+  {
+   "kind": "scalar",
+   "path": "/dust_ir/energy_balance_lut/11/4",
+   "repr": "None"
+  },
+  {
+   "kind": "scalar",
+   "path": "/dust_ir/energy_balance_lut/11/5",
+   "repr": "None"
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/dust_ir/energy_balance_lut/11/6",
+   "sha256": "b3d16eafec7b297b650b895f7166ccad810cc4916b63df83dbd5d28dd9ad2592",
+   "shape": [
+    15,
+    93
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/dust_ir/energy_balance_lut/11/7",
+   "sha256": "2f045a8cc663d723af545f99460c598069307771e1f562ded7dc5fdf652af369",
+   "shape": [
+    15,
+    93,
+    1,
+    1
+   ]
+  },
+  {
+   "kind": "scalar",
+   "path": "/dust_ir/energy_balance_lut/11/8",
+   "repr": "None"
+  },
+  {
+   "kind": "scalar",
+   "path": "/dust_ir/energy_balance_lut/11/9",
+   "repr": "None"
+  },
+  {
+   "kind": "scalar",
+   "path": "/dust_ir/energy_balance_lut/11/10",
+   "repr": "None"
+  },
+  {
+   "kind": "scalar",
+   "path": "/dust_ir/energy_balance_lut/11/11",
    "repr": "None"
   },
   {
