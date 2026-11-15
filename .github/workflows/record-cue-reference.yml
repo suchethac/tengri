@@ -1,0 +1,36 @@
+name: record-cue-reference
+# Temporary (not for merge): re-records the x64-off Cue reference and Linux digest at CI's
+# pinned JAX, with the repository's own fixture script.
+on:
+  pull_request:
+    paths: [".github/workflows/record-cue-reference.yml"]
+permissions:
+  contents: read
+env:
+  SETUPTOOLS_SCM_PRETEND_VERSION_FOR_DSPS: "0.4.7"
+  PIP_CONSTRAINT: ${{ github.workspace }}/.github/ci-constraints.txt
+  TENGRI_DISABLE_JAX_CACHE: "1"
+  JAX_PLATFORMS: cpu
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        i: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            .github/ci-constraints.txt
+      - run: pip install -e ".[dev]"
+      - run: grep -m1 "model name" /proc/cpuinfo
+      - run: python tests/regression/precision/fixtures/make_cue_x64_off_reference.py
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: cue-x64-off-reference-${{ matrix.i }}
+          path: tests/regression/precision/fixtures/cue_x64_off_reference.npz
