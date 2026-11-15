@@ -29,6 +29,11 @@ from jax import dtypes as jax_dtypes
 from tengri._cache_keys import KeyPolicy, baked, content
 from tengri._x64_hold import hold_x64_preference
 from tengri.components.stellar.sps.grid_defects import repair_known_grid_defects
+from tengri.components.stellar.sps.met_pchip import (
+    met_weights,
+    read_met,
+    read_met_per_age,
+)
 
 
 def canonical_dsps_kwargs(**kwargs):
@@ -1729,8 +1734,8 @@ def _dsps_kernel_scatter(lgmet_scatter):
 def _native_joint(dsps_joint, lgmet, lgmet_scatter, ssp_lgmet):
     """Joint (n_met, n_age) weights of the DSPS-native kernel, normalized to 1.
 
-    Declared: DSPS's joint as is. Undeclared: the node-exact metallicity row for
-    ``lgmet`` times DSPS's age marginal, which the lognormal kernel leaves unchanged.
+    Declared: DSPS's joint as is. Undeclared: the PCHIP metallicity surrogate for
+    ``lgmet`` times DSPS's age marginal (#3434; :func:`met_weights`).
     """
     declared = _scatter_value(lgmet_scatter) > 0.0
     age_marginal = dsps_joint.sum(axis=0)
@@ -1740,7 +1745,7 @@ def _native_joint(dsps_joint, lgmet, lgmet_scatter, ssp_lgmet):
     total = age_marginal.sum()
     live = total > 1e-20
     age_marginal = jnp.where(live, age_marginal / jnp.where(live, total, 1.0), jnp.nan)
-    met_row = _lgmet_hermite_weights(jnp.asarray(lgmet), ssp_lgmet)
+    met_row = met_weights(jnp.asarray(lgmet), ssp_lgmet)
     node_exact = met_row[:, None] * age_marginal[None, :]
     return jnp.where(declared, dsps_joint, node_exact)
 
@@ -1748,12 +1753,12 @@ def _native_joint(dsps_joint, lgmet, lgmet_scatter, ssp_lgmet):
 def _met_table_weights(dsps_met_w, lgmet_on_ssp_ages, lgmet_scatter, ssp_lgmet):
     """Per-age metallicity weights (n_met, n_age), each column summing to 1.
 
-    Declared: DSPS's per-age lognormal columns. Undeclared: the node-exact read
-    of each age's own metallicity (#3434).
+    Declared: DSPS's per-age lognormal columns. Undeclared: the PCHIP metallicity
+    surrogate at each age's own metallicity (#3434; :func:`met_weights`).
     """
     declared = _scatter_value(lgmet_scatter) > 0.0
     kernel_w = dsps_met_w / dsps_met_w.sum(axis=0, keepdims=True)
-    node_exact = jax.vmap(lambda z: _lgmet_hermite_weights(z, ssp_lgmet))(lgmet_on_ssp_ages).T
+    node_exact = met_weights(lgmet_on_ssp_ages, ssp_lgmet)
     return jnp.where(declared, kernel_w, node_exact)
 
 
@@ -2693,91 +2698,6 @@ def interpolate_metallicity(
     return (1.0 - frac) * ssp_flux[idx] + frac * ssp_flux[idx + 1]
 
 
-def _fd_node_slopes(xs, ys):
-    """Non-uniform finite-difference slopes on a window of ``m`` nodes (#3434).
-
-    Linear in ``ys``: each slope is a fixed combination of the node values, so
-    the cubic read built from it is a weight vector over the nodes. Interior
-    slopes are the width-weighted mean of the two bracketing secants (the
-    Catmull-Rom form on a non-uniform grid); the two window edges use the
-    one-sided three-point form on the boundary interval pair. Both reduce to
-    the usual central and one-sided differences on a uniform grid. A two-node
-    window has only the secant.
-    """
-    m = xs.shape[0]  # static
-    h = jnp.diff(xs)  # (m-1,)
-    d = jnp.diff(ys, axis=0) / h[:, None]  # (m-1, k) secants
-    if m == 2:
-        return jnp.broadcast_to(d, (2, *d.shape[1:]))
-    first = ((2.0 * h[0] + h[1]) * d[0] - h[0] * d[1]) / (h[0] + h[1])
-    interior = (h[1:, None] * d[:-1] + h[:-1, None] * d[1:]) / (h[:-1] + h[1:])[:, None]
-    last = ((2.0 * h[-1] + h[-2]) * d[-1] - h[-1] * d[-2]) / (h[-2] + h[-1])
-    return jnp.concatenate([first[None], interior, last[None]], axis=0)
-
-
-def _lgmet_hermite_weights(log_z, ssp_lgmet):
-    """Node-exact local cubic-Hermite metallicity weights for a fixed Z (#3434).
-
-    Returns the ``(n_met,)`` weight vector ``w`` such that ``w @ table`` reads the
-    SSP table at ``log_z`` for any table whose leading axis is metallicity. The
-    cubic uses the finite-difference slopes of :func:`_fd_node_slopes` on the
-    window of four nodes that brackets ``log_z`` (the whole axis when it has fewer
-    than four nodes). Because the read is linear in the
-    node values, it contracts with the age weights exactly like the lognormal
-    MDF weights it replaces.
-
-    Parameters
-    ----------
-    log_z : array_like, scalar
-        Absolute ``log10(Z)`` of the parcel. [dex]
-    ssp_lgmet : array_like, shape (n_met,)
-        SSP metallicity axis, absolute ``log10(Z)``, ascending, ``n_met >= 2``.
-
-    Returns
-    -------
-    ndarray, shape (n_met,)
-        Weights summing to 1. Exactly one-hot at every node. Outside the grid the
-        query is held at the edge node, so the weight is one-hot there too.
-
-    Notes
-    -----
-    **JIT/grad/vmap-safe**: yes. The stencil start is an integer; the derivative
-    flows through the Hermite basis and the node spacing only. Between nodes the
-    weights can be negative, so the cubic may overshoot the node values; the
-    lognormal MDF it replaces is positive everywhere.
-    """
-    if jnp.ndim(log_z) != 0:
-        raise ValueError(
-            f"_lgmet_hermite_weights takes a scalar log_z; got shape {jnp.shape(log_z)}."
-        )
-    args = canonical_dsps_kwargs(log_z=log_z, ssp_lgmet=ssp_lgmet)
-    log_z, x = args["log_z"], args["ssp_lgmet"]
-    n = x.shape[0]
-    if n < 2:
-        raise ValueError(f"_lgmet_hermite_weights needs at least 2 SSP nodes, got {n}")
-    m = min(4, n)  # window: four nodes, or the whole axis for a short grid
-    # Hold the query at the node hull with a where, not a clip (no halved slope).
-    xq = jnp.where(log_z < x[0], x[0], jnp.where(log_z > x[-1], x[-1], log_z))
-    pos = jnp.searchsorted(x, xq) - 1
-    i = jax.lax.clamp(jnp.zeros_like(pos), pos, jnp.full_like(pos, n - 2))
-    start = jax.lax.clamp(jnp.zeros_like(i), i - 1, jnp.full_like(i, n - m))
-    xs = jax.lax.dynamic_slice_in_dim(x, start, m, axis=0)
-    cell = i - start
-    # Slope operator: row k holds the slope at window node k per unit node value.
-    slope_op = _fd_node_slopes(xs, jnp.eye(m, dtype=x.dtype))
-    h = jnp.take(xs, cell + 1) - jnp.take(xs, cell)
-    t = (xq - jnp.take(xs, cell)) / h
-    t2 = t * t
-    t3 = t2 * t
-    w4 = (
-        (2.0 * t3 - 3.0 * t2 + 1.0) * jax.nn.one_hot(cell, m, dtype=x.dtype)
-        + (t3 - 2.0 * t2 + t) * h * jnp.take(slope_op, cell, axis=0)
-        + (-2.0 * t3 + 3.0 * t2) * jax.nn.one_hot(cell + 1, m, dtype=x.dtype)
-        + (t3 - t2) * h * jnp.take(slope_op, cell + 1, axis=0)
-    )
-    return jnp.zeros(n, dtype=w4.dtype).at[start + jnp.arange(m)].add(w4)
-
-
 # ── Smooth metallicity interpolation (triweight kernel, DSPS-compatible)
 
 
@@ -2846,8 +2766,8 @@ def compute_lgmet_weights(log_z, ssp_lgmet, lgmet_scatter=None):
     A declared scatter (``lgmet_scatter > 0``) gives the triweight-kernel weights:
     the kernel CDF integrated over DSPS's bin edges, matching DSPS
     ``triweighted_histogram``. Non-negative, summing to 1. A zero scatter is
-    undeclared and reads the SSP grid node-exactly in log Z by cubic Hermite
-    (:func:`_lgmet_hermite_weights`): one-hot at every node.
+    undeclared and reads the SSP grid by monotone PCHIP in log Z (:func:`read_met`;
+    its linear surrogate :func:`met_weights` gives the weights): one-hot at every node.
 
     Parameters
     ----------
@@ -2884,7 +2804,7 @@ def compute_lgmet_weights(log_z, ssp_lgmet, lgmet_scatter=None):
     nearest = jnp.argmin(jnp.abs(ssp_lgmet - log_z))
     fallback = jnp.zeros_like(raw).at[nearest].set(1.0)
     kernel = jnp.where(total > 0, raw / total, fallback)
-    return jnp.where(declared, kernel, _lgmet_hermite_weights(log_z, ssp_lgmet))
+    return jnp.where(declared, kernel, met_weights(log_z, ssp_lgmet))
 
 
 @jax.jit
@@ -2917,7 +2837,9 @@ def interpolate_metallicity_smooth(ssp_flux, ssp_lgmet, log_z, lgmet_scatter=Non
 
     """
     w = compute_lgmet_weights(log_z, ssp_lgmet, lgmet_scatter)
-    return jnp.einsum("m,maw->aw", w, ssp_flux)
+    kernel_out = jnp.einsum("m,maw->aw", w, ssp_flux)
+    exact = read_met(ssp_flux, ssp_lgmet, log_z)  # PCHIP each SSP column, then (no age sum here)
+    return jnp.where(_scatter_value(lgmet_scatter) > 0.0, kernel_out, exact)
 
 
 @jax.jit
@@ -2956,7 +2878,9 @@ def interpolate_metallicity_smooth_evolving(
         return jnp.einsum("m,mw->w", w, flux_at_age_i)
 
     flux_by_age = jnp.transpose(ssp_flux, (1, 0, 2))
-    return jax.vmap(_one_age)(log_z_per_age, flux_by_age)
+    kernel_out = jax.vmap(_one_age)(log_z_per_age, flux_by_age)
+    exact = read_met_per_age(ssp_flux, ssp_lgmet, log_z_per_age)  # (n_age, n_wave)
+    return jnp.where(_scatter_value(lgmet_scatter) > 0.0, kernel_out, exact)
 
 
 @jax.jit
@@ -2990,7 +2914,9 @@ def interpolate_mass_remaining_smooth(ssp_mass_remaining, ssp_lgmet, log_z, lgme
 
     """
     w = compute_lgmet_weights(log_z, ssp_lgmet, lgmet_scatter)
-    return jnp.einsum("m,ma->a", w, ssp_mass_remaining)
+    kernel_out = jnp.einsum("m,ma->a", w, ssp_mass_remaining)
+    exact = read_met(ssp_mass_remaining, ssp_lgmet, log_z)
+    return jnp.where(_scatter_value(lgmet_scatter) > 0.0, kernel_out, exact)
 
 
 @jax.jit

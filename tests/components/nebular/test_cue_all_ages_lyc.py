@@ -49,11 +49,15 @@ _QUENCHED = (0.3, 10.0)
 #: Q_H (second entry) re-pinned 2026-11-15 after #3434 (in #3462): fixed metallicity carries
 #: no metallicity scatter, which raises Q_H by 0.90 / 1.44 / 1.42 % in the last three cases.
 #: Halpha is unchanged (within 4e-7). The values are from main debe80a55.
+#: Re-pinned 2026-11-15: monotone PCHIP metallicity read (#3434, owner ruling 'True PCHIP on
+#: the spectra'). Q_H moved by -5.7e-5, -9.1e-5 and -9.0e-5 relative; Halpha unchanged. PCHIP-only
+#: confirmed: with the metallicity read reverted to main's Hermite weights (control tree) these
+#: three Q_H values reproduce the main pins within 1e-5.
 _CUT_BASELINE = {
     (0.3, 10.0): (9.566780466105229e29, 5.022708261307399e50),
-    (1.0, 10.0): (1.1611200717310071e39, 1.3492167736675826e51),
-    (3.0, 1.0): (4.5446609399766484e42, 3.316382552160136e54),
-    (1.0, 5.0): (8.968849307789703e40, 6.592457284943417e52),
+    (1.0, 10.0): (1.1611200717310071e39, 1.3491399391532043e51),
+    (3.0, 1.0): (4.5446609399766484e42, 3.316081435046156e54),
+    (1.0, 5.0): (8.968849307789703e40, 6.59186374342154e52),
 }
 #: Combine output of the cut at the last case above (tau = 1, age = 5): frozen from the tree
 #: before the change, float64 arithmetic.
