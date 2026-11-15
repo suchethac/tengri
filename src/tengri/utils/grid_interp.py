@@ -579,10 +579,12 @@ def subband_quadrature(
     # law, which goes as 1/lambda, so it must stay finite and positive.
     live = i_k != 0.0
     nodes = np.where(live, l_k / np.where(live, i_k, 1.0), eff_wave_obs)
-    norm = np.maximum(denom, representable_denominator(1e-30))
+    phi = i_k / np.maximum(denom, representable_denominator(1e-30))
     if with_numerator:
-        return i_k / norm, nodes, l_k / norm
-    return i_k / norm, nodes
+        # The numerator shares phi's clamped normalization; written inline so the
+        # zero-hiding-clamp inventory sees this second division (#3541).
+        return phi, nodes, l_k / np.maximum(denom, representable_denominator(1e-30))
+    return phi, nodes
 
 
 def lyc_augment_grid_for_step(
