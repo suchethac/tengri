@@ -66,7 +66,10 @@ _BASE = dict(
     sfh={
         "type": "delayed",
         "all_params": Fixed(DEFAULT),
-        "log_total_mass": Uniform(9.0, 11.0),
+        # Fixed: a free SFH needs the #3526 shape probe, whose tabulated twin the AGN
+        # build cannot yet make. The mass is irrelevant to the per-Q_H photometry this
+        # file pins, so fixing it keeps the test about the dust and grid parity it names.
+        "log_total_mass": 10.0,
         "tau_gyr": 1.0,
         "age_gyr": 5.0,
     },
