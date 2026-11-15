@@ -1038,7 +1038,15 @@ def _lut_forward_bias(exact_model, lut_model, data_type, *, redshift=None):
 
 
 def _warn_if_lut_bias_amplified(
-    exact_model, lut_model, data, noise, data_type, *, surface, user_likelihood=False
+    exact_model,
+    lut_model,
+    data,
+    noise,
+    data_type,
+    *,
+    surface,
+    user_likelihood=False,
+    runtime_redshift=None,
 ):
     """#1671's measurement made operational: warn when ``bias x SNR`` is material.
 
@@ -1139,7 +1147,8 @@ def _warn_if_lut_bias_amplified(
             z_peak = float(eval_z_values[worst_idx])
             bias = biases_at_z[worst_idx]
         else:
-            bias = _lut_forward_bias(exact_model, lut_model, data_type)
+            # A runtime redshift is read from params at call time: the fit's override.
+            bias = _lut_forward_bias(exact_model, lut_model, data_type, redshift=runtime_redshift)
         if bias.size == 0:
             return
         flat_data = np.asarray(data, dtype=float).reshape(-1)
@@ -4224,6 +4233,7 @@ class Fitter:
                 self.data_type,
                 surface="Fitter",
                 user_likelihood=self._likelihood_is_user_supplied,
+                runtime_redshift=self._runtime_redshift,
             )
 
         # --- Smart lean: drop only stale L3 entries before this run ---

@@ -380,7 +380,8 @@ def test_runtime_redshift_moves_the_fingerprint_only(synthetic_ssp_wide, synthet
         redshift=Fixed(0.3),
         approx=WavePrecomp(catalog_z_range=(0.05, 0.9), n_z=32),
     )
-    params = model.spec.sample(jax.random.PRNGKey(0))
+    # The catalog model reads redshift at call time (#3505), so the truth draw carries it.
+    params = {**model.spec.sample(jax.random.PRNGKey(0)), "redshift": 0.3}
     flux = np.asarray(model.predict_photometry(params))
     noise = 0.05 * np.abs(flux)
 

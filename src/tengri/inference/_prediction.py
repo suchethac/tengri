@@ -68,6 +68,10 @@ def _build_prediction(
     else:
         free_params = params
         eval_fixed = None
+    # A runtime redshift is read from params by the eager forward (#3505), so it travels
+    # with the free values; every other Fixed value stays out (the forward refuses it).
+    runtime_keys = getattr(model, "_runtime_keys", ())
+    eager_params = {**free_params, **{k: params[k] for k in runtime_keys if k in params}}
 
     # Single threaded forward for phot/spec/joint: one orchestrator call
     # returns an Observables carrying every configured channel. ``_obs`` is
@@ -92,27 +96,27 @@ def _build_prediction(
         if _obs is not None:
             predicted = _obs.phot_fnu
         elif use_components:
-            predicted = model._photometry_via_state(free_params)
+            predicted = model._photometry_via_state(eager_params)
         else:
-            predicted = model.predict_photometry(free_params)
+            predicted = model.predict_photometry(eager_params)
         pred_phot, pred_spec = predicted, None
     elif data_type == "spectroscopy":
         if _obs is not None:
             predicted = _obs.spec_fnu
         elif use_components:
-            predicted = model._spectrum_via_state(free_params)
+            predicted = model._spectrum_via_state(eager_params)
         else:
-            predicted = model.predict_spectrum(free_params)
+            predicted = model.predict_spectrum(eager_params)
         pred_phot, pred_spec = None, predicted
     elif data_type == "joint":
         if _obs is not None:
             pred_phot, pred_spec = _obs.phot_fnu, _obs.spec_fnu
         elif use_components:
-            pred_phot = model._photometry_via_state(free_params)
-            pred_spec = model._spectrum_via_state(free_params)
+            pred_phot = model._photometry_via_state(eager_params)
+            pred_spec = model._spectrum_via_state(eager_params)
         else:
-            pred_phot = model.predict_photometry(free_params)
-            pred_spec = model.predict_spectrum(free_params)
+            pred_phot = model.predict_photometry(eager_params)
+            pred_spec = model.predict_spectrum(eager_params)
         predicted = jnp.concatenate([pred_phot, pred_spec])
     else:
         raise ValueError(f"Unknown data_type: {data_type}")
@@ -161,7 +165,7 @@ def _build_prediction(
             template_data=jit_inputs["template_data"],
         )
     else:
-        feature_state = model.predict_state(free_params)
+        feature_state = model.predict_state(eager_params)
     if needs_line_lums and _threaded_lums is not None:
         prediction["log_line_lums_attenuated"] = _threaded_lums
     elif needs_line_lums:
