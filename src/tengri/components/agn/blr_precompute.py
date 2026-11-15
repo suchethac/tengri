@@ -143,7 +143,7 @@ def precompute(
     # Redshift Fe II centers
     feii_centers_obs = feii_centers_rest * (1.0 + redshift)
 
-    # Band response of each unit-luminosity line and Fe II group centre.
+    # Band response of each unit-luminosity line and Fe II group center.
     line_weight_matrix = delta_line_matrix(
         np.concatenate([np.asarray(_BLR_LINE_WAVELENGTHS), feii_centers_rest]),
         filter_waves,
