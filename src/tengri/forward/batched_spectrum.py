@@ -59,8 +59,8 @@ through the same LUT call as the per-galaxy joint kernel (``predict_via_precomp`
 the exact spectrum), with the galaxy's own traced redshift ``obs.z``. Without it, the
 exact projector :func:`~tengri.observation.photometry.project_photometry` is used. The
 LUT is used whatever the nebular setting: a model with a fast nebular grid
-(``enable_fast_nebular``) keeps the LUT photometry and the exact spectrum, which the
-per-galaxy joint kernel does not do. Its accuracy is the LUT's own (see
+(``enable_fast_nebular``) keeps the LUT photometry and the exact spectrum, as the per-galaxy
+joint kernel does. Its accuracy is the LUT's own (see
 ``predict_via_precomp``), not the exact projector's.
 
 JIT note

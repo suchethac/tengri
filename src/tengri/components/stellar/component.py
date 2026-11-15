@@ -144,12 +144,12 @@ from tengri.components.stellar.sfh.registry import SFH_REGISTRY
 from tengri.components.stellar.sps.dsps_wrapper import (
     LSUN_ERG_PER_S,
     SSPData,
-    _lgmet_hermite_weights,
     canonical_dsps_kwargs,
     compute_log_z_evolving,
     enforce_increasing_cosmic_time,
     has_alpha_grid,
 )
+from tengri.components.stellar.sps.met_pchip import met_collapsed, met_weights
 from tengri.parameters.translate import LOG10_ZSUN
 from tengri.protocols.component import declared_default
 from tengri.utils.scale import _not_computable, log10_magnitude, pow10, representable_denominator
@@ -1422,11 +1422,58 @@ def _delta_met_weights(log_z, lgmet_scatter, ssp_lgmet, *, declared):
 
     The lognormal MDF of :func:`_lgmet_weights` applies only when the user
     declared ``met_logzsol_scatter`` (a value or a prior). Otherwise the parcel
-    reads the SSP grid node-exactly in log Z via :func:`_lgmet_hermite_weights`.
+    reads the SSP grid by monotone PCHIP in log Z (#3434). Returned here as the
+    linear surrogate :func:`met_weights`, which feeds the ``(n_met, n_age)`` joint
+    weights; the exact read of each table is :func:`_met_read_ops`.
     """
     if declared:
         return _lgmet_weights(log_z, lgmet_scatter, ssp_lgmet)
-    return _lgmet_hermite_weights(log_z, ssp_lgmet)
+    return met_weights(log_z, ssp_lgmet)
+
+
+def _keep_table(table, age_axis=1):
+    """Identity collapse: the declared (lognormal) path keeps each table as stored."""
+    del age_axis
+    return table
+
+
+def _met_read_ops(joint_weights, *, declared, ssp_lgmet, met_z):
+    """``(joint, collapse)`` for the metallicity contraction of a table (#3434, phase 1).
+
+    Declared scatter: the joint weights and the tables are used as they are, so the
+    lognormal path is bit-identical. Undeclared: every table is read across its
+    metallicity nodes by monotone PCHIP at ``met_z`` (a scalar, or one log Z per SSP
+    age; owner ruling 2026-11-15, "PCHIP each SSP") and collapsed to ``[1, ...]``.
+    The joint is then the age marginal, so the existing ``"ma,ma...->a..."``
+    contractions run unchanged.
+
+    Parameters
+    ----------
+    joint_weights : ndarray, shape (n_met, n_age)
+        The normalized joint weights (the surrogate on the undeclared path).
+    declared : bool
+        Static: the metallicity scatter was declared.
+    ssp_lgmet : ndarray, shape (n_met,)
+        SSP metallicity nodes, absolute log10(Z).
+    met_z : scalar or ndarray, shape (n_age,)
+        The undeclared read's log Z: one value for a scalar Z, or one per SSP age.
+
+    Returns
+    -------
+    joint : ndarray
+        ``joint_weights`` (declared) or its age marginal ``(1, n_age)`` (undeclared).
+    collapse : callable
+        ``collapse(table, age_axis=1)``: the table as stored (declared) or its
+        met-collapsed PCHIP read ``[1, ...]`` (undeclared).
+    """
+    if declared:
+        return joint_weights, _keep_table
+    joint_age = joint_weights.sum(axis=0, keepdims=True)
+
+    def collapse(table, age_axis=1):
+        return met_collapsed(table, ssp_lgmet, met_z, age_axis=age_axis)
+
+    return joint_age, collapse
 
 
 def _lgmet_weights_parcels(log_z, lgmet_scatter, ssp_lgmet):
@@ -1572,22 +1619,30 @@ def _joint_weights_cic_met_table(
     contrib, idx, f, total_mass, age = _cic_parcels(age_yr, sfr, ssp_ages_yr, t_obs_gyr)
     lg_nodes = jnp.log10(jnp.maximum(ssp_ages_yr, 1e-30))
     lg_age = jnp.log10(jnp.maximum(age, 1e-30))
-    lgmet_par = jnp.interp(lg_age, lg_nodes, lgmet_on_ssp_ages)
-    if declared:
-        met_w = _lgmet_weights_parcels(lgmet_par, lgmet_scatter, ssp_lgmet)  # (n_parcel, n_met)
-    else:
-        # No scatter declared (#3434): each parcel reads the SSP grid node-exactly
-        # at its own log Z, the same read the delta path takes for a fixed Z.
-        met_w = jax.vmap(lambda z: _lgmet_hermite_weights(z, ssp_lgmet))(lgmet_par)
     n_met = ssp_lgmet.shape[0]
     n_age = ssp_ages_yr.shape[0]
-    joint = (
-        jnp.zeros((n_met, n_age), dtype=contrib.dtype)
-        .at[:, idx]
-        .add(met_w.T * (contrib * (1.0 - f))[None, :])
-        .at[:, idx + 1]
-        .add(met_w.T * (contrib * f)[None, :])
-    )
+    if declared:
+        lgmet_par = jnp.interp(lg_age, lg_nodes, lgmet_on_ssp_ages)
+        met_w = _lgmet_weights_parcels(lgmet_par, lgmet_scatter, ssp_lgmet)  # (n_parcel, n_met)
+        joint = (
+            jnp.zeros((n_met, n_age), dtype=contrib.dtype)
+            .at[:, idx]
+            .add(met_w.T * (contrib * (1.0 - f))[None, :])
+            .at[:, idx + 1]
+            .add(met_w.T * (contrib * f)[None, :])
+        )
+    else:
+        # No scatter declared (#3434, owner ruling 2026-11-15): each SSP age reads the grid by
+        # monotone PCHIP at its own log Z, F[age] = PCHIP_Z(T[:, age])(z_age). The joint is the
+        # surrogate met weight times the CIC age marginal, so it keeps the (n_met, n_age) shape.
+        marginal = (
+            jnp.zeros((n_age,), dtype=contrib.dtype)
+            .at[idx]
+            .add(contrib * (1.0 - f))
+            .at[idx + 1]
+            .add(contrib * f)
+        )
+        joint = met_weights(lgmet_on_ssp_ages, ssp_lgmet) * marginal[None, :]
     return joint / jnp.maximum(jnp.sum(joint), representable_denominator(1e-300)), total_mass
 
 
@@ -1763,6 +1818,20 @@ def tabulated_history_weights(
 ):
     """Joint (metallicity, age) SSP weights and formed mass for a tabulated SFH.
 
+    The two-value face of :func:`tabulated_history_met_read`, which also returns the
+    log Z the exact metallicity read uses (#3434).
+    """
+    joint_weights, total_mass, _ = tabulated_history_met_read(
+        t_gyr, sfr, ssp_lg_age_gyr, ssp_lgmet, t_obs_gyr, log_z_abs, lgmet_scatter
+    )
+    return joint_weights, total_mass
+
+
+def tabulated_history_met_read(
+    t_gyr, sfr, ssp_lg_age_gyr, ssp_lgmet, t_obs_gyr, log_z_abs, lgmet_scatter
+):
+    """Joint (metallicity, age) SSP weights, formed mass and the exact-read Z (#3434).
+
     The SED-free entry point for a simulation history. It runs the same chain as
     the ``sfh_model='table'`` forward pass: :func:`_tabulated_sfh` (zero outside
     the table, lookback from ``t_obs_gyr``), :func:`_cic_integrand` (dense grid
@@ -1794,9 +1863,11 @@ def tabulated_history_weights(
     Returns
     -------
     joint_weights : ndarray, shape (n_met, n_age)
-        Normalized (sum = 1) joint weights.
+        Normalized (sum = 1) joint weights (the linear surrogate on the undeclared path).
     total_mass : ndarray, shape ()
         Formed stellar mass [Msun], the trapezoidal integral of the SFR.
+    met_z : ndarray, shape () or (n_age,)
+        The log Z for :func:`_met_read_ops`: the scalar, or one value per SSP age.
     """
     ssp_ages_yr = 10.0 ** (jnp.asarray(ssp_lg_age_gyr) + 9.0)
     t_obs = jnp.asarray(t_obs_gyr)
@@ -1814,7 +1885,7 @@ def tabulated_history_weights(
         lgmet_w = _delta_met_weights(
             jnp.asarray(log_z_abs), lgmet_scatter, ssp_lgmet, declared=declared
         )
-        return lgmet_w[:, None] * age_w[None, :], total_mass
+        return lgmet_w[:, None] * age_w[None, :], total_mass, jnp.asarray(log_z_abs)
     # Same history-to-SSP-age mapping as _tabulated_lgmet_on_ssp_ages, with the
     # Z nodes paired to the lookback-sorted SFR nodes by the same ``order``.
     met_log_age_yr = jnp.log10(jnp.maximum(tab_lbt_yr, 1.0))
@@ -1822,7 +1893,7 @@ def tabulated_history_weights(
     lgmet_on_ssp_ages = tabulated_metallicity_on_ssp_grid(
         ssp_lg_age_gyr, met_log_age_yr, met_log_z_abs
     )
-    return _joint_weights_cic_met_table(
+    joint_met, total_met = _joint_weights_cic_met_table(
         age_yr,
         sfr_grid,
         ssp_ages_yr,
@@ -1832,6 +1903,7 @@ def tabulated_history_weights(
         ssp_lgmet,
         declared=declared,
     )
+    return joint_met, total_met, lgmet_on_ssp_ages
 
 
 def _first_edge_within_eps(fine_age_yr, edges_yr, eps):
@@ -2552,20 +2624,10 @@ class _CompositePopulation(NamedTuple):
     derived_overrides: Any
     #: ``(ia, fa)`` of ``met_alpha_fe`` on a 4D grid, else None (see ``alpha_bracket``).
     alpha_bracket: Any = None
+    #: ``(joint, collapse)`` from :func:`_met_read_ops`: the exact metallicity read (#3434).
+    met_read: Any = None
 
 
-# Photometry LUT fields that carry the [alpha/Fe] axis on a 4D grid, shaped
-# (n_met, n_alpha, n_age, ...). The alpha axis sits at position 1.
-_FIXED_Z_LUT_ALPHA_FIELDS = (
-    "ssp_phot",
-    "ssp_phot_moment",
-    "ssp_subband_phot",
-    "ssp_subband_waves_rest",
-    "ssp_subband_phot_igm",
-    "ssp_subband_waves_rest_igm",
-    "ssp_phot_lyc",
-    "ssp_phot_nolyc",
-)
 # Free-z table fields, shaped (n_z, n_met, n_alpha, n_age, ...): the alpha axis is at 2.
 _FREE_Z_TABLE_ALPHA_FIELDS = (
     "ssp_phot_table",
@@ -2576,12 +2638,6 @@ _FREE_Z_TABLE_ALPHA_FIELDS = (
     "subband_waves_rest_igm_table",
     "ssp_phot_lyc_table",
     "ssp_phot_nolyc_table",
-)
-# Rest-band LUT fields, shaped (n_met, n_alpha, n_age, ...).
-_RESTBAND_ALPHA_FIELDS = (
-    "ssp_restband_phot",
-    "ssp_restband_subband_phot",
-    "ssp_restband_subband_waves",
 )
 
 
@@ -2624,20 +2680,23 @@ def _alpha_fe_at_ages(params, ssp, *, evolving: bool, t_universe_gyr):
     )
 
 
-def _collapse_alpha_plane(x, alpha_bracket, axis: int = 1):
-    """Collapse one 4D [alpha/Fe] array at the model's bracket; a 3D array passes through.
+def _collapse_met_then_alpha(table, collapse, alpha_bracket):
+    """Per-SSP read of a table with an [alpha/Fe] axis: metallicity first, then alpha (#3434).
 
-    Linear, so collapsing a template cube before a metallicity contraction gives the
-    same spectrum as contracting each alpha node and interpolating the results.
+    ``collapse`` is the metallicity read of :func:`_met_read_ops`, called as
+    ``collapse(table, age_axis=2)``. Each (alpha, age) SSP column is read across its
+    metallicity nodes first; only then are the two alpha nodes that bracket the model
+    mixed linearly. Alpha first and PCHIP second is a different number whenever the alpha
+    dependence varies with Z, so the owner ruling "PCHIP each SSP" fixes this order.
+    ``alpha_bracket`` None (no alpha axis), or a table below 4-D, returns ``collapse(table)``.
+    The table is ``(n_met, n_alpha, n_age, ...)``.
     """
-    if x.ndim < 4:
-        return x
-    if alpha_bracket is None:
-        raise ValueError("a 4D [alpha/Fe] array reached the spectrum tables without a bracket")
+    if alpha_bracket is None or table.ndim < 4:
+        return collapse(table)
     from tengri.components.stellar.sps.dsps_wrapper import collapse_alpha_axis
 
     ia, fa = alpha_bracket
-    return collapse_alpha_axis(x, ia, fa, axis=axis)
+    return collapse_alpha_axis(collapse(table, age_axis=2), ia, fa, axis=1)
 
 
 def _collapse_alpha_fields(tables, names, alpha_bracket, axis: int):
@@ -2828,6 +2887,23 @@ class StellarSEDComponent:
                 "joint_weights",
                 "",
                 "DSPS joint (metallicity, age) weights, shape (n_met, n_age)",
+            ),
+            DerivedKey(
+                "met_exact_joint",
+                "",
+                "Metallicity-read joint: (n_met, n_age) on a declared scatter, the age marginal "
+                "(1, n_age) when undeclared; contracts each stored table after an exact read "
+                "at met_exact_z (#3434)",
+            ),
+            DerivedKey(
+                "met_exact_z",
+                "dex",
+                "Log10(Z/Zsun) of the undeclared exact read: a scalar, or one per SSP age",
+            ),
+            DerivedKey(
+                "met_exact_lgmet",
+                "dex",
+                "SSP metallicity nodes the exact read interpolates over",
             ),
             DerivedKey(
                 "log_stellar_mass_scale",
@@ -3388,6 +3464,7 @@ class StellarSEDComponent:
         _alpha_collapse_active = c.alpha_collapse_active
         _agb_dust_cube = c.agb_dust_cube
         joint_weights = c.joint_weights
+        met_read = c.met_read
         total_mass = c.total_mass
         wave = c.wave
         sed_intrinsic = c.sed_intrinsic
@@ -3406,6 +3483,7 @@ class StellarSEDComponent:
                 _agb_dust_cube=_agb_dust_cube,
                 template_data=template_data,
                 ztable_data=ztable_data,
+                met_read=met_read,
             )
         )
 
@@ -3429,27 +3507,34 @@ class StellarSEDComponent:
         _agb_dust_cube,
         template_data,
         ztable_data,
+        met_read=None,
     ) -> dict:
         """Publish the precomputed photometry, spectrum and sub-band tables (phase F)."""
         derived_overrides: dict = {}
+        # Exact metallicity read of every stored table (#3434, phase 2): the surrogate
+        # joint never contracts a table. ``met_read`` is always set by ``apply``.
+        joint_x, collapse = met_read if met_read is not None else (joint_weights, _keep_table)
         # ── 12b. Stellar photometry LUT (WavePrecomp) ──────────────────
         # When eager precomputation is enabled and the LUT is available,
         # compute stellar_phot_lnu_precomp and publish it to derived.
         if self._state is not None and self._state.ssp_phot_lut is not None:
             phot_lut = self._threaded_lut(template_data, "ssp_phot_lut")
+            # 4D grid: the LUT keeps its [alpha/Fe] axis (position 1), and every contraction
+            # below reads it per SSP, metallicity by PCHIP and then the alpha bracket (#3434).
             if alpha_bracket is not None:
-                # 4D grid: the LUT carries the [alpha/Fe] axis at position 1. Collapse it at
-                # the model's bracket, so every contraction below sees the 3D layout.
-                phot_lut = _collapse_alpha_fields(
-                    phot_lut, _FIXED_Z_LUT_ALPHA_FIELDS, alpha_bracket, axis=1
-                )
+
+                def read(table):
+                    return _collapse_met_then_alpha(table, collapse, alpha_bracket)
+
+            else:
+                read = collapse
             # Fixed-z path; LUT built at source's z in precompute()
             ssp_phot = phot_lut.ssp_phot
             # (n_met, n_age, n_filt) in Lsun/Hz/Msun; sum over metallicity and
             # age axes weighted by joint distribution × total mass.
             # Convert to erg/s/Hz to match sed_intrinsic units.
             stellar_phot_lnu_precomp_rest = _mass_scale_lnu(
-                jnp.einsum("ma,maf->f", joint_weights, ssp_phot), total_mass
+                jnp.einsum("ma,maf->f", joint_x, read(ssp_phot)), total_mass
             )
             derived_overrides["stellar_phot_lnu_precomp"] = stellar_phot_lnu_precomp_rest
             # Lyman continuum photometry: rest λ < 912 Å. Used by the nebular
@@ -3457,14 +3542,14 @@ class StellarSEDComponent:
             ssp_phot_lyc = phot_lut.ssp_phot_lyc
             if ssp_phot_lyc is not None:
                 stellar_phot_lnu_precomp_lyc = _mass_scale_lnu(
-                    jnp.einsum("ma,maf->f", joint_weights, ssp_phot_lyc), total_mass
+                    jnp.einsum("ma,maf->f", joint_x, read(ssp_phot_lyc)), total_mass
                 )
                 derived_overrides["stellar_phot_lnu_precomp_lyc"] = stellar_phot_lnu_precomp_lyc
                 # The other half of the split, built from the same cumulative
                 # integral: the escape-fraction mask adds to it rather than
                 # subtracting from the whole (see ``PhotometricPrecomputation``).
                 derived_overrides["stellar_phot_lnu_precomp_nolyc"] = _mass_scale_lnu(
-                    jnp.einsum("ma,maf->f", joint_weights, phot_lut.ssp_phot_nolyc),
+                    jnp.einsum("ma,maf->f", joint_x, read(phot_lut.ssp_phot_nolyc)),
                     total_mass,
                 )
             # Age-resolved per-filter LUT for two-component
@@ -3472,7 +3557,7 @@ class StellarSEDComponent:
             # the age axis. Shape (n_age, n_filter). Sum over age == the
             # marginalized stellar_phot_lnu_precomp above.
             stellar_phot_lnu_per_age = _mass_scale_lnu(
-                jnp.einsum("ma,maf->af", joint_weights, ssp_phot), total_mass
+                jnp.einsum("ma,maf->af", joint_x, read(ssp_phot)), total_mass
             )
             derived_overrides["stellar_phot_lnu_per_age_precomp"] = stellar_phot_lnu_per_age
             # Per-age twin of stellar_phot_lnu_precomp_lyc above (R3d, #2439,
@@ -3486,24 +3571,24 @@ class StellarSEDComponent:
             # per-age) silently disagree with the marginalized one.
             if ssp_phot_lyc is not None:
                 stellar_phot_lnu_per_age_lyc = _mass_scale_lnu(
-                    jnp.einsum("ma,maf->af", joint_weights, ssp_phot_lyc), total_mass
+                    jnp.einsum("ma,maf->af", joint_x, read(ssp_phot_lyc)), total_mass
                 )
                 derived_overrides["stellar_phot_lnu_per_age_precomp_lyc"] = (
                     stellar_phot_lnu_per_age_lyc
                 )
                 derived_overrides["stellar_phot_lnu_per_age_precomp_nolyc"] = _mass_scale_lnu(
-                    jnp.einsum("ma,maf->af", joint_weights, phot_lut.ssp_phot_nolyc),
+                    jnp.einsum("ma,maf->af", joint_x, read(phot_lut.ssp_phot_nolyc)),
                     total_mass,
                 )
             # Taylor moment Ψ: same einsum, units erg/s/Hz × Å.
             ssp_phot_moment = phot_lut.ssp_phot_moment
             if ssp_phot_moment is not None:
                 stellar_phot_moment_precomp = _mass_scale_lnu(
-                    jnp.einsum("ma,maf->f", joint_weights, ssp_phot_moment), total_mass
+                    jnp.einsum("ma,maf->f", joint_x, read(ssp_phot_moment)), total_mass
                 )
                 derived_overrides["stellar_phot_moment_precomp"] = stellar_phot_moment_precomp
                 stellar_phot_moment_per_age = _mass_scale_lnu(
-                    jnp.einsum("ma,maf->af", joint_weights, ssp_phot_moment), total_mass
+                    jnp.einsum("ma,maf->af", joint_x, read(ssp_phot_moment)), total_mass
                 )
                 derived_overrides["stellar_phot_moment_per_age_precomp"] = (
                     stellar_phot_moment_per_age
@@ -3514,8 +3599,8 @@ class StellarSEDComponent:
             ssp_sub_phot = phot_lut.ssp_subband_phot
             if ssp_sub_phot is not None:
                 ssp_sub_waves = phot_lut.ssp_subband_waves_rest
-                sub_phi = jnp.einsum("ma,mafk->afk", joint_weights, ssp_sub_phot)
-                sub_num = jnp.einsum("ma,mafk->afk", joint_weights, ssp_sub_waves * ssp_sub_phot)
+                sub_phi = jnp.einsum("ma,mafk->afk", joint_x, read(ssp_sub_phot))
+                sub_num = jnp.einsum("ma,mafk->afk", joint_x, read(ssp_sub_waves * ssp_sub_phot))
                 derived_overrides["stellar_phot_lnu_per_age_subband_precomp"] = _mass_scale_lnu(
                     sub_phi, total_mass
                 )
@@ -3539,17 +3624,18 @@ class StellarSEDComponent:
                 if ssp_sub_phot_igm is not None:
                     derived_overrides["stellar_phot_lnu_per_age_subband_igm_precomp"] = (
                         _mass_scale_lnu(
-                            jnp.einsum("ma,mafk->afk", joint_weights, ssp_sub_phot_igm), total_mass
+                            jnp.einsum("ma,mafk->afk", joint_x, read(ssp_sub_phot_igm)),
+                            total_mass,
                         )
                     )
                     waves_igm = phot_lut.ssp_subband_waves_rest_igm
                     _publish_igm_nodes(
                         derived_overrides,
-                        jnp.einsum("ma,mafk->afk", joint_weights, ssp_sub_phot_igm),
+                        jnp.einsum("ma,mafk->afk", joint_x, read(ssp_sub_phot_igm)),
                         None
                         if waves_igm is None
                         else jnp.einsum(
-                            "ma,mafk->afk", joint_weights, waves_igm * ssp_sub_phot_igm
+                            "ma,mafk->afk", joint_x, read(waves_igm * ssp_sub_phot_igm)
                         ),
                     )
             # Publish filter pivot wavelengths so the dust LUT
@@ -3599,18 +3685,20 @@ class StellarSEDComponent:
                 # is consumed rather than on every (n_met, n_age, ...) entry.
                 return pchip_interp_local(z_grid, table, z, reduce=reduce, extrapolate=True)
 
-            def _per_age(w):
-                return lambda rows: jnp.einsum("ma,zma...->za...", w, rows)
-
-            per_age_rows = _per_age(joint_weights)
+            def per_age_rows(rows):
+                # rows: (4, n_met, n_age, ...) z-bracket rows. Read the met axis at the
+                # galaxy's met_z in each z row (PCHIP each SSP), then contract over age.
+                return jnp.einsum("ma,zma...->za...", joint_x, jax.vmap(collapse)(rows))
 
             def _interp_phi_num(phot, waves):
                 # (Σ_m w φ, Σ_m w λ φ) per (age, filter, sub-band), read at z.
                 def rows(p_rows, w_rows):
                     return jnp.stack(
                         [
-                            jnp.einsum("ma,zmafk->zafk", joint_weights, p_rows),
-                            jnp.einsum("ma,zmafk->zafk", joint_weights, w_rows * p_rows),
+                            jnp.einsum("ma,zmafk->zafk", joint_x, jax.vmap(collapse)(p_rows)),
+                            jnp.einsum(
+                                "ma,zmafk->zafk", joint_x, jax.vmap(collapse)(w_rows * p_rows)
+                            ),
                         ],
                         axis=1,
                     )
@@ -3713,18 +3801,24 @@ class StellarSEDComponent:
         # rest band does not move with redshift, so there is nothing to interpolate.
         if self._state is not None and self._state.restband_lut is not None:
             rb = self._state.restband_lut
+            # 4D grid: the restband tables keep their [alpha/Fe] axis and read per SSP (#3434).
             if alpha_bracket is not None:
-                rb = _collapse_alpha_fields(rb, _RESTBAND_ALPHA_FIELDS, alpha_bracket, axis=1)
+
+                def read(table):
+                    return _collapse_met_then_alpha(table, collapse, alpha_bracket)
+
+            else:
+                read = collapse
             derived_overrides["stellar_restband_lnu_precomp"] = _mass_scale_lnu(
-                jnp.einsum("ma,maf->f", joint_weights, rb.ssp_restband_phot), total_mass
+                jnp.einsum("ma,maf->f", joint_x, read(rb.ssp_restband_phot)), total_mass
             )
             derived_overrides["filter_restband_eff_waves"] = jnp.asarray(rb.restband_eff_waves)
             if rb.ssp_restband_subband_phot is not None:
-                rb_phi = jnp.einsum("ma,mafk->afk", joint_weights, rb.ssp_restband_subband_phot)
+                rb_phi = jnp.einsum("ma,mafk->afk", joint_x, read(rb.ssp_restband_subband_phot))
                 rb_num = jnp.einsum(
                     "ma,mafk->afk",
-                    joint_weights,
-                    rb.ssp_restband_subband_waves * rb.ssp_restband_subband_phot,
+                    joint_x,
+                    read(rb.ssp_restband_subband_waves * rb.ssp_restband_subband_phot),
                 )
                 derived_overrides["stellar_restband_lnu_per_age_subband_precomp"] = (
                     _mass_scale_lnu(rb_phi, total_mass)
@@ -3771,6 +3865,7 @@ class StellarSEDComponent:
                     cube_modified=_agb_dust_cube is not None,
                     template_data=template_data,
                     alpha_bracket=alpha_bracket,
+                    met_read=met_read,
                 )
             )
 
@@ -4338,6 +4433,10 @@ class StellarSEDComponent:
                 ssp.ssp_lgmet,
                 declared=self.config.lgmet_scatter_declared,
             )
+        # Metallicity the exact PCHIP read uses: a scalar Z, or one per SSP age (#3434).
+        _met_z = (
+            log_z_abs_scalar if self.config.metallicity_model == "delta" else lgmet_on_ssp_ages
+        )
         # Guarded normalization: a degenerate SFH (empty star-formation
         # window, e.g. reversed const bounds) yields all-zero weights;
         # 0/0 here would NaN the whole SED. Zero weights → zero SED is the
@@ -4349,6 +4448,12 @@ class StellarSEDComponent:
         # point the age kernel's total_mass converges to: the weights already
         # zero the integrand at lookback ages older than age(z) and
         # renormalize within the surviving support (#2521).
+        _mj, _mc = _met_read_ops(
+            joint_weights,
+            declared=self.config.lgmet_scatter_declared,
+            ssp_lgmet=ssp.ssp_lgmet,
+            met_z=_met_z,
+        )
         measured_total_mass = total_mass
         total_mass = _mass_conserving_total(sfh_kwargs, total_mass, is_composite=is_composite)
         total_mass = _pin_table_mass(total_mass, params, sfh_fn, _tab_lbt_yr, t_obs_gyr)
@@ -4401,19 +4506,17 @@ class StellarSEDComponent:
 
             ssp_flux_at_age = (
                 collapse_alpha_axis(
-                    jnp.einsum("ma,mkaw->kaw", joint_weights, ssp_flux_for_csp),
+                    jnp.einsum("ma,mkaw->kaw", _mj, _mc(ssp_flux_for_csp, age_axis=2)),
                     _alpha_ia,
                     _alpha_fa,
                 )
                 * LSUN_ERG_PER_S
             )
         else:
-            ssp_flux_at_age = jnp.einsum(
-                "ma,maw->aw", joint_weights, ssp_flux_for_csp * LSUN_ERG_PER_S
-            )
+            ssp_flux_at_age = jnp.einsum("ma,maw->aw", _mj, _mc(ssp_flux_for_csp * LSUN_ERG_PER_S))
         # Per-age "mass" for downstream per-age operations (dust BC mask).
         # This is the marginalized age distribution × total_mass.
-        age_weights = joint_weights.sum(axis=0) * total_mass  # (n_age,) Msun
+        age_weights = _mj.sum(axis=0) * total_mass  # (n_age,) Msun
 
         # ── 7. Stellar SED in erg/s/Hz ──────────────────────────────────
         # Reconstruct the CSP SED as ``total_mass × Σ_met(weights × ssp_flux)``
@@ -4486,7 +4589,7 @@ class StellarSEDComponent:
                 )
             else:
                 _mass_remaining = ssp.ssp_mass_remaining
-            mstar_surv_age = jnp.sum(joint_weights * _mass_remaining, axis=0) * total_mass
+            mstar_surv_age = jnp.sum(_mj * _mc(_mass_remaining), axis=0) * total_mass
             mstar_surv = jnp.sum(mstar_surv_age)
             log_mstar = jnp.log10(jnp.maximum(mstar_surv, 1e-30))
             log_mstar_surviving = log_mstar
@@ -4583,13 +4686,15 @@ class StellarSEDComponent:
                 from tengri.components.stellar.sps.dsps_wrapper import collapse_alpha_axis
 
                 _lnu_age_ion = collapse_alpha_axis(
-                    jnp.einsum("ma,mkai->kai", joint_weights, ssp_flux_for_csp[:, :, :, :_n_ion]),
+                    jnp.einsum(
+                        "ma,mkai->kai", _mj, _mc(ssp_flux_for_csp[:, :, :, :_n_ion], age_axis=2)
+                    ),
                     _alpha_ia,
                     _alpha_fa,
                 )  # shape (n_age, n_ion), per-Msun
             else:
                 _lnu_age_ion = jnp.einsum(
-                    "ma,mai->ai", joint_weights, ssp_flux_for_csp[:, :, :_n_ion]
+                    "ma,mai->ai", _mj, _mc(ssp_flux_for_csp[:, :, :_n_ion])
                 )  # shape (n_age, n_ion), per-Msun
             # Q_H's age+met-marginalized ionizing SED is the age-sum of the
             # per-age slice above (both reduce the SAME joint_weights over the
@@ -4710,6 +4815,9 @@ class StellarSEDComponent:
             joint_weights=joint_weights,
             # log10(total_mass x L_sun). The linear scale is ~1e43 for a 1e10 Msun
             # galaxy and is not published: it is inf in pure float32 (#1206, #3149).
+            met_exact_joint=_mj,
+            met_exact_z=_met_z,
+            met_exact_lgmet=ssp.ssp_lgmet,
             log_stellar_mass_scale=log10_mass_scale,
             # CSP mass weights (Msun per SSP age bin), summed
             # over the metallicity axis. Published so downstream
@@ -4747,6 +4855,7 @@ class StellarSEDComponent:
             joint_weights=joint_weights,
             total_mass=total_mass,
             wave=wave,
+            met_read=(_mj, _mc),
             sed_intrinsic=sed_intrinsic,
             derived_overrides=derived_overrides,
         )
@@ -4763,6 +4872,7 @@ class StellarSEDComponent:
         cube_modified=False,
         template_data=None,
         alpha_bracket=None,
+        met_read=None,
     ):
         r"""Stellar spectrum LUT families at the pixels, with the velocity dispersion applied.
 
@@ -4816,6 +4926,7 @@ class StellarSEDComponent:
         full-grid route adds one broadening of the summed spectrum plus one per age row
         for the per-age family.
         """
+        joint_x, collapse = met_read if met_read is not None else (joint_weights, _keep_table)
         from tengri.observation.spectrum import (
             broaden_velocity_only,
             broaden_velocity_only_window,
@@ -4839,21 +4950,20 @@ class StellarSEDComponent:
                     f"the draw has {float(seeded)}; rebuild the model."
                 )
             # (n_met, n_age, n_pix), broadened at build; (n_met, n_alpha, n_age, n_pix) on a
-            # 4D grid, collapsed at the bracket before the metallicity contraction.
-            on_pix = _collapse_alpha_plane(lut.ssp_on_pixels, alpha_bracket)
+            # 4D grid: each SSP is read across Z, then the alpha bracket (#3434).
+            on_pix = _collapse_met_then_alpha(lut.ssp_on_pixels, collapse, alpha_bracket)
             return {
                 "stellar_spec_lnu_precomp": _mass_scale_lnu(
-                    jnp.einsum("ma,map->p", joint_weights, on_pix), total_mass
+                    jnp.einsum("ma,map->p", joint_x, on_pix), total_mass
                 ),
                 "stellar_spec_lnu_per_age_precomp": _mass_scale_lnu(
-                    jnp.einsum("ma,map->ap", joint_weights, on_pix), total_mass
+                    jnp.einsum("ma,map->ap", joint_x, on_pix), total_mass
                 ),
                 "spec_eff_waves": jnp.asarray(lut.wave_rest_pixels),
             }
 
-        # A 4D [alpha/Fe] cube is collapsed at the bracket first: the per-draw families below
-        # are linear in the cube, so this equals contracting each alpha node and interpolating.
-        ssp_flux_for_csp = _collapse_alpha_plane(ssp_flux_for_csp, alpha_bracket)
+        # A 4D [alpha/Fe] cube stays 4D until the metallicity read: each SSP is read across Z
+        # first, then the alpha bracket is applied (#3434, "PCHIP each SSP").
         if lut is not None:
             spec_eff = jnp.asarray(lut.wave_rest_pixels)
         else:
@@ -4869,11 +4979,11 @@ class StellarSEDComponent:
             # Free redshift, fixed sigma_v: the cube was broadened once at build, so the
             # per-draw work is the weighted sum and the interpolation, as before sigma_v
             # was applied.
-            # On a grid with an [alpha/Fe] axis the broadened cube carries it; collapse it
-            # at the model's bracket first (broadening and the collapse are both linear).
-            cube = _collapse_alpha_plane(spec_state.spec_ssp_broadened, alpha_bracket)
-            tot_b = jnp.einsum("ma,maw->w", joint_weights, cube)
-            age_b = jnp.einsum("ma,maw->aw", joint_weights, cube)
+            # On a grid with an [alpha/Fe] axis the broadened cube carries it; each SSP is read
+            # across Z, then the model's alpha bracket is applied (#3434).
+            cube = _collapse_met_then_alpha(spec_state.spec_ssp_broadened, collapse, alpha_bracket)
+            tot_b = jnp.einsum("ma,maw->w", joint_x, cube)
+            age_b = jnp.einsum("ma,maw->aw", joint_x, cube)
             return {
                 "stellar_spec_lnu_precomp": _mass_scale_lnu(_at_pixels_of(tot_b), total_mass),
                 "stellar_spec_lnu_per_age_precomp": _mass_scale_lnu(
@@ -4902,8 +5012,9 @@ class StellarSEDComponent:
         def _broadened_at_pixels(row):
             return _at_pixels(_broaden(row))
 
-        total = jnp.einsum("ma,maw->w", joint_weights, ssp_flux_for_csp)
-        per_age = jnp.einsum("ma,maw->aw", joint_weights, ssp_flux_for_csp)
+        flux_x = _collapse_met_then_alpha(ssp_flux_for_csp, collapse, alpha_bracket)
+        total = jnp.einsum("ma,maw->w", joint_x, flux_x)
+        per_age = jnp.einsum("ma,maw->aw", joint_x, flux_x)
         return {
             "stellar_spec_lnu_precomp": _mass_scale_lnu(_broadened_at_pixels(total), total_mass),
             "stellar_spec_lnu_per_age_precomp": _mass_scale_lnu(
@@ -4978,7 +5089,13 @@ class StellarSEDComponent:
             node holds no ionizing light (or the grid has no ionizing bins).
         """
         ssp = ssp_data if ssp_data is not None else self.ssp_data
-        joint_weights, total_mass, _, _ = self._joint_weights_impl(params, ssp)
+        joint_weights, total_mass, _, _, _met_z = self._joint_weights_impl(params, ssp)
+        _mj, _mc = _met_read_ops(
+            joint_weights,
+            declared=self.config.lgmet_scatter_declared,
+            ssp_lgmet=ssp.ssp_lgmet,
+            met_z=_met_z,
+        )
         wave = ssp.ssp_wave
         if self._state is not None and self._state.n_ion_bins is not None:
             n_ion = self._state.n_ion_bins
@@ -4986,7 +5103,7 @@ class StellarSEDComponent:
             n_ion = int(jnp.sum(wave < (2.0 * _HI_LIMIT_AA)))
         if n_ion == 0:
             return jnp.full((joint_weights.shape[1],), -jnp.inf)
-        lnu_age_ion = jnp.einsum("ma,mai->ai", joint_weights, ssp.ssp_flux[:, :, :n_ion])
+        lnu_age_ion = jnp.einsum("ma,mai->ai", _mj, _mc(ssp.ssp_flux[:, :, :n_ion]))
         log10_scale = jnp.log10(total_mass.astype(jnp.result_type(float))) + jnp.log10(
             LSUN_ERG_PER_S
         )
@@ -5043,6 +5160,27 @@ class StellarSEDComponent:
             (#1395). The caller must use the exact forward there.
         """
         return self._joint_weights_impl(params, ssp_data)[:3]
+
+    def compute_joint_weights_exact(self, params, ssp_data=None):
+        """Joint weights and the operands of the exact metallicity read (#3434, phase 2).
+
+        Returns ``(joint, total_mass, ssp_ages_yr, met_joint, met_z, lgmet)``. ``joint``
+        is the surrogate of :meth:`compute_joint_weights`, kept for bookkeeping only.
+        Contract every stored table as ``exact_table(table, met_joint, lgmet, met_z)``
+        with ``met_joint``: it is the joint itself on a declared scatter, and the age
+        marginal ``(1, n_age)`` otherwise.
+        """
+        joint, total_mass, ssp_ages_yr, _younger, met_z = self._joint_weights_impl(
+            params, ssp_data
+        )
+        ssp = ssp_data if ssp_data is not None else self.ssp_data
+        met_joint, _collapse = _met_read_ops(
+            joint,
+            declared=self.config.lgmet_scatter_declared,
+            ssp_lgmet=ssp.ssp_lgmet,
+            met_z=met_z,
+        )
+        return joint, total_mass, ssp_ages_yr, met_joint, met_z, ssp.ssp_lgmet
 
     def _joint_weights_impl(self, params, ssp_data=None):
         """Weights, mass, ages and (when requested) the younger-than-boundary fractions.
@@ -5216,7 +5354,8 @@ class StellarSEDComponent:
         # ``SFH_REGISTRY`` with one raises ``TypeError`` before this point.
         total_mass = _mass_conserving_total(sfh_kwargs, total_mass)
         total_mass = _pin_table_mass(total_mass, params, sfh_fn, _tab_lbt_yr, t_obs_gyr)
-        return joint_weights, total_mass, ssp_ages_yr, younger_fraction
+        met_z = lgmet_on_ssp_ages if lgmet_on_ssp_ages is not None else log_z_abs_scalar
+        return joint_weights, total_mass, ssp_ages_yr, younger_fraction, met_z
 
     def _agb_dust_cube_ratio(self, params, ssp_flux):
         """Live AGB dust-shell ratio cube for a free ``agb_dust_weight`` (#2534).
@@ -5285,7 +5424,13 @@ class StellarSEDComponent:
         is concrete), so the slice shape is fixed under jit.
         """
         ssp = ssp_data if ssp_data is not None else self.ssp_data
-        joint_weights, total_mass, _ = self.compute_joint_weights(params, ssp_data=ssp)
+        joint_weights, total_mass, _, _, _met_z = self._joint_weights_impl(params, ssp)
+        _mj, _mc = _met_read_ops(
+            joint_weights,
+            declared=self.config.lgmet_scatter_declared,
+            ssp_lgmet=ssp.ssp_lgmet,
+            met_z=_met_z,
+        )
         wave = ssp.ssp_wave
         # Ionizing slice + a buffer so the boundary bin's first non-ionizing
         # point is included; the non-ionizing region contributes zero to the
@@ -5328,7 +5473,7 @@ class StellarSEDComponent:
                 ]
                 * agb_dust_cube[..., :n_ion]
             )
-            sed_ion = jnp.tensordot(joint_weights, ssp_flux_ion, axes=([0, 1], [0, 1]))
+            sed_ion = jnp.tensordot(_mj, _mc(ssp_flux_ion), axes=([0, 1], [0, 1]))
         elif has_alpha_grid(ssp):
             # Same order as :meth:`apply`: contract over metallicity per age, collapse
             # the [alpha/Fe] axis at met_alpha_fe, then sum over age.
@@ -5349,7 +5494,7 @@ class StellarSEDComponent:
             if agb_dust_cube is not None:
                 ssp_flux_ion = ssp_flux_ion * agb_dust_cube[..., :n_ion]
             lnu_age_ion = collapse_alpha_axis(
-                jnp.einsum("ma,mkai->kai", joint_weights, ssp_flux_ion),
+                jnp.einsum("ma,mkai->kai", _mj, _mc(ssp_flux_ion, age_axis=2)),
                 _alpha_ia,
                 _alpha_fa,
             )
@@ -5358,7 +5503,7 @@ class StellarSEDComponent:
             ssp_flux_ion = ssp.ssp_flux[:, :, :n_ion]
             if agb_dust_cube is not None:
                 ssp_flux_ion = ssp_flux_ion * agb_dust_cube[..., :n_ion]
-            sed_ion = jnp.tensordot(joint_weights, ssp_flux_ion, axes=([0, 1], [0, 1]))
+            sed_ion = jnp.tensordot(_mj, _mc(ssp_flux_ion), axes=([0, 1], [0, 1]))
         log10_scale = jnp.log10(total_mass.astype(jnp.result_type(float))) + jnp.log10(
             LSUN_ERG_PER_S
         )
