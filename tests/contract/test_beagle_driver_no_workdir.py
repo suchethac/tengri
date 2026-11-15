@@ -448,7 +448,9 @@ def test_episode_section_varies_the_current_timescale_per_row() -> None:
 
 def test_const100_uses_the_s8_node_grid() -> None:
     const = M.by_section("s8e_const100")[0]
-    nodes = [{k: v for k, v in r.items() if k != "sfr"} for r in M.by_section("s8_nebular")[0].rows]
+    nodes = [
+        {k: v for k, v in r.items() if k != "sfr"} for r in M.by_section("s8_nebular")[0].rows
+    ]
     assert list(const.rows) == nodes
     assert all("sfr" not in r for r in const.rows)  # pure constant history, no current episode
     assert "max_stellar_age mock:type:fixed value:8.0" in const.param_text()
