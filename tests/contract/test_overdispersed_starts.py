@@ -34,8 +34,8 @@ def _gauss(x, args):
 
 def test_the_start_covariance_is_the_stated_rule():
     inverse_mass = jnp.array([1e-6, 0.04, 1.0])
-    # Isotropic part: min(prior scale 1, START_CAP sd) = 0.01, 1, 1 per coordinate.
-    iso = jnp.array([0.01, 1.0, 1.0])
+    # Isotropic part: min(prior scale 1, START_CAP sd) = 0.003, 0.6, 1 per coordinate.
+    iso = jnp.array([0.003, 0.6, 1.0])
     scale = start_scale(inverse_mass, 1.0)
     np.testing.assert_allclose(scale**2, OVERDISPERSION**2 * inverse_mass + iso**2)
     dense = jnp.diag(inverse_mass)
@@ -46,7 +46,7 @@ def test_the_start_covariance_is_the_stated_rule():
 
 def test_the_starts_spread_matches_the_rule():
     inverse_mass = jnp.array([1e-6, 0.04, 1.0])
-    iso = np.array([0.01, 1.0, 1.0])
+    iso = np.array([0.003, 0.6, 1.0])
     starts = jittered_starts(
         jnp.zeros(3), jax.random.PRNGKey(0), 20000, start_scale(inverse_mass, 1.0)
     )

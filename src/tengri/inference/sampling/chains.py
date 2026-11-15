@@ -26,7 +26,7 @@ UNADAPTED_START_SCALE = 0.1
 #: deviations: a start farther than this from a sharp posterior (a prior-scale start of 250
 #: widths) is a transient no short chain recovers from, which R-hat then reports as
 #: non-convergence rather than as the multimodality it was meant to find.
-START_CAP = 10.0
+START_CAP = 3.0
 
 
 def jittered_starts(base, warmup_key, n_chains, chain_jitter):
