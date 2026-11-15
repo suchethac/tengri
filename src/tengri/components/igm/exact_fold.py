@@ -33,6 +33,7 @@ from typing import NamedTuple
 
 import numpy as np
 
+from tengri.utils.band_projection import BandSpec, project_bands
 from tengri.utils.physics_constants import LYMAN_LIMIT_AA
 
 __all__ = ["SubbandFold", "subband_fold", "subband_fold_table"]
@@ -221,8 +222,6 @@ def subband_fold(
         integral is zero (no flux either way) and exactly one for filters the
         IGM cannot reach.
     """
-    from tengri.utils.grid_interp import preintegrate_transposed
-
     if wave_rest is None or templates_T is None or filter_arrays is None:
         wave_rest, templates_T, filter_arrays = _host_inputs(ssp_data, filters)
     filter_waves = [fw for fw, _ in filter_arrays]
@@ -252,20 +251,14 @@ def subband_fold(
     # partition, so one quadrature over a stacked template axis yields both. The
     # stack is a single concatenate of the sliced rows (bare columns, then folded).
     stacked_T = np.concatenate([src_T_sl, src_T_sl * transmission_sl[:, None]], axis=1)
-    grid = preintegrate_transposed(
-        stacked_T,
-        (2, *lead),
-        wave_sl,
-        [filter_waves[i] for i in reached],
-        [filter_trans[i] for i in reached],
-        z,
-        1.0,  # dl_cm: constant factor of both integrals, cancels in the ratio
-        axes=(),  # runtime interpolation axes; unused by the sub-band outputs
-        taylor=False,
-        n_subbands=n_subbands,
+    spec = BandSpec(
+        filters=([filter_waves[i] for i in reached], [filter_trans[i] for i in reached]),
         convention=convention,
+        n_subbands=n_subbands,
         lyc_gate=lyc_gate,
     )
+    # dl_cm stays 1: a constant factor of both integrals, it cancels in the ratio.
+    grid = project_bands(stacked_T, wave_sl, spec, z, grid_dims=(2, *lead))
     sub_phot = np.asarray(grid.subband_phot, dtype=np.float64)
     sub_nodes = np.asarray(grid.subband_waves_rest, dtype=np.float64)
     bare, folded = sub_phot[0], sub_phot[1]

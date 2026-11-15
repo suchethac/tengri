@@ -2399,24 +2399,16 @@ class Observation:
         )
         igm_factor = None if foreground_trans is not None else state.derived.get("igm_phot_factor")
         eff_waves = state.derived.get("filter_eff_waves")
-        fw_pad = ft_pad = None
+        bands = None
         from_dense_curve = igm_factor is None
         if igm_factor is None and igm_trans is not None and eff_waves is not None:
             # Fallback: patchy reionization / DLA read free parameters, so <T>_f
             # is not a function of redshift alone and cannot be tabulated.
-            fw_pad = state.derived.get("phot_filter_waves_padded")
-            ft_pad = state.derived.get("phot_filter_trans_padded")
-            if fw_pad is not None and ft_pad is not None:
-                from tengri.observation.photometry import lnu_filter_integral_batch
+            bands = state.derived.get("phot_band_spec")
+            if bands is not None:
+                from tengri.utils.band_projection import project_bands
 
-                igm_factor = lnu_filter_integral_batch(
-                    igm_trans,
-                    state.wave,
-                    fw_pad,
-                    ft_pad,
-                    z,
-                    convention=self.photometry.convention,
-                )
+                igm_factor = project_bands(igm_trans, state.wave, bands, z)
             else:
                 igm_factor = jnp.interp(jnp.asarray(eff_waves), state.wave, igm_trans)
         if igm_factor is not None:
@@ -2428,7 +2420,7 @@ class Observation:
             # for the dense curve, so it is reused over every band.
             rest_t = state.derived.get("igm_rest_transmission_precomp")
             reach = state.derived.get("igm_reach_filters_precomp")
-            if rest_t is None and from_dense_curve and fw_pad is not None:
+            if rest_t is None and from_dense_curve and bands is not None:
                 rest_t, reach = igm_trans, jnp.arange(igm_factor.shape[0])
             correction = 0.0
             if rest_t is not None and reach is not None:
@@ -2449,11 +2441,9 @@ class Observation:
                     rest_t,
                     reach,
                     state.wave,
-                    state.derived.get("phot_filter_waves_padded"),
-                    state.derived.get("phot_filter_trans_padded"),
+                    state.derived.get("phot_band_spec"),
                     z,
                     igm_factor,
-                    convention=self.photometry.convention,
                 )
                 neb_chunks = state.derived.get("nebular_phot_lnu_subband_screened_precomp")
                 if neb_chunks is not None:

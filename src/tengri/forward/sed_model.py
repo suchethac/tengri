@@ -13215,8 +13215,7 @@ class SEDModel:
                 elif isinstance(comp, IGMSEDComponent):
                     igm_state = comp.precompute_band_factors(
                         wave_rest=self.wavelengths,
-                        photometry=self.observation.photometry,
-                        filters=filters,
+                        bands=bands,
                         redshift_spec=redshift_spec,
                     )
                     # The band factors ARE the precompute product for IGM: its own

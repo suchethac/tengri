@@ -1253,38 +1253,18 @@ def preintegrate_lines(
     PreintegratedLines
         Weights (n_lines, n_filters) and grid information.
     """
-    line_wavelengths = np.asarray(line_wavelengths)
-    n_lines = len(line_wavelengths)
-    n_filters = len(filter_waves)
+    from tengri.utils.band_projection import BandSpec, line_band_weights
 
-    # Redshift line wavelengths to observed frame
-    line_wavelengths_obs = line_wavelengths * (1.0 + redshift)
-
-    # Compute filter denominators (normalization): ∫ T w dλ
-    filter_denoms = np.zeros(n_filters)
-    for f_idx, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
-        fw_np = np.asarray(fw, dtype=np.float64)
-        ft_np = np.asarray(ft, dtype=np.float64)
-        filter_denoms[f_idx] = _np_trapezoid(ft_np * _filter_weight_np(fw_np, convention), fw_np)
-
-    # Compute line weights via point-sampling: T(λ_line) w(λ_line) / ∫ T w dλ
-    line_filter_weights = np.zeros((n_lines, n_filters))
-    for line_idx, lam_obs in enumerate(line_wavelengths_obs):
-        lam_arr = np.asarray([lam_obs], dtype=np.float64)
-        w_at_line = float(_filter_weight_np(lam_arr, convention)[0])
-        for f_idx, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
-            fw_np = np.asarray(fw, dtype=np.float64)
-            ft_np = np.asarray(ft, dtype=np.float64)
-
-            # Interpolate transmission at the line's observed wavelength.
-            # ``left=right=0`` zeroes lines outside the filter passband (np.interp
-            # otherwise returns the edge value, which the 1/λ weight would
-            # amplify for blue out-of-band lines).
-            T_at_line = np.interp(lam_obs, fw_np, ft_np, left=0.0, right=0.0)
-            denom = filter_denoms[f_idx]
-            line_filter_weights[line_idx, f_idx] = (
-                T_at_line * w_at_line / np.maximum(denom, representable_denominator(1e-30))
-            )
+    spec = BandSpec(
+        filters=([np.asarray(fw) for fw in filter_waves], [np.asarray(ft) for ft in filter_trans]),
+        convention=convention,
+        n_subbands=None,
+        lyc_gate=False,
+    )
+    line_filter_weights = np.asarray(
+        line_band_weights(np.asarray(line_wavelengths), spec, redshift, per_hz=False),
+        dtype=np.float64,
+    )
 
     # Convert axes and precompute edges
     axes_jax = tuple(jnp.asarray(ax) for ax in axes)

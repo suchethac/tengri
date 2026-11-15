@@ -28,14 +28,10 @@ import numpy as np
 
 from tengri.forward.energy_balance import bolometric_absorbed_log10
 from tengri.parameters.resolve import require_redshift
-from tengri.utils.filter_convention import FilterConvention, filter_weight_np
-from tengri.utils.grid_interp import (
-    _np_trapezoid,
-    _vectorized_interp,
-    subband_quadrature,
-)
+from tengri.utils.band_projection import BandSpec, project_bands
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.physics_constants import C_AA, LYMAN_LIMIT_AA
-from tengri.utils.scale import representable_denominator, representable_floor
+from tengri.utils.scale import representable_floor
 
 __all__ = [
     "_lyc_cutoff_for",
@@ -67,9 +63,8 @@ def _nebular_subband_channels(
 ) -> tuple[np.ndarray, np.ndarray]:
     r"""Sub-band integrals and quadrature nodes of per-node nebular SEDs.
 
-    Mirrors the union-grid quadrature of
-    :func:`~tengri.utils.grid_interp.preintegrate_grid`, so the chunks factor the
-    exact filter integral the stellar LUT factors.
+    One call of :func:`~tengri.utils.band_projection.project_bands`, so the chunks factor
+    the exact filter integral the stellar LUT factors.
 
     Parameters
     ----------
@@ -99,35 +94,18 @@ def _nebular_subband_channels(
     -----
     **JIT-compatible**: no; build-time numpy precompute.
     """
-    sed = np.asarray(sed_nodes_rest, dtype=np.float64)
-    wave_obs = np.asarray(wave_rest, dtype=np.float64) * (1.0 + redshift)
-    n_points = sed.shape[0]
-    phi = np.zeros((n_points, len(filters), n_subbands))
-    lam_rest = np.zeros_like(phi)
-    for f_idx, (fw, ft) in enumerate(filters):
-        fw_np = np.asarray(fw, dtype=np.float64)
-        ft_np = np.asarray(ft, dtype=np.float64)
-        # Same support rule as the whole-band filter integral (#2817): SED nodes
-        # are clipped into the filter's own support, so the sub-band chunks sum to
-        # the whole band exactly. A node past an edge would otherwise carry a
-        # transmission ramp from the edge value to zero across the straddle segment.
-        f_lo, f_hi = float(fw_np.min()), float(fw_np.max())
-        grid = np.sort(np.concatenate([np.clip(wave_obs, f_lo, f_hi), fw_np]))
-        lo = np.searchsorted(grid, f_lo, side="left")
-        hi = np.searchsorted(grid, f_hi, side="right")
-        grid = grid[lo:hi]
-        trans = np.interp(grid, fw_np, ft_np, left=0.0, right=0.0)
-        tw_grid = trans * filter_weight_np(grid, convention)
-        denom = _np_trapezoid(tw_grid, grid)
-        eff_obs = _np_trapezoid(tw_grid * grid, grid) / np.maximum(
-            denom, representable_denominator(1e-30)
-        )
-        integrand = _vectorized_interp(grid, wave_obs, sed) * tw_grid[None, :]
-        phi[:, f_idx, :], nodes = subband_quadrature(
-            grid, tw_grid, integrand, denom, n_subbands, float(eff_obs)
-        )
-        lam_rest[:, f_idx, :] = nodes / (1.0 + redshift)
-    return phi, lam_rest
+    sed_T = np.ascontiguousarray(np.asarray(sed_nodes_rest, dtype=np.float64).T)
+    spec = BandSpec(
+        filters=([fw for fw, _ in filters], [ft for _, ft in filters]),
+        convention=convention,
+        n_subbands=n_subbands,
+        lyc_gate=False,
+    )
+    grid = project_bands(sed_T, wave_rest, spec, redshift, grid_dims=(sed_T.shape[1],))
+    return (
+        np.asarray(grid.subband_phot, dtype=np.float64),
+        np.asarray(grid.subband_waves_rest, dtype=np.float64),
+    )
 
 
 def _nebular_screen_for(

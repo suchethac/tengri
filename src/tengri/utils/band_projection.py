@@ -29,11 +29,13 @@ from dataclasses import dataclass
 from typing import Any
 
 import jax
+import jax.numpy as jnp
 import numpy as np
 
 from tengri.utils.filter_convention import FilterConvention
+from tengri.utils.scale import representable_denominator
 
-__all__ = ["BandSpec", "project_bands"]
+__all__ = ["BandSpec", "delta_line_matrix", "line_band_weights", "project_bands"]
 
 
 @dataclass(frozen=True, eq=False)
@@ -124,6 +126,27 @@ class BandSpec:
             object.__setattr__(self, "_padded", cached)
         return cached
 
+    def pivot_wavelengths(self) -> np.ndarray:
+        r"""Observed-frame effective wavelength of each band, :math:`\int\lambda T w/\int T w`.
+
+        Evaluated on the filter's own nodes under the convention weight; it does not depend
+        on redshift, so it is the point a transmission read once per band (the IGM) uses.
+
+        Returns
+        -------
+        ndarray, shape (n_filters,)
+            Pivot wavelengths [Angstrom].
+        """
+        from tengri.utils.filter_convention import filter_weight_np
+        from tengri.utils.grid_interp import _np_trapezoid
+
+        pivots = []
+        for fw, ft in zip(*self.filters, strict=True):
+            fw_np, ft_np = np.asarray(fw), np.asarray(ft)
+            tw = ft_np * filter_weight_np(fw_np, self.convention)
+            pivots.append(_np_trapezoid(tw * fw_np, fw_np) / max(_np_trapezoid(tw, fw_np), 1e-30))
+        return np.array(pivots)
+
     def replace(self, **changes: Any) -> BandSpec:
         """Return a copy with the named fields changed (the spec is frozen).
 
@@ -156,6 +179,8 @@ def project_bands(
     axes: tuple[Any, ...] = (),
     taylor: bool = False,
     dl_cm: float = 1.0,
+    node_transmission: Any = None,
+    select: Any = None,
 ) -> Any:
     r"""Project a rest-frame basis onto the bands of ``spec``.
 
@@ -180,6 +205,14 @@ def project_bands(
         Build-time only: also precompute the first spectral moment.
     dl_cm : float
         Build-time luminosity distance [cm].
+    node_transmission : array_like, shape (n_wave,), optional
+        A factor evaluated at each node of ``wave_rest`` and multiplied into the basis
+        before it is integrated (the IGM transmission on the rest grid, for example):
+        the integral then reads :math:`\int L_\nu T\,T_b\,w\,d\lambda`, with ``T``
+        interpolated linearly between nodes along with the SED.
+    select : array_like of int, optional
+        Runtime engine only: the bands to integrate, as indices into ``spec.filters``
+        (may be traced). Every other band is not evaluated.
 
     Returns
     -------
@@ -190,6 +223,8 @@ def project_bands(
     if grid_dims is not None:
         from tengri.utils.grid_interp import preintegrate_transposed
 
+        if node_transmission is not None:
+            basis = basis * np.asarray(node_transmission, dtype=np.float64)[:, None]
         return preintegrate_transposed(
             basis,
             tuple(grid_dims),
@@ -207,9 +242,117 @@ def project_bands(
     from tengri.observation.photometry import lnu_filter_integral_batch
 
     fw_pad, ft_pad = spec.padded()
+    if select is not None:
+        fw_pad, ft_pad = jnp.asarray(fw_pad)[select], jnp.asarray(ft_pad)[select]
+    if node_transmission is not None:
+        basis = basis * node_transmission
     return lnu_filter_integral_batch(
         basis, wave_rest, fw_pad, ft_pad, z, convention=spec.convention
     )
+
+
+def line_band_weights(line_waves_rest: Any, spec: BandSpec, z: Any, *, per_hz: bool) -> Any:
+    r"""Band response of delta-function lines: the one line projection.
+
+    A line at rest wavelength :math:`\lambda_0` seen through band :math:`b` of convention
+    weight :math:`w` has the observed wavelength :math:`\lambda_{\rm obs}=(1+z)\lambda_0` and
+
+    .. math::
+
+        r_b = \frac{T_b(\lambda_{\rm obs})\,w(\lambda_{\rm obs})}{\int T_b\,w\,d\lambda}.
+
+    With ``per_hz`` the response of a unit line luminosity [erg/s] to the band-averaged
+    :math:`L_\nu` [1/Hz] is returned, :math:`r_b\,(1+z)\lambda_0^2/c`; the Jacobian
+    :math:`(1+z)\lambda_0^2/c` converts the delta in frequency to the delta in wavelength.
+    For the photon-counting weight this is :math:`\lambda_0 T_b/(c\int T_b/\lambda\,d\lambda)`;
+    the energy weight carries :math:`1/\lambda_{\rm obs}` less
+    (:func:`~tengri.utils.filter_convention.photon_relative_weight`). The normalization
+    :math:`\int T_b w\,d\lambda` runs over the filter's own nodes, as in the exact integral.
+
+    Parameters
+    ----------
+    line_waves_rest : array_like, shape (n_lines,)
+        Rest wavelengths of the lines as the SED renders them [Angstrom].
+    spec : BandSpec
+        Filters and convention.
+    z : float or jax.Array
+        Redshift; may be traced.
+    per_hz : bool
+        Include the Jacobian :math:`(1+z)\lambda_0^2/c` (response in [1/Hz]); without it the
+        weight is per Angstrom of observed wavelength.
+
+    Returns
+    -------
+    jax.Array, shape (n_lines, n_filters)
+        :math:`r_b` [1/Angstrom], or [1/Hz] with ``per_hz``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes (``spec`` is static).
+    """
+
+    from tengri.utils.filter_convention import filter_weight, photon_relative_weight
+    from tengri.utils.physics_constants import C_AA
+
+    line_waves = jnp.asarray(line_waves_rest)
+    obs = (1.0 + jnp.asarray(z)) * line_waves
+    cols = []
+    for fw, ft in zip(*spec.filters, strict=True):
+        fw = jnp.asarray(fw)
+        ft = jnp.asarray(ft)
+        trans = jnp.interp(obs, fw, ft, left=0.0, right=0.0)
+        norm = jnp.trapezoid(ft * filter_weight(fw, spec.convention), fw)
+        if per_hz:
+            rel = photon_relative_weight(obs, spec.convention)
+            cols.append(line_waves * trans * rel / (C_AA * norm))
+        else:
+            cols.append(
+                trans
+                * filter_weight(obs, spec.convention)
+                / jnp.maximum(norm, representable_denominator(1e-30))
+            )
+    return jnp.stack(cols, axis=-1)
+
+
+def delta_line_matrix(
+    line_waves_rest: Any,
+    filter_waves: Sequence[Any],
+    filter_trans: Sequence[Any],
+    redshift: float,
+    convention: FilterConvention,
+) -> np.ndarray:
+    r"""Response of each unit-luminosity delta line to each band, as a float64 matrix.
+
+    The build-time form of :func:`line_band_weights` (``per_hz=True``) for the line-emitter
+    adapters: ``matrix.T @ line_luminosity [erg/s]`` is the band-averaged :math:`L_\nu`
+    [erg/s/Hz] of the lines.
+
+    Parameters
+    ----------
+    line_waves_rest : array_like, shape (n_lines,)
+        Rest wavelengths [Angstrom].
+    filter_waves, filter_trans : sequence of array_like
+        Observed-frame filter curves [Angstrom], [dimensionless].
+    redshift : float
+        Source redshift [dimensionless].
+    convention : FilterConvention
+        Bandpass weight.
+
+    Returns
+    -------
+    ndarray, shape (n_lines, n_filters)
+        Band response [1/Hz].
+    """
+    spec = BandSpec(
+        filters=([np.asarray(fw) for fw in filter_waves], [np.asarray(ft) for ft in filter_trans]),
+        convention=convention,
+        n_subbands=None,
+        lyc_gate=False,
+    )
+    weights = line_band_weights(
+        np.asarray(line_waves_rest, dtype=np.float64), spec, redshift, per_hz=True
+    )
+    return np.asarray(weights, dtype=np.float64)
 
 
 def _flatten_spec(spec: BandSpec):
