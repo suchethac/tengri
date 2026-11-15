@@ -165,14 +165,12 @@ def additive_term_band_response(ctx, name):
     if refusal is not None:
         return Decline(refusal)
     fw_pad, ft_pad = ctx.padded_filters
-    if not (
-        ctx.wave_precomp
-        and fw_pad is not None
-        and ft_pad is not None
-        and hasattr(comp, "emission_terms")
-        and hasattr(comp, "EMITTER_PROBE_INPUTS")
-    ):
-        return Decline(None)
+    if not ctx.wave_precomp:
+        return Decline("approx=WavePrecomp() is not enabled")
+    if fw_pad is None or ft_pad is None:
+        return Decline("the padded filter curves are absent, so no band response can be built")
+    if not (hasattr(comp, "emission_terms") and hasattr(comp, "EMITTER_PROBE_INPUTS")):
+        return Decline("the emitter declares no emission terms or probe inputs")
     amplitudes_fixed = bool(getattr(comp, "FIXED_TERM_AMPLITUDES", False)) and not any(
         p in getattr(comp, "AMPLITUDE_PARAMS", ()) for p in free
     )
@@ -352,16 +350,18 @@ def additive_term_shape_table(ctx, name) -> BandTable | Decline:
     keys = comp.term_shape_keys() if hasattr(comp, "term_shape_keys") else {}
     fw_pad, ft_pad = ctx.padded_filters
     prefix = f"{name}_"
-    if not (
-        keys
-        and any(p.startswith(prefix) for p in ctx.spec.free_params)
-        and ctx.wave_precomp
-        and fw_pad is not None
-        and ft_pad is not None
-        and ctx.z_nodes is None
-        and not isinstance(ctx.ask(name, "term_band_response"), BandTable)
-    ):
-        return Decline(None)
+    if not keys:
+        return Decline("the emitter publishes no term shape keys")
+    if not any(p.startswith(prefix) for p in ctx.spec.free_params):
+        return Decline(f"no {name} parameter is free, so there is no shape to tabulate")
+    if not ctx.wave_precomp:
+        return Decline("approx=WavePrecomp() is not enabled")
+    if fw_pad is None or ft_pad is None:
+        return Decline("the padded filter curves are absent, so no band response can be built")
+    if ctx.z_nodes is not None:
+        return Decline("redshift is free: the term shape table is built at a fixed redshift")
+    if isinstance(ctx.ask(name, "term_band_response"), BandTable):
+        return Decline("the rank-1 term response already serves this emitter exactly")
     from tengri.forward.precompute import registry
 
     redshift = float(ctx.spec.get_fixed_values()["redshift"])
@@ -378,7 +378,7 @@ def additive_term_shape_table(ctx, name) -> BandTable | Decline:
             term=term,
         )
         if term_table is None:
-            return Decline(None)
+            return Decline(f"the {key} adapter built no shape table for term {term!r}")
         tables[term] = term_table
     return BandTable(tables)
 
