@@ -2076,13 +2076,22 @@ def _window_eval_axis0(st: _AxisStencil, ys: jnp.ndarray, kind: str) -> jnp.ndar
     if kind == "linear":
         t = (st.xq - x0) / jnp.where(h > 0.0, h, 1.0)
         return (1.0 - t) * y0 + t * y1
-    slopes = _pchip_slopes(st.xs, ys)
+    # The cubic is positively homogeneous in the node values, so it is formed on each
+    # column divided by its own window maximum and scaled back, as in
+    # :func:`pchip_interp_local`: the harmonic-mean test multiplies two secants, and a
+    # table of ~1e19 per-Lsun values squares past float32's range (#3505).
+    scale = jax.lax.stop_gradient(jnp.max(jnp.abs(ys), axis=0, keepdims=True))
+    scale = jnp.where(scale > 0.0, scale, 1.0)
+    yn = ys / scale
+    y0 = jax.lax.dynamic_index_in_dim(yn, st.cell, axis=0, keepdims=False)
+    y1 = jax.lax.dynamic_index_in_dim(yn, st.cell + 1, axis=0, keepdims=False)
+    slopes = _pchip_slopes(st.xs, yn)
     m0 = jax.lax.dynamic_index_in_dim(slopes, st.cell, axis=0, keepdims=False)
     m1 = jax.lax.dynamic_index_in_dim(slopes, st.cell + 1, axis=0, keepdims=False)
     t = (st.xq - x0) / h
     t2 = t * t
     t3 = t2 * t
-    return (
+    return scale[0] * (
         (2.0 * t3 - 3.0 * t2 + 1.0) * y0
         + (t3 - 2.0 * t2 + t) * h * m0
         + (-2.0 * t3 + 3.0 * t2) * y1
