@@ -1653,8 +1653,10 @@ def _pchip_slopes(x: jnp.ndarray, y: jnp.ndarray) -> jnp.ndarray:
     # skirtor_disc_dust_ratio, #892). Replacing d_left/d_right with 1.0 wherever
     # the harmonic is unused keeps the denominator = w1+w2 > 0, so the reverse
     # pass stays finite. Forward is unchanged: interior is 0 in exactly the same
-    # places (d_left*d_right <= 0).
-    mono = d_left * d_right > 0.0
+    # places (opposite signs). The test is on the signs, not on the product: the
+    # float32 product of two ~1e-23 secants underflows to zero and zeroed every
+    # interior slope of an SED-scale table (#3541).
+    mono = jnp.sign(d_left) * jnp.sign(d_right) > 0.0
     d_left_safe = jnp.where(mono, d_left, 1.0)
     d_right_safe = jnp.where(mono, d_right, 1.0)
     harmonic = (w1 + w2) / (w1 / d_left_safe + w2 / d_right_safe)
