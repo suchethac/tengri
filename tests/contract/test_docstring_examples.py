@@ -11,6 +11,9 @@ from __future__ import annotations
 import ast
 import doctest
 import importlib
+import os
+import subprocess
+import sys
 
 import pytest
 
@@ -71,13 +74,43 @@ def test_docstring_tengri_imports_resolve(module_name):
     assert _broken_tengri_imports(module_name) == []
 
 
+#: Runs one module's docstring examples and prints the failure count. It runs in a fresh
+#: interpreter: an example may mutate process-wide state (``register_agn_block``'s example
+#: registers ``"example_torus"`` into ``AGN_BLOCKS``), and in-process that leaked into every
+#: later test on the same worker (the menu-grammar and torus-support contracts).
+_RUN_DOCTESTS = """
+import doctest, importlib, sys
+module = importlib.import_module(sys.argv[1])
+runner = doctest.DocTestRunner(optionflags=doctest.ELLIPSIS)
+for test in doctest.DocTestFinder().find(module):
+    runner.run(test, out=lambda _text: None)
+print(runner.failures)
+"""
+
+
 @pytest.mark.parametrize("module_name", TOUCHED_MODULES)
 def test_docstring_examples_pass(module_name):
-    module = importlib.import_module(module_name)
-    runner = doctest.DocTestRunner(optionflags=doctest.ELLIPSIS)
-    for test in doctest.DocTestFinder().find(module):
-        runner.run(test, out=lambda _text: None)
-    assert runner.failures == 0, f"{runner.failures} failing docstring example(s) in {module_name}"
+    out = subprocess.run(
+        [sys.executable, "-c", _RUN_DOCTESTS, module_name],
+        capture_output=True,
+        text=True,
+        check=False,
+        env={**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)},
+    )
+    assert out.returncode == 0, f"{module_name}: doctest runner crashed\n{out.stderr[-2000:]}"
+    failures = int(out.stdout.strip().splitlines()[-1])
+    assert failures == 0, f"{failures} failing docstring example(s) in {module_name}"
+
+
+def test_docstring_examples_leave_no_registry_behind():
+    """Running the examples must not change this process's registries (#3452 leak)."""
+    from tengri.components.agn.blocks._protocol import AGN_BLOCKS
+
+    before = {cat: set(blocks) for cat, blocks in AGN_BLOCKS.items()}
+    for module_name in TOUCHED_MODULES:
+        test_docstring_examples_pass(module_name)
+    after = {cat: set(blocks) for cat, blocks in AGN_BLOCKS.items()}
+    assert after == before
 
 
 def test_package_doctest_collection_does_not_raise():

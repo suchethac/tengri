@@ -195,7 +195,9 @@ def test_xray_simple_lut_matches_exact(real_ssp):
 
     The declared prior on ``agn_log_lbol`` is 6.42-12.42. Dominant bands are the 12.4 A
     and 1.24 A filters (share 7.3 and 1.1); the 124 A band adds 0.9% and is excluded.
-    Measured worst relative difference 3.2e-15; tolerance 1e-14 = 3 x measured, rounded up.
+    Measured worst relative difference 1.28e-14 since #3434 (in #3462; 2.7e-15 before, the
+    stellar mass and age mix the X-ray scaling reads moved by ~1e-9); tolerance 4e-14 =
+    3 x measured, rounded up. Float noise in the order of operations, not a path difference.
     """
     from tengri import Fixed
 
@@ -206,7 +208,7 @@ def test_xray_simple_lut_matches_exact(real_ssp):
         obs,
         dict(agn=disc, xray={"type": "simple"}),
         dict(agn=disc),
-        rtol=1e-14,
+        rtol=4e-14,
         label="xray simple",
     )
 
