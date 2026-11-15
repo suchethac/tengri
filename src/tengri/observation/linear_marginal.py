@@ -9,14 +9,12 @@ integrated out analytically.
 
 from __future__ import annotations
 
-import math
 from typing import NamedTuple
 
 import jax.numpy as jnp
 
 from tengri.observation.banded import BandedMatrix, banded_forward_substitution
-
-_LOG_2PI = math.log(2.0 * math.pi)
+from tengri.utils.scale import diag_gaussian_log_normalization
 
 
 class MarginalResult(NamedTuple):
@@ -229,7 +227,7 @@ def marginalize_linear_nuisance(
     if chol_lower is None:
         resid = weight * (data - model0) / sigma
         design_w = (weight / sigma)[:, None] * design * coef_scale
-        log_norm = jnp.sum(weight * jnp.log(sigma))
+        normalization = diag_gaussian_log_normalization(sigma, weight)
     else:
         # One batched substitution: the residual rides as column 0 of the right-hand side
         # beside the scaled design columns, so the serial scan runs once per evaluation.
@@ -239,7 +237,7 @@ def marginalize_linear_nuisance(
         )
         whitened = banded_forward_substitution(chol_lower, rhs)
         resid, design_w = whitened[:, 0], whitened[:, 1:]
-        log_norm = jnp.sum(jnp.log(chol_lower.data[0]))
+        normalization = diag_gaussian_log_normalization(chol_lower.data[0], weight)
     prior_s = precision * coef_scale**2
 
     gram = design_w.T @ design_w + prior_s
@@ -252,11 +250,7 @@ def marginalize_linear_nuisance(
     _sign_m, logdet_m = jnp.linalg.slogdet(gram_m)
 
     log_like = (
-        -0.5 * jnp.sum(weight) * _LOG_2PI
-        - log_norm
-        - 0.5 * jnp.dot(resid, resid)
-        + 0.5 * jnp.dot(rhs_m, beta_s)
-        - 0.5 * logdet_m
+        normalization - 0.5 * jnp.dot(resid, resid) + 0.5 * jnp.dot(rhs_m, beta_s) - 0.5 * logdet_m
     )
     if prior_precision is None:
         log_like = log_like + jnp.sum(col) * jnp.log(coef_scale)

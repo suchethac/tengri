@@ -27,7 +27,7 @@ from tengri.observation.calibration import (
     marginalize_calibration_segments,
 )
 from tengri.observation.eline_marginalization import (
-    marginalize_emission_lines,
+    line_marginal,
     model_line_prior,
     unit_line_prior,
     unit_model_line_prior,
@@ -52,22 +52,8 @@ __all__ = [
     "eline_model_marginal_term",
     "fitted_line_model",
     "floored_noise",
-    "gaussian_constant",
     "student_t_term",
 ]
-
-
-def gaussian_constant(err, chol_data=None, pix_mask=None):
-    """The Gaussian normalization ``0.5 N ln 2pi + sum ln sigma`` [nats] of a pixel noise model.
-
-    ``sigma`` is the error, or the diagonal of the Cholesky factor of a correlated
-    covariance; ``N`` and the sum run over unmasked pixels. A normalized log-likelihood
-    carries ``-gaussian_constant``.
-    """
-    sigma = err if chol_data is None else chol_data[0]
-    if pix_mask is None:
-        return 0.5 * sigma.shape[0] * LOG_2PI + jnp.sum(jnp.log(sigma))
-    return 0.5 * jnp.sum(pix_mask) * LOG_2PI + jnp.sum(pix_mask * jnp.log(sigma))
 
 
 def student_t_term(predicted, obs, err, f_cal, dof):
@@ -324,8 +310,7 @@ def eline_flat_marginal_term(
     ``-1/2 ln Lambda`` nats of evidence when the data constrain it, so evidences of models
     with different numbers of marginalized lines depend on the prior width. The Fitter's
     width is ``Spectroscopy.eline_prior_sigma`` (default 100), the same in the batched path.
-    The value is the full normalized log-density: the primitive's Gaussian constant is
-    removed here, once.
+    The value is the full normalized log-density.
 
     The calibration floor ``f_cal`` is scaled by ``model_flux``, the model before the linear
     nuisance terms (``m0``), not by the calibrated or line-added spectrum: the noise is
@@ -335,7 +320,7 @@ def eline_flat_marginal_term(
     :func:`floored_noise`).
     """
     err, chol_data, chol_offsets = floored_noise(model_flux, err, chol_data, chol_offsets, f_cal)
-    ln_l_marg, _a_hat, _a_cov = marginalize_emission_lines(
+    result, _width, _scatter = line_marginal(
         residual=obs - model_flux,
         noise=err,
         design_matrix=design,
@@ -345,7 +330,7 @@ def eline_flat_marginal_term(
         chol_data=chol_data,
         chol_offsets=chol_offsets,
     )
-    return ln_l_marg - gaussian_constant(err, chol_data, pix_mask)
+    return result.log_like
 
 
 def eline_cloudy_marginal_term(

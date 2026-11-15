@@ -37,7 +37,7 @@ from jax.tree_util import Partial
 # without importing ``inference/``, the layering runs
 # observation -> inference, never back (#1588). Re-exported here because every
 # likelihood in this module is written in terms of it.
-from tengri.utils.scale import present_noise, whiten
+from tengri.utils.scale import LOG_2PI, diag_gaussian_log_normalization, present_noise, whiten
 
 __all__ = [
     "LOG_2PI",
@@ -249,47 +249,6 @@ def diag_gaussian_log_prob(
     **JIT-compatible**: yes, pure JAX.
     """
     return -0.5 * diag_gaussian_chi2(predicted, observed, sigma, sigma_floor, presence)
-
-
-LOG_2PI = math.log(2.0 * math.pi)
-
-
-def diag_gaussian_log_normalization(
-    sigma_eff: jnp.ndarray,
-    presence: jnp.ndarray | None = None,
-) -> jnp.ndarray:
-    r"""Exact normalization of a diagonal Gaussian.
-
-    The constant is :math:`-\sum_i \log\sigma_i - \tfrac{n}{2}\log 2\pi`.
-
-    :func:`diag_gaussian_log_prob` omits this constant. The published evidence adds it
-    back (#3427). The sum runs over the bands present in ``presence``.
-
-    Parameters
-    ----------
-    sigma_eff : array_like
-        Effective 1-σ uncertainty per band, already combined with any floor.
-    presence : array_like, optional
-        Per-band presence mask (0.0 or 1.0). Absent bands count in neither term.
-
-    Returns
-    -------
-    scalar jnp.ndarray
-        The log normalization [nats].
-
-    Notes
-    -----
-    Depends on the data and the fixed floor only. A free calibration floor is inside the
-    Student-t energy instead, where its ``log sigma_eff`` term is kept (see
-    :func:`tengri.observation.noise.variable_noise_hamiltonian`).
-    """
-    log_sigma = jnp.log(sigma_eff)
-    if presence is None:
-        n_present = jnp.asarray(sigma_eff.shape[0], dtype=log_sigma.dtype)
-        return -jnp.sum(log_sigma) - 0.5 * n_present * LOG_2PI
-    present = presence > 0
-    n_present = jnp.sum(present.astype(log_sigma.dtype))
-    return -jnp.sum(jnp.where(present, log_sigma, 0.0)) - 0.5 * n_present * LOG_2PI
 
 
 def student_t_log_norm_per_point(dof: float | jnp.ndarray) -> jnp.ndarray:

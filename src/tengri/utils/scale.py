@@ -365,6 +365,50 @@ def present_noise(noise, presence):
     return noise if presence is None else jnp.where(presence > 0, noise, jnp.ones_like(noise))
 
 
+LOG_2PI = math.log(2.0 * math.pi)
+
+
+def diag_gaussian_log_normalization(
+    sigma_eff: jnp.ndarray,
+    presence: jnp.ndarray | None = None,
+) -> jnp.ndarray:
+    r"""Exact normalization of a diagonal Gaussian.
+
+    The constant is :math:`-\sum_i \log\sigma_i - \tfrac{n}{2}\log 2\pi`.
+
+    :func:`diag_gaussian_log_prob` omits this constant. The published evidence adds it
+    back (#3427). The sum runs over the bands present in ``presence``.
+
+    Parameters
+    ----------
+    sigma_eff : array_like
+        Effective 1-σ uncertainty per band, already combined with any floor.
+    presence : array_like, optional
+        Per-band presence mask (0.0 or 1.0). Absent bands count in neither term.
+
+    Returns
+    -------
+    scalar jnp.ndarray
+        The log normalization [nats].
+
+    Notes
+    -----
+    Depends on the data and the fixed floor only. A free calibration floor is inside the
+    Student-t energy instead, where its ``log sigma_eff`` term is kept (see
+    :func:`tengri.observation.noise.variable_noise_hamiltonian`).
+
+    For a correlated covariance pass the diagonal of its Cholesky factor as ``sigma_eff``:
+    the log-determinant is then ``2 sum log L_ii``, and the normalization the same formula.
+    """
+    log_sigma = jnp.log(sigma_eff)
+    if presence is None:
+        n_present = jnp.asarray(sigma_eff.shape[0], dtype=log_sigma.dtype)
+        return -jnp.sum(log_sigma) - 0.5 * n_present * LOG_2PI
+    present = presence > 0
+    n_present = jnp.sum(present.astype(log_sigma.dtype))
+    return -jnp.sum(jnp.where(present, log_sigma, 0.0)) - 0.5 * n_present * LOG_2PI
+
+
 def is_float32_arithmetic(grid) -> bool:
     """Whether the forward arithmetic runs in float32 (#3401).
 
