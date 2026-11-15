@@ -24,7 +24,7 @@ from tengri.components.nebular._shared import (
     velocity_window_nodes,
 )
 
-pytestmark = pytest.mark.unit
+pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
 def _mist_like_grid() -> np.ndarray:
