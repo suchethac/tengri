@@ -225,7 +225,16 @@ class TestAcceptedListLawScopesPerScreenNames:
             )
         message = str(exc_info.value)
 
-        for accepted in ("slope_bc", "slope_diff", "slope_neb"):
+        # power_law reads its opt-in UV bump, so the bump names are accepted here
+        # (the wildcard leaves them out, but naming one explicitly is allowed).
+        for accepted in (
+            "slope_bc",
+            "slope_diff",
+            "slope_neb",
+            "bump_strength_bc",
+            "bump_strength_diff",
+            "bump_strength_neb",
+        ):
             assert accepted in message, f"{accepted!r} should be listed as accepted: {message}"
 
         for foreign in (
@@ -235,9 +244,6 @@ class TestAcceptedListLawScopesPerScreenNames:
             "delta_bc",
             "delta_diff",
             "delta_neb",
-            "bump_strength_bc",
-            "bump_strength_diff",
-            "bump_strength_neb",
         ):
             assert foreign not in message, (
                 f"{foreign!r} is not read by power_law and must not be advertised "

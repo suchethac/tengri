@@ -305,3 +305,33 @@ def test_no_vi_default_anywhere(fwd_3band, table_3band):
 
     sig = inspect.signature(Catalog.fit)
     assert sig.parameters["method"].default == "map"
+
+
+def test_catalog_forwards_cigale_ingest_options(fwd_3band, table_3band):
+    """Catalog(...) passes the CIGALE ingest options through to ingest_catalog.
+
+    The reference is ingest_catalog called directly with the same table and options.
+    Without the option the noise arrays are the table's own errors.
+    """
+    from tengri import Catalog
+    from tengri.inference.catalog_ingest import ingest_catalog
+
+    photometry = fwd_3band.observation.photometry
+    cat = Catalog(
+        fwd_3band, table_3band, flux_unit="cgs_fnu", redshift_col="z", observed_relative_error=0.1
+    )
+    direct = ingest_catalog(
+        table_3band,
+        photometry=photometry,
+        flux_unit="cgs_fnu",
+        redshift_col="z",
+        observed_relative_error=0.1,
+    )
+    np.testing.assert_allclose(cat._catalog_arrays.noise, direct.noise, rtol=1e-12)
+
+    plain = Catalog(fwd_3band, table_3band, flux_unit="cgs_fnu", redshift_col="z")
+    default = ingest_catalog(
+        table_3band, photometry=photometry, flux_unit="cgs_fnu", redshift_col="z"
+    )
+    np.testing.assert_allclose(plain._catalog_arrays.noise, default.noise, rtol=1e-12)
+    assert not np.allclose(cat._catalog_arrays.noise, plain._catalog_arrays.noise, rtol=1e-12)
