@@ -54,6 +54,12 @@ def _percentile_label(level) -> str:
     return text.replace(".", "p").replace("-", "m")
 
 
+def _runtime_values_of(galaxy) -> dict | None:
+    """One galaxy's own values of the model's runtime keys (its redshift), or ``None``."""
+    z = galaxy.get("redshift")
+    return None if z is None else {"redshift": z}
+
+
 def _sample_dict_for_summary(posterior, properties=None):
     """Everything worth summarizing for one galaxy: parameters + derived properties.
 
@@ -1551,6 +1557,7 @@ class _CatalogFitterOriginal:
                 presence=g.get("presence", None),
                 cache=self.cache,
                 profile_mass=profile_mass,
+                approx=self.approx,
             )
             self._dummy_fitters[key] = cached
         return cached
@@ -1756,6 +1763,7 @@ class _CatalogFitterOriginal:
                 diagnostics={"n_iterations": int(all_n_iters[i])},
                 loss_history=None,
                 _model=self.model,
+                _runtime_values=_runtime_values_of(self.galaxies[i]),
             )
             _attach_summaries(post_i, store, percentiles, reducers, properties)
             posteriors.append(post_i)
@@ -2314,6 +2322,7 @@ class _CatalogFitterOriginal:
                 },
                 loss_history=None,
                 _model=self.model,
+                _runtime_values=_runtime_values_of(self.galaxies[i]),
             )
             # Reinsert the analytically marginalized mass for THIS galaxy,
             # before ``_attach_summaries`` runs: derived properties are computed
@@ -2345,6 +2354,7 @@ class _CatalogFitterOriginal:
                     line_obs=None if _line_obs_i is None else jnp.asarray(_line_obs_i),
                     line_err=None if _line_err_i is None else jnp.asarray(_line_err_i),
                     key=jax.random.fold_in(key, i),
+                    runtime_values=_runtime_values_of(self.galaxies[i]),
                 )
 
             _attach_summaries(post_i, store, percentiles, reducers, properties)

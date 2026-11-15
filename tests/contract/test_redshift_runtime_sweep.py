@@ -844,7 +844,7 @@ def _map_logm(representation, z, *, runtime):
 
 @cache
 def _fixed_z_logm(z):
-    return _map_logm("exact", z, runtime=False)
+    return _fixed_z_map(z)[0]
 
 
 @pytest.mark.parametrize("z", FIT_ZS)
@@ -887,3 +887,226 @@ def test_catalog_masses_at_per_galaxy_redshifts_match_the_fixed_z_fits(represent
     np.testing.assert_allclose(
         got, ref, atol=FIT_LOGM_VS_EXACT, err_msg=f"{representation}: catalog logM at z={FIT_ZS}"
     )
+
+
+# ── Samplers: the reinserted mass follows the runtime redshift ─────────────────
+#
+# Under a sampler the profiled mass is drawn per posterior sample after the run, through
+# the reinsertion program and the batched catalog paths, which assemble their own
+# prediction parameters. One NUTS chain of 100 warmup and 100 draws per fit.
+
+SAMPLER_ZS = (0.06, 0.94)
+SAMPLER_KW = {"n_warmup": 100, "n_samples": 100, "n_chains": 1}
+#: Atol [dex] on a posterior median against the fixed-z fit's. Two NUTS fits of the same
+#: mock at different seeds differ by 0.02 dex in the median, and a table fit and the
+#: exact one by up to 0.05 dex on one seed (measured at z = 0.94); a baked distance gives
+#: at least 1.07 dex over SAMPLER_ZS.
+SAMPLER_LOGM_ATOL = 0.1
+
+
+def _median_logm(posterior):
+    return float(np.median(np.asarray(posterior.samples["sfh_dpl_log_total_mass"])))
+
+
+def _nuts_logm(representation, z, *, runtime):
+    from tengri import ForwardModel
+    from tengri.inference.fitter import Fitter
+
+    flux, noise = _fit_mock(z)
+    base = _fit_model(representation, Fixed(Z_PLACEHOLDER if runtime else z))
+    fitter = Fitter(
+        ForwardModel.build(sed=base),
+        flux,
+        noise,
+        approx=None if representation == "exact" else "auto",
+        params_override={"redshift": z} if runtime else None,
+    )
+    assert fitter._profile_mass_resolved, "the cell must exercise the profiled-mass fit"
+    post = fitter.run("mcmc_nuts", verbose=False, key=jax.random.PRNGKey(0), **SAMPLER_KW)
+    return _median_logm(post)
+
+
+@cache
+def _fixed_z_nuts_logm(z):
+    return _nuts_logm("exact", z, runtime=False)
+
+
+@pytest.mark.parametrize("representation", REPRESENTATIONS)
+def test_nuts_mass_at_a_runtime_redshift_matches_the_fixed_z_fit(representation):
+    """NUTS at an override z reinserts the mass of a fit built fixed at that z."""
+    z = SAMPLER_ZS[1]
+    got = _nuts_logm(representation, z, runtime=True)
+    ref = _fixed_z_nuts_logm(z)
+    assert abs(got - ref) < SAMPLER_LOGM_ATOL, (
+        f"{representation} z={z}: logM {got:.3f} vs fixed-z fit {ref:.3f}"
+    )
+
+
+@pytest.mark.parametrize("representation", REPRESENTATIONS)
+def test_catalog_nuts_masses_at_per_galaxy_redshifts_match_the_fixed_z_fits(representation):
+    """Catalog.fit with NUTS reinserts each galaxy's fixed-z mass at its own z."""
+    from tengri import Catalog, ForwardModel
+
+    fluxes = [_fit_mock(z) for z in SAMPLER_ZS]
+    n_b = len(FIT_BANDS)
+    table = {"z": np.asarray(SAMPLER_ZS)}
+    for j in range(n_b):
+        table[f"f{j}"] = np.asarray([f[0][j] for f in fluxes])
+        table[f"e{j}"] = np.asarray([f[1][j] for f in fluxes])
+    fwd = ForwardModel.build(sed=_fit_model(representation, Fixed(Z_PLACEHOLDER)))
+    cat = Catalog(
+        fwd,
+        table,
+        flux_unit="cgs_fnu",
+        redshift_col="z",
+        flux_cols=[f"f{j}" for j in range(n_b)],
+        err_cols=[f"e{j}" for j in range(n_b)],
+    )
+    kw = {"approx": None} if representation == "exact" else {}
+    ref = np.asarray([_fixed_z_nuts_logm(z) for z in SAMPLER_ZS])
+    jax.clear_caches()  # the references' compiled programs are not needed by the catalog fit
+    fit = cat.fit(key=jax.random.PRNGKey(0), method="mcmc_nuts", **SAMPLER_KW, **kw)
+    got = np.asarray([_median_logm(p) for p in fit.posteriors])
+    np.testing.assert_allclose(
+        got, ref, atol=SAMPLER_LOGM_ATOL, err_msg=f"{representation}: catalog NUTS at {SAMPLER_ZS}"
+    )
+
+
+# ── Derived properties and the remaining fit routes ────────────────────────────
+#
+# A derived property of a posterior (the star formation rate over the last 100 Myr, whose
+# window is capped by the age of the Universe at the galaxy's z) is evaluated at the
+# redshift of the galaxy that was fit, through the same assembly of parameters as the
+# profiled mass.
+
+#: Rtol on a derived property of a runtime-z fit against the fixed-z fit's, for fits that
+#: agree to 1e-4 dex in mass (MAP) or to the sampling noise above (samplers).
+PROPERTY_RTOL_MAP = 0.02
+PROPERTY_RTOL_SAMPLED = 0.25
+
+
+def _catalog_table(zs):
+    fluxes = [_fit_mock(z) for z in zs]
+    n_b = len(FIT_BANDS)
+    table = {"z": np.asarray(zs)}
+    for j in range(n_b):
+        table[f"f{j}"] = np.asarray([f[0][j] for f in fluxes])
+        table[f"e{j}"] = np.asarray([f[1][j] for f in fluxes])
+    return table
+
+
+def _fit_catalog(representation, zs, method, **kwargs):
+    from tengri import Catalog, ForwardModel
+
+    n_b = len(FIT_BANDS)
+    fwd = ForwardModel.build(sed=_fit_model(representation, Fixed(Z_PLACEHOLDER)))
+    cat = Catalog(
+        fwd,
+        _catalog_table(zs),
+        flux_unit="cgs_fnu",
+        redshift_col="z",
+        flux_cols=[f"f{j}" for j in range(n_b)],
+        err_cols=[f"e{j}" for j in range(n_b)],
+    )
+    kw = {"approx": None} if representation == "exact" else {}
+    return cat.fit(key=jax.random.PRNGKey(0), method=method, **kwargs, **kw)
+
+
+def _fixed_z_map_post(z):
+    from tengri import ForwardModel
+    from tengri.inference.fitter import Fitter
+
+    flux, noise = _fit_mock(z)
+    fitter = Fitter(
+        ForwardModel.build(sed=_fit_model("exact", Fixed(z))), flux, noise, approx=None
+    )
+    return fitter.run("map", verbose=False, key=jax.random.PRNGKey(0))
+
+
+PROPERTY_NAMES_FIT = ("sfr_100myr", "mass_weighted_age_gyr")
+
+
+@cache
+def _fixed_z_map(z):
+    """One fixed-z MAP fit: its log mass and the properties the cells compare."""
+    post = _fixed_z_map_post(z)
+    props = {n: float(np.asarray(post.properties[n])) for n in PROPERTY_NAMES_FIT}
+    return float(post.params["sfh_dpl_log_total_mass"]), props
+
+
+def _fixed_z_sfr(z):
+    return _fixed_z_map(z)[1]["sfr_100myr"]
+
+
+@pytest.mark.parametrize("z", FIT_ZS)
+@pytest.mark.parametrize("representation", REPRESENTATIONS)
+def test_map_property_at_a_runtime_redshift_matches_the_fixed_z_fit(representation, z):
+    """The SFR of a MAP fit at an override z is the fixed-z fit's, not the placeholder's."""
+    from tengri import ForwardModel
+    from tengri.inference.fitter import Fitter
+
+    flux, noise = _fit_mock(z)
+    fitter = Fitter(
+        ForwardModel.build(sed=_fit_model(representation, Fixed(Z_PLACEHOLDER))),
+        flux,
+        noise,
+        approx=None if representation == "exact" else "auto",
+        params_override={"redshift": z},
+    )
+    post = fitter.run("map", verbose=False, key=jax.random.PRNGKey(0))
+    got = float(np.asarray(post.properties["sfr_100myr"]))
+    np.testing.assert_allclose(got, _fixed_z_sfr(z), rtol=PROPERTY_RTOL_MAP)
+
+
+@pytest.mark.parametrize("representation", REPRESENTATIONS)
+def test_catalog_laplace_masses_and_properties_match_the_fixed_z_fits(representation):
+    """A sequential-fallback sampler reinserts each galaxy's fixed-z mass and properties."""
+    names = ("stellar_mass", "sfr_100myr", "mass_weighted_age_gyr")
+    fit = _fit_catalog(representation, FIT_ZS, "laplace", properties=names)
+    mass = np.log10(np.asarray(fit["stellar_mass"]))
+    ref = np.asarray([_fixed_z_logm(z) for z in FIT_ZS])
+    np.testing.assert_allclose(
+        mass, ref, atol=FIT_LOGM_VS_EXACT * 10, err_msg=f"{representation}: laplace logM"
+    )
+    for name in names[1:]:
+        got = np.ravel(np.asarray(fit[name]))[: len(FIT_ZS)]
+        want = np.asarray([_fixed_z_map(z)[1][name] for z in FIT_ZS])
+        np.testing.assert_allclose(
+            got, want, rtol=PROPERTY_RTOL_SAMPLED, err_msg=f"{representation}: laplace {name}"
+        )
+
+
+def test_catalog_reinsertion_compiles_once_for_galaxies_at_different_redshifts():
+    """The profiled-mass reinsertion is one program for the catalog, not one per galaxy."""
+    lowerings = []
+
+    def _listener(name, _duration, **kw):
+        if name == _LOWERING and kw.get("fun_name") == "jit(_reinsert)":
+            lowerings.append(kw.get("fun_name"))
+
+    _jax_monitoring.register_event_duration_secs_listener(_listener)
+    try:
+        _fit_catalog("wp", (0.06, 0.32, 0.94), "mcmc_nuts", n_warmup=5, n_samples=5, n_chains=1)
+    finally:
+        _jax_monitoring.unregister_event_duration_listener(_listener)
+    assert len(lowerings) == 1, f"{len(lowerings)} reinsertion programs for 3 galaxies"
+
+
+PROPERTY_NAMES = ("stellar_mass", "sfr_100myr", "mass_weighted_age_gyr")
+
+
+@pytest.mark.parametrize("z", FIT_ZS)
+@pytest.mark.parametrize("representation", REPRESENTATIONS)
+def test_properties_at_fixed_parameters_follow_the_runtime_redshift(representation, z):
+    """Properties at one parameter point equal a Fixed-z build's, extensive and intensive."""
+    base = _fit_model(representation, Fixed(Z_PLACEHOLDER))
+    runtime = base if representation == "wp" else base.with_runtime_redshift(None)
+    got = runtime.predict_properties({**FIT_TRUTH, "redshift": z}, names=PROPERTY_NAMES)
+    ref = _fit_model("exact", Fixed(z)).predict_properties(FIT_TRUTH, names=PROPERTY_NAMES)
+    for name in PROPERTY_NAMES:
+        np.testing.assert_allclose(
+            np.asarray(got[name]),
+            np.asarray(ref[name]),
+            rtol=RTOL["exact"] if representation == "exact" else RTOL["wp"],
+            err_msg=f"{representation} z={z}: {name}",
+        )

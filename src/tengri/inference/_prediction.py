@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-__all__ = ["_build_prediction", "_resolve_measured_line_defs"]
+__all__ = ["_build_prediction", "_resolve_measured_line_defs", "assemble_eval_params"]
 
 
 def _runtime_keys_of(model) -> tuple:
@@ -22,6 +22,41 @@ def _runtime_keys_of(model) -> tuple:
     if hasattr(model, "populations"):
         model = model.populations[0].sed
     return getattr(model, "_runtime_keys", ())
+
+
+def assemble_eval_params(model, params, runtime_values=None) -> dict:
+    """``params`` with the galaxy's runtime values, the one assembly of an evaluation's inputs.
+
+    Every evaluation of the model for one galaxy after or inside a fit (the likelihood
+    prediction, the profiled-mass reinsertion, derived properties of a posterior) builds
+    its parameter dict here. A model that reads a Fixed value at call time (the redshift
+    of a promoted or catalog model) takes it from ``params``, and a dict that lacks it is
+    evaluated at the model's declared value: every flux and every age-capped property of
+    a galaxy at another redshift is then silently wrong.
+
+    Parameters
+    ----------
+    model : SEDModel or ForwardModel
+        The model; its runtime keys are those it declares.
+    params : dict
+        Parameters of the evaluation, free values and any Fixed values the caller holds.
+    runtime_values : dict or None, optional
+        The galaxy's own values of runtime keys, which win over ``params``. Entries for keys
+        the model does not read at call time are ignored.
+
+    Returns
+    -------
+    dict
+        A new dict: ``params`` with the model's runtime keys set from ``runtime_values``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes. ``runtime_values`` may hold tracers; a program cached on the
+    model takes them as arguments, never as closed-over constants.
+    """
+    keys = _runtime_keys_of(model)
+    given = runtime_values or {}
+    return {**params, **{k: given[k] for k in keys if k in given}}
 
 
 def _build_prediction(
@@ -48,6 +83,13 @@ def _build_prediction(
       ``line_fluxes`` / ``indices``, fed to user / auto-built Likelihood adapters.
     - ``predicted``: concatenated array (legacy χ² fall-through still uses this).
     - ``pred_phot`` / ``pred_spec``: split components or ``None``.
+
+    **Runtime keys.** ``params`` must carry every runtime key of ``model`` (the redshift of
+    a model that reads it at call time) beside the free values; this function forwards
+    them to the eager forward, and a caller that leaves one out evaluates the model at its
+    declared value, a silent rescaling of every flux by the distance ratio. The mass
+    profile reads the model back through here, so its callers put the galaxy's own
+    redshift into ``params``.
 
     **JIT data threading.** When ``jit_inputs`` (the ``data_args["_jit_inputs"]``
     bundle of ``ssp_data`` / ``template_data`` / ``fixed_values``) and
@@ -80,8 +122,7 @@ def _build_prediction(
         eval_fixed = None
     # A runtime redshift is read from params by the eager forward (#3505), so it travels
     # with the free values; every other Fixed value stays out (the forward refuses it).
-    runtime_keys = _runtime_keys_of(model)
-    eager_params = {**free_params, **{k: params[k] for k in runtime_keys if k in params}}
+    eager_params = assemble_eval_params(model, free_params, params)
 
     # Single threaded forward for phot/spec/joint: one orchestrator call
     # returns an Observables carrying every configured channel. ``_obs`` is

@@ -198,14 +198,15 @@ class PosteriorProperties(ReadOnlyPropertyMapping, Mapping):
         # A property computed with siblings (``Property.bundle``, the composable AGN's energy
         # ledger) is evaluated once for every name that shares it, not once per name.
         names = _bundle_siblings(model, name, exclude=cache)
+        runtime = post.runtime_values
         if post.samples is None:
             # MAP: one point, no sample axis. Same key, zero extra axes.
-            values = model.predict_properties(post.params, names=names)
+            values = model.predict_properties({**post.params, **runtime}, names=names)
         else:
             from tengri.utils.batching import vmap_chunked
 
             fn = vmap_chunked(
-                lambda p: model.predict_properties(p, names=names),
+                lambda p: model.predict_properties({**p, **runtime}, names=names),
                 chunk_size=_PROPERTY_CHUNK,
             )
             values = fn(post.samples)
@@ -474,6 +475,7 @@ class Posterior:
     log_evidence: float | None = None
     _model: object = field(default=None, repr=False)
     _fitter: object = field(default=None, repr=False)
+    _runtime_values: dict | None = field(default=None, repr=False)
     eline_fluxes: jnp.ndarray | None = field(default=None, repr=False)
     eline_flux_cov: jnp.ndarray | None = field(default=None, repr=False)
     eline_names: tuple | None = field(default=None, repr=False)
@@ -667,6 +669,30 @@ class Posterior:
             free_on_model = set(self._model.spec.free_params)
             values = {k: v for k, v in values.items() if k not in free_on_model}
         return values
+
+    @property
+    def runtime_values(self) -> dict:
+        """This galaxy's own values of the model's runtime keys (its redshift).
+
+        A model that reads its redshift at call time evaluates every derived quantity
+        at the redshift of the galaxy that was fit, not at the placeholder it was built
+        at. A catalog fit records each galaxy's value here; a single fit reads it from
+        its fitter's ``params_override``.
+
+        Returns
+        -------
+        dict
+            Runtime key -> value [dimensionless for redshift]. Empty when the model
+            reads nothing at call time.
+        """
+        from tengri.inference._prediction import assemble_eval_params
+
+        if self._model is None:
+            return {}
+        held = dict(self._runtime_values or {})
+        if not held and self._fitter is not None:
+            held = dict(self._fitter._fixed_values)
+        return {k: v for k, v in assemble_eval_params(self._model, {}, held).items()}
 
     # ── Derived quantities ────────────────────────────────────────
 
