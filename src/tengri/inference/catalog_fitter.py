@@ -764,6 +764,17 @@ def _all_absent(presence) -> bool:
     return presence is not None and not np.any(np.asarray(presence) != 0)
 
 
+def _vmapped_mcmc_tags() -> dict[str, str]:
+    """Return ``registry method -> engine sampler tag`` for every vmappable sampler."""
+    from tengri.inference.sampling.driver import get_sampler, sampler_names
+
+    return {
+        get_sampler(name).methods[0]: name
+        for name in sampler_names()
+        if get_sampler(name).vmappable
+    }
+
+
 class _CatalogFitterOriginal:
     """Per-galaxy catalog inference with optional K-way on-device parallelism.
 
@@ -815,22 +826,17 @@ class _CatalogFitterOriginal:
     """
 
     _NATIVE_VMAPPABLE: frozenset = frozenset({"native_vi_linear", "native_vi_nonlinear"})
-    #: Sampling methods that honor ``forward_chunk_size`` by vmapping K galaxies'
-    #: chains per ``lax.map`` step, each galaxy adapting to its own posterior.
-    #:
-    #: Membership is not a quality claim and it is not the tier. It is one
-    #: structural property: the sampler's whole run -- adaptation included --
-    #: is expressible as a fixed-shape traced program, so K of them fit under
-    #: one ``vmap``. ``mcmc_chees`` qualifies and stays ``tier="experimental"``;
-    #: ``mcmc_ghmc`` and ``mcmc_mclmc`` are ``tier="broken"`` and are deliberately
-    #: absent, because a backend that reports wrong answers reports them faster
-    #: here (``tests/contract/test_broken_backends_quarantined.py``).
-    _MCMC_VMAPPABLE: frozenset = frozenset({"mcmc_nuts", "mcmc_hmc", "mcmc_chees"})
-
-    #: ``method`` -> the ``sampler`` tag ``build_catalog_mcmc_engine`` takes.
-    _MCMC_SAMPLER_TAG: types.MappingProxyType = types.MappingProxyType(
-        {"mcmc_nuts": "nuts", "mcmc_hmc": "hmc", "mcmc_chees": "chees"}
-    )
+    #: ``method`` -> the ``sampler`` tag ``build_catalog_mcmc_engine`` takes, derived from the
+    #: sampler registry of :mod:`tengri.inference.sampling`: every registered sampler whose
+    #: whole run -- adaptation included -- is a fixed-shape traced program, so K galaxies fit
+    #: under one ``vmap``, each adapting to its own posterior. Membership is a structural
+    #: property, not a quality claim and not the tier: ``mcmc_chees`` qualifies and stays
+    #: ``tier="experimental"``, and a ``tier="broken"`` member (``mcmc_ghmc``) is refused by
+    #: the tier gate unless ``allow_unvalidated=True``, as on every other surface.
+    _MCMC_SAMPLER_TAG: types.MappingProxyType = types.MappingProxyType(_vmapped_mcmc_tags())
+    #: Sampling methods that honor ``forward_chunk_size`` by vmapping K galaxies' chains per
+    #: ``lax.map`` step; the keys of :attr:`_MCMC_SAMPLER_TAG`.
+    _MCMC_VMAPPABLE: frozenset = frozenset(_MCMC_SAMPLER_TAG)
 
     def _engine_kind(self, resolved: str) -> str:
         """Which of the three engines ``resolved`` dispatches to."""
@@ -1938,7 +1944,10 @@ class _CatalogFitterOriginal:
         path holds up to float round-off.
         """
         self._refuse_all_absent_rows()
-        from tengri.inference.backends.mcmc._shared import _CHEES_JITTER_SCALE
+        from tengri.inference.backends.mcmc._shared import (
+            _CHEES_JITTER_SCALE,
+            FIRST_ORDER_TARGET_ACCEPT_RATE,
+        )
         from tengri.inference.backends.mcmc.catalog import (
             build_catalog_mcmc_engine,
             build_catalog_metric_diagnostics,
@@ -1948,11 +1957,18 @@ class _CatalogFitterOriginal:
         from tengri.inference.backends.mcmc.nuts import resolve_dense_mass_gate
         from tengri.inference.posterior import Posterior
         from tengri.inference.preconditioning import _resolve_whitening_strength
+        from tengri.inference.sampling.driver import get_sampler
 
         sampler = self._MCMC_SAMPLER_TAG[method_tag]
         is_chees = sampler == "chees"
         if target_accept_rate is AUTO:
-            target_accept_rate = CHEES_TARGET_ACCEPT_RATE if is_chees else 0.85
+            target_accept_rate = (
+                CHEES_TARGET_ACCEPT_RATE
+                if is_chees
+                else FIRST_ORDER_TARGET_ACCEPT_RATE
+                if sampler in ("barker", "mala")
+                else 0.85
+            )
         if ensemble_jitter is None:
             ensemble_jitter = _CHEES_JITTER_SCALE
         n_chains = max(1, int(n_chains))
@@ -1974,7 +1990,12 @@ class _CatalogFitterOriginal:
             forward_chunk_size,
             n_gal=n_gal,
             n_data_per_gal=len(self.galaxies[0]["flux_obs"]) if n_gal else None,
-            n_chains=_catalog_live_chains(sampler, n_chains=n_chains, n_ensemble=n_ensemble),
+            n_chains=_catalog_live_chains(
+                sampler,
+                n_chains=n_chains,
+                n_ensemble=n_ensemble,
+                n_dim=getattr(getattr(self.model, "spec", None), "n_free", None),
+            ),
         )
         dev_list = self._resolve_devices(devices)
         n_dev = len(dev_list) if dev_list else 1
@@ -2049,10 +2070,11 @@ class _CatalogFitterOriginal:
             verbose=verbose,
             spec=getattr(fitter, "spec", None),
         )
-        # ChEES's own kernel metric is diagonal. A dense request is served by a
-        # pilot-estimated metric inside the engine (chees_dense), not by use_dense.
-        chees_dense = bool(is_chees and dense_mass_matrix)
-        if is_chees:
+        # A sampler with no dense adaptation of its own (ChEES, GHMC, Barker, MALA) serves a
+        # dense request by the engine's pilot-whitening layer, not by use_dense.
+        layered = get_sampler(sampler).metric_mode == "layer"
+        pilot_dense = bool(layered and dense_mass_matrix)
+        if layered:
             use_dense = False
         elif verbose and not user_set_dense:
             policy = "dense (D<=12, non-dense_basis)" if use_dense else "diagonal"
@@ -2076,8 +2098,9 @@ class _CatalogFitterOriginal:
             chain_jitter=chain_jitter,
             max_leapfrog_steps=max_leapfrog_steps,
             precondition=precondition,
-            metric="dense" if chees_dense else "diag",
+            metric="dense" if pilot_dense else "diag",
             mass_matrix_estimation=mass_matrix_estimation,
+            return_metric_info=True,
         )
 
         dummy_flat = ravel_pytree(fitter._initialize_unbounded(jax.random.PRNGKey(0)))[0]
@@ -2090,7 +2113,7 @@ class _CatalogFitterOriginal:
         precond_strength = _resolve_whitening_strength(precondition, d_params)
 
         if verbose:
-            tag = {"nuts": "NUTS", "hmc": "HMC", "chees": "ChEES-HMC"}[sampler]
+            tag = sampler
             extra = f", ensemble={n_ensemble} x {n_chains} chains/galaxy" if is_chees else ""
             whiten = "" if precond_strength is None else f", precondition={precond_strength}"
             print(
@@ -2207,15 +2230,17 @@ class _CatalogFitterOriginal:
             all_line_err,
         )
         if n_dev > 1:
-            all_positions, all_divergent = self._sharded_vmap(
+            all_positions, all_divergent, all_fallback = self._sharded_vmap(
                 run_one, xs, dev_list, fitter._data_args
             )
         else:
-            all_positions, all_divergent = map_with_shared(
+            all_positions, all_divergent, all_fallback = map_with_shared(
                 run_one, xs, fitter._data_args, batch_size=K
             )
         all_positions = all_positions[:n_gal]
+        n_returned = int(all_positions.shape[1]) // int(n_samples)
         all_divergent = all_divergent[:n_gal]
+        all_fallback = np.asarray(all_fallback[:n_gal])
         jax.block_until_ready(all_positions)
 
         # What the metric actually bought, per galaxy. A run that whitened but
@@ -2283,7 +2308,10 @@ class _CatalogFitterOriginal:
                 diagnostics={
                     "n_divergent": n_div,
                     "n_samples": n_samples,
-                    "n_chains": n_chains,
+                    "n_chains": n_returned,
+                    # True when the pilot of a dense metric could not define one for
+                    # this galaxy and its draws are the diagonal pass's own.
+                    "metric_fallback": bool(all_fallback[i]),
                     # Same three keys ``run_chees`` records for a single fit, so
                     # a catalog galaxy and a single fit of it report their
                     # geometry the same way. ``metric_condition`` is 1.0 with
@@ -2361,7 +2389,8 @@ class _CatalogFitterOriginal:
                 "n_divergent_total": int(jnp.sum(all_divergent)),
                 "n_warmup": n_warmup,
                 "n_samples": n_samples,
-                "n_chains": n_chains,
+                "n_chains": n_returned,
+                "n_metric_fallback": int(np.sum(all_fallback)),
                 # ``preconditioned`` is the count of galaxies actually whitened,
                 # not a boolean: a lane whose metric could not be factorized
                 # falls back to the identity for that galaxy alone, and a

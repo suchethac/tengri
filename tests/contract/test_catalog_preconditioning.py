@@ -287,4 +287,5 @@ class TestNoTierMoved:
 
         for name in ("mcmc_ghmc", "mcmc_mclmc"):
             assert get_backend(name).tier == "broken"
-            assert name not in _CatalogFitterOriginal._MCMC_VMAPPABLE
+        # ghmc is vmapped (derived from the sampler registry) and gated by its tier.
+        assert "mcmc_mclmc" not in _CatalogFitterOriginal._MCMC_VMAPPABLE

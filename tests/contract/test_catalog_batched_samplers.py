@@ -62,18 +62,25 @@ class TestWhichSamplersReachTheBatchedPath:
 
         assert "mcmc_chees" in _CatalogFitterOriginal._MCMC_VMAPPABLE
 
-    def test_the_quarantined_samplers_are_not(self):
+    def test_the_quarantine_is_the_tier_gate_not_set_membership(self):
         """A ``tier="broken"`` backend reports wrong answers *faster* here.
 
         ``mcmc_ghmc`` measured split-R-hat 1.1e10 with acceptance at 0.989 and
-        ``mcmc_mclmc`` is quarantined on its energy error. Putting either on the
-        batched path would hand a catalog user a fast wrong answer, which is
-        strictly worse than a slow one.
+        ``mcmc_mclmc`` is quarantined on its energy error. The vmapped set is derived
+        from the sampler registry, so ghmc is a member, and what keeps a catalog user
+        from a fast wrong answer is the tier gate every surface applies: refused unless
+        ``allow_unvalidated=True``. ``mcmc_mclmc`` has no vmapped engine at all.
         """
+        import pytest
+
+        from tengri.inference._backend_registry import check_usable, get_backend
         from tengri.inference.catalog_fitter import _CatalogFitterOriginal
 
-        for name in ("mcmc_ghmc", "mcmc_mclmc"):
-            assert name not in _CatalogFitterOriginal._MCMC_VMAPPABLE
+        assert "mcmc_mclmc" not in _CatalogFitterOriginal._MCMC_VMAPPABLE
+        assert get_backend("mcmc_ghmc").tier == "broken"
+        with pytest.raises(Exception, match="broken"):
+            check_usable(get_backend("mcmc_ghmc"))
+        check_usable(get_backend("mcmc_ghmc"), allow_unvalidated=True)
 
     def test_chees_did_not_get_promoted_on_the_way_in(self):
         """Reaching the batched path is a structural property, not a tier bump."""
