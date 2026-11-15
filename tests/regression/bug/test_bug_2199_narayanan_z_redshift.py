@@ -105,34 +105,37 @@ def _filter_fixture_warnings() -> None:
 #: values by about 1.5e-9 relative (continuum <= 2e-6 on the default models).
 #: The invariant itself -- ``redshift`` never reaches a law that does not
 #: declare it -- is pinned ulp-free by the resolver test below.
+#: Re-captured 2026-11-15 after #3434 (in #3462): no metallicity scatter at fixed Z
+#: scales all four tuples by the same factor, -3.554% on this fixture's three-node synthetic
+#: grid; 8aff37cb3 (just before #3462) reproduces the previous values to 2e-16.
 _UNTOUCHED_LAW_PHOTOMETRY: dict[tuple[str, str], tuple[float, ...]] = {
     ("single_component", "calzetti"): (
-        2.05755382704491e-13,
-        1.939947192197928e-13,
-        1.4326872269755943e-13,
-        7.996951043911334e-14,
-        5.1650456723241795e-14,
+        1.9844242340669173e-13,
+        1.870997575084906e-13,
+        1.3817666472093099e-13,
+        7.71272335216442e-14,
+        4.9814695817427804e-14,
     ),
     ("single_component", "kriek_conroy"): (
-        2.0607500102289744e-13,
-        1.9347079202879839e-13,
-        1.3935335088440816e-13,
-        7.934589393566451e-14,
-        5.1608379606922155e-14,
+        1.9875068184851947e-13,
+        1.8659445174150106e-13,
+        1.344004530810348e-13,
+        7.652578160046394e-14,
+        4.97741142062802e-14,
     ),
     ("two_component", "calzetti"): (
-        2.05755382704491e-13,
-        1.939947192197928e-13,
-        1.4326872269755943e-13,
-        7.996951043911334e-14,
-        5.1650456723241795e-14,
+        1.9844242340669173e-13,
+        1.870997575084906e-13,
+        1.3817666472093099e-13,
+        7.712723352164419e-14,
+        4.981469581742779e-14,
     ),
     ("two_component", "kriek_conroy"): (
-        2.060750010228974e-13,
-        1.9347079202879839e-13,
-        1.393533508844082e-13,
-        7.934589393566451e-14,
-        5.1608379606922155e-14,
+        1.9875068184851945e-13,
+        1.8659445174150106e-13,
+        1.344004530810348e-13,
+        7.652578160046394e-14,
+        4.97741142062802e-14,
     ),
 }
 
