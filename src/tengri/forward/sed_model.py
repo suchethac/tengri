@@ -1881,12 +1881,13 @@ def _free_lsf_param_missing(name: str) -> str:
     )
 
 
-def redshift_is_runtime(redshift_dist, catalog_z_range) -> bool:
+def redshift_is_runtime(redshift_dist, catalog_z_range, z_runtime) -> bool:
     """Whether redshift is a runtime input (per-galaxy or sampled), not a build constant.
 
-    A ``Fixed`` redshift is still runtime in catalog mode, where each galaxy's z
-    arrives through ``params`` and the placeholder spec value must not be used.
-    An unknown (no distribution) is treated as runtime, so the general path runs.
+    A ``Fixed`` redshift is still runtime in catalog mode, and under
+    ``with_runtime_redshift`` (#3505), where z arrives through ``params`` and the
+    placeholder spec value must not be used. An unknown (no distribution) is
+    treated as runtime, so the general path runs.
 
     Parameters
     ----------
@@ -1894,13 +1895,15 @@ def redshift_is_runtime(redshift_dist, catalog_z_range) -> bool:
         The spec's ``redshift`` distribution.
     catalog_z_range : tuple of float or None
         ``(z_lo, z_hi)`` when the model is a catalog model, else None.
+    z_runtime : bool
+        The model's runtime-redshift flag (``SEDModel._z_runtime``).
 
     Returns
     -------
     bool
         True when redshift must be treated as runtime.
     """
-    if catalog_z_range is not None:
+    if catalog_z_range is not None or z_runtime:
         return True
     if redshift_dist is None:
         return True
@@ -3479,6 +3482,7 @@ class SEDModel:
         agn_config=None,
         strategy=UNSET,
         compile=None,
+        z_runtime=False,
     ):
         # Retired kwargs. Both are still accepted so old call sites keep
         # running, but neither changes the model: warn when a caller passes one.
@@ -3526,7 +3530,7 @@ class SEDModel:
         ):
             from tengri.components.stellar.agb_dust_shell import bake_agb_dust_shell
 
-            _agb_dust_w = self.spec.get_fixed_values().get("agb_dust_weight", 1.0)
+            _agb_dust_w = self._fixed_values().get("agb_dust_weight", 1.0)
             self.ssp_data = bake_agb_dust_shell(self.ssp_data, float(_agb_dust_w))
         self._forward_dtype = jnp.dtype(forward_dtype)
         if self._forward_dtype != jnp.dtype("float64"):
@@ -3706,6 +3710,10 @@ class SEDModel:
         # single SEDModel handles many per-galaxy ``Fixed(z)`` values
         # without recompiling. See ``docs/dev/cross-compile-fixed-z-design.md``.
         self._catalog_z_range: tuple[float, float] | None = None
+        # Runtime redshift (#3505): z arrives through ``params`` at every call, so no
+        # build-time quantity may bake it. Set by ``with_runtime_redshift``; a
+        # catalog range implies it (checked below).
+        self._z_runtime: bool = bool(z_runtime)
         if self._approx["wave_precomp"]:
             redshift_dist = spec.get_distribution("redshift")
             # ``catalog_z_range`` is a WavePrecomp-only knob, so read it from the
@@ -3726,6 +3734,22 @@ class SEDModel:
                     self._catalog_z_range = (float(cz[0]), float(cz[1]))
             elif not redshift_dist.is_fixed:
                 self._approx = self._approx.replace(ztable=True)
+        if self._catalog_z_range is not None:
+            self._z_runtime = True
+        # A tabulated model needs the z-table range at build time (#3505): the table
+        # cannot cover an unbounded runtime redshift. Free redshift already takes the
+        # ztable branch above, so only a Fixed spec reaches here.
+        if (
+            self._z_runtime
+            and self._approx["wave_precomp"]
+            and self._catalog_z_range is None
+            and spec.get_distribution("redshift").is_fixed
+        ):
+            raise ValueError(
+                "z_runtime with WavePrecomp needs a redshift range: build with "
+                "WavePrecomp(catalog_z_range=(z_lo, z_hi)) or call "
+                "with_runtime_redshift((z_lo, z_hi))."
+            )
 
         # ── Stellar populations ───────────────────────────────────
         self._init_ssp(spec, ssp_data, csp_integration)
@@ -4060,6 +4084,22 @@ class SEDModel:
                 return 0.0
         hi = getattr(d, "hi", None)
         return float(hi) if hi is not None else 1.0
+
+    def _fixed_values(self) -> dict:
+        """The spec's Fixed values minus the runtime-read keys (#3505).
+
+        A runtime redshift's Fixed value is a placeholder; leaving it in the dict the
+        forward receives would make it the silent redshift of a call that omitted z.
+        """
+        fixed = dict(self.spec.get_fixed_values())
+        for key in self._runtime_keys:
+            fixed.pop(key, None)
+        return fixed
+
+    @property
+    def _runtime_keys(self) -> tuple[str, ...]:
+        """Fixed keys the forward reads from ``params`` at call time (#3505)."""
+        return ("redshift",) if self._z_runtime else ()
 
     def _representative_redshift(self) -> float:
         """A single representative redshift (fixed value or prior midpoint).
@@ -5382,7 +5422,7 @@ class SEDModel:
         # measurement this build-time check exists to make.
         params_lo = {**params, "agn_log_lbol": lo, "agn_ir_frac": frac_mid}
         params_hi = {**params, "agn_log_lbol": hi, "agn_ir_frac": frac_mid}
-        fixed_values = dict(self.spec.get_fixed_values())
+        fixed_values = dict(self._fixed_values())
 
         # Evaluate the rest-frame SED at both bounds. Per #2069 brief: "if the
         # forward cannot be evaluated at build, raise -- do not fall back".
@@ -5892,7 +5932,7 @@ class SEDModel:
                 # to check the LSF against, so the warning is skipped, not guessed (#2847).
                 z_for_check = (
                     None
-                    if redshift_is_runtime(redshift_dist, self._catalog_z_range)
+                    if redshift_is_runtime(redshift_dist, self._catalog_z_range, self._z_runtime)
                     else float(redshift_dist.bounds[0])
                 )
                 # #2526: lsf_scale multiplies sigma_inst, so the deficit
@@ -6067,12 +6107,12 @@ class SEDModel:
     def _init_cosmology(self, spec):
         """Precompute luminosity distance if redshift is fixed."""
         redshift_dist = spec.get_distribution("redshift")
-        if redshift_dist.is_fixed and self._catalog_z_range is None:
+        if not redshift_is_runtime(redshift_dist, self._catalog_z_range, self._z_runtime):
             self._dl_cm_fixed = luminosity_distance(redshift_dist.bounds[0])
             self._z_fixed = redshift_dist.bounds[0]
         else:
-            # Catalog-fit mode (Approach A): even though redshift is Fixed
-            # in the spec, treat it as a runtime input so different
+            # Runtime-redshift mode (catalog Approach A, #3505): even though redshift
+            # is Fixed in the spec, treat it as a runtime input so different
             # per-galaxy values reuse the same compiled kernel. The
             # cosmology + IGM + filter-λ_eff paths fall back to their
             # already-existing free-redshift runtime branches.
@@ -6207,7 +6247,7 @@ class SEDModel:
         from tengri.parameters.resolve import merge_fixed_params
         from tengri.parameters.timing import route_timing_fracs
 
-        merged = merge_fixed_params(self.spec, params)
+        merged = merge_fixed_params(self.spec, params, self._runtime_keys)
         if fixed_values is not None:
             merged = {**merged, **fixed_values}
         # A sampled ``*_frac`` timing replaces its Gyr twin; an unsampled one
@@ -6708,6 +6748,70 @@ class SEDModel:
             approx=approx,
         )
 
+    def with_runtime_redshift(self, z_range=None):
+        """Return a copy that takes redshift as a runtime input (#3505).
+
+        The copy reads ``params["redshift"]`` on every call, so one compiled kernel
+        serves any number of redshifts. The spec's Fixed value stays as a placeholder
+        and is never read. ``self`` is returned unchanged when redshift is already
+        free in the spec, since it is already a runtime input.
+
+        Parameters
+        ----------
+        z_range : tuple of float or None, optional
+            ``(z_lo, z_hi)`` redshift table range [dimensionless]. Required for a
+            tabulated (``WavePrecomp``) model unless the model already carries a
+            ``catalog_z_range``; must be None for an exact model, which has no table.
+
+        Returns
+        -------
+        SEDModel
+            A new model on the same ``approx`` policy and build settings, with the
+            runtime-redshift flag set. ``self`` when redshift is already free.
+
+        Raises
+        ------
+        ValueError
+            If ``z_range`` is given for an exact model, or a tabulated model has no
+            range from either ``z_range`` or ``catalog_z_range``.
+
+        Notes
+        -----
+        Costs one model construction. **JIT-compatible** after construction: the
+        returned model takes a traced redshift in ``params`` like any free-z model.
+        """
+        if self._z_runtime or not self.spec.get_distribution("redshift").is_fixed:
+            return self
+        if self._approx["wave_precomp"]:
+            cz = self._catalog_z_range if z_range is None else tuple(map(float, z_range))
+            if cz is None:
+                raise ValueError(
+                    "with_runtime_redshift on a WavePrecomp model needs z_range=(z_lo, z_hi)"
+                )
+            wave_cfg = dataclasses.replace(self._approx_config_wave, catalog_z_range=cz)
+            approx = tuple(
+                wave_cfg if cfg is self._approx_config_wave else cfg for cfg in self.approx_configs
+            )
+        else:
+            if z_range is not None:
+                raise ValueError(
+                    "with_runtime_redshift: an exact model has no redshift table; pass "
+                    "z_range=None, or build with WavePrecomp for a tabulated range"
+                )
+            approx = self.approx_configs or None
+        return SEDModel(
+            self.spec,
+            self.ssp_data,
+            observation=self.observation,
+            forward_dtype=str(self._forward_dtype),
+            csp_integration=str(self._csp_integration),
+            wave_chunk_size=self._wave_chunk_size,
+            agn_config=self._agn_config,
+            compile=str(self._compile_mode),
+            approx=approx,
+            z_runtime=True,
+        )
+
     def with_fixed_redshift(self, redshift):
         """Return a copy of this model built at a different Fixed redshift.
 
@@ -6878,7 +6982,7 @@ class SEDModel:
         # value in from the spec correctly, but silently accepts and uses a
         # PRESENT one at whatever value the caller passed -- the override-wins
         # bug this issue closes.
-        refuse_fixed_overrides(self.spec, params)
+        refuse_fixed_overrides(self.spec, params, self._runtime_keys)
         p = self._get_internal_params(params)
         sfr_mean, sfr_full = self._compute_sfr_mean_and_full(p, self._get_redshift(params))
         _state = self.predict_state(params)
@@ -7045,7 +7149,7 @@ class SEDModel:
         # Prediction uses (#2296). Without the merge, a Fixed value that the
         # IGM/DLA reads need (e.g. dla_z) is absent and silently defaults.
         # ``merge_fixed_params`` refuses a Fixed key before it merges.
-        full = merge_fixed_params(self.spec, params)
+        full = merge_fixed_params(self.spec, params, self._runtime_keys)
         return self._predict_obs_sed(full, wave=wave)
 
     def _predict_obs_sed(self, params, wave=None):
@@ -7759,7 +7863,7 @@ class SEDModel:
         # free-name filter would silently drop a Fixed-key override before
         # any refusal saw it -- the same silent-ignore closed for
         # predict_obs_sed itself.
-        refuse_fixed_overrides(self.spec, params)
+        refuse_fixed_overrides(self.spec, params, self._runtime_keys)
         spectroscopy = (
             getattr(self.observation, "spectroscopy", None) if self.observation else None
         )
@@ -7774,9 +7878,9 @@ class SEDModel:
         kernel = self._get_or_build_predict_spectrum_on_grid_jit(conserving, wave_obs)
         traced_grid = isinstance(wave_obs, jax.core.Tracer)
         args = (
-            (params, self.spec.get_fixed_values(), jnp.asarray(wave_obs))
+            (params, self._fixed_values(), jnp.asarray(wave_obs))
             if traced_grid
-            else (params, self.spec.get_fixed_values())
+            else (params, self._fixed_values())
         )
         return kernel(*args, *self._resolve_threaded_data(None, None, None))
 
@@ -8072,7 +8176,7 @@ class SEDModel:
         stellar = next(c for c in chain if c.name == "stellar")
         # A caller may hand free-only or already-merged params; fill the Fixed
         # values in underneath either (the stellar methods read redshift, Z, ...).
-        full = {**dict(self.spec.get_fixed_values()), **dict(params)}
+        full = {**dict(self._fixed_values()), **dict(params)}
         return ionizing_interval_weights(
             interval_fractions(stellar.compute_age_boundary_fractions(full)),
             stellar.compute_log_L_lyc_age(full),
@@ -10276,7 +10380,7 @@ class SEDModel:
         # Refuse any Fixed key in params (#2296), same reasoning as
         # :meth:`predict_sfh`: ``get_internal_params`` below would otherwise
         # silently accept and use a present-but-overridden Fixed value.
-        refuse_fixed_overrides(self.spec, params)
+        refuse_fixed_overrides(self.spec, params, self._runtime_keys)
         p = self._get_internal_params(params)
         sfr = self._compute_sfr(p, self._get_redshift(params))
 
@@ -10661,7 +10765,7 @@ class SEDModel:
             )
         state = self.predict_state(params)
         # Refuse any Fixed key in params (#2296)
-        full = merge_fixed_params(self.spec, params)
+        full = merge_fixed_params(self.spec, params, self._runtime_keys)
         return self.observation.predict(state, full)["phot_fnu"]
 
     def _spectrum_via_state(self, params, wave_obs=None):
@@ -10725,7 +10829,7 @@ class SEDModel:
 
         state = self.predict_state(params)
         # Refuse any Fixed key in params (#2296)
-        full = merge_fixed_params(self.spec, params)
+        full = merge_fixed_params(self.spec, params, self._runtime_keys)
         return self.observation.predict(
             state,
             full,
@@ -10867,7 +10971,9 @@ class SEDModel:
             # _attenuate_line_catalog reads params["dust_tau_bc"] etc. with no
             # merge of its own (#2296), so it needs the merged form here too.
             atten_lums = self._attenuate_line_catalog(
-                merge_fixed_params(self.spec, params), lines.all_waves, lines.all_lums
+                merge_fixed_params(self.spec, params, self._runtime_keys),
+                lines.all_waves,
+                lines.all_lums,
             )
 
         # Re-extract the headline scalars from the attenuated catalog
@@ -11041,7 +11147,7 @@ class SEDModel:
             ``igm_*``, ``redshift``).
         fixed_values : Mapping | None, optional
             Fixed parameter values. When provided, overrides
-            ``self.spec.get_fixed_values()``. Used by :meth:`predict_observables_jit`
+            ``self._fixed_values()``. Used by :meth:`predict_observables_jit`
             to thread per-galaxy fixed values as JIT runtime inputs.
         ssp_data : Any | None, optional
             SSP grid. When provided, passed to components that need it as a
@@ -11150,13 +11256,13 @@ class SEDModel:
         #
         # ``fixed_values`` is an optional override. When provided
         # (typically from ``predict_observables_jit`` threading it as a
-        # JIT runtime input), use it instead of ``self.spec.get_fixed_values()``.
+        # JIT runtime input), use it instead of ``self._fixed_values()``.
         # That decouples per-galaxy fixed values from the closure so two
         # SEDModels with the same structure but different fixed values
         # share one compiled function.
         if fixed_values is None:
             # Refuse any Fixed key present in params (#2296)
-            full_params = merge_fixed_params(self.spec, params)
+            full_params = merge_fixed_params(self.spec, params, self._runtime_keys)
         else:
             # "Already resolved, trust me" escape hatch: this branch never
             # refuses, by design, for THREE DIFFERENT reasons depending on the
@@ -11166,8 +11272,8 @@ class SEDModel:
             # (a) The refusal already ran, on this SAME (free-only) ``params``,
             # in the caller that built ``fixed_values``. ``predict_observables``
             # / ``predict_observables_jit`` both call
-            # ``refuse_fixed_overrides(self.spec, params)`` before threading
-            # ``self.spec.get_fixed_values()`` in unmodified as a JIT runtime
+            # ``refuse_fixed_overrides(self.spec, params, self._runtime_keys)`` before threading
+            # ``self._fixed_values()`` in unmodified as a JIT runtime
             # input (#2296) -- re-checking here would be redundant, not wrong.
             #
             # (b) An internal, build-time probe that deliberately overrides a
@@ -11177,7 +11283,7 @@ class SEDModel:
             # ``_check_agn_lbol_flat_direction`` (this file) sweeps
             # ``agn_log_lbol``/``agn_ir_frac`` across their declared range to
             # measure whether the AGN luminosity direction is flat, passing
-            # ``fixed_values=dict(self.spec.get_fixed_values())``; and
+            # ``fixed_values=dict(self._fixed_values())``; and
             # ``nebular_grid_precompute._row_traced`` forces
             # ``neb_dig_frac=0.0`` while sweeping the per-Q_H grid, passing
             # ``fixed_values={}`` because its ``params`` is already fully
@@ -11281,10 +11387,10 @@ class SEDModel:
             )
 
         # Refuse any Fixed key in params before it reaches the cached ``_impl``
-        # closure, which threads ``self.spec.get_fixed_values()`` in as
+        # closure, which threads ``self._fixed_values()`` in as
         # ``fixed_values`` and so takes ``predict_state``'s no-refusal branch
         # (#2296). A static, pre-trace key-set check: safe and cheap here.
-        refuse_fixed_overrides(self.spec, params)
+        refuse_fixed_overrides(self.spec, params, self._runtime_keys)
 
         # Eager (non-JIT) forward + projection. Runs the SAME ``_impl`` closure
         # that :meth:`predict_observables_jit` wraps in ``jax.jit``, one
@@ -11302,7 +11408,7 @@ class SEDModel:
         impl = cache["predict_observables_impl"]
         return impl(
             params,
-            self.spec.get_fixed_values(),
+            self._fixed_values(),
             *self._resolve_threaded_data(ssp_data, template_data, ztable_data),
         )
 
@@ -11331,7 +11437,7 @@ class SEDModel:
         -----
         **JIT-compatible**: yes, this method IS the JIT entry point.
 
-        2026-05-20: ``self.spec.get_fixed_values()`` is now
+        2026-05-20: ``self._fixed_values()`` is now
         passed as a JIT runtime input rather than closure-captured. Two
         SEDModels with the same structural config but different per-galaxy
         fixed values (e.g., ``redshift=Fixed(0.1)`` vs ``redshift=Fixed(0.5)``)
@@ -11367,13 +11473,13 @@ class SEDModel:
         # a bare KeyError deep inside a component.
         check_missing_free_params(params, self.spec, self._param_map)
         # Refuse any Fixed key in params before it reaches the jitted closure,
-        # which threads ``self.spec.get_fixed_values()`` in as ``fixed_values``
+        # which threads ``self._fixed_values()`` in as ``fixed_values``
         # and so takes ``predict_state``'s no-refusal branch (#2296). A static
         # key-set check on the un-traced dict, safe and free under jit.
-        refuse_fixed_overrides(self.spec, params)
+        refuse_fixed_overrides(self.spec, params, self._runtime_keys)
         return self._get_or_build_predict_observables_jit()(
             params,
-            self.spec.get_fixed_values(),
+            self._fixed_values(),
             *self._resolve_threaded_data(ssp_data, template_data, ztable_data),
         )
 
@@ -12258,7 +12364,7 @@ class SEDModel:
             and not unsafe_free
             and self.ssp_data is not None
         ):
-            fixed = self.spec.get_fixed_values()
+            fixed = self._fixed_values()
             # Same narrowing as the component's own apply() (#1833), read off
             # the component that is actually in the chain, so the LUT cannot
             # bake a different curve from the one the direct path evaluates.
@@ -12775,7 +12881,7 @@ class SEDModel:
         free = set(self.spec.free_params)
         if "neb_fdust_frac" in free:
             return True
-        fixed = self.spec.get_fixed_values()
+        fixed = self._fixed_values()
         return float(fixed.get("neb_fdust_frac", 0.0)) != 0.0
 
     def _requested_dust_log_L_ir(self) -> bool:
@@ -13061,7 +13167,7 @@ class SEDModel:
             if "neb_fesc" in free_names:
                 lyc_mask_live = True
             else:
-                fesc_fixed = float(self.spec.get_fixed_values().get("neb_fesc", 0.0))
+                fesc_fixed = float(self._fixed_values().get("neb_fesc", 0.0))
                 lyc_mask_live = abs(fesc_fixed - 1.0) > 1e-12
 
         # Precompute-config state: extracted once, reused for all components
@@ -13090,7 +13196,7 @@ class SEDModel:
             except (AttributeError, KeyError):
                 redshift_dist = None  # unknown redshift: take the runtime (general) path
             z_bounds = redshift_dist.bounds if redshift_dist is not None else None
-            runtime_z = redshift_is_runtime(redshift_dist, self._catalog_z_range)
+            runtime_z = redshift_is_runtime(redshift_dist, self._catalog_z_range, self._z_runtime)
 
             if wave_precomp_enabled:
                 # Build filter tuple
