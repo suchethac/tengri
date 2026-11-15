@@ -1180,7 +1180,7 @@ def bounded_rescaled_history(sfr, lbt_grid_yr, t_obs_gyr, target_mass):
     return t_pub, s_pub * history_rescale_factor(sfr, lbt_grid_yr, t_obs_gyr, target_mass)
 
 
-def _pin_table_mass(total_mass, params, sfh_fn, tab_lbt_yr, t_obs_gyr, *, field=False):
+def _pin_table_mass(total_mass, params, sfh_fn, tab_lbt_yr, t_obs_gyr):
     """Pin a tabulated history's formed mass on EVERY age kernel (#2621).
 
     The table family declares no ``log_total_mass`` in the SFH kwargs, so
@@ -1191,11 +1191,11 @@ def _pin_table_mass(total_mass, params, sfh_fn, tab_lbt_yr, t_obs_gyr, *, field=
     ``[0, age(z)]`` (trapezoid of the table rows, plus the interpolated value at
     ``age(z)``). Not applied when the kernel measured nothing.
     """
-    if tab_lbt_yr is None or field:
-        # With the GP field the table fixes the MEAN mass only: the lognormal
-        # correction makes its expectation the table integral, and each draw keeps
-        # the mass its own modulation forms (owner ruling, 2026-11-15, #3505).
+    if tab_lbt_yr is None:
         return total_mass
+    # ``field`` does not change the pin: as for a parametric SFH under the GP
+    # field (#2622), every draw is renormalized to the table integral; the field
+    # changes the SFR shape, not the formed mass (owner ruling 2026-11-15, #3505).
     if "sfh_table_log_total_mass" in params:
         target = 10.0 ** jnp.asarray(params["sfh_table_log_total_mass"])
     else:
@@ -4346,9 +4346,7 @@ class StellarSEDComponent:
         # renormalize within the surviving support (#2521).
         measured_total_mass = total_mass
         total_mass = _mass_conserving_total(sfh_kwargs, total_mass, is_composite=is_composite)
-        total_mass = _pin_table_mass(
-            total_mass, params, sfh_fn, _tab_lbt_yr, t_obs_gyr, field=self.config.field
-        )
+        total_mass = _pin_table_mass(total_mass, params, sfh_fn, _tab_lbt_yr, t_obs_gyr)
         # Eager loud-signal guard (#2644): a declared mass was requested
         # (``log_total_mass`` present) but nothing formed. Same
         # eager-only / ConcretizationTypeError-guarded pattern as the
@@ -5210,9 +5208,7 @@ class StellarSEDComponent:
         # function never sees a composite (list) ``sfh_model``: indexing
         # ``SFH_REGISTRY`` with one raises ``TypeError`` before this point.
         total_mass = _mass_conserving_total(sfh_kwargs, total_mass)
-        total_mass = _pin_table_mass(
-            total_mass, params, sfh_fn, _tab_lbt_yr, t_obs_gyr, field=self.config.field
-        )
+        total_mass = _pin_table_mass(total_mass, params, sfh_fn, _tab_lbt_yr, t_obs_gyr)
         return joint_weights, total_mass, ssp_ages_yr, younger_fraction
 
     def _agb_dust_cube_ratio(self, params, ssp_flux):

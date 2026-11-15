@@ -1,16 +1,16 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """A tabulated SFH with the GP field (#3505, row B25).
 
-The table fixes the mean star-formation history. The GP field multiplies the table
-SFR by the lognormal modulation ``exp(x(t) - K(0)/2)``, and the formed mass varies
-from draw to draw, with its expectation equal to the table integral (owner ruling,
-2026-11-15). Four things are pinned here:
+The GP field multiplies the table SFR by the lognormal modulation
+``exp(x(t) - K(0)/2)``, which changes the SFR shape draw by draw. As for a parametric
+SFH under the field (#2622), every draw's formed mass is pinned to the table integral
+(owner ruling, 2026-11-15). Four things are pinned here:
 
 * the model builds and runs, where it used to raise ``NotImplementedError``;
 * at ``xi = 0`` the history is the table times the constant ``exp(-K(0)/2)``;
-* the mean formed mass over many ``xi`` draws matches the table integral within a
-  Monte-Carlo tolerance;
-* the formed mass is not pinned per draw, so its spread is non-zero.
+* every ``xi`` draw forms the table integral, to float precision;
+* the field still changes the SFR shape: at some ages the draw differs from the table
+  by more than 1 % in shape.
 """
 
 from __future__ import annotations
@@ -129,35 +129,32 @@ def test_xi_zero_is_the_table_times_the_lognormal_constant(model, stellar):
     np.testing.assert_array_equal(sfr[~inside], 0.0)
 
 
-def test_mean_formed_mass_over_draws_equals_the_table_integral(model, stellar):
-    """E[formed mass] over the latent draws is the table integral, within Monte-Carlo error.
-
-    The lognormal correction makes E[exp(x - K/2)] = 1 at each node, so the expected SFR
-    is the table and the expected mass is its integral. The tolerance is four standard
-    errors of the draw mean plus 2 % for the finite lookback grid.
-    """
+def test_every_draw_forms_the_table_integral(model, stellar):
+    """Each draw's formed mass is the table integral (per-draw pin, as #2622 for parametric)."""
     target = _table_integral(age_at_z(Z_OBS))
     rng = np.random.default_rng(11)
-    masses = np.array(
-        [
-            float(stellar.compute_joint_weights(_params(model, rng.standard_normal(N_GRID)))[1])
-            for _ in range(200)
-        ]
-    )
-    mean = masses.mean()
-    se = masses.std(ddof=1) / np.sqrt(masses.size)
-    assert abs(mean - target) <= 4.0 * se + 0.02 * target, (
-        f"mean formed mass {mean:.4e} vs table integral {target:.4e} (SE {se:.2e})"
-    )
+    for _ in range(8):
+        xi = rng.standard_normal(N_GRID)
+        mass = float(stellar.compute_joint_weights(_params(model, xi))[1])
+        assert mass == pytest.approx(target, rel=1e-10), f"draw formed {mass:.10e}, table {target:.10e}"
 
 
-def test_formed_mass_varies_per_draw(model, stellar):
-    """The table pins the MEAN mass, not each draw: the spread across draws is non-zero."""
+def test_field_changes_the_sfr_shape(model, stellar):
+    """The field still reshapes the SFR: at some ages the draw departs from the table by > 1 %."""
     rng = np.random.default_rng(5)
-    masses = np.array(
-        [
-            float(stellar.compute_joint_weights(_params(model, rng.standard_normal(N_GRID)))[1])
-            for _ in range(20)
-        ]
+    out = stellar._sfh_on_ssp_ages(
+        _params(model, rng.standard_normal(N_GRID)), jnp.asarray(SSP_AGES_YR), N_GRID
     )
-    assert np.std(masses) > 1e-3 * np.mean(masses)
+    lbt_yr = np.asarray(out.sfh_lbt_grid)
+    table = np.interp(
+        lbt_yr,
+        (age_at_z(Z_OBS) - T_NODES_GYR[::-1]) * 1e9,
+        SFR_NODES[::-1],
+        left=0.0,
+        right=0.0,
+    )
+    inside = table > 0.0
+    sfr = np.asarray(out.sfr_history)
+    shape_sfr = sfr[inside] / sfr[inside].sum()
+    shape_table = table[inside] / table[inside].sum()
+    assert np.max(np.abs(shape_sfr / shape_table - 1.0)) > 1e-2
