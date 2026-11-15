@@ -21,6 +21,7 @@ from jax.scipy.optimize import minimize as _jax_minimize
 from tengri.config.exceptions import warn_measured
 from tengri.inference._model_cache import _default_owner as _model_cache_owner
 from tengri.inference.context import InferenceContext
+from tengri.inference.curvature import flat_names, require_finite
 from tengri.inference.lbfgs_driver import lbfgs_to_gtol
 from tengri.inference.likelihoods.gaussian import inv_noise_std
 from tengri.inference.map_stationarity import (
@@ -273,6 +274,18 @@ def _flat_map_loss(loss_fn, data_args, unravel_fn):
     return flat_loss
 
 
+def _require_finite_derivative(value_and_grad, unravel_fn, where: str) -> None:
+    """Raise, naming the parameters, when a loss value or its gradient is not finite."""
+    value, grad = value_and_grad
+    flat_grad, _ = ravel_pytree(grad)
+    require_finite(
+        value=value,
+        grad=flat_grad,
+        names=lambda: flat_names(unravel_fn, flat_grad.size),
+        where=where,
+    )
+
+
 def _run_map_scipy(
     context: InferenceContext,
     *,
@@ -348,6 +361,9 @@ def _run_map_scipy(
     # Warmup: ensure grad_fn is compiled before timing
     _warmup = grad_fn(init_params, data_args)
     jax.block_until_ready(_warmup)
+    # A non-finite gradient at the start makes L-BFGS stop at once with zero iterations and
+    # report the start point as the answer. Name it instead.
+    _require_finite_derivative(_warmup, unravel_fn, "MAP start point")
 
     n_evals = [0]
     # Per-iteration objective value, so ``Posterior.loss_history`` is a real
@@ -399,6 +415,7 @@ def _run_map_scipy(
         scipy_success=bool(result.success),
         n_steps=n_steps,
         gtol=tol,
+        names=lambda: flat_names(unravel_fn, init_flat.size),
     )
     if reason == "hessian_not_finite":
         warn_measured(
@@ -519,7 +536,7 @@ def _accept_round(candidate, best, bar: float) -> bool:
     return candidate.stationary and candidate.nlp - best.nlp <= bar
 
 
-def _certify_map_point(flat_loss, x, *, scipy_success, n_steps, gtol):
+def _certify_map_point(flat_loss, x, *, scipy_success, n_steps, gtol, names=None):
     """Return the point to report after scipy's stop, continuing with the shared driver if needed.
 
     Parameters
@@ -534,6 +551,8 @@ def _certify_map_point(flat_loss, x, *, scipy_success, n_steps, gtol):
         Iteration cap of each continuation run.
     gtol : float
         Gradient tolerance of each continuation run.
+    names : sequence of str or callable, optional
+        Coordinate names, used to name a non-finite gradient component.
 
     Returns
     -------
@@ -576,6 +595,9 @@ def _certify_map_point(flat_loss, x, *, scipy_success, n_steps, gtol):
     """
     value_and_grad, _ = compiled_derivatives(flat_loss)
     value, grad = value_and_grad(x)
+    # The certificate reads the Hessian's finiteness as a status (documented below); a
+    # non-finite value or gradient at the reported point is not a status, it is an error.
+    require_finite(value=value, grad=grad, names=names, where="MAP solution")
     if scipy_success and float(jnp.max(jnp.abs(grad))) < gtol:
         return x, float(value), float(jnp.linalg.norm(grad)), None, True, 1, None
     stat = stationarity(flat_loss, x)
@@ -1153,6 +1175,9 @@ def run_map(
         learning_rate,
     )
     opt_state = opt.init(init_params)
+    _require_finite_derivative(
+        context.grad_fn(init_params, data_args), ravel_pytree(init_params)[1], "MAP start point"
+    )
 
     # Warmup: trigger JIT compilation before timing.
     _, _, warmup_loss = single_step(init_params, opt_state, data_args)

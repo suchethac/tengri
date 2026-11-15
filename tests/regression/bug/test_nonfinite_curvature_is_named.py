@@ -334,3 +334,94 @@ def test_laplace_refuses_a_non_finite_covariance_from_a_finite_hessian():
             regularize=False,
             newton_steps=0,
         )
+
+
+# -- a non-finite gradient (finite value) at the start and at the solution ------------------
+
+
+def _nan_gradient_in_b(params, _data=None):
+    """Finite value; the gradient with respect to ``b[1]`` is NaN (its second leg is a stub)."""
+    a, b = params["a"], params["b"]
+    return jnp.sum(a**2) + jnp.sum(b**2) + _nan_slope(b[1])
+
+
+@jax.custom_jvp
+def _nan_slope(x):
+    return 0.0 * x
+
+
+@_nan_slope.defjvp
+def _nan_slope_jvp(primals, tangents):
+    return _nan_slope(primals[0]), jnp.nan * tangents[0]
+
+
+@pytest.mark.parametrize("x64,dtype_name", DTYPES)
+def test_map_names_a_non_finite_gradient_at_the_start_point(x64, dtype_name):
+    """A zero-iteration L-BFGS used to return the start point with no warning."""
+    from tengri.inference.backends.map_dispatch import _run_map_scipy
+
+    with jax.enable_x64(x64):
+        dtype = _dtype_of(x64)
+        init = {"a": jnp.asarray([0.3, 0.1], dtype), "b": jnp.asarray([0.2, -0.4, 0.5], dtype)}
+        assert np.isfinite(float(_nan_gradient_in_b(init)))
+        grad_fn = jax.jit(jax.value_and_grad(_nan_gradient_in_b))
+        with pytest.raises(NonFiniteCurvatureError) as err:
+            _run_map_scipy(
+                None,
+                init_params=init,
+                grad_fn=lambda p, d: grad_fn(p),
+                loss_fn=lambda p, d: _nan_gradient_in_b(p),
+                data_args=None,
+                optimizer="lbfgs",
+                n_steps=50,
+                tol=1e-8,
+                verbose=False,
+            )
+    message = str(err.value)
+    assert message.startswith("MAP start point: gradient has 1 of 5 entries non-finite")
+    assert "entries b[1])" in message and dtype_name in message
+
+
+@pytest.mark.parametrize("x64,dtype_name", DTYPES)
+def test_map_names_a_non_finite_gradient_at_the_solution(x64, dtype_name):
+    from tengri.inference.backends.map_dispatch import _certify_map_point
+
+    with jax.enable_x64(x64):
+        x = jnp.asarray([0.3, 0.1, 0.2, -0.4, 0.5], _dtype_of(x64))
+
+        def flat_loss(v):
+            return _nan_gradient_in_b({"a": v[:2], "b": v[2:]})
+
+        with pytest.raises(NonFiniteCurvatureError, match=r"MAP solution: gradient has 1 of 5"):
+            _certify_map_point(
+                flat_loss,
+                x,
+                scipy_success=True,
+                n_steps=10,
+                gtol=1e-8,
+                names=["a[0]", "a[1]", "b[0]", "b[1]", "b[2]"],
+            )
+
+
+@pytest.mark.parametrize("x64,dtype_name", DTYPES)
+def test_laplace_names_a_non_finite_gradient(x64, dtype_name):
+    from tengri.inference.backends.laplace import run_laplace
+
+    def logdensity(v, _data=None):
+        return -_nan_gradient_in_b({"a": v[:2], "b": v[2:]})
+
+    with jax.enable_x64(x64):
+        x = jnp.asarray([0.3, 0.1, 0.2, -0.4, 0.5], _dtype_of(x64))
+        with pytest.raises(NonFiniteCurvatureError) as err:
+            run_laplace(
+                key=jax.random.PRNGKey(0),
+                logdensity_fn=logdensity,
+                data_args=None,
+                position=x,
+                unravel_fn=lambda v: {"a": v[:2], "b": v[2:]},
+                to_physical_fn=None,
+                model=None,
+            )
+    message = str(err.value)
+    assert message.startswith("laplace: gradient has")
+    assert "b[1]" in message and dtype_name in message
