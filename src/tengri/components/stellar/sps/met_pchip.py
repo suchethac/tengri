@@ -17,9 +17,18 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
-from tengri.utils.grid_interp import pchip_interp_1d, pchip_interp_local
+from tengri.utils.grid_interp import _pchip_slopes, pchip_interp_1d, pchip_interp_local
 
-__all__ = ["met_collapsed", "met_weights", "read_met", "read_met_per_age"]
+__all__ = [
+    "met_collapsed",
+    "met_collapsed_hermite",
+    "met_weights",
+    "pchip_node_slopes",
+    "read_met",
+    "read_met_hermite",
+    "read_met_hermite_per_age",
+    "read_met_per_age",
+]
 
 
 def _clamp_to_grid(log_z, x):
@@ -150,3 +159,65 @@ def met_weights(log_z, ssp_lgmet):
         return raw / jnp.sum(raw)
     raw = jax.vmap(lambda z: read_met(eye, x, z))(jnp.asarray(log_z))
     return (raw / jnp.sum(raw, axis=1, keepdims=True)).T
+
+
+def pchip_node_slopes(table, ssp_lgmet):
+    """Native PCHIP tangents along the metallicity axis (#3541).
+
+    The tangents depend only on the node values, not on the query Z, so they are
+    computed once on the native grid and carried through each table's linear build.
+    Same formula as :func:`read_met`: :func:`pchip_interp_local` uses the global
+    Fritsch-Carlson tangents for ``n_met >= 4``, :func:`pchip_interp_1d` for 2 or 3,
+    and the secant for 2. ``n_met == 1`` gives zeros.
+    """
+    table = jnp.asarray(table)
+    x = jnp.asarray(ssp_lgmet)
+    if x.shape[0] == 1:
+        return jnp.zeros_like(table)
+    return _pchip_slopes(x, table)
+
+
+def read_met_hermite(values, slopes, ssp_lgmet, log_z):
+    """Cubic Hermite read of (node values, native slopes) at one log Z (#3541).
+
+    Equals :func:`read_met` on the table the slopes came from, to round-off: the
+    Hermite basis in the bracketing cell, clamped outside the grid as :func:`read_met`
+    clamps, and node-exact. Linear in ``values`` and in ``slopes``, so a table and its
+    slope sibling can be built by the same linear code.
+    """
+    values = jnp.asarray(values)
+    slopes = jnp.asarray(slopes)
+    x = jnp.asarray(ssp_lgmet)
+    n = x.shape[0]
+    if n == 1:
+        return values[0]
+    zc = _clamp_to_grid(jnp.asarray(log_z, dtype=x.dtype), x)
+    i = jnp.clip(jnp.searchsorted(x, zc) - 1, 0, n - 2)
+    h = x[i + 1] - x[i]
+    t = (zc - x[i]) / h
+    t2 = t * t
+    t3 = t2 * t
+    val = (
+        (2.0 * t3 - 3.0 * t2 + 1.0) * values[i]
+        + (t3 - 2.0 * t2 + t) * h * slopes[i]
+        + (-2.0 * t3 + 3.0 * t2) * values[i + 1]
+        + (t3 - t2) * h * slopes[i + 1]
+    )
+    return _pin_to_node(val, values, x, zc)
+
+
+def read_met_hermite_per_age(values, slopes, ssp_lgmet, log_z_age, *, age_axis=1):
+    """Per-age :func:`read_met_hermite`, the twin of :func:`read_met_per_age` (#3541)."""
+    mv = jnp.moveaxis(jnp.asarray(values), age_axis, 1)
+    ms = jnp.moveaxis(jnp.asarray(slopes), age_axis, 1)
+    per_age = jax.vmap(lambda v, s, z: read_met_hermite(v, s, ssp_lgmet, z), in_axes=(1, 1, 0))(
+        mv, ms, jnp.asarray(log_z_age)
+    )
+    return jnp.moveaxis(per_age, 0, age_axis - 1)
+
+
+def met_collapsed_hermite(values, slopes, ssp_lgmet, log_z, *, age_axis=1):
+    """Hermite twin of :func:`met_collapsed`: ``[1, ...]`` for scalar or per-age log Z."""
+    if jnp.ndim(log_z) == 0:
+        return read_met_hermite(values, slopes, ssp_lgmet, log_z)[None]
+    return read_met_hermite_per_age(values, slopes, ssp_lgmet, log_z, age_axis=age_axis)[None]
