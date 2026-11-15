@@ -38,7 +38,7 @@ from tengri.observation.eline_catalog import (
     DEFAULT_LINE_WAVELENGTHS,  # noqa: F401, re-exported for convenience
 )
 from tengri.observation.linear_marginal import marginalize_linear_nuisance
-from tengri.utils.physics_constants import C_AA
+from tengri.utils.physics_constants import C_AA, C_KM_S, GAUSSIAN_FWHM_PER_SIGMA
 from tengri.utils.scale import log10_four_pi_dl2
 
 # ── Public API ────────────────────────────────────────────────────
@@ -48,58 +48,25 @@ from tengri.utils.scale import log10_four_pi_dl2
 def _build_eline_design_matrix_jitted(
     wave_obs: jnp.ndarray,
     line_wavelengths: jnp.ndarray,
-    spectral_resolution: float,
-    redshift: float,
-    eline_sigma_kms: float,
-    eline_delta_v_kms: float,
-) -> jnp.ndarray:
-    """Internal JIT-compiled implementation of build_eline_design_matrix."""
-    c_kms = 299792.458
-
-    def _single_column(lam_rest):
-        """Build a normalized Gaussian profile for a single emission line."""
-        lam_obs = lam_rest * (1.0 + redshift)
-        # Velocity offset: convert km/s to wavelength shift
-        delta_lam = lam_obs * eline_delta_v_kms / c_kms
-        lam_center = lam_obs + delta_lam
-        # Instrument resolution
-        sigma_inst = lam_obs / (2.355 * spectral_resolution)
-        # Intrinsic velocity broadening
-        sigma_vel = lam_obs * eline_sigma_kms / c_kms
-        # Combined sigma
-        sigma = jnp.sqrt(sigma_inst**2 + sigma_vel**2)
-        profile = jnp.exp(-0.5 * ((wave_obs - lam_center) / sigma) ** 2) / (
-            jnp.sqrt(2.0 * jnp.pi) * sigma
-        )
-        return profile
-
-    # vmap over lines -> (n_lines, n_pix), then transpose -> (n_pix, n_lines)
-    columns = jax.vmap(_single_column)(line_wavelengths)
-    return columns.T
-
-
-@jax.jit
-def _build_eline_design_matrix_per_line_jitted(
-    wave_obs: jnp.ndarray,
-    line_wavelengths: jnp.ndarray,
     spectral_resolution: jnp.ndarray,
     redshift: float,
     eline_sigma_kms: jnp.ndarray,
     eline_delta_v_kms: jnp.ndarray,
 ) -> jnp.ndarray:
-    """The same profile with a resolution, width and offset per line, shape ``(n_lines,)``."""
-    c_kms = 299792.458
+    """Gaussian line profiles, one column per line; per-line arrays of shape ``(n_lines,)``."""
 
     def _single_column(lam_rest, resolution_j, sigma_j, delta_v_j):
+        """Build a normalized Gaussian profile for a single emission line."""
         lam_obs = lam_rest * (1.0 + redshift)
-        lam_center = lam_obs + lam_obs * delta_v_j / c_kms
-        sigma_inst = lam_obs / (2.355 * resolution_j)
-        sigma_vel = lam_obs * sigma_j / c_kms
+        lam_center = lam_obs + lam_obs * delta_v_j / C_KM_S
+        sigma_inst = lam_obs / (GAUSSIAN_FWHM_PER_SIGMA * resolution_j)
+        sigma_vel = lam_obs * sigma_j / C_KM_S
         sigma = jnp.sqrt(sigma_inst**2 + sigma_vel**2)
         return jnp.exp(-0.5 * ((wave_obs - lam_center) / sigma) ** 2) / (
             jnp.sqrt(2.0 * jnp.pi) * sigma
         )
 
+    # vmap over lines -> (n_lines, n_pix), then transpose -> (n_pix, n_lines)
     columns = jax.vmap(_single_column)(
         line_wavelengths, spectral_resolution, eline_sigma_kms, eline_delta_v_kms
     )
@@ -158,22 +125,12 @@ def build_eline_design_matrix(
     enable proper line amplitude marginalization in
     :func:`marginalize_emission_lines`.
     """
-    per_line = (spectral_resolution, eline_sigma_kms, eline_delta_v_kms)
-    if all(jnp.ndim(value) == 0 for value in per_line):
-        # One value for every line: the scalar kernel, unchanged.
-        return _build_eline_design_matrix_jitted(
-            wave_obs,
-            line_wavelengths,
-            spectral_resolution,
-            redshift,
-            eline_sigma_kms,
-            eline_delta_v_kms,
-        )
     n_lines = jnp.shape(line_wavelengths)[0]
     resolution, sigma_kms, delta_v_kms = (
-        jnp.broadcast_to(jnp.asarray(value), (n_lines,)) for value in per_line
+        jnp.broadcast_to(jnp.asarray(value), (n_lines,))
+        for value in (spectral_resolution, eline_sigma_kms, eline_delta_v_kms)
     )
-    return _build_eline_design_matrix_per_line_jitted(
+    return _build_eline_design_matrix_jitted(
         wave_obs, line_wavelengths, resolution, redshift, sigma_kms, delta_v_kms
     )
 

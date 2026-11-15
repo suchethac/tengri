@@ -335,6 +335,12 @@ ELINE_GROUP_SIGMA_MAX_KMS = 5000.0
 def eline_group_params(group: str) -> tuple[ParamDeclaration, ...]:
     """Return the width and offset declarations of one named kinematic group.
 
+    Derived from the default group's ``eline_sigma_kms`` and ``eline_delta_v_kms``
+    declarations in :data:`ELINE_PARAMS`: same default, bound check and units, the
+    name suffixed with ``_<group>``. The one difference is the width prior's upper
+    edge, :data:`ELINE_GROUP_SIGMA_MAX_KMS`, because a named group can be a broad
+    component.
+
     Parameters
     ----------
     group : str
@@ -343,33 +349,27 @@ def eline_group_params(group: str) -> tuple[ParamDeclaration, ...]:
     Returns
     -------
     tuple of ParamDeclaration
-        ``eline_sigma_kms_<group>`` and ``eline_delta_v_kms_<group>``, both fixed
-        at zero by default like the default group's pair.
+        ``eline_sigma_kms_<group>`` and ``eline_delta_v_kms_<group>``.
     """
+    base = {decl.name: decl for decl in ELINE_PARAMS}
+    sigma = base["eline_sigma_kms"]
+    offset = base["eline_delta_v_kms"]
+    width = sigma.free_prior
     return (
-        ParamDeclaration(
-            f"eline_sigma_kms_{group}",
-            Fixed(0.0),
-            f"Velocity dispersion of the lines in kinematic group {group!r} in km/s "
-            "(added in quadrature to instrument resolution)",
-            lambda lo, hi: lo >= 0,
-            "must have lo >= 0",
-            units="km/s",
+        sigma._replace(
+            name=f"eline_sigma_kms_{group}",
+            description=f"{sigma.description} for kinematic group {group!r}",
             free_prior=Uniform(
-                0.0,
+                width.lo,
                 ELINE_GROUP_SIGMA_MAX_KMS,
-                "Line velocity dispersion",
-                units="km/s",
-                default=0.0,
+                width.description,
+                units=width.units,
+                default=width.default,
             ),
         ),
-        ParamDeclaration(
-            f"eline_delta_v_kms_{group}",
-            Fixed(0.0),
-            f"Velocity offset of the lines in kinematic group {group!r} from the "
-            "systemic redshift in km/s",
-            units="km/s",
-            free_prior=Uniform(-1000.0, 1000.0, "Line velocity offset", units="km/s", default=0.0),
+        offset._replace(
+            name=f"eline_delta_v_kms_{group}",
+            description=f"{offset.description} for kinematic group {group!r}",
         ),
     )
 

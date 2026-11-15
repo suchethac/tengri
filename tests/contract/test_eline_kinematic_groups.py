@@ -28,6 +28,7 @@ from tengri.observation.line_list import LineList
 pytestmark = pytest.mark.contract
 
 _C_KMS = 299792.458
+_FWHM_PER_SIGMA = 2.0 * np.sqrt(2.0 * np.log(2.0))
 _Z = 0.1
 _R = 1500.0
 _LINES = ["Hbeta", "OIII_4959", "OIII_5007", "Halpha"]
@@ -53,7 +54,7 @@ def _gaussian(wave, rest, sigma_kms, delta_v_kms, resolution=_R, z=_Z):
     """Unit-area Gaussian line profile on ``wave`` [1/Angstrom], NumPy only."""
     lam = rest * (1.0 + z)
     center = lam * (1.0 + delta_v_kms / _C_KMS)
-    width = np.hypot(lam / (2.355 * resolution), lam * sigma_kms / _C_KMS)
+    width = np.hypot(lam / (_FWHM_PER_SIGMA * resolution), lam * sigma_kms / _C_KMS)
     return np.exp(-0.5 * ((wave - center) / width) ** 2) / (np.sqrt(2.0 * np.pi) * width)
 
 
@@ -243,6 +244,41 @@ def test_line_kinematics_gathers_each_group():
     sigma, delta_v = line_kinematics(params, fixed, catalog)
     np.testing.assert_allclose(np.asarray(sigma), [150.0, 80.0, 80.0, 150.0, 1200.0])
     np.testing.assert_allclose(np.asarray(delta_v), [250.0, 0.0, 0.0, 250.0, -100.0])
+
+
+def test_line_kernel_uses_the_shared_constants():
+    """One kernel, with c and the Gaussian FWHM factor from physics_constants."""
+    import inspect
+
+    from tengri.observation import eline_marginalization as em
+    from tengri.utils.physics_constants import C_KM_S, GAUSSIAN_FWHM_PER_SIGMA
+
+    assert pytest.approx(_FWHM_PER_SIGMA, rel=1e-15) == GAUSSIAN_FWHM_PER_SIGMA
+    assert C_KM_S == _C_KMS
+    source = inspect.getsource(em)
+    assert "2.355" not in source and "299792" not in source
+    assert not hasattr(em, "_build_eline_design_matrix_per_line_jitted")
+
+
+def test_group_declarations_derive_from_the_default_pair():
+    """A named group's pair is the default pair renamed; only the width ceiling widens."""
+    from tengri.components.nebular._params import (
+        ELINE_GROUP_SIGMA_MAX_KMS,
+        ELINE_PARAMS,
+        eline_group_params,
+    )
+
+    base = {d.name: d for d in ELINE_PARAMS}
+    sigma, offset = eline_group_params("broad")
+    for derived, name in ((sigma, "eline_sigma_kms"), (offset, "eline_delta_v_kms")):
+        ref = base[name]
+        assert derived.name == f"{name}_broad"
+        assert derived.prior == ref.prior
+        assert derived.bound_check is ref.bound_check
+        assert derived.bound_error == ref.bound_error
+        assert derived.units == ref.units
+    assert offset.free_prior is base["eline_delta_v_kms"].free_prior
+    assert sigma.free_prior.bounds == (0.0, ELINE_GROUP_SIGMA_MAX_KMS)
 
 
 # ── Model and likelihood ──────────────────────────────────────────

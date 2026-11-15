@@ -356,7 +356,7 @@ def batched_eline_design(line_set: BatchedLineSet, obs: SpectroBatch, params: di
         {\sqrt{2\pi}\,\sigma_j}, \qquad
         \mu_j = \lambda_j^{\rm rest}(1+z)\left(1+\frac{\Delta v}{c}\right),
         \qquad
-        \sigma_j = \sqrt{\left(\frac{\lambda_j^{\rm obs}}{2.355\,R}\right)^2
+        \sigma_j = \sqrt{\left(\frac{\lambda_j^{\rm obs}}{2\sqrt{2\ln 2}\,R}\right)^2
         + \left(\frac{\lambda_j^{\rm obs}\,\sigma_v}{c}\right)^2},
         \qquad \lambda_j^{\rm obs} = \lambda_j^{\rm rest}(1+z),
 
