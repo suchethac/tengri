@@ -9,9 +9,9 @@ root::
 It reuses the fixture and helpers of ``tests/components/nebular/test_cue_process_dtype.py``
 so the recipe is the one the test replays. The output is ``cue_x64_off_reference.npz``.
 
-The exact spectrum digest that the test asserts on Linux at jax 0.12.0 (697f52...) is CI's
-printed value, not this script's: this script runs on macOS and prints its own digest, which
-differs. The bit-exact check applies only at the CI platform and JAX version, and the
+Run it on CI Linux at the pinned JAX (a ``pull_request`` job that uploads the npz as an
+artifact): there the digest it prints is the one the test asserts. On macOS it prints a
+different digest. The bit-exact check applies only at the CI platform and JAX version, and the
 reference bound covers everywhere else.
 """
 
