@@ -112,11 +112,23 @@ EMITTERS: dict[str, dict] = {
 SKIPS: dict[tuple[str, str], str] = {}
 
 
+#: Extra spectral steepening of the synthetic SSP: its L_nu is multiplied by
+#: ``(5000 A / lambda) ** STEEP_INDEX``, so it falls as lambda^-(2 + STEEP_INDEX) and a band
+#: integral under the photon and energy weights differs by more than the LUT bound.
+STEEP_INDEX = 2.0
+
+
+def _steepen(ssp):
+    return ssp._replace(ssp_flux=ssp.ssp_flux * (5000.0 / ssp.ssp_wave) ** STEEP_INDEX)
+
+
 def _ssp(kind, request, physical=False):
     if kind == "wide":
         # The float32 arm needs a physically normalized grid (the plain one is not).
-        return request.getfixturevalue(
-            "synthetic_ssp_wide_physical" if physical else "synthetic_ssp_wide"
+        return _steepen(
+            request.getfixturevalue(
+                "synthetic_ssp_wide_physical" if physical else "synthetic_ssp_wide"
+            )
         )
     if kind == "fsps":
         return request.getfixturevalue("ssp_data_fsps")
