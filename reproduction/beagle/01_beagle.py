@@ -110,7 +110,7 @@ print(f"BEAGLE version: {str(_prov['version']).splitlines()[0]}")
 print(f"BEAGLE templates: {', '.join(_prov['templates'])}")
 print(f"BEAGLE cache: {beagle_run.workdir() / 'cache'}")
 
-# BEAGLE's solar metallicity is 0.01524; tengri's is 0.0142. A BEAGLE log Z/Z_sun value maps to
+# BEAGLE's solar metallicity is 0.01524; tengri's is 0.0142. A BEAGLE log Z/Z☉ value maps to
 # tengri's scale by adding LOG10_ZSUN_SHIFT, so both sides request the same absolute Z.
 SHIFT = beagle_driver.LOG10_ZSUN_SHIFT
 AGE_Z1_GYR = float(Planck18.age(1.0).to_value("Gyr"))
@@ -900,7 +900,7 @@ for k, (lo, hi) in enumerate(CONT_WINDOWS_AA):
 # is log SFR in {-1, 0, 0.5, 1, 1.5} over 10 Myr, plus log SFR 0.5 over 31.6 and 100 Myr. The formed
 # mass is 10^10 M☉ in both codes, and the stellar and gas metallicity are 0.014 with log U = -2.5 and
 # xi_d = 0.3. tengri's `recent` episode is the same constant rate over `timescale_myr`. The equivalent
-# width of H-alpha divides the line by the continuum L_λ averaged over the line-free windows 6400–6500 Å
+# width of Hα divides the line by the continuum L_λ averaged over the line-free windows 6400–6500 Å
 # and 6605–6640 Å, so both codes use the same continuum estimate.
 
 # %%
@@ -1031,8 +1031,8 @@ save_fig("beagle_08e_spectra.png")
 plt.show()
 
 # %% [markdown]
-# The H-alpha EW ratio tengri/BEAGLE is 0.68 to 0.73 on the rows where BEAGLE's EW exceeds 10 Å. On the
-# log SFR 1, 10 Myr row the H-alpha luminosity ratio is 0.718 and the continuum L_λ at H-alpha ratio is 1.027,
+# The Hα EW ratio tengri/BEAGLE is 0.68 to 0.73 on the rows where BEAGLE's EW exceeds 10 Å. On the
+# log SFR 1, 10 Myr row the Hα luminosity ratio is 0.718 and the continuum L_λ at Hα ratio is 1.027,
 # so the EW gap sits in the line. The line ratio matches the per-SFR ratio of §8c (0.73): the ionizing output
 # of CB16 (BEAGLE) against BC03 STELIB (tengri), a library bracket. On the log SFR -1 row BEAGLE's EW is 1.3 Å
 # and tengri's is 1.5 Å; this row is at the continuum-dominated limit and is not classified beyond that.
@@ -1046,7 +1046,7 @@ plt.show()
 # ### §8f Dust inside H II regions
 #
 # The `s8c_hiidust_on` and `s8c_hiidust_off` runs share the episode (log SFR 1 over 10 Myr) and CF00 depths
-# tau_V,eff of 0.3, 1 and 2 with mu = 0.4. BEAGLE applies dust inside the H II regions only in the `on`
+# τ_V,eff of 0.3, 1 and 2 with mu = 0.4. BEAGLE applies dust inside the H II regions only in the `on`
 # run. tengri has no separate H II-region dust term: its two-component birth-cloud screen acts on the
 # nebular light and the stellar light of ages below 10 Myr, with the power-law slopes -1.3 and -0.7 of
 # §5. The table places tengri between the two BEAGLE runs with the fraction (tengri - off) / (on - off).
@@ -1169,7 +1169,7 @@ save_fig("beagle_08g_lyc_escape.png")
 plt.show()
 
 # %% [markdown]
-# BEAGLE's H-beta and H-alpha fall exactly as 1 - f_esc (0.900, 0.700, 0.400). tengri's fall as
+# BEAGLE's H-beta and Hα fall exactly as 1 - f_esc (0.900, 0.700, 0.400). tengri's fall as
 # (1 - f_esc) / (1 + 0.597 f_esc), the form stated in `docs/model_reference/nebular.md`, and its printed values
 # match that form to 0.001 at each escape fraction (0.849, 0.594, 0.295). This is a convention: BEAGLE removes
 # photons from the lines, while tengri applies one factor that also scales the continuum, so its line ratios
@@ -1272,7 +1272,7 @@ plt.show()
 # 10^7, 10^7.5, 10^8 and 10^9 yr, at logU -2.5, Z 0.014 and xi_d 0.3. tengri runs the same constant history at each
 # age, from lookback 10^(log age - 9) Gyr to the present. The public table is time-integrated, so it has no age
 # axis and §8i compares the two codes only with each other. The figure shows the two line ratios and the
-# H-alpha equivalent width against age, and the table gives the values.
+# Hα equivalent width against age, and the table gives the values.
 
 # %%
 AGE_LOG_I = (6.5, 7.0, 7.5, 8.0, 9.0)  # BEAGLE max_stellar_age [log yr]
@@ -1333,15 +1333,10 @@ plt.show()
 # and the public table is not, so tengri has no age dependence at all. At the saturated ages the He II 1640/H-beta
 # ratio differs by 0.96 dex (a factor of 9) and the [O III]/H-beta ratio by 0.04 dex. The He II value lies inside the
 # §8a He II 1640 spread (median 0.49 dex, maximum 1.03 dex) and is classed the same way, as model physics on BEAGLE's
-# side, not isolated; the [O III] value is in the §8a class, not classified beyond that. The H-alpha EW ratio
+# side, not isolated; the [O III] value is in the §8a class, not classified beyond that. The Hα EW ratio
 # tengri/BEAGLE is 0.95 at 3.2 Myr, 0.79 at 10 Myr and 0.69 at 1 Gyr. From 10 Myr on it sits near the ionizing-output
 # bracket of §8c (0.73 per SFR), a library bracket; its drift from 0.79 to 0.69 with age is not isolated here. At
 # 3.2 Myr the EW gap of 5 per cent is not classified further.
-
-# %% [markdown]
-# ### §8j Density, C/O and upper mass
-#
-# (written in the next pass)
 
 # %% [markdown]
 # ## 9. AGN narrow-line region
@@ -1349,7 +1344,7 @@ plt.show()
 # BEAGLE-AGN (Vidal-Garcia et al. 2024) adds a narrow-line region (NLR) to the H II regions of a galaxy. The
 # NLR is the Feltre, Charlot & Gutkin (2016) CLOUDY photoionization grid, and BEAGLE drives it with the
 # accretion luminosity `agn_lacc` (log10 erg/s), the ionization parameter `agn_logU`, the metallicity `agn_Z`
-# (log10 Z/Z_sun, Z_sun 0.01524), `agn_xi` 0.3, n_H 10^3 cm^-3 and alpha -1.7. tengri's composable `nlr` block
+# (log10 Z/Z☉, Z☉ 0.01524), `agn_xi` 0.3, n_H 10^3 cm^-3 and alpha -1.7. tengri's composable `nlr` block
 # reads the same grid. Its disc and torus are left out, because BEAGLE adds no AGN continuum, so the AGN
 # contributes lines only. The section has four parts: the grid check (9a), the NLR normalization and the
 # AGN-only line ratios (9b and 9c), and the mixed H II plus NLR population (9d and 9e).
@@ -1554,7 +1549,8 @@ for j, (u, zr) in enumerate(zip(ONLY_LOGU, ONLY_Z)):
 # The two normalizations are not one constant factor apart. The ratio is 0.97 to 0.98 at logU -3.5 and rises to 2.74
 # at logU -1.5 and Z 0. Tengri's H-beta falls by 0.17 dex across the logU range, as the raw grid does, while BEAGLE's
 # falls by 0.62 dex at Z 0. Tengri matches the raw grid at the nodes (9a), so the difference lies in how BEAGLE's
-# `agn_logU` drives the grid. That is model physics, not isolated here. Applying a 10 % covering fraction on top of
+# `agn_logU` drives the grid. The cause is not isolated; §13 lists it as a template-version candidate, since BEAGLE's
+# AGN templates carry the `C100_v100_h1_r3` tags in their file names. Applying a 10 % covering fraction on top of
 # `agn_lacc` would put every ratio at 0.10 to 0.27, so this comparison takes `agn_lacc` as the ionizing luminosity.
 
 # %% [markdown]
@@ -1610,9 +1606,10 @@ plt.show()
 # Hα agrees to 0.01 dex in all six combinations, [N II] to 0.04 dex and [O III]/H-beta to 0.05 dex. The [O II] and
 # [S II] differences reach 0.17 and 0.60 dex at logU -1.5 and Z -0.5, C IV reaches -1.12 dex at logU -1.5 and Z 0, and
 # He II 1640 and C III] reach 0.32 and 0.20 dex. The UV and low-ionization lines depend on the shape of the ionizing
-# spectrum, which the two codes drive differently, so these are model physics, not isolated here. He II 4686 and
-# [Ne V] 3426 are not in the Feltre table tengri reads, which holds 20 lines, while BEAGLE's AGN output lists them: a
-# line-set coverage difference.
+# spectrum, which the two codes drive differently, and BEAGLE's AGN templates carry a `C100_v100_h1_r3` release tag that
+# the public Feltre grid does not, so these differences are classed as a template-version candidate and not isolated
+# here. He II 4686 and [Ne V] 3426 are not in the Feltre table tengri reads, which holds 20 lines, while BEAGLE's AGN
+# output lists them: a line-set coverage difference.
 
 # %% [markdown]
 # ### §9d Mixed H II and NLR: BPT diagram
@@ -1699,7 +1696,7 @@ plt.show()
 # %% [markdown]
 # The H II points agree to 0.04 dex in [O III]/H-beta, consistent with the §8 line comparison. The pure-AGN points agree
 # to 0.05 dex in both axes for all six combinations, so the 9b normalization offset does not move a line ratio. The
-# mixed rows differ by at most 0.16 dex in [N II]/H-alpha and 0.13 dex in [O III]/H-beta, at logU -1.5 where the 9b offset
+# mixed rows differ by at most 0.16 dex in [N II]/Hα and 0.13 dex in [O III]/H-beta, at logU -1.5 where the 9b offset
 # is largest (agn_lacc 44 and 45, Z 0 and -0.5). Mixed points depend on the NLR-to-H II H-beta ratio, so this difference is
 # the 9b normalization offset carried into the mixture, together with the H II library bracket of §8c, which this section
 # does not remove. It is classified as model physics of the NLR normalization.
@@ -1879,7 +1876,19 @@ for label, sec_i, sec_n in (
 # | formed mass | `M_tot`, formed mass including the episode | formed mass set to the same value | convention | §2 M_tot ratio 1.000 at each tau |
 # | specific SFR | `specific_sfr` relative to total formed mass | `recent_ssfr` episode | convention | not compared here |
 # | formation time | `formation_redshift` | `age_gyr` (age at z) | convention | not compared here |
-# | BEAGLE-AGN | not run | not run | convention | not run here; §9 has no BEAGLE column |
+# | Hα EW per episode SFR | episode rate over 10 Myr, EW from BEAGLE line and continuum | episode rate over `timescale_myr`, same continuum window | library bracket (ionizing output) | §8e EW ratio 0.70 at log SFR 1 (0.68 to 0.73 on rows with BEAGLE EW above 10 Å); 1.16 at log SFR -1, not classified |
+# | dust inside H II regions | `ACCOUNT FOR HII DUST` on and off | no H II-region dust term; birth-cloud screen on all nebular light | convention | §8f Balmer-decrement position between off and on: -0.01, 0.03 and 0.16 at tauV 0.3, 1 and 2 |
+# | LyC escape form | `LyC_f_esc` removes that fraction of the lines | `neb_fesc` scales lines and continuum by one factor, (1 - f) / (1 + 0.597 f) | convention | §8g H-beta at f 0.1, 0.3, 0.6: tengri 0.849, 0.594, 0.295 against BEAGLE 0.900, 0.700, 0.400 |
+# | ionizing photons below 912 Å at f_esc 0 | picket fence: only stars younger than 10 Myr reprocessed | all stellar ages reprocessed in the gutkin16 build without dust | convention | §8g mean L_ν at 800–900 Å: tengri 2.18e20 against BEAGLE 1.98e26 erg/s/Hz; escaping ratio 0.585 to 0.619 at f 0.1 to 0.6 |
+# | BEAGLE nebular templates against the public table, UV lines | BEAGLE's updated templates (README: "an updated version of the stellar population + photoionization models presented in Gutkin et al., 2016") | the published 2016 grid, time-integrated | template version (BEAGLE's updated templates vs the published grid) | §8h at 100 Myr: He II 1640 and Si III] 1888 medians 0.490 and 0.355 dex, C III] 1908 maximum 0.537 dex, the same as at 1 Gyr to 0.001 dex; tengri equals the table to 7.4e-15 dex |
+# | line age dependence | age-resolved nebular templates | time-integrated table, no age axis | physics (BEAGLE side) | §8i [O III]/H-beta 3.400 at 3.2 Myr and 3.649 from 32 Myr on, tengri 3.327 at every age; EW ratio 0.95, 0.79 and 0.69 at 3.2 Myr, 10 Myr and 1 Gyr |
+# | NLR normalization against logU | BEAGLE `agn_logU` drives the Feltre grid; grid file names carry the `C100_v100_h1_r3` tags | Feltre grid at the same nodes (matches the raw grid to 1e-14 dex, §9a) | template version (candidate; cause not isolated) | §9b H-beta ratio tengri/BEAGLE 0.97 to 2.74 at cf 1.0 across logU -3.5 to -1.5; BEAGLE falls 0.62 dex across logU at Z 0 against tengri 0.17 dex |
+# | AGN covering fraction | BEAGLE states a 10 % covering fraction | `agn_nlr_cf` 1.0, with `agn_lacc` taken as the ionizing luminosity | convention | §9b with `agn_nlr_cf` 0.1 the ratio would be 0.10 to 0.27, so the 10 % statement is not reproduced by that key alone |
+# | AGN UV and low-ionization lines | BEAGLE's AGN templates (`v100` tags) | Feltre table lines only | template version (candidate) | §9c tengri minus BEAGLE at logU -1.5, Z 0: C IV -1.12, He II 1640 -0.32, C III] -0.20, [O II] 0.17, [S II] -0.60 dex; Hα 0.01, [N II] 0.04, [O III] 0.05 dex |
+# | AGN line-set coverage | He II 4686 and [Ne V] 3426 in BEAGLE's AGN output | not in the Feltre table tengri reads (20 lines) | convention | §9c n/a for both in every combination |
+# | H II continuum below 3500 Å | BEAGLE H II part with the same episode | gutkin16 H II part with BC03 STELIB | library bracket (nebular continuum not separated) | §9e tengri/BEAGLE median 1.17 at 1200–2000 Å and 1.09 at 2000–3500 Å, H II-only 1.21 and 1.12; 0.99 and 1.00 above 3500 Å |
+# | AGN non-line light | BEAGLE's AGN output includes non-line light | NLR block returns lines only | convention | §9e non-line share of BEAGLE AGN light 0.04, 0.40, 0.03 and 0.06 in the four windows from 1200 to 7000 Å |
+# | BEAGLE-AGN, normalization | Feltre NLR at `agn_lacc`, line output | composable `nlr` block on the same grid | convention | §9a–§9e run with the BEAGLE AGN column; disc and torus are not built |
 
 # %%
 from astropy.cosmology import Planck15
@@ -1929,7 +1938,7 @@ print(f"L_sun: BEAGLE {beagle_driver.L_SUN_BEAGLE:.4e} erg/s, tengri {L_SUN:.4e}
 # %% [markdown]
 # ## 15. tengri in BEAGLE mode
 #
-# The four capstone galaxies are the Paper I objects 79 (red), 7837 (blue), 15775 (dusty) and 1826 (mid-infrared AGN host). BEAGLE fitted them on the CANDELS photometry of the workshop catalog, with the priors listed in the driver, and its posterior is read from the cache. tengri is run on the same photometry with the same model family: delayed-tau plus a recent episode set by the specific SFR, a CF00 two-component law with power-law slopes -1.3 and -0.7 and mu = 0.4, Gutkin et al. (2016) nebular emission with a free ionization parameter, and the Inoue IGM.
+# The four capstone galaxies are the Paper I objects 79 (red), 7837 (blue), 15775 (dusty) and 1826 (mid-infrared AGN host). BEAGLE fitted them on the CANDELS photometry of the workshop catalog, with the priors listed in the driver, and its posterior is read from the cache. tengri is run on the same photometry with the same model family: delayed-tau plus a recent episode set by the specific SFR, a CF00 two-component law with power-law slopes -1.3 and -0.7 and mu = 0.4, Gutkin et al. (2016) nebular emission with a free ionization parameter and the gas metallicity set equal to the stellar one, as in BEAGLE, and the Inoue IGM.
 #
 # The tengri side is evaluated at BEAGLE's posterior-median parameters and is not a tengri fit. A Laplace fit of one galaxy did not finish inside this notebook's budget, because the compiled likelihood takes minutes to build, so the comparison is between two models at the same parameter values. The tables and the figure are the record; the classification sentences below each table give the cause of each difference.
 
@@ -2023,7 +2032,7 @@ def beagle_like_model(p, tengri_bands, *, dust=True):
         dust_attenuation=dust_block,
         dust_emission={"type": "none"},
         neb={"type": "gutkin16", "logU": Fixed(p["log_u"]), "xi_d": Fixed(0.3), "log_nH": Fixed(2.0),
-             "co_ratio": Fixed(1.0), "all_params": Fixed(DEFAULT)},
+             "co_ratio": Fixed(1.0), "logZ_gas": Fixed(p["met_logzsol"]), "all_params": Fixed(DEFAULT)},
         igm={"type": "inoue"},
         redshift=Fixed(p["z"]),
     )
@@ -2087,7 +2096,7 @@ for gid in CAPSTONE_IDS:
         print(f"  {label:<24s}{b:9.3f}{lo:9.3f}{hi:9.3f}{t:9.3f}{t - b:+9.3f}")
 
 # %% [markdown]
-# Each table is BEAGLE's posterior median with its 16 and 84 % range, and tengri's value at that median, so the difference is the model difference at fixed parameters. Four classes follow, one per quantity.
+# Each table is BEAGLE's posterior median with its 16 and 84 % range, and tengri's value at that median, so the difference is the model difference at fixed parameters. Tying the gas metallicity to the stellar one leaves every printed value unchanged at the printed precision; the first-band photometry moves by under 0.01 %. Four classes follow, one per quantity.
 #
 # - log M_star (surviving): the differences of 0.01 to 0.02 dex are a library bracket. The stellar set and the surviving-mass fraction of the two codes differ, and §1 gives the template spread that this inherits; the size of its share is not isolated here.
 # - log SFR_10: the differences of up to 0.02 dex are a library bracket too. Both codes use the same 10 Myr episode, so the residual comes from the template spread in §1 and not from the episode definition.
@@ -2197,7 +2206,20 @@ plt.show()
 # | §8a | He II 1640 and Si III] 1888, median | 0.49 and 0.36 dex | not classified (not isolated) |
 # | §8c | H-beta per photon and per SFR_10, median | 0.99 and 0.73 | agreement (per photon); library bracket (per SFR) |
 # | §8d | continuum shape, window ratios | 0.93 to 1.19 | library bracket |
+# | §8e | Hα EW ratio, 10 Myr episode at log SFR 1 | 0.70 (0.68 to 0.73 across rows above 10 Å) | library bracket (ionizing output) |
+# | §8f | Balmer-decrement position between off and on, tauV 0.3, 1, 2 | -0.01, 0.03, 0.16 | convention |
+# | §8g | H-beta at f_esc 0.1, 0.3, 0.6, tengri against BEAGLE | 0.849, 0.594, 0.295 against 0.900, 0.700, 0.400 | convention (escape form) |
+# | §8g | mean L_ν at 800–900 Å, f_esc 0 | 2.18e20 against 1.98e26 erg/s/Hz | convention (ages reprocessed) |
+# | §8h | He II 1640 and Si III] 1888 medians at 100 Myr; C III] 1908 maximum | 0.490, 0.355 dex; 0.537 dex | template version |
+# | §8i | [O III]/H-beta at saturated ages; EW ratio at 3.2 Myr, 10 Myr, 1 Gyr | 0.04 dex; 0.95, 0.79, 0.69 | physics (BEAGLE side) |
 # | §9 | AGN anchor node, and H-beta linear in L_acc | 1.0000 and 0.1000 | normalization and wiring only |
+# | §9b | AGN-only H-beta, tengri/BEAGLE at cf 1.0, logU -3.5 to -1.5 | 0.97 to 2.74 | template version (candidate) |
+# | §9b | the same ratio with `agn_nlr_cf` 0.1 | 0.10 to 0.27 | convention |
+# | §9c | UV and low-ionization lines, tengri minus BEAGLE, logU -1.5 Z 0 | C IV -1.12, He II 1640 -0.32, C III] -0.20, [O II] 0.17, [S II] -0.60 dex | template version (candidate) |
+# | §9c | Hα, [N II] and [O III] against BEAGLE, all six combinations | 0.01, 0.04, 0.05 dex | agreement |
+# | §9e | tengri/BEAGLE median, 1200–2000 and 2000–3500 Å | 1.17 and 1.09 | library bracket (H II continuum) |
+# | §9e | tengri/BEAGLE median, 3500–5500 and 5500–7000 Å; NLR share agreement | 0.99 and 1.00; within 0.02 | agreement |
+# | §9e | BEAGLE non-line share of AGN light, 2000–3500 Å | 0.40 | convention |
 # | §12 | IGM transmission, bands away from the steps | max 0.0002 | agreement |
 # | §12 | Lyman-alpha band at z = 6, native and rebinned | +0.002 and +0.12 | numerical |
 # | §13 | luminosity distance at z = 1, Planck 2015 against 2018 | ratio 1.00008 | convention |
@@ -2207,15 +2229,25 @@ plt.show()
 # | §15 | tauV_eff, four capstone galaxies | 0.000 | parameter mapping (set by construction) |
 # | §15 | A_V, four capstone galaxies | -0.28 to +0.10 mag | convention |
 #
-# The rest-frame ultraviolet bands agree to 1 % and the normalization, age and star formation history
-# match at the level this notebook tests. Redward of 0.35 μm the two codes differ by up to 5 %, within the
-# spread between BEAGLE's own two template sets in §1a. The attenuation-curve differences are conventions:
-# the curve definitions of Calzetti, Milky Way and the Magellanic Clouds. The strong nebular lines agree to
-# 0.02 dex in the median and Hα/H-beta to 0.002 dex, while He II 1640 and Si III] 1888 differ by
-# 0.36 to 0.49 dex and are not isolated here. The IGM agrees to 0.0002 away from the steps, and the one
-# numerical difference, at the z = 6 Lyman-alpha edge, is set by BEAGLE's template sampling. BEAGLE-AGN,
-# CCWW13 full, `ACCOUNT FOR HII DUST` and the noise model are not run in this notebook, and §15 is not
-# written here.
+# On the stellar side the two codes agree in the rest-frame ultraviolet to 1 % and in normalization, age and
+# star formation history at the level this notebook tests; redward of 0.35 μm they differ by up to 5 %, within the
+# spread between BEAGLE's own two template sets in §1a. The attenuation-curve differences are conventions: the
+# curve definitions of Calzetti, Milky Way and the Magellanic Clouds. The IGM agrees to 0.0002 away from the
+# steps, and the one numerical difference, at the z = 6 Lyman-alpha edge, is set by BEAGLE's template sampling.
+#
+# On the nebular side the strong lines agree (Hα/H-beta to 0.002 dex, the other strong lines to 0.02 dex in the
+# median), and the Hα equivalent width and the ionizing output both sit near 0.7 of BEAGLE's per unit star
+# formation rate, a library bracket. The UV and low-ionization lines do not agree. He II 1640, Si III] 1888 and
+# C III] 1908 keep their gaps at a constant 100 Myr history, which points to BEAGLE's updated nebular templates
+# rather than to the age of the history. BEAGLE's nebular templates and the public 2016 grid differ, so this is a
+# template-version class, not a tengri defect. The Lyman-continuum split by stellar age is a convention. The
+# AGN normalization does not follow the same function of logU in the two codes, with a ratio from 0.97 to 2.74;
+# the AGN line ratios match in Hα, [N II] and [O III] but not in C IV, He II or [O II].
+#
+# BEAGLE-AGN is run here with its line output, and §9 gives the AGN comparison in full. CCWW13 full and the noise
+# model are not run in this notebook. §15 compares the two codes at BEAGLE's posterior medians for the four capstone
+# galaxies, with the gas metallicity tied to the stellar one as in BEAGLE; its differences are the library bracket
+# and the convention classes above.
 
 # %% [markdown]
 # ## References
