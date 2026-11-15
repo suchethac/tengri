@@ -31,6 +31,8 @@ _PARAMS = ({"sfh_delayed_log_total_mass": 10.0}, {"sfh_delayed_log_total_mass": 
 # The exact spectrum and the exact photometry are the same arithmetic on the same state
 # once the continuum is present, so only float64 round-off separates them.
 _RTOL = 1e-10
+# LUT photometry bound: 1e-6 is 30x the 3.2e-8 measured here and five orders below the -14 % bug.
+_LUT_RTOL = 1e-6
 
 
 def _build(ssp, *, phot: bool, spec: bool, approx):
@@ -74,10 +76,13 @@ def models(ssp_data_fsps):
 
 @pytest.mark.parametrize("params", _PARAMS)
 def test_joint_photometry_matches_the_exact_path(models, params):
+    # The joint photometry is served from the WavePrecomp LUT beside the spectrum (#3505), so
+    # it agrees with the exact projector to LUT accuracy (measured 3.2e-8 here), not to
+    # round-off. The -14 % of #3227 is seven orders of magnitude above this bound.
     np.testing.assert_allclose(
         np.asarray(models["joint"].predict_photometry(params)),
         np.asarray(models["joint_exact"].predict_photometry(params)),
-        rtol=_RTOL,
+        rtol=_LUT_RTOL,
     )
 
 

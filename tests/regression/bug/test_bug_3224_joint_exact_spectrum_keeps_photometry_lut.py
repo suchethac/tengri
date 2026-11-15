@@ -15,8 +15,8 @@ Pinned here:
   which does not go through the observables kernel. It is the joint ``WavePrecomp``
   spectrum, not ``approx=None`` in general: an ``L_ir`` consumer feeds the energy-balance
   LUT, so the two differ there;
-* a model with a nebular grid attached keeps exact photometry, because serving photometry
-  from the grid zeroes ``sed_nebular`` and the exact spectrum reads it.
+* a model with a nebular grid attached keeps the photometry LUT beside its spectrum: the
+  spectrum keeps ``sed_nebular`` materialized, so the grid never zeroes what it reads (#3505).
 """
 
 import jax
@@ -115,8 +115,8 @@ def test_free_redshift_with_an_igm_keeps_the_same_parity(ssp_data_fsps):
     _assert_joint_matches_references(phot, joint, seeds=(1, 2))
 
 
-def test_a_nebular_grid_keeps_the_photometry_exact(ssp_data_fsps, monkeypatch):
-    """A nebular grid zeroes sed_nebular, so the LUT must not serve the photometry."""
+def test_a_nebular_grid_keeps_the_photometry_on_the_lut(ssp_data_fsps, monkeypatch):
+    """A spectrum keeps sed_nebular materialized, so a nebular grid keeps the LUT (#3505)."""
     from tengri import DEFAULT, FeaturePrecomp, Fixed, SEDModel, Uniform, WavePrecomp
     from tengri.observation import Observation
 
@@ -135,9 +135,14 @@ def test_a_nebular_grid_keeps_the_photometry_exact(ssp_data_fsps, monkeypatch):
     )
     assert getattr(joint, "_nebular_grid_table", None) is not None, "setup: no grid attached"
 
-    def refuse(*args, **kwargs):
-        raise AssertionError("the LUT served the photometry of a model with a nebular grid")
+    served = []
+    original = Observation.predict_via_precomp
 
-    monkeypatch.setattr(Observation, "predict_via_precomp", refuse)
+    def record(self, *args, **kwargs):
+        served.append(True)
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(Observation, "predict_via_precomp", record)
     flux = joint.predict_photometry({"sfh_delayed_log_total_mass": 10.0})
+    assert served, "the LUT did not serve the photometry of a joint model with a nebular grid"
     assert bool(jnp.all(jnp.isfinite(flux)))
