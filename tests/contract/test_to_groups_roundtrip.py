@@ -14,6 +14,7 @@ import pytest
 pytestmark = pytest.mark.contract
 from tengri import builders
 from tengri.config.exceptions import ConfigError
+from tengri.forward.sed_model import _met_scatter_declared
 from tengri.parameters import DEFAULT, FREE, Fixed, Uniform, parse_groups
 from tengri.parameters.parameters import Parameters
 
@@ -373,6 +374,30 @@ class TestToGroupsFlatBuilt:
 
         assert original.free_params == roundtripped.free_params
         assert original.fixed_params == roundtripped.fixed_params
+
+    def test_flat_default_spec_round_trips_its_scatter_read(self):
+        """An untouched flat-spec scatter default is not read back as a declaration.
+
+        The flat spec lists every parameter explicitly but never names the scatter,
+        so the reparsed spec must read the metallicity node-exactly, as the original
+        does, and the scatter must not appear in any emitted group.
+        """
+        original = Parameters(
+            mean_sfh_type="dpl",
+            sfh_dpl_alpha=Uniform(0.5, 3.0),
+            sfh_dpl_beta=Uniform(0.3, 2.0),
+            sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
+            sfh_dpl_log_total_mass=Uniform(8, 12),
+            redshift=Fixed(0.1),
+        )
+        assert not _met_scatter_declared(original)
+        groups = original.to_groups()
+        reparsed = parse_groups(**groups)
+
+        assert _met_scatter_declared(reparsed) == _met_scatter_declared(original)
+        for group in groups.values():
+            if isinstance(group, dict):
+                assert "logzsol_scatter" not in group
 
 
 class TestToGroupsStructuralSettings:

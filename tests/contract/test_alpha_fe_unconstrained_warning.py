@@ -3,9 +3,10 @@
 """A free [alpha/Fe] that the observation cannot constrain warns once per build (#3487).
 
 [alpha/Fe] moves the Mg b / Fe features at 4800-5400 A rest frame. Only spectral indices, or a
-spectrum that resolves (R >= 1000) and covers that window, constrain it. Photometry moves light
-by about 1-2% at fixed total metallicity, so a free [alpha/Fe] fitted to photometry follows its
-prior. The model still builds, so the advisory warns and never refuses.
+spectrum that resolves (R >= 1000) and covers that window, constrain it. Photometry barely moves
+at fixed total metallicity (g changes 0.4% from [alpha/Fe] 0 to +0.4 on the alpha-MC Kroupa grid),
+so a free [alpha/Fe] fitted to photometry follows its prior. The model still builds, so the
+advisory warns and never refuses.
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ import numpy as np
 import pytest
 
 import tengri
-from tengri import DEFAULT, FREE, SEDModel, Uniform
+from tengri import DEFAULT, FREE, SEDModel, Uniform, WavePrecomp
 from tengri.components.stellar.sps.dsps_wrapper import SSPData
 from tengri.config.exceptions import AlphaFeUnconstrainedWarning, ParameterError
 from tengri.observation.spectral_indices import STANDARD_INDICES, SpectralIndexData
@@ -177,3 +178,25 @@ def test_3d_grid_free_alpha_is_refused_not_warned(ssp3d):
             _model(ssp3d, _photometry_only(), {"alpha_fe": FREE})
     msgs = [w for w in caught if issubclass(w.category, AlphaFeUnconstrainedWarning)]
     assert msgs == []
+
+
+def test_catalog_mode_checks_the_catalog_redshift_range_not_the_placeholder(ssp4d):
+    """A catalog model's Fixed redshift is a placeholder; coverage uses the catalog ends."""
+    observation = tengri.Observation(
+        photometry=_photometry(), spectroscopy=_spectrum(4500.0, 6000.0, 2000.0, z=0.05)
+    )
+
+    def build():
+        SEDModel.build(
+            ssp_data=ssp4d,
+            observation=observation,
+            sfh={"type": "delayed", "all_params": Fixed(DEFAULT), "log_total_mass": Fixed(10.0)},
+            met={"logzsol": Fixed(-0.3), "alpha_fe": Uniform(-0.2, 0.4)},
+            redshift=Fixed(0.05),
+            neb={"type": "ssp"},
+            approx=WavePrecomp(catalog_z_range=(0.0, 1.0)),
+        )
+
+    messages = _alpha_warnings(build)
+    assert len(messages) == 1, messages
+    assert "z = 1" in messages[0]

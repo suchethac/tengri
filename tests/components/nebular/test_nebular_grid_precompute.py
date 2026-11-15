@@ -428,7 +428,14 @@ def test_snapped_met_axis_beats_uniform_on_a_dense_sweep():
         f"snapped met axis ({worst['snapped']:.2%}) must beat uniform "
         f"({worst['uniform']:.2%}) at equal size"
     )
-    assert worst["snapped"] < 0.01, f"[OIII] worst-case {worst['snapped']:.2%} exceeds 1 %"
+    # Bar measured 2026-11-15 on main f37a20741 (121-point sweep, FSPS/MILES, 23-point axis):
+    # snapped 1.12 % (at logzsol 0.055, the widest near-solar node cell), uniform 2.35 %.
+    # Before #3434 (in #3462) the forward interpolated metallicity linearly across the SSP
+    # nodes, so knots on the nodes reproduced it (0.40 %). The forward is now node-exact
+    # cubic Hermite, which curves inside each node cell; a linear table cannot follow that
+    # curvature, and a denser snapped axis does not remove it (36 points: still 1.12 %).
+    # Matching the table's met interpolation to the forward's is tracked separately.
+    assert worst["snapped"] < 0.015, f"[OIII] worst-case {worst['snapped']:.2%} exceeds 1.5 %"
 
 
 # ── DIG mixing on the grid (#2222) ──────────────────────────────────────────

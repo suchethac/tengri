@@ -62,7 +62,10 @@ _OBS = Observation(
 # #3059: the closed t_obs endpoint's trapezoid half-panel is now included on every
 # platform (was dropped on macOS arm64 by a 28-ulp round trip); 3.80298790e-27 ->
 # 3.799456754378686e-27, -9.3e-4. The new value is bit-identical to Linux CI's.
-_OPT_EXACT_MAIN = 3.799456754378686e-27
+# Re-pinned 2026-11-15 after #3434 (in #3462): an undeclared metallicity scatter is now a node-
+# exact cubic-Hermite read of the SSP, +0.044% on this band; 8aff37cb3 reproduces the previous
+# value exactly.
+_OPT_EXACT_MAIN = 3.801128300673926e-27
 
 
 def _build(ssp, approx):
