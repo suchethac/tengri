@@ -658,7 +658,7 @@ def test_cloudy_nebular_photometry_follows_runtime_z(representation):
 #
 # The runtime-z table adds no error of its own: it agrees with a Fixed-z WavePrecomp
 # build at every redshift. Against the EXACT build the tabulated path keeps WavePrecomp's
-# own in-band error on a band the IGM has suppressed to ~1e-4 of its neighbours (u at
+# own in-band error on a band the IGM has suppressed to ~1e-4 of its neighbors (u at
 # z = 3.5: 4.9e-3; u at z = 4.95: 1.3e-2). That error is the same in a plain Fixed-z
 # WavePrecomp build and does not move with n_z or n_subbands, so it is not a node
 # placement matter; the strict xfail tracks it against the 3e-3 bar.
