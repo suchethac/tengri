@@ -39,6 +39,7 @@ from tengri.inference.channels import (
     selected_channels,
 )
 from tengri.observation.banded import banded_cholesky, dense_to_banded
+from tengri.observation.noise import compute_effective_noise
 from tests.contract import _channel_fixtures as fixtures
 
 pytestmark = pytest.mark.contract
@@ -1099,16 +1100,16 @@ def test_photometry_and_line_limits_share_one_censoring_convention():
 
 
 def test_the_scored_error_is_the_one_a_noisy_mock_draws_from():
-    """``effective_sigma`` is the error the floored likelihood scores with.
+    """``compute_effective_noise`` is the error the floored likelihood scores with.
 
-    The floored Gaussian density rebuilt from ``effective_sigma`` equals ``score`` plus its
+    The floored Gaussian density rebuilt from ``compute_effective_noise`` equals ``score`` plus its
     normalization; the control rebuilds it from the bare measurement error and must miss by
     many nats, so the comparison can fail.
     """
     preds, data, noise = _synthetic("photometry", "cal_floor")
     obs, err = np.asarray(data["data"]), np.asarray(data["noise"])
     pred = np.asarray(preds.phot_fnu)
-    sigma = np.asarray(channels.effective_sigma(err, pred, F_CAL))
+    sigma = np.asarray(compute_effective_noise(err, pred, F_CAL))
     np.testing.assert_allclose(sigma, np.hypot(err, F_CAL * np.abs(pred)), rtol=1e-14)
 
     def gaussian(s):

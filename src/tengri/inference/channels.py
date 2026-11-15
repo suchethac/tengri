@@ -60,7 +60,6 @@ __all__ = [
     "Predictions",
     "channel_keys",
     "data_keys",
-    "effective_sigma",
     "log_normalization",
     "score",
     "selected_channels",
@@ -897,34 +896,6 @@ def validate(noise: NoiseSpec, data_keys_present) -> None:
     marginalized = noise.calibration is not None or _lines_marginalized(noise)
     if noise.covariance == "dense" and marginalized and "spec_cov_chol_data" not in present:
         raise ValueError("a dense covariance with marginalization needs spec_cov_chol_data")
-
-
-def effective_sigma(err, predicted, f_cal=0.0):
-    """The 1-sigma error a noise model scores a band or pixel with.
-
-    Parameters
-    ----------
-    err : array_like
-        Measurement uncertainty [flux units].
-    predicted : array_like
-        Model prediction the calibration floor scales with [flux units].
-    f_cal : float or array_like, optional
-        Fractional calibration floor [dimensionless].
-
-    Returns
-    -------
-    ndarray
-        ``hypot(err, f_cal |predicted|)`` [flux units]. The variable-noise and censored
-        terms evaluate this same function, so a noisy mock drawn with it is scored by the
-        likelihood that scores real data.
-
-    Notes
-    -----
-    **JIT-compatible**: yes; every argument may be traced.
-    """
-    from tengri.observation.noise import compute_effective_noise
-
-    return compute_effective_noise(err, predicted, f_cal)
 
 
 def score(preds: Predictions, data: Mapping, noise: NoiseSpec):
