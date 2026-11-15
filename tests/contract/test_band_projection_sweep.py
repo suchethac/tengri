@@ -34,8 +34,16 @@ from tengri import (
     Uniform,
     WavePrecomp,
 )
-from tengri.components.stellar.component import SFHBeyondOldestTemplateWarning
-from tengri.config.exceptions import AdvisoryWarning
+from tengri.config.exceptions import (
+    ComponentDataNotAvailableWarning,
+    CorruptEnergyBalanceWarning,
+    DeadPrecomputeAxisWarning,
+    FilterCoverageWarning,
+    GridSupportWarning,
+    PrecompBiasWarning,
+    SSPMassRemainingFallbackWarning,
+    ZTableCoverageWarning,
+)
 from tengri.forward.precompute.band_table import BandTable
 from tengri.forward.precompute.registry import BAND_TABLE_PROVIDERS, resolve_band_table_provider
 from tengri.observation.photometry import FilterConvention
@@ -138,14 +146,55 @@ def _build(request, name, convention, z_name, approx):
     )
 
 
+#: Warning classes a precompute path raises when it declines or falls back (enumerated from
+#: ``tengri.config.exceptions``): a cell that reaches one of them has silently left the path it
+#: names, so it is an error here, not an advisory.
+_FALLBACK_WARNINGS = (
+    DeadPrecomputeAxisWarning,
+    ZTableCoverageWarning,
+    FilterCoverageWarning,
+    PrecompBiasWarning,
+    ComponentDataNotAvailableWarning,
+    GridSupportWarning,
+    CorruptEnergyBalanceWarning,
+    SSPMassRemainingFallbackWarning,
+)
+#: Messages that name a decline or fallback whatever their class.
+_FALLBACK_MESSAGE = r".*(fall(s|ing)? back|declin|per-call path|exact path).*"
+
+
 def _fallbacks_are_errors():
-    """Promote every warning to an error except configuration advisories the cells trigger."""
-    warnings.simplefilter("error")
-    for category in (AdvisoryWarning, DeprecationWarning, SFHBeyondOldestTemplateWarning):
-        warnings.filterwarnings("ignore", category=category)
-    warnings.filterwarnings("ignore", message=".*outside the SSP grid.*")
-    warnings.filterwarnings("ignore", message=".*ionizing spectral shape.*")
-    warnings.filterwarnings("ignore", message=".*no .zsun. attribute.*")
+    """Error on the fallback and decline warnings; leave configuration advisories alone."""
+    warnings.simplefilter("default")
+    for category in _FALLBACK_WARNINGS:
+        warnings.filterwarnings("error", category=category)
+    warnings.filterwarnings("error", category=RuntimeWarning)
+    warnings.filterwarnings("error", message=_FALLBACK_MESSAGE)
+
+
+#: Band-table slots that must hold a built table in each cell (the others decline by design:
+#: the AGN and CLOUDY tables are built at one fixed redshift, and the stellar, dust-screen
+#: and nebular-grid cells have no band-table provider). A provider that starts declining under
+#: one convention changes this set and fails the cell.
+_ENGAGED = {
+    ("cloudy_grid", "fixed"): {("nebular", "band_table")},
+    ("dust_emission", "fixed"): {("dust_emission", "emission_band_response")},
+    ("dust_emission", "free"): {("dust_emission", "emission_band_response")},
+    ("agn", "fixed"): {("agn", "band_table")},
+    ("radio", "fixed"): {("radio", "term_band_response")},
+    ("radio", "free"): {("radio", "term_band_response")},
+    ("xray", "fixed"): {("xray", "term_band_response")},
+    ("xray", "free"): {("xray", "term_band_response")},
+}
+
+
+def _engaged(model):
+    return {
+        (comp, slot)
+        for comp, slots in model._band_tables.items()
+        for slot, entry in slots.items()
+        if isinstance(entry, BandTable)
+    }
 
 
 def _phot(model, z_name):
@@ -164,7 +213,11 @@ def test_waveprecomp_matches_the_exact_path(request, name, convention, z_name):
     with warnings.catch_warnings():
         _fallbacks_are_errors()
         exact = _phot(_build(request, name, convention, z_name, None), z_name)
-        lut = _phot(_build(request, name, convention, z_name, approx), z_name)
+        lut_model = _build(request, name, convention, z_name, approx)
+        lut = _phot(lut_model, z_name)
+    assert _engaged(lut_model) == _ENGAGED.get((name, z_name), set()), (
+        f"{name}/{convention.value}/{z_name}: band tables built {_engaged(lut_model)}"
+    )
     assert np.all(np.isfinite(lut)), f"{name}: non-finite LUT photometry {lut}"
     rel = np.abs(lut / np.where(exact == 0.0, 1.0, exact) - 1.0)
     assert np.all(rel < LUT_RTOL), f"{name}/{convention.value}/{z_name}: per-band {rel}"
