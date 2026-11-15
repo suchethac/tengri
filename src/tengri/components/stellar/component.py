@@ -3674,22 +3674,30 @@ class StellarSEDComponent:
                 # z=0 and carries no IGM.
                 ssp_sub_phot_igm = phot_lut.ssp_subband_phot_igm
                 if ssp_sub_phot_igm is not None:
-                    derived_overrides["stellar_phot_lnu_per_age_subband_igm_precomp"] = (
-                        _mass_scale_lnu(
-                            jnp.einsum("ma,mafk->afk", joint_x, read(ssp_sub_phot_igm)),
-                            total_mass,
+                    # The exact fold's folded integral and its numerator are linear, so each
+                    # is read by Hermite with its native-slope sibling (#3541); the node is
+                    # their ratio after the read. The node fold carries neither numerator nor
+                    # sibling (it is nonlinear in F through the node): its values are read by
+                    # PCHIP, as the approximation it is.
+                    num_igm = phot_lut.ssp_subband_num_igm
+                    if num_igm is None:
+                        phi_igm_at = jnp.einsum("ma,mafk->afk", joint_x, read(ssp_sub_phot_igm))
+                        num_igm_at = None
+                    else:
+                        phi_igm_at = jnp.einsum(
+                            "ma,mafk->afk",
+                            joint_x,
+                            read(_read_pair(ssp_sub_phot_igm, sl.ssp_subband_phot_igm)),
                         )
+                        num_igm_at = jnp.einsum(
+                            "ma,mafk->afk",
+                            joint_x,
+                            read(_read_pair(num_igm, sl.ssp_subband_num_igm)),
+                        )
+                    derived_overrides["stellar_phot_lnu_per_age_subband_igm_precomp"] = (
+                        _mass_scale_lnu(phi_igm_at, total_mass)
                     )
-                    waves_igm = phot_lut.ssp_subband_waves_rest_igm
-                    _publish_igm_nodes(
-                        derived_overrides,
-                        jnp.einsum("ma,mafk->afk", joint_x, read(ssp_sub_phot_igm)),
-                        None
-                        if waves_igm is None
-                        else jnp.einsum(
-                            "ma,mafk->afk", joint_x, read(waves_igm * ssp_sub_phot_igm)
-                        ),
-                    )
+                    _publish_igm_nodes(derived_overrides, phi_igm_at, num_igm_at)
             # Publish filter pivot wavelengths so the dust LUT
             # (and future per-filter consumers like AGN and IGM) can use them.
             derived_overrides["filter_eff_waves"] = jnp.asarray(
@@ -3757,16 +3765,21 @@ class StellarSEDComponent:
                 per_row = jax.vmap(lambda *parts: _met_alpha_row(parts))(*rows)
                 return jnp.einsum("ma,zma...->za...", joint_x, per_row)
 
-            def _phi_num(phot, waves):
-                # (Σ_m w φ, Σ_m w λ φ) per (age, filter, sub-band), read at z. The λφ
-                # numerator is formed per row from the stored node and φ, componentwise on the
-                # (values, slopes) pair, so it is the linear quantity read per SSP.
+            def _phi_num(phot, other, *, product):
+                # (Σ_m w φ, Σ_m n) per (age, filter, sub-band), read at z by the Hermite of
+                # (values, slopes) pairs (#3541). ``other`` is the numerator table itself
+                # (``product=False``, the IGM tables: linear in the flux, so its own sibling
+                # is the same quadrature on S), or the node table whose product with φ is
+                # formed per bracket row (``product=True``, the bare route, where the
+                # product of the two read siblings is the numerator sibling).
                 p_parts = phot if isinstance(phot, tuple) else (phot,)
-                w_parts = waves if isinstance(waves, tuple) else (waves,)
+                o_parts = other if isinstance(other, tuple) else (other,)
                 k = len(p_parts)
 
                 def rows(*r):
-                    p_rows, w_rows = r[:k], r[k:]
+                    p_rows, o_rows = r[:k], r[k:]
+                    if product:
+                        o_rows = tuple(w * p for w, p in zip(o_rows, p_rows, strict=True))
                     phi = jnp.einsum(
                         "ma,zmafk->zafk",
                         joint_x,
@@ -3775,14 +3788,12 @@ class StellarSEDComponent:
                     num = jnp.einsum(
                         "ma,zmafk->zafk",
                         joint_x,
-                        jax.vmap(lambda *parts: _met_alpha_row(parts))(
-                            *(w * p for w, p in zip(w_rows, p_rows, strict=True))
-                        ),
+                        jax.vmap(lambda *parts: _met_alpha_row(parts))(*o_rows),
                     )
                     return jnp.stack([phi, num], axis=1)
 
                 both = pchip_interp_local(
-                    z_grid, p_parts + w_parts, z, reduce=rows, extrapolate=True
+                    z_grid, p_parts + o_parts, z, reduce=rows, extrapolate=True
                 )
                 return both[0], both[1]
 
@@ -3834,7 +3845,9 @@ class StellarSEDComponent:
             # contracted over the population weights and then cubic-read in z.
             if ztable.ssp_subband_phot_table is not None:
                 sub_phi, sub_num = _phi_num(
-                    _zt("ssp_subband_phot_table"), _zt("subband_waves_rest_table")
+                    _zt("ssp_subband_phot_table"),
+                    _zt("subband_waves_rest_table"),
+                    product=True,
                 )
                 derived_overrides["stellar_phot_lnu_per_age_subband_precomp"] = _mass_scale_lnu(
                     sub_phi, total_mass
@@ -3853,13 +3866,16 @@ class StellarSEDComponent:
                 # z grid at build time, so it rides the same cubic read as the
                 # sub-band photometry it multiplies.
                 if ztable.ssp_subband_phot_igm_table is not None:
-                    if ztable.subband_waves_rest_igm_table is not None:
-                        # IGM-folded tables carry no native-slope sibling yet (#3541 open).
+                    if ztable.subband_num_igm_table is not None:
                         phi_igm, num_igm = _phi_num(
-                            ztable.ssp_subband_phot_igm_table,
-                            ztable.subband_waves_rest_igm_table,
+                            _read_pair(
+                                ztable.ssp_subband_phot_igm_table, zs.ssp_subband_phot_igm_table
+                            ),
+                            _read_pair(ztable.subband_num_igm_table, zs.subband_num_igm_table),
+                            product=False,
                         )
                     else:
+                        # Node fold: no numerator and no sibling (see the fixed-z read).
                         phi_igm = _interp(ztable.ssp_subband_phot_igm_table, per_age_rows)
                         num_igm = None
                     derived_overrides["stellar_phot_lnu_per_age_subband_igm_precomp"] = (

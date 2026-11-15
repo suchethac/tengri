@@ -463,7 +463,8 @@ def subband_quadrature(
     n_subbands: int,
     eff_wave_obs: float,
     lyc_edge_obs: float | None = None,
-) -> tuple[np.ndarray, np.ndarray]:
+    with_numerator: bool = False,
+) -> tuple[np.ndarray, ...]:
     r"""Sub-band weights and quadrature nodes for one filter (#1122).
 
     Splits the band into ``K`` sub-bands of equal filter mass and returns, per
@@ -527,6 +528,11 @@ def subband_quadrature(
         integral. K+1-wide when ``lyc_edge_obs`` is given.
     nodes : ndarray, shape (..., K) or (..., K+1)
         Quadrature nodes, observed frame [Angstrom]. Same width as ``phi``.
+    numerator : ndarray, same shape, only when ``with_numerator``
+        The flux-weighted wavelength integral over each sub-band divided by the same
+        filter normalization as ``phi``: ``int_k lambda L T w / denom`` [Angstrom].
+        Linear in the template, so it is a table in its own right; ``nodes`` is the
+        ratio ``numerator / phi`` (#3541).
 
     Raises
     ------
@@ -573,7 +579,10 @@ def subband_quadrature(
     # law, which goes as 1/lambda, so it must stay finite and positive.
     live = i_k != 0.0
     nodes = np.where(live, l_k / np.where(live, i_k, 1.0), eff_wave_obs)
-    return i_k / np.maximum(denom, representable_denominator(1e-30)), nodes
+    norm = np.maximum(denom, representable_denominator(1e-30))
+    if with_numerator:
+        return i_k / norm, nodes, l_k / norm
+    return i_k / norm, nodes
 
 
 def lyc_augment_grid_for_step(
@@ -767,6 +776,10 @@ class PreintegratedGrid:
     subband_waves_rest: jnp.ndarray | None = None
     lyc_phot: jnp.ndarray | None = None
     nolyc_phot: jnp.ndarray | None = None
+    #: Rest-frame sub-band numerator ``subband_waves_rest * subband_phot`` taken from
+    #: the quadrature's own ``int lambda L T w`` (not as that product), so it is linear
+    #: in the template and can be read by its own native-slope sibling (#3541).
+    subband_num_rest: jnp.ndarray | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -1074,6 +1087,7 @@ def preintegrate_transposed(
     K_sub = K + 1 if (K > 0 and lyc_gate) else K
     sub_phot = np.zeros((n_grid_points, n_filters, K_sub)) if K > 0 else None
     sub_waves = np.zeros((n_grid_points, n_filters, K_sub)) if K > 0 else None
+    sub_num = np.zeros((n_grid_points, n_filters, K_sub)) if K > 0 else None
 
     for f_idx, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
         fw_np = np.asarray(fw, dtype=np.float64)
@@ -1157,14 +1171,17 @@ def preintegrate_transposed(
         # (possibly edge-augmented) ``grid_q``/``tw_grid_q``/``integrand_q``
         # keep its own chunks exact at that boundary too.
         if K > 0:
-            sub_phot[:, f_idx, :], sub_waves[:, f_idx, :] = subband_quadrature(
-                grid_q,
-                tw_grid_q,
-                fold_q,
-                denom_q,
-                K,
-                float(eff_waves_obs[f_idx]),
-                lyc_edge_obs=lyc_wave_obs if lyc_gate else None,
+            sub_phot[:, f_idx, :], sub_waves[:, f_idx, :], sub_num[:, f_idx, :] = (
+                subband_quadrature(
+                    grid_q,
+                    tw_grid_q,
+                    fold_q,
+                    denom_q,
+                    K,
+                    float(eff_waves_obs[f_idx]),
+                    lyc_edge_obs=lyc_wave_obs if lyc_gate else None,
+                    with_numerator=True,
+                )
             )
 
     eff_waves_rest = eff_waves_obs / (1.0 + redshift)
@@ -1178,8 +1195,11 @@ def preintegrate_transposed(
         sub_phot_j = jnp.array(sub_phot.reshape(*grid_dims, n_filters, K_sub))
         sub_waves_j = jnp.array(sub_waves.reshape(*grid_dims, n_filters, K_sub))
         sub_waves_rest_j = sub_waves_j / (1.0 + redshift)
+        sub_num_rest_j = jnp.array(sub_num.reshape(*grid_dims, n_filters, K_sub)) / (
+            1.0 + redshift
+        )
     else:
-        sub_phot_j = sub_waves_j = sub_waves_rest_j = None
+        sub_phot_j = sub_waves_j = sub_waves_rest_j = sub_num_rest_j = None
 
     # Geometric factor, as a log10 offset. Not ``lnu_to_fnu`` + ``float()``:
     # under a surrounding jit trace ``dl_cm`` and ``redshift`` arrive as tracers
@@ -1207,6 +1227,7 @@ def preintegrate_transposed(
         subband_waves_rest=sub_waves_rest_j,
         lyc_phot=lyc_phot,
         nolyc_phot=nolyc_phot,
+        subband_num_rest=sub_num_rest_j,
     )
 
 

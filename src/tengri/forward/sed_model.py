@@ -2507,42 +2507,69 @@ def _fold_igm_exact_into_subbands(
             "convention": convention,
         }
 
+    from tengri.components.stellar.sps.met_pchip import pchip_node_slopes
+
+    def _slope_ssp(ssp):
+        """The SSP grid whose flux is the native PCHIP slopes across Z (#3541)."""
+        return ssp._replace(ssp_flux=pchip_node_slopes(ssp.ssp_flux, ssp.ssp_lgmet))
+
+    def _folded(fold, bare_phi, bare_num):
+        """The folded integrals, with the bare ones where the IGM does not reach (#3541)."""
+        phi = np.where(np.isnan(fold.phi), bare_phi, fold.phi)
+        num = np.where(np.isnan(fold.num_rest), bare_num, fold.num_rest)
+        return phi, num
+
+    def _bare_num(waves, phot):
+        """The bare rest-frame numerator, node times integral, as the stellar read forms it."""
+        return np.asarray(waves) * np.asarray(phot)
+
     lut = getattr(stellar_state, "ssp_phot_lut", None)
     if lut is not None and lut.ssp_subband_phot is not None:
         subband = np.asarray(lut.ssp_subband_phot)
         if subband.shape[-1] <= 0:
             return stellar_state
         z = _fixed_redshift_value(redshift_spec) if redshift_spec else float(lut.redshift)
+        # The folded integrals are the linear objects (#3541): the table and its native-slope
+        # sibling are the same quadrature on F and on S, and the ratio is formed after the read.
         fold = exact_fold.subband_fold(ssp_data, filters, z, **_partition(subband))
-        bare_nodes = np.asarray(lut.ssp_subband_waves_rest)
-        return _replace(
-            stellar_state,
-            ssp_phot_lut=lut._replace(
-                ssp_subband_phot_igm=subband * fold.ratio,
-                ssp_subband_waves_rest_igm=np.where(
-                    np.isnan(fold.nodes_rest), bare_nodes, fold.nodes_rest
-                ),
-            ),
-        )
+        phi, num = _folded(fold, subband, _bare_num(lut.ssp_subband_waves_rest, subband))
+        new = lut._replace(ssp_subband_phot_igm=phi, ssp_subband_num_igm=num)
+        if lut.slopes is not None:
+            sib = lut.slopes
+            sib_phot = np.asarray(sib.ssp_subband_phot)
+            fold_s = exact_fold.subband_fold(
+                _slope_ssp(ssp_data), filters, z, **_partition(subband)
+            )
+            phi_s, num_s = _folded(
+                fold_s, sib_phot, _bare_num(sib.ssp_subband_waves_rest, sib_phot)
+            )
+            new = new._replace(
+                slopes=sib._replace(ssp_subband_phot_igm=phi_s, ssp_subband_num_igm=num_s)
+            )
+        return _replace(stellar_state, ssp_phot_lut=new)
 
     ztable = getattr(stellar_state, "ssp_phot_ztable", None)
     if ztable is not None and ztable.ssp_subband_phot_table is not None:
         table = np.asarray(ztable.ssp_subband_phot_table)
         if table.shape[-1] <= 0:
             return stellar_state
-        fold = exact_fold.subband_fold_table(
-            ssp_data, filters, np.asarray(ztable.z_grid), **_partition(table)
-        )
-        bare_nodes = np.asarray(ztable.subband_waves_rest_table)
-        return _replace(
-            stellar_state,
-            ssp_phot_ztable=ztable._replace(
-                ssp_subband_phot_igm_table=table * fold.ratio,
-                subband_waves_rest_igm_table=np.where(
-                    np.isnan(fold.nodes_rest), bare_nodes, fold.nodes_rest
-                ),
-            ),
-        )
+        z_grid = np.asarray(ztable.z_grid)
+        fold = exact_fold.subband_fold_table(ssp_data, filters, z_grid, **_partition(table))
+        phi, num = _folded(fold, table, _bare_num(ztable.subband_waves_rest_table, table))
+        new = ztable._replace(ssp_subband_phot_igm_table=phi, subband_num_igm_table=num)
+        if ztable.slopes is not None:
+            sib = ztable.slopes
+            sib_table = np.asarray(sib.ssp_subband_phot_table)
+            fold_s = exact_fold.subband_fold_table(
+                _slope_ssp(ssp_data), filters, z_grid, **_partition(table)
+            )
+            phi_s, num_s = _folded(
+                fold_s, sib_table, _bare_num(sib.subband_waves_rest_table, sib_table)
+            )
+            new = new._replace(
+                slopes=sib._replace(ssp_subband_phot_igm_table=phi_s, subband_num_igm_table=num_s)
+            )
+        return _replace(stellar_state, ssp_phot_ztable=new)
 
     return stellar_state
 

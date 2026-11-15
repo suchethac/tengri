@@ -74,7 +74,7 @@ def observation():
     return tengri.Observation(photometry=tengri.Photometry.from_names(BANDS))
 
 
-def _bare_stellar(ssp, observation, approx, z=PROBE_Z):
+def _bare_stellar(ssp, observation, approx, z=PROBE_Z, igm=None):
     """One model, identical in every respect but the approximation path.
 
     Deliberately no dust and no nebular group: this arm must isolate the IGM.
@@ -93,7 +93,7 @@ def _bare_stellar(ssp, observation, approx, z=PROBE_Z):
             "met_logzsol": Fixed(0.0),
         },
         redshift=Fixed(z),
-        igm={"type": "inoue"},
+        igm={"type": "inoue"} if igm is None else igm,
         approx=approx,
     )
 
@@ -233,18 +233,23 @@ def test_more_quadrature_nodes_cannot_substitute_for_the_exact_fold(ssp, observa
 
 
 def test_the_exact_fold_is_free_in_a_band_with_no_structure(ssp, observation):
-    """It must not perturb bands it has no business touching.
+    """A band the IGM does not reach must read exactly as it does with no IGM.
 
-    Across ten bands at z=0.5 only GALEX NUV moved; the other nine were
-    bit-identical between the folds. A fold that shifted flat bands too would
-    be changing the photometry for some other reason.
+    Across ten bands at z=0.5 only GALEX NUV moved; the other nine were unchanged. The
+    reference is the no-IGM model, not the node fold: the node fold reads its values by
+    PCHIP across Z, which is nonlinear, so it differs from the exact read by round-off
+    amplified by that nonlinearity (6e-7 here, #3541). The exact fold reads the flat band
+    through the same native-slope read as the no-IGM table, so the two agree.
     """
-    node = _photometry(_bare_stellar(ssp, observation, WavePrecomp(igm_fold="node")))
+    no_igm = _photometry(
+        _bare_stellar(ssp, observation, WavePrecomp(igm_fold="exact"), igm={"type": "none"})
+    )
     exact = _photometry(_bare_stellar(ssp, observation, WavePrecomp(igm_fold="exact")))
 
-    assert node[CONTROL] == exact[CONTROL], (
-        f"the folds differ by {abs(node[CONTROL] - exact[CONTROL]) / node[CONTROL]:.3e} "
-        f"in {CONTROL_BAND}, which carries no IGM structure"
+    rel = abs(no_igm[CONTROL] - exact[CONTROL]) / no_igm[CONTROL]
+    assert rel <= 1e-12, (
+        f"the exact fold differs by {rel:.3e} from the no-IGM model in {CONTROL_BAND}, "
+        "which carries no IGM structure"
     )
 
 
