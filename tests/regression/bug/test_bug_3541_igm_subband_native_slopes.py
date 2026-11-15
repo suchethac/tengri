@@ -122,4 +122,3 @@ def test_igm_subband_tables_match_exact_at_off_node_z_free_z():
     z_node = float(inside[len(inside) // 2])
     params = {"redshift": jnp.asarray(z_node)}
     _assert_matches_exact(_derived(lut_model, params), _derived(exact_model, params))
-

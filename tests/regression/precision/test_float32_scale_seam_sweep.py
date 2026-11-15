@@ -489,32 +489,38 @@ _AGN_MBH_DUST = {
 _REF_F64_AGN_BLACK_HOLE_MASS = {
     # Re-pinned 2026-11-16 for #3541 (native slopes): the undeclared metallicity read of the
     # SSP tables is now the Hermite of (values, native PCHIP slopes). Measured moves vs the
-    # previous pin: rest_sed_sum -4.95e-5, rest_sed_0 +6.46e-5, rest_sed_mid +1.63e-4, rest_sed_last -1.48e-3, photometry +1.63e-4, -1.49e-3, -1.62e-3.
+    # previous pin:
+    #   rest_sed_sum -4.95e-5, rest_sed_0 +6.46e-5, rest_sed_mid +1.63e-4,
+    #   rest_sed_last -1.48e-3, photometry +1.63e-4, -1.49e-3, -1.62e-3.
     6.0: {
-        "rest_sed_sum": 1.5600328322961183e+32,
+        "rest_sed_sum": 1.5600328322961183e32,
         "rest_sed_0": 108276406393609.36,
-        "rest_sed_mid": 2.887258903775085e+28,
-        "rest_sed_last": 8.76572583882615e+21,
+        "rest_sed_mid": 2.887258903775085e28,
+        "rest_sed_last": 8.76572583882615e21,
         "photometry": (1.0982090058766199e-27, 1.5879384016070353e-27, 1.8086441533885063e-27),
     },
     # Re-pinned 2026-11-16 for #3541 (native slopes): the undeclared metallicity read of the
     # SSP tables is now the Hermite of (values, native PCHIP slopes). Measured moves vs the
-    # previous pin: rest_sed_sum -4.14e-5, rest_sed_0 +6.46e-5, rest_sed_mid +1.55e-4, rest_sed_last -1.47e-3, photometry +1.54e-4, -1.48e-3, -1.62e-3.
+    # previous pin:
+    #   rest_sed_sum -4.14e-5, rest_sed_0 +6.46e-5, rest_sed_mid +1.55e-4,
+    #   rest_sed_last -1.47e-3, photometry +1.54e-4, -1.48e-3, -1.62e-3.
     8.0: {
-        "rest_sed_sum": 1.680046174265232e+32,
-        "rest_sed_0": 3.0685708345783624e+16,
-        "rest_sed_mid": 3.1587042378475583e+28,
-        "rest_sed_last": 8.831778852343052e+21,
+        "rest_sed_sum": 1.680046174265232e32,
+        "rest_sed_0": 3.0685708345783624e16,
+        "rest_sed_mid": 3.1587042378475583e28,
+        "rest_sed_last": 8.831778852343052e21,
         "photometry": (1.2077635285441751e-27, 1.5901190719397972e-27, 1.809275191596727e-27),
     },
     # Re-pinned 2026-11-16 for #3541 (native slopes): the undeclared metallicity read of the
     # SSP tables is now the Hermite of (values, native PCHIP slopes). Measured moves vs the
-    # previous pin: rest_sed_sum -4.21e-5, rest_sed_0 0, rest_sed_mid +1.36e-4, rest_sed_last -1.48e-3, photometry +1.35e-4, -1.47e-3, -1.62e-3.
+    # previous pin:
+    #   rest_sed_sum -4.21e-5, rest_sed_0 0, rest_sed_mid +1.36e-4,
+    #   rest_sed_last -1.48e-3, photometry +1.35e-4, -1.47e-3, -1.62e-3.
     10.0: {
-        "rest_sed_sum": 1.8425335276988755e+32,
-        "rest_sed_0": 7.652309097363384e+17,
-        "rest_sed_mid": 3.4592931494497416e+28,
-        "rest_sed_last": 8.765115666069333e+21,
+        "rest_sed_sum": 1.8425335276988755e32,
+        "rest_sed_0": 7.652309097363384e17,
+        "rest_sed_mid": 3.4592931494497416e28,
+        "rest_sed_last": 8.765115666069333e21,
         "photometry": (1.3249982030901379e-27, 1.608723114816339e-27, 1.8089841397077586e-27),
     },
 }

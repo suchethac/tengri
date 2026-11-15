@@ -18,7 +18,6 @@ from __future__ import annotations
 import jax.numpy as jnp
 import numpy as np
 import pytest
-from scipy.interpolate import PchipInterpolator
 
 import tengri
 from tengri import DEFAULT, Fixed, SEDModel, Uniform
@@ -65,7 +64,7 @@ def obs():
     )
 
 
-def _build_lut(ssp4, obs, approx=WavePrecomp()):
+def _build_lut(ssp4, obs, approx):
     """Fixed-z model on the 4-D grid; ``approx=None`` is the exact path."""
     return SEDModel.build(
         ssp_data=ssp4,
@@ -98,13 +97,13 @@ def test_photometry_lut_matches_exact_path_on_the_4d_grid(request, obs, grid):
     ssp4 = request.getfixturevalue(
         "ssp_multiplicative" if grid == "control_multiplicative" else "ssp_non_multiplicative"
     )
-    lut = np.asarray(_build_lut(ssp4, obs).predict_photometry({}), dtype=np.float64)
+    lut = np.asarray(_build_lut(ssp4, obs, WavePrecomp()).predict_photometry({}), dtype=np.float64)
     exact = np.asarray(_build_lut(ssp4, obs, approx=None).predict_photometry({}), dtype=np.float64)
     rel = float(np.max(np.abs(lut / exact - 1.0)))
     assert rel <= ROUND_OFF, f"{grid}: photometry LUT vs exact, max rel {rel:.3e}"
 
 
-def _build_spectrum_lut(ssp4, obs_spec, approx=SpectrumPrecomp()):
+def _build_spectrum_lut(ssp4, obs_spec, approx):
     return SEDModel.build(
         ssp_data=ssp4,
         observation=obs_spec,
@@ -137,7 +136,10 @@ def test_spectrum_lut_matches_exact_path_on_the_4d_grid(request, grid):
             wave_obs=jnp.linspace(3600.0, 9800.0, 300), resolution=3000.0, resample="point"
         ),
     )
-    lut = np.asarray(_build_spectrum_lut(ssp4, obs_spec).predict_spectrum({}), dtype=np.float64)
+    lut = np.asarray(
+        _build_spectrum_lut(ssp4, obs_spec, SpectrumPrecomp()).predict_spectrum({}),
+        dtype=np.float64,
+    )
     exact = np.asarray(
         _build_spectrum_lut(ssp4, obs_spec, approx=None).predict_spectrum({}), dtype=np.float64
     )
@@ -233,9 +235,7 @@ def _emitter_contribution(ssp4, approx):
             neb={"type": "none"},
             met={"type": "delta", "alpha_fe": Fixed(0.3), "all_params": Fixed(DEFAULT)},
             dust_emission=(
-                {"type": "dale2014", "all_params": Fixed(DEFAULT)}
-                if emitter
-                else {"type": "none"}
+                {"type": "dale2014", "all_params": Fixed(DEFAULT)} if emitter else {"type": "none"}
             ),
         )
 
