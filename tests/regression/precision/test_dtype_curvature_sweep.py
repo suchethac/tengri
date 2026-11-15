@@ -12,6 +12,13 @@ dtypes:
 - the preconditioning metric (:func:`negative_hessian_metric`);
 - the damped Newton polish (:func:`newton_polish`).
 
+Finiteness alone is a blind check (an exact 0 is underflow, a clean multiple is a
+double-counted path), so each cell also compares the float32 gradient, in reverse and in
+forward mode, and the float32 Hessian-vector product, against the float64 result and
+against central finite differences of the float64 log density, at a point displaced from
+the MAP (where the gradient is not ~0). One compiled program serves every call of the
+curvature helper on one function: the sweep counts backend compiles on a repeat call.
+
 Assertions per cell: the Hessian is finite in both dtypes; the float32 Hessian
 agrees with the float64 one to ``max|dH| / max|H| <= 1e-3`` at the same point;
 the Laplace float32 mean is within 0.1 sigma of float64 and its covariance within
@@ -55,6 +62,10 @@ CONFIGS = ("photometry_1band", "multiband", "censored", "presence", "nebular", "
 #: ``"auto"`` engages profiling where the model admits it and steps aside (with a logged
 #: reason) where it does not: censored data and affine-in-mass AGN refuse an explicit True.
 PROFILES = (False, "auto")
+#: Selection rule: profiling on and off is crossed with the two plain photometry fixtures,
+#: where ``"auto"`` engages it; every other configuration runs once at the fitter default
+#: (``"auto"``), which engages or steps aside as that model admits.
+PROFILE_CROSS = ("photometry_1band", "multiband")
 DTYPES = ("float64", "float32")
 
 HESSIAN_REL_TOL = 1e-3
@@ -152,16 +163,77 @@ def _measure(config: str, profile: bool, dtype: str, ref: dict | None) -> dict:
             "dtype": str(jnp.result_type(x)),
             "profile_engaged": bool(getattr(fitter, "_profile_mass", False)),
         }
-        out["hess"] = _attempt(
-            lambda: np.asarray(
-                jax.jit(lambda v, d: curvature(logd, v, d, want=("hess",)).hess)(x, data_args)
-            )
+        out["hess"] = _attempt(lambda: np.asarray(curvature(logd, x, data_args).hess))
+        out["derivs"] = _attempt(lambda: _derivatives(logd, x, data_args, ref))
+        out["recompiles"] = _attempt(
+            lambda: _count_compiles(lambda: curvature(logd, x, data_args))
         )
         out["metric"] = _attempt(lambda: np.asarray(negative_hessian_metric(logd, x, data_args)))
         out["newton"] = _attempt(
             lambda: np.asarray(newton_polish(x, logd, data_args, max_steps=5, tol=1e-3)[0])
         )
         out["laplace"] = _attempt(lambda: _laplace_moments(fitter))
+    return out
+
+
+_COMPILES: list[float] = []
+_COUNTING = {"on": False}
+
+
+def _on_duration(event: str, duration: float, **_) -> None:
+    if _COUNTING["on"] and event == "/jax/core/compile/backend_compile_duration":
+        _COMPILES.append(duration)
+
+
+jax.monitoring.register_event_duration_secs_listener(_on_duration)
+
+
+def _count_compiles(thunk) -> int:
+    """Backend compiles triggered by ``thunk``, run after its program is already built."""
+    jax.block_until_ready(thunk())
+    _COMPILES.clear()
+    _COUNTING["on"] = True
+    try:
+        jax.block_until_ready(thunk())
+    finally:
+        _COUNTING["on"] = False
+    return len(_COMPILES)
+
+
+FD_STEP = 1e-4
+OFFSET = 0.1
+
+
+def _derivatives(logd, x, data_args, ref: dict | None) -> dict:
+    """Gradient (reverse and forward) and Hessian-vector product at a displaced point.
+
+    The float64 cell also stores central finite differences of its own log density; the
+    float32 cell is compared against those.
+    """
+    n = x.shape[0]
+    point = x + OFFSET * jnp.cos(jnp.arange(n, dtype=x.dtype))
+    direction = jnp.sin(1.0 + jnp.arange(n, dtype=x.dtype))
+    direction = direction / jnp.linalg.norm(direction)
+    curv = curvature(logd, point, data_args)
+    out = {
+        "grad_rev": np.asarray(curv.grad),
+        "grad_fwd": np.asarray(jax.jit(jax.jacfwd(logd))(point, data_args)),
+        "hvp": np.asarray(curv.hess @ direction),
+        "dtype": (str(curv.grad.dtype), str(curv.hess.dtype)),
+    }
+    if ref is None:
+        value = lambda v: curvature(logd, v, data_args, want=("value",)).value  # noqa: E731
+        grad = lambda v: curvature(logd, v, data_args, want=("grad",)).grad  # noqa: E731
+        eye = jnp.eye(n, dtype=x.dtype)
+        out["fd_grad"] = np.asarray(
+            [
+                (value(point + FD_STEP * e) - value(point - FD_STEP * e)) / (2 * FD_STEP)
+                for e in eye
+            ]
+        )
+        out["fd_hvp"] = np.asarray(
+            (grad(point + FD_STEP * direction) - grad(point - FD_STEP * direction)) / (2 * FD_STEP)
+        )
     return out
 
 
@@ -186,7 +258,7 @@ def _cell(config: str, profile: bool) -> dict:
 
 
 def _cases():
-    return [(c, p) for c in CONFIGS for p in PROFILES]
+    return [(c, p) for c in CONFIGS for p in (PROFILES if c in PROFILE_CROSS else ("auto",))]
 
 
 def _case_id(config: str, profile) -> str:
@@ -265,3 +337,75 @@ def test_laplace_float32_matches_float64(config, profile):
     assert mean_gap <= LAPLACE_MEAN_TOL_SIGMA, f"mean gap {mean_gap:.3f} sigma"
     cov_gap = _rel_max(lap32["cov"], lap64["cov"])
     assert cov_gap <= LAPLACE_COV_TOL, f"covariance relative gap {cov_gap:.3f}"
+
+
+def _scaled_gap(a: np.ndarray, b: np.ndarray) -> float:
+    return float(np.max(np.abs(a - b)) / np.max(np.abs(b)))
+
+
+@pytest.mark.parametrize("config,profile", _cases(), ids=_CASE_IDS)
+def test_float32_derivatives_match_float64_and_finite_differences(config, profile):
+    """Gradient (reverse, forward) and Hessian-vector product at a displaced point.
+
+    An exact zero in float32 where float64 is not is underflow; a uniform ratio is a
+    double-counted autodiff path. Both would pass a finiteness check.
+    """
+    cell = _cell(config, profile)
+    d32 = _value(cell, "float32", "derivs")
+    d64 = _value(cell, "float64", "derivs")
+    for mode in ("grad_rev", "grad_fwd"):
+        assert np.all(np.isfinite(d32[mode])), f"float32 {mode} is not finite"
+        live = np.abs(d64[mode]) > 1e-9 * np.max(np.abs(d64[mode]))
+        assert np.all(d32[mode][live] != 0.0), f"float32 {mode} is exactly 0 where float64 is not"
+        assert _scaled_gap(d32[mode], d64[mode]) <= HESSIAN_REL_TOL, f"{mode} vs float64"
+        assert _scaled_gap(d32[mode], d64["fd_grad"]) <= HESSIAN_REL_TOL, f"{mode} vs differences"
+    assert _scaled_gap(d64["grad_rev"], d64["fd_grad"]) <= 1e-6, "float64 gradient vs differences"
+    assert _scaled_gap(d64["grad_fwd"], d64["grad_rev"]) <= 1e-9, "float64 forward vs reverse"
+    assert np.all(np.isfinite(d32["hvp"]))
+    assert _scaled_gap(d32["hvp"], d64["hvp"]) <= HESSIAN_REL_TOL
+    assert _scaled_gap(d32["hvp"], d64["fd_hvp"]) <= HESSIAN_REL_TOL
+    assert _scaled_gap(d64["hvp"], d64["fd_hvp"]) <= 1e-5, "float64 Hv vs differences"
+
+
+@pytest.mark.parametrize("config,profile", _cases(), ids=_CASE_IDS)
+def test_output_dtype_follows_the_mode(config, profile):
+    """Each cell's derivatives carry the dtype of the mode it ran in."""
+    cell = _cell(config, profile)
+    for dtype in DTYPES:
+        assert cell[dtype]["dtype"] == dtype
+        assert _value(cell, dtype, "derivs")["dtype"] == (dtype, dtype)
+
+
+@pytest.mark.parametrize("config,profile", _cases(), ids=_CASE_IDS)
+def test_repeat_curvature_call_does_not_recompile(config, profile):
+    """One compiled program serves repeated calls on one log density."""
+    cell = _cell(config, profile)
+    for dtype in DTYPES:
+        assert _value(cell, dtype, "recompiles") == 0
+
+
+def _hessian_in(config: str, profile, dtype: str, mp_unb) -> np.ndarray:
+    with jax.enable_x64(dtype == "float64"):
+        jdtype = jnp.float64 if dtype == "float64" else jnp.float32
+        fitter = _fitter(config, profile)
+        point = jax.tree.map(lambda a: jnp.asarray(a, dtype=jdtype), mp_unb)
+        logd, _, x, data_args = _get_flat_logdensity(fitter, point)
+        hess = curvature(logd, x, data_args).hess
+        assert str(hess.dtype) == dtype
+        return np.asarray(hess)
+
+
+def test_dtype_order_does_not_change_the_result():
+    """Float32 then float64 in one process gives the same Hessians as float64 then float32.
+
+    Host tables memoized from a loader keep the dtype of their first conversion; the
+    cell already ran float64 first, here the order is reversed on a warm process.
+    """
+    config, profile = "photometry_1band", False
+    cell = _cell(config, profile)
+    mp = cell["float64"]["mp_unb"]
+    h32 = _hessian_in(config, profile, "float32", mp)
+    h64 = _hessian_in(config, profile, "float64", mp)
+    np.testing.assert_allclose(h64, _value(cell, "float64", "hess"), rtol=1e-12)
+    np.testing.assert_allclose(h32, _value(cell, "float32", "hess"), rtol=1e-5)
+    assert _rel_max(h32, h64) <= HESSIAN_REL_TOL
