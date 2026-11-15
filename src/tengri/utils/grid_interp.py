@@ -317,7 +317,7 @@ def lyc_augment_fold(
     filter_wave: np.ndarray,
     filter_trans: np.ndarray,
     edge_aa: float,
-    convention: FilterConvention = FilterConvention.BESSELL,
+    convention: FilterConvention,
 ) -> tuple[np.ndarray, _FoldedIntegrand, np.ndarray]:
     """Folded sibling of :func:`lyc_augment_grid_for_step`.
 
@@ -343,7 +343,7 @@ def lyc_augment_fold_T(
     filter_wave: np.ndarray,
     filter_trans: np.ndarray,
     edge_aa: float,
-    convention: FilterConvention = FilterConvention.BESSELL,
+    convention: FilterConvention,
 ) -> tuple[np.ndarray, _FoldedIntegrand, np.ndarray]:
     """:func:`lyc_augment_fold` on a pre-transposed template layout (no per-call copy)."""
     g, tw, c1, w1, c2, w2 = _lyc_augmented_operator(
@@ -584,7 +584,7 @@ def lyc_augment_grid_for_step(
     filter_wave: np.ndarray,
     filter_trans: np.ndarray,
     edge_aa: float,
-    convention: FilterConvention = FilterConvention.BESSELL,
+    convention: FilterConvention,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     r"""Augment a union grid so an ORDINARY trapezoid integrates the Lyman step exactly.
 
@@ -880,7 +880,8 @@ def preintegrate_grid(
     taylor: bool = False,
     n_subbands: int = 0,
     energy_normalize: bool = False,
-    convention: FilterConvention = FilterConvention.BESSELL,
+    *,
+    convention: FilterConvention,
     lyc_gate: bool = False,
 ) -> PreintegratedGrid:
     """Precompute filter-integrated photometry from a template grid.
@@ -1040,7 +1041,8 @@ def preintegrate_transposed(
     axes: tuple[np.ndarray, ...] = (),
     taylor: bool = False,
     n_subbands: int = 0,
-    convention: FilterConvention = FilterConvention.BESSELL,
+    *,
+    convention: FilterConvention,
     lyc_gate: bool = False,
 ) -> PreintegratedGrid:
     """:func:`preintegrate_grid` on templates already in the transposed layout (#2769).
@@ -1216,7 +1218,8 @@ def preintegrate_lines(
     filter_trans: list[np.ndarray],
     redshift: float,
     axes: tuple[np.ndarray, ...] = (),
-    convention: FilterConvention = FilterConvention.BESSELL,
+    *,
+    convention: FilterConvention,
 ) -> PreintegratedLines:
     """Precompute emission line weights through filters.
 

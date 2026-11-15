@@ -165,7 +165,9 @@ def test_lyc_augmented_fold_unbracketed_edge_falls_back(ssp_like):
     wave, tmpl = ssp_like["wave_src"], ssp_like["templates"]
     fw, ft = ssp_like["filter_wave"], ssp_like["filter_trans"]
     edge = float(wave[-1] * 2.0)  # beyond the source: no bracket cell
-    grid_f, fold_f, _ = lyc_augment_fold(grid, tw, wave, tmpl, fw, ft, edge)
+    grid_f, fold_f, _ = lyc_augment_fold(
+        grid, tw, wave, tmpl, fw, ft, edge, convention=FilterConvention.BESSELL
+    )
     np.testing.assert_array_equal(grid_f, grid)
     _assert_match(fold_f.trapezoid(), _np_trapezoid(_materialized(grid, tw, wave, tmpl), grid, -1))
 
@@ -207,9 +209,19 @@ def test_lyc_augmented_fold_T_matches_fold(ssp_like):
     wave, tmpl = ssp_like["wave_src"], ssp_like["templates"]
     fw, ft = ssp_like["filter_wave"], ssp_like["filter_trans"]
     edge = float(wave[60] * 1.0000007 + 0.25)
-    grid_a, fold_a, tw_a = lyc_augment_fold(grid, tw, wave, tmpl, fw, ft, edge)
+    grid_a, fold_a, tw_a = lyc_augment_fold(
+        grid, tw, wave, tmpl, fw, ft, edge, convention=FilterConvention.BESSELL
+    )
     grid_t, fold_t, tw_t = lyc_augment_fold_T(
-        grid, tw, wave, transpose_templates(tmpl), tmpl.shape[:-1], fw, ft, edge
+        grid,
+        tw,
+        wave,
+        transpose_templates(tmpl),
+        tmpl.shape[:-1],
+        fw,
+        ft,
+        edge,
+        convention=FilterConvention.BESSELL,
     )
     np.testing.assert_array_equal(grid_t, grid_a)
     np.testing.assert_array_equal(tw_t, tw_a)

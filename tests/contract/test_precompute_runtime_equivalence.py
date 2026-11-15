@@ -43,6 +43,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.utils.filter_convention import FilterConvention
 from tests._data_skip import DATA_DIR as _REPO_DATA  # root computed once; see #1431
 from tests.contract._heap import release_heap
 
@@ -353,7 +354,9 @@ def test_silva04_precompute_matches_exact_pchip(where) -> None:
     filter_waves = [np.geomspace(1.0e5, 1.0e6, 300), np.geomspace(1.0e6, 1.0e7, 300)]
     filter_trans = [np.ones(300), np.ones(300)]
 
-    precomp = precompute_silva04_photometry(grid_path, filter_waves, filter_trans, redshift=0.0)
+    precomp = precompute_silva04_photometry(
+        grid_path, filter_waves, filter_trans, redshift=0.0, convention=FilterConvention.BESSELL
+    )
     lookup = build_silva04_photometry_lookup(precomp)
     phot_precomp = np.asarray(lookup(0.0, log_nh_value, 1.0))
 
@@ -600,7 +603,16 @@ def _exact_grid_torus_photometry(sed_fn, grid, axis_kwargs, values, waves, trans
     wave = _runtime_wave(grid, waves)
     L_nu = sed_fn(grid, wave, agn_log_lbol=0.0, agn_torus_frac=1.0, **kwargs)
     out = [
-        float(lnu_filter_integral(L_nu, wave, jnp.asarray(w), jnp.asarray(t), 0.0))
+        float(
+            lnu_filter_integral(
+                L_nu,
+                wave,
+                jnp.asarray(w),
+                jnp.asarray(t),
+                0.0,
+                convention=FilterConvention.BESSELL,
+            )
+        )
         for w, t in zip(waves, trans, strict=True)
     ]
     return np.asarray(out)
@@ -1043,7 +1055,14 @@ def _exact_photometry_fn(sed_fn, grid, names, waves, trans, redshift=0.0):
         lnu = sed_fn(grid, wave, agn_log_lbol=0.0, agn_torus_frac=1.0, **kwargs)
         return jnp.stack(
             [
-                lnu_filter_integral(lnu, wave, jnp.asarray(w), jnp.asarray(t), redshift)
+                lnu_filter_integral(
+                    lnu,
+                    wave,
+                    jnp.asarray(w),
+                    jnp.asarray(t),
+                    redshift,
+                    convention=FilterConvention.BESSELL,
+                )
                 for w, t in zip(waves, trans, strict=True)
             ]
         )
@@ -1233,6 +1252,7 @@ def test_torus_table_is_power_weighted(spec, grid_torus_filters):
                             jnp.asarray(w),
                             jnp.asarray(t),
                             0.0,
+                            convention=FilterConvention.BESSELL,
                         )
                     )
                     for w, t in zip(waves, trans, strict=True)

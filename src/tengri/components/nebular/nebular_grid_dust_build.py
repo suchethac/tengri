@@ -63,6 +63,7 @@ def _nebular_subband_channels(
     filters: Sequence[tuple[np.ndarray, np.ndarray]],
     redshift: float,
     n_subbands: int,
+    convention: FilterConvention,
 ) -> tuple[np.ndarray, np.ndarray]:
     r"""Sub-band integrals and quadrature nodes of per-node nebular SEDs.
 
@@ -82,6 +83,8 @@ def _nebular_subband_channels(
         Redshift at which the filters are projected (0 for the rest-band twin).
     n_subbands : int
         Number of chunks K per filter.
+    convention : FilterConvention
+        Bandpass weight, the observation's (``BandSpec.convention``).
 
     Returns
     -------
@@ -114,7 +117,7 @@ def _nebular_subband_channels(
         hi = np.searchsorted(grid, f_hi, side="right")
         grid = grid[lo:hi]
         trans = np.interp(grid, fw_np, ft_np, left=0.0, right=0.0)
-        tw_grid = trans * filter_weight_np(grid, FilterConvention.BESSELL)
+        tw_grid = trans * filter_weight_np(grid, convention)
         denom = _np_trapezoid(tw_grid, grid)
         eff_obs = _np_trapezoid(tw_grid * grid, grid) / np.maximum(
             denom, representable_denominator(1e-30)
@@ -241,6 +244,8 @@ def _nebular_eb_channel(
     dust,
     ref_params: Mapping,
     eb_tau_grids: tuple[Sequence[float], Sequence[float]],
+    *,
+    convention: FilterConvention,
 ) -> np.ndarray:
     r"""LyC-masked absorbed nebular luminosity per unit Q_H on the tau grid.
 
@@ -306,7 +311,9 @@ def _nebular_eb_channel(
     for t_stack in t_stacks:
         results = np.stack(
             [
-                np.asarray(_node(jnp.asarray(row), t_stack), dtype=np.float64)
+                np.asarray(
+                    _node(jnp.asarray(row), t_stack, convention=convention), dtype=np.float64
+                )
                 for row in np.asarray(sed_nodes_rest)
             ]
         )  # (n_points, 2, n_a * n_b)
@@ -342,12 +349,16 @@ def _nebular_filters(model) -> tuple | None:
     return None
 
 
-def _chunked_subbands(sed_all, neg_log_qh, wave_rest, filters, redshift, n_subbands):
+def _chunked_subbands(
+    sed_all, neg_log_qh, wave_rest, filters, redshift, n_subbands, convention: FilterConvention
+):
     """:func:`_nebular_subband_channels` in node batches, scaled to per-Q_H (float64)."""
     phis, lams = [], []
     for i in range(0, sed_all.shape[0], _SUBBAND_NODE_CHUNK):
         sl = slice(i, i + _SUBBAND_NODE_CHUNK)
-        phi, lam = _nebular_subband_channels(sed_all[sl], wave_rest, filters, redshift, n_subbands)
+        phi, lam = _nebular_subband_channels(
+            sed_all[sl], wave_rest, filters, redshift, n_subbands, convention
+        )
         phis.append(phi * 10.0 ** neg_log_qh[sl, None, None])
         lams.append(lam)
     return np.concatenate(phis, axis=0), np.concatenate(lams, axis=0)
@@ -398,6 +409,7 @@ def _build_dust_channels(
     dust_component,
     eb_tau_grids,
     n_subbands,
+    convention: FilterConvention,
 ) -> dict:
     """The ``NebularGridTable`` dust-channel fields, or ``{}`` where none is requested.
 
@@ -450,9 +462,9 @@ def _build_dust_channels(
             )
         )
         n_wave_nodes = int(np.asarray(wave_rest).size)
-        phi, lam = _chunked_subbands(sed, nlq, wave_rest, filters, ref_z, k)
+        phi, lam = _chunked_subbands(sed, nlq, wave_rest, filters, ref_z, k, convention)
         _check_conservation(phi, phot_all, "observed-band", n_nodes=n_wave_nodes)
-        phi_r, lam_r = _chunked_subbands(sed, nlq, wave_rest, filters, 0.0, k)
+        phi_r, lam_r = _chunked_subbands(sed, nlq, wave_rest, filters, 0.0, k, convention)
         _check_conservation(phi_r, rest_all, "rest-band", n_nodes=n_wave_nodes)
         out.update(
             log_phot_subband_per_qh=_log_channel(phi, grid_shape),
@@ -461,7 +473,9 @@ def _build_dust_channels(
             restband_subband_waves_rest=jnp.asarray(lam_r.reshape(*grid_shape, *lam_r.shape[1:])),
         )
     if dust_component is not None and eb_tau_grids is not None:
-        eb = _nebular_eb_channel(sed, nlq, wave_rest, dust_component, ref_params, eb_tau_grids)
+        eb = _nebular_eb_channel(
+            sed, nlq, wave_rest, dust_component, ref_params, eb_tau_grids, convention=convention
+        )
         out.update(
             eb_absorbed_per_qh=jnp.asarray(eb.reshape(*grid_shape, *eb.shape[1:])),
             eb_tau_a_grid=jnp.asarray(eb_tau_grids[0]),

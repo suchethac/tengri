@@ -179,12 +179,40 @@ _CANARY_CASES = {
     "nebular": "cloudy_nebular",
     "shock": "shock",
     "radio": "free_z_radio_xray",
-    "xray": "free_z_radio_xray",
+    "xray": "xray_band",
 }
+
+
+def _xray_band_model(convention):
+    """An X-ray band beside an optical one, so the X-ray term has flux to project."""
+    import jax.numpy as jnp
+
+    from tengri.observation.photometry import FilterCurve
+
+    xw = jnp.linspace(2.0, 12.0, 60)
+    ow = jnp.linspace(5000.0, 6000.0, 40)
+    curves = (
+        FilterCurve(wave=xw, trans=jnp.full_like(xw, 0.5), name="xray_band"),
+        FilterCurve(wave=ow, trans=jnp.sin(jnp.linspace(0.0, jnp.pi, 40)), name="optical"),
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return SEDModel.build(
+            ssp_data=cases._synthetic_agn_ssp(),
+            observation=Observation(photometry=Photometry(filters=curves, convention=convention)),
+            approx=WavePrecomp(),
+            redshift=Fixed(0.1),
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={"type": "none"},
+            neb={"type": "none"},
+            xray={"type": "simple", "all_params": Fixed(DEFAULT)},
+        )
 
 
 def _case_model(case, convention):
     """The parity-case model rebuilt with the given convention on its observation."""
+    if case == "xray_band":
+        return _xray_band_model(convention)
     cases.CONVENTION = convention
     try:
         with warnings.catch_warnings():
@@ -224,6 +252,16 @@ def test_band_tables_follow_the_convention(provider):
 # ------------------------------------------------------------------------- AST check
 
 
+#: The three public entry points where a user declares the convention for the first time.
+#: Each states its own default in its documentation; everything below them takes the
+#: convention from the observation's ``BandSpec`` with no default.
+_USER_DECLARATION_ENTRY_POINTS = {
+    ("observation/photometry_config.py", "from_names"),
+    ("observation/photometry_config.py", "from_filter_set"),
+    ("measure.py", "photometry"),
+}
+
+
 def _defaulted_convention_parameters():
     root = Path(__file__).resolve().parents[2] / "src" / "tengri"
     found = []
@@ -235,6 +273,8 @@ def _defaulted_convention_parameters():
             pos = a.posonlyargs + a.args
             defaulted = pos[len(pos) - len(a.defaults) :]
             defaulted += [k for k, d in zip(a.kwonlyargs, a.kw_defaults, strict=True) if d]
+            if (str(path.relative_to(root)), node.name) in _USER_DECLARATION_ENTRY_POINTS:
+                continue
             if any(arg.arg == "convention" for arg in defaulted):
                 found.append(f"{path.relative_to(root)}:{node.lineno} {node.name}")
     return found

@@ -262,6 +262,8 @@ def precompute_photometry(
     n_subbands: int = 0,
     fixed: dict[int, float] | None = None,
     lyc_gate: bool = False,
+    *,
+    convention: FilterConvention,
 ) -> PhotometricPrecomputation:
     """Pre-compute SSP broadband fluxes for all filters.
 
@@ -349,6 +351,7 @@ def precompute_photometry(
         taylor=taylor_correction,
         n_subbands=n_subbands,
         lyc_gate=lyc_gate,
+        convention=convention,
     )
 
     # Collapse fixed axes if provided
@@ -401,6 +404,8 @@ def precompute_restband_photometry(
     filter_trans,
     n_subbands: int = 0,
     fixed: dict[int, float] | None = None,
+    *,
+    convention: FilterConvention,
 ) -> RestBandPrecomputation:
     r"""Preintegrate the SSP grid through each filter placed in the **rest** frame.
 
@@ -466,6 +471,7 @@ def precompute_restband_photometry(
         ),
         taylor=False,  # the rest band uses the quadrature, never the Taylor form
         n_subbands=n_subbands,
+        convention=convention,
     )
     if fixed:
         preint = slice_fixed_axes(preint, fixed)
@@ -924,7 +930,8 @@ def precompute_photometry_ztable(
     apply_igm=False,
     taylor_correction: bool = False,
     n_subbands: int = 0,
-    convention: FilterConvention = FilterConvention.BESSELL,
+    *,
+    convention: FilterConvention,
     lyc_gate: bool = False,
 ) -> PhotometricZTable:
     """Pre-compute SSP broadband fluxes on a redshift grid, disk-cached.
@@ -1112,7 +1119,8 @@ def _compute_photometry_ztable(
     apply_igm=False,
     taylor_correction: bool = False,
     n_subbands: int = 0,
-    convention: FilterConvention = FilterConvention.BESSELL,
+    *,
+    convention: FilterConvention,
     lyc_gate: bool = False,
 ) -> PhotometricZTable:
     """Pre-compute SSP broadband fluxes on a redshift grid.
@@ -1675,6 +1683,7 @@ def precompute(
     ssp_data,
     dl_cm: float,
     taylor_correction: bool = True,
+    convention: FilterConvention,
 ):
     """Protocol-shaped wrapper around :func:`precompute_photometry`.
 
@@ -1724,6 +1733,7 @@ def precompute(
         dl_cm=dl_cm,
         taylor_correction=taylor_correction,
         fixed=fixed,
+        convention=convention,
     )
 
 

@@ -13,14 +13,15 @@ from collections.abc import Callable
 
 import jax.numpy as jnp
 
+from tengri.utils.band_projection import BandSpec, project_bands
+
 
 def project_additive_onto_photometry(
     precomputed_phot: jnp.ndarray | None,
     sed: jnp.ndarray,
     wave: jnp.ndarray,
     filter_eff_waves: jnp.ndarray,
-    padded_filter_waves: jnp.ndarray | None,
-    padded_filter_trans: jnp.ndarray | None,
+    bands: BandSpec | None,
     redshift: jnp.ndarray,
     fallback_fn: Callable[[jnp.ndarray], jnp.ndarray] | None = None,
 ) -> jnp.ndarray:
@@ -46,12 +47,9 @@ def project_additive_onto_photometry(
         Rest-frame wavelength grid [Angstrom], ascending.
     filter_eff_waves : ndarray, shape (n_filters,)
         Filter effective wavelengths [Angstrom]. Read by branch 3 only.
-    padded_filter_waves : ndarray, shape (n_filters, max_len), optional
-        Zero-padded observed-frame filter wavelengths [Angstrom]. ``None``
-        selects branch 3.
-    padded_filter_trans : ndarray, shape (n_filters, max_len), optional
-        Zero-padded filter transmission [dimensionless], as published --
-        normalization is applied inside the integral, not here.
+    bands : BandSpec, optional
+        The band spec the observation published in state: filter curves and the
+        convention the exact integral weights them with. ``None`` selects branch 3.
     redshift : ndarray, scalar
         Source redshift [dimensionless]. Read by branch 2 only.
     fallback_fn : callable, optional
@@ -94,12 +92,8 @@ def project_additive_onto_photometry(
     if precomputed_phot is not None:
         return precomputed_phot
 
-    if padded_filter_waves is not None:
-        from tengri.observation.photometry import lnu_filter_integral_batch
-
-        return lnu_filter_integral_batch(
-            sed, wave, padded_filter_waves, padded_filter_trans, redshift
-        )
+    if bands is not None:
+        return project_bands(sed, wave, bands, redshift)
 
     if fallback_fn is not None:
         return fallback_fn(filter_eff_waves)

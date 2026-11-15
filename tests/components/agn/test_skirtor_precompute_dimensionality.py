@@ -19,6 +19,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from tengri.utils.filter_convention import FilterConvention
+
 pytestmark = pytest.mark.regression_bug
 
 
@@ -50,6 +52,7 @@ def test_precompute_matches_runtime_midir_to_farir_ratio():
         [jnp.asarray(fw_mid), jnp.asarray(fw_far)],
         [jnp.asarray(ft_mid), jnp.asarray(ft_far)],
         redshift=0.0,
+        convention=FilterConvention.BESSELL,
     )
     lookup = precompute_mod.build_lookup(precomp)
     # Flux ratio at one representative grid node (central index per axis).

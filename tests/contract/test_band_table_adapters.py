@@ -32,6 +32,8 @@ from tengri.components.nebular.component import NebularSEDComponent
 from tengri.components.nebular.shock_model import ShockNebular
 from tengri.forward.precompute.band_table import BandTable, BandTableContext, Decline
 from tengri.observation.photometry import lnu_filter_integral_batch
+from tengri.utils.band_projection import BandSpec
+from tengri.utils.filter_convention import FilterConvention
 from tests.contract import _band_table_cases as cases
 
 pytestmark = pytest.mark.contract
@@ -58,6 +60,17 @@ def _padded_filters() -> tuple[np.ndarray, np.ndarray]:
     return fw, ft
 
 
+def _stub_bands() -> BandSpec:
+    """The five top-hat bands as one spec: the contexts below read ``ctx.bands``."""
+    fw, ft = _padded_filters()
+    return BandSpec(
+        filters=(list(fw), list(ft)),
+        convention=FilterConvention.BESSELL,
+        n_subbands=None,
+        lyc_gate=False,
+    )
+
+
 def _cloudy_spec(**overrides) -> Parameters:
     """A CLOUDY-nebular spec with a fixed redshift and line width, the table's engaged case."""
     kwargs = {
@@ -79,7 +92,7 @@ def _context(spec: Parameters, *, chain=(), wave_precomp=True) -> BandTableConte
     return BandTableContext(
         spec=spec,
         wave=_WAVE,
-        filters=None,
+        bands=_stub_bands(),
         padded_filters=None,
         z_nodes=None,
         wave_precomp=wave_precomp,
@@ -205,8 +218,12 @@ def test_shock_coefficients_equal_the_integral_of_each_delta_line():
         sed = render_nebular_lines(line_waves, lum, wave, 0.0, 0.0)
         expected = jnp.stack(
             [
-                lnu_filter_integral_batch(sed, wave, fw_j, ft_j, _REDSHIFT),
-                lnu_filter_integral_batch(sed, wave, fw_j, ft_j, 0.0),
+                lnu_filter_integral_batch(
+                    sed, wave, fw_j, ft_j, _REDSHIFT, convention=FilterConvention.BESSELL
+                ),
+                lnu_filter_integral_batch(
+                    sed, wave, fw_j, ft_j, 0.0, convention=FilterConvention.BESSELL
+                ),
             ]
         )
         np.testing.assert_allclose(coeff[i], np.asarray(expected), rtol=1e-12, atol=0)
@@ -224,7 +241,7 @@ def _dust_context(model, z_nodes=None) -> BandTableContext:
     return BandTableContext(
         spec=model.spec,
         wave=model._rest_wavelength,
-        filters=(model.filter_waves, model.filter_trans),
+        bands=model._band_spec(),
         padded_filters=(state.phot_fw_padded, state.phot_ft_padded),
         z_nodes=z_nodes,
         wave_precomp=WavePrecomp(),
@@ -261,7 +278,9 @@ def test_dust_band_table_equals_the_filter_integral_at_each_node_bit_for_bit():
             budget["log_L_ir"] = jnp.log10(1.0)
         p = emitter.slice_params({**fixed, "redshift": z})
         sed, _ = emitter.predict(p, zeros, ctx.wave, **budget)
-        return lnu_filter_integral_batch(sed, ctx.wave, fw, ft, z)
+        return lnu_filter_integral_batch(
+            sed, ctx.wave, fw, ft, z, convention=FilterConvention.BESSELL
+        )
 
     assert values.shape == (3, fw.shape[0])
     for row, z in enumerate(jnp.expm1(ctx.z_nodes)):
@@ -354,7 +373,7 @@ def _agn_context(
     return BandTableContext(
         spec=_AGNSpec(free, fixed, bounds),
         wave=_WAVE,
-        filters=None,
+        bands=_stub_bands(),
         padded_filters=(np.ones((2, 3)), np.ones((2, 3))) if padded else (None, None),
         z_nodes=z_nodes,
         wave_precomp=WavePrecomp() if wave_precomp else None,
@@ -438,7 +457,7 @@ def test_agn_table_is_accurate_and_matches_the_direct_band_flux_at_a_node(monkey
     ctx = BandTableContext(
         spec=model.spec,
         wave=model._rest_wavelength,
-        filters=(model.filter_waves, model.filter_trans),
+        bands=model._band_spec(),
         padded_filters=(state.phot_fw_padded, state.phot_ft_padded),
         z_nodes=None,
         wave_precomp=WavePrecomp(),
@@ -539,7 +558,11 @@ def test_term_band_response_row_is_the_dense_filter_integral_of_its_shape(
     assert live, f"the {name} fixture has no live term at the node"
     assert len(live) == len(terms), (name, live, list(terms))
     for key in terms:
-        dense = np.asarray(lnu_filter_integral_batch(terms[key], ctx.wave, fw_pad, ft_pad, z))
+        dense = np.asarray(
+            lnu_filter_integral_batch(
+                terms[key], ctx.wave, fw_pad, ft_pad, z, convention=FilterConvention.BESSELL
+            )
+        )
         row = np.asarray(table["R"][node, list(terms).index(key)])
         assert np.any(row != 0.0), (name, key, "the term's band row is zero")
         # The table is built inside the batched node evaluation; the dense integral here is

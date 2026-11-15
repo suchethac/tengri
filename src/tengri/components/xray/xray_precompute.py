@@ -65,6 +65,7 @@ from tengri.forward.precompute.templates import (
     collapse_fixed_axes,
     precompute_template_photometry,
 )
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid_interp import PreintegratedGrid
 from tengri.utils.host_array import device_table, host_array
 from tengri.utils.physics_constants import C_AA as _C_AA
@@ -96,6 +97,8 @@ def _build_grid_xrb(
     redshift: float,
     gamma_h_grid: np.ndarray,
     gamma_l_grid: np.ndarray,
+    *,
+    convention: FilterConvention,
 ) -> PreintegratedGrid:
     gamma_h_grid = np.asarray(gamma_h_grid, dtype=np.float64)
     gamma_l_grid = np.asarray(gamma_l_grid, dtype=np.float64)
@@ -121,6 +124,7 @@ def _build_grid_xrb(
         dl_cm=1.0,
         energy_normalize=False,
         units="lnu",
+        convention=convention,
     )
 
 
@@ -130,6 +134,8 @@ def _build_grid_corona(
     redshift: float,
     gamma_grid: np.ndarray,
     alpha_ox_grid: np.ndarray,
+    *,
+    convention: FilterConvention,
 ) -> PreintegratedGrid:
     gamma_grid = np.asarray(gamma_grid, dtype=np.float64)
     alpha_ox_grid = np.asarray(alpha_ox_grid, dtype=np.float64)
@@ -171,6 +177,7 @@ def _build_grid_corona(
         dl_cm=1.0,
         energy_normalize=False,
         units="lnu",
+        convention=convention,
     )
 
 
@@ -180,6 +187,8 @@ def _build_grid_corona_lopez24(
     redshift: float,
     gamma_grid: np.ndarray,
     alpha_irx_grid: np.ndarray,
+    *,
+    convention: FilterConvention,
 ) -> PreintegratedGrid:
     gamma_grid = np.asarray(gamma_grid, dtype=np.float64)
     alpha_irx_grid = np.asarray(alpha_irx_grid, dtype=np.float64)
@@ -205,6 +214,7 @@ def _build_grid_corona_lopez24(
         dl_cm=1.0,
         energy_normalize=False,
         units="lnu",
+        convention=convention,
     )
 
 
@@ -418,6 +428,7 @@ def term_shape_table(
     parameters: Any,
     model: str,
     term: str,
+    convention: FilterConvention,
 ) -> dict | None:
     """Shape-only band table of one X-ray term, built through the shared normalizer.
 
@@ -467,6 +478,7 @@ def term_shape_table(
         filter_waves_padded,
         filter_trans_padded,
         redshift,
+        convention=convention,
     )
 
 

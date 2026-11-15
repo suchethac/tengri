@@ -1366,7 +1366,9 @@ class Observation:
         wave_rest = sed_result.wavelength / (1.0 + z)
         fluxes = []
         for fw, ft in zip(self.photometry.filter_waves, self.photometry.filter_trans):
-            f = compute_flux_density(sed_result.sed, wave_rest, fw, ft, z, dl_cm)
+            f = compute_flux_density(
+                sed_result.sed, wave_rest, fw, ft, z, dl_cm, convention=self.photometry.convention
+            )
             fluxes.append(f)
         return jnp.array(fluxes)
 

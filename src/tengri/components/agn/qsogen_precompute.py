@@ -48,6 +48,7 @@ from tengri.forward.precompute.templates import (
     collapse_fixed_axes,
     precompute_template_photometry,
 )
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid_interp import PreintegratedGrid
 
 # ── Axis definitions ──────────────────────────────────────
@@ -72,6 +73,8 @@ def _build_grid_qsogen(
     agn_bbnorm: float = 3.96,
     agn_emline_scale: float = 1.0,
     agn_bcnorm: float = DEFAULT_AGN_BCNORM,
+    *,
+    convention: FilterConvention,
 ) -> PreintegratedGrid:
     """Preintegrate QSOgen over a 2D grid of (plslp1, E(B-V)).
 
@@ -151,6 +154,7 @@ def _build_grid_qsogen(
         dl_cm=1.0,
         energy_normalize=False,  # already normalized per L_sun from qsogen
         units="lnu",
+        convention=convention,
     )
 
 
@@ -186,6 +190,7 @@ def precompute(
     *,
     plslp1_grid: np.ndarray | None = None,
     ebv_grid: np.ndarray | None = None,
+    convention: FilterConvention,
 ) -> dict:
     """Build preintegrated QSOgen grid, auto-collapsing Fixed-parameter axes.
 
@@ -234,10 +239,17 @@ def precompute(
 
     result = {
         "grid_phot": _build_grid_qsogen(
-            filter_waves, filter_trans, redshift, plslp1_grid, ebv_grid
+            filter_waves,
+            filter_trans,
+            redshift,
+            plslp1_grid,
+            ebv_grid,
+            convention=convention,
         ).phot,
         "axes": (jnp.asarray(plslp1_grid), jnp.asarray(ebv_grid)),
-        "_preint": _build_grid_qsogen(filter_waves, filter_trans, redshift, plslp1_grid, ebv_grid),
+        "_preint": _build_grid_qsogen(
+            filter_waves, filter_trans, redshift, plslp1_grid, ebv_grid, convention=convention
+        ),
     }
 
     # Auto-collapse any Fixed axes: including axes for params the user

@@ -2158,16 +2158,14 @@ class DustSEDComponent(TemplateThreading):
                 z_neb = jnp.asarray(
                     require_redshift(params, "components.dust.two_component.apply")
                 )
-                fw_pad = state.derived.get("phot_filter_waves_padded")
-                ft_pad = state.derived.get("phot_filter_trans_padded")
+                bands = state.derived.get("phot_band_spec")
                 derived_overrides["nebular_phot_lnu_attenuated_precomp"] = (
                     project_additive_onto_photometry(
                         None,  # no band response: a multiplicative screen is not rank-1
                         sed_neb_attenuated,
                         wave,
                         filter_eff,
-                        fw_pad,
-                        ft_pad,
+                        bands,
                         z_neb,
                     )
                 )
@@ -2189,16 +2187,14 @@ class DustSEDComponent(TemplateThreading):
                 z_shock = jnp.asarray(
                     require_redshift(params, "components.dust.two_component.apply")
                 )
-                fw_pad = state.derived.get("phot_filter_waves_padded")
-                ft_pad = state.derived.get("phot_filter_trans_padded")
+                bands = state.derived.get("phot_band_spec")
                 derived_overrides["shock_phot_lnu_attenuated_precomp"] = (
                     project_additive_onto_photometry(
                         None,  # no band response: a multiplicative screen is not rank-1
                         sed_shock_attenuated,
                         wave,
                         filter_eff,
-                        fw_pad,
-                        ft_pad,
+                        bands,
                         z_shock,
                     )
                 )
@@ -2216,16 +2212,14 @@ class DustSEDComponent(TemplateThreading):
                 z_agn = jnp.asarray(
                     require_redshift(params, "components.dust.two_component.apply")
                 )
-                fw_pad = state.derived.get("phot_filter_waves_padded")
-                ft_pad = state.derived.get("phot_filter_trans_padded")
+                bands = state.derived.get("phot_band_spec")
                 derived_overrides["agn_phot_lnu_attenuated_precomp"] = (
                     project_additive_onto_photometry(
                         None,
                         sed_agn_attenuated,
                         wave,
                         filter_eff,
-                        fw_pad,
-                        ft_pad,
+                        bands,
                         z_agn,
                     )
                 )
@@ -2385,8 +2379,7 @@ class DustSEDComponent(TemplateThreading):
                         sed_neb_attenuated,
                         wave,
                         rb_eff,
-                        fw_pad,
-                        ft_pad,
+                        bands,
                         jnp.zeros_like(z_neb),
                     )
                 )

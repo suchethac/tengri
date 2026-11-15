@@ -39,6 +39,7 @@ from tengri.components.nebular.shock import (
     _load_mappings_grids,
     _resolve_abundance,
 )
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid_interp import (
     library_lookup,
 )
@@ -272,6 +273,8 @@ def shock_band_coefficients(
     filter_trans: list,
     redshift: float,
     wave: object,
+    *,
+    convention: FilterConvention,
 ) -> object:
     """Band of one unit-luminosity shock line through each filter, both frames.
 
@@ -317,7 +320,9 @@ def shock_band_coefficients(
 
     def _bands(sed, z):
         # The same batch integral the per-call shock path uses, so the two agree.
-        return lnu_filter_integral_batch(sed, wave, filter_waves, filter_trans, z)
+        return lnu_filter_integral_batch(
+            sed, wave, filter_waves, filter_trans, z, convention=convention
+        )
 
     def _unit(lum_vec):
         # Delta-function placement: the same call compute_shock_sed makes with
@@ -366,6 +371,7 @@ def band_table(ctx, *, component: str, slot: str):
         st.phot_ft_padded,
         float(ctx.spec.fixed_value("redshift")),
         ctx.wave,
+        convention=ctx.bands.convention,
     )
     if coeff is None:
         return Decline("the MAPPINGS V line grid is absent, so the line list is not fixed")

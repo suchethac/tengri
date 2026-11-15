@@ -42,6 +42,7 @@ from tengri.forward.precompute.templates import (
     collapse_fixed_axes,
     precompute_template_photometry,
 )
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid_interp import PreintegratedGrid
 
 __all__ = ["AXIS_PARAMS", "build_lookup", "precompute"]
@@ -82,6 +83,7 @@ def _build_grid_grahsp(
     disc_m: str = "8.0",
     disc_a: str = "0",
     disc_mdot: str = "0.3",
+    convention: FilterConvention,
 ) -> PreintegratedGrid:
     """Pre-integrate GRAHSP over a 2-D grid of (plslope, E(B-V)).
 
@@ -156,6 +158,7 @@ def _build_grid_grahsp(
         dl_cm=1.0,
         energy_normalize=False,  # GRAHSP normalizes to l5100; do not double-normalize
         units="llam",
+        convention=convention,
     )
 
 
@@ -194,6 +197,7 @@ def precompute(
     disc_m: str = "8.0",
     disc_a: str = "0",
     disc_mdot: str = "0.3",
+    convention: FilterConvention,
 ) -> dict:
     """Build the GRAHSP preintegrated grid, auto-collapsing Fixed-parameter axes.
 
@@ -243,6 +247,7 @@ def precompute(
         disc_m=disc_m,
         disc_a=disc_a,
         disc_mdot=disc_mdot,
+        convention=convention,
     )
     result = {
         "grid_phot": preint.phot,

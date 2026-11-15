@@ -29,6 +29,7 @@ import pytest
 from tengri import DEFAULT, FREE, FeaturePrecomp, Fixed, SEDModel, Uniform, WavePrecomp
 from tengri.observation import Observation, Photometry
 from tengri.observation.photometry import FilterCurve, lnu_filter_integral
+from tengri.utils.filter_convention import FilterConvention
 
 pytestmark = pytest.mark.regression_bug
 
@@ -636,9 +637,25 @@ class TestDeltaLines:
         wave, fw, ft, profile = self._setup()
         zs = np.linspace(0.06, 0.34, 57)  # observed line 5300 .. 6700: through both edges
         delta = np.array(
-            [float(delta_line_band_kernel(z, [5000.0], [fw], [ft])[0, 0]) for z in zs]
+            [
+                float(
+                    delta_line_band_kernel(
+                        z, [5000.0], [fw], [ft], convention=FilterConvention.BESSELL
+                    )[0, 0]
+                )
+                for z in zs
+            ]
         )
-        exact = np.array([float(lnu_filter_integral(profile, wave, fw, ft, z)) for z in zs])
+        exact = np.array(
+            [
+                float(
+                    lnu_filter_integral(
+                        profile, wave, fw, ft, z, convention=FilterConvention.BESSELL
+                    )
+                )
+                for z in zs
+            ]
+        )
         peak = exact.max()
         assert peak > 0
         assert np.max(np.abs(delta - exact)) / peak < 5e-3
@@ -653,10 +670,21 @@ class TestDeltaLines:
         c_aa = 2.99792458e18
         norm = float(jnp.trapezoid(ft / fw, fw))
         z = 0.2  # observed 6000: on the plateau, T = 0.8
-        got = float(delta_line_band_kernel(z, [5000.0], [fw], [ft])[0, 0])
+        got = float(
+            delta_line_band_kernel(z, [5000.0], [fw], [ft], convention=FilterConvention.BESSELL)[
+                0, 0
+            ]
+        )
         assert got == pytest.approx(5000.0 * 0.8 / (c_aa * norm), rel=1e-12)
         # at rest (z = 0) the line at 5000 A is blueward of the band: no response
-        assert float(delta_line_band_kernel(0.0, [5000.0], [fw], [ft])[0, 0]) == 0.0
+        assert (
+            float(
+                delta_line_band_kernel(
+                    0.0, [5000.0], [fw], [ft], convention=FilterConvention.BESSELL
+                )[0, 0]
+            )
+            == 0.0
+        )
 
     def test_redshift_gradient_is_finite_and_matches_finite_differences(self):
         from tengri.components.nebular.nebular_band_z import delta_line_band_kernel
@@ -664,7 +692,9 @@ class TestDeltaLines:
         _, fw, ft, _ = self._setup()
 
         def band(z):
-            return delta_line_band_kernel(z, [5000.0, 6563.0], [fw], [ft]).sum()
+            return delta_line_band_kernel(
+                z, [5000.0, 6563.0], [fw], [ft], convention=FilterConvention.BESSELL
+            ).sum()
 
         grad = jax.grad(band)
         zs = np.linspace(-0.02, 0.45, 83)
@@ -695,7 +725,14 @@ class TestContinuumTable:
         from tengri.components.nebular.nebular_band_z import continuum_ztable, ln1pz_grid
 
         lnz = ln1pz_grid(z_lo, z_hi, n_z)
-        tab = continuum_ztable(TestContinuumTable._cont(wave)[None, :], wave, [fw], [ft], lnz)[0]
+        tab = continuum_ztable(
+            TestContinuumTable._cont(wave)[None, :],
+            wave,
+            [fw],
+            [ft],
+            lnz,
+            convention=FilterConvention.BESSELL,
+        )[0]
         pos = tab[tab > 0]
         log_tab = np.log10(np.maximum(tab, 1e-3 * pos.min()))
         return jnp.asarray(lnz), jnp.asarray(log_tab), jnp.asarray(tab > 0.0), tab
@@ -708,7 +745,16 @@ class TestContinuumTable:
         cont = jnp.asarray(self._cont(wave))
         for i in (0, 7, 40, 120, 200):
             z = float(np.expm1(lnz[i]))
-            exact = float(lnu_filter_integral(cont, jnp.asarray(wave), g.wave, g.trans, z))
+            exact = float(
+                lnu_filter_integral(
+                    cont,
+                    jnp.asarray(wave),
+                    g.wave,
+                    g.trans,
+                    z,
+                    convention=FilterConvention.BESSELL,
+                )
+            )
             assert tab[i, 0] == pytest.approx(exact, rel=1e-9, abs=1e-300)
 
     def test_dense_off_grid_sweep_over_the_balmer_jump(self, ssp_data_fsps):
@@ -723,7 +769,19 @@ class TestContinuumTable:
             [float(continuum_band_at_z(0.0, log_tab, nonzero, lnz, z, lambda s: s)[0]) for z in zs]
         )
         exact = np.array(
-            [float(lnu_filter_integral(cont, jnp.asarray(wave), g.wave, g.trans, z)) for z in zs]
+            [
+                float(
+                    lnu_filter_integral(
+                        cont,
+                        jnp.asarray(wave),
+                        g.wave,
+                        g.trans,
+                        z,
+                        convention=FilterConvention.BESSELL,
+                    )
+                )
+                for z in zs
+            ]
         )
         rel = np.abs(got / exact - 1.0)
         print(f"continuum sweep: p95 {np.percentile(rel, 95):.2e} max {rel.max():.2e}")

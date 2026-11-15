@@ -41,6 +41,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.utils.filter_convention import FilterConvention
+
 pytestmark = [pytest.mark.contract, pytest.mark.regression_bug]
 
 #: The 5e-2 off-node contract shared with the other torus tables.
@@ -135,7 +137,9 @@ def _bands(lnu, wave, waves, trans):
 
     return jnp.stack(
         [
-            lnu_filter_integral(lnu, wave, jnp.asarray(w), jnp.asarray(t), 0.0)
+            lnu_filter_integral(
+                lnu, wave, jnp.asarray(w), jnp.asarray(t), 0.0, convention=FilterConvention.BESSELL
+            )
             for w, t in zip(waves, trans, strict=True)
         ]
     )

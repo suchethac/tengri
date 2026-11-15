@@ -12,6 +12,7 @@ import numpy as np
 import pytest
 
 import tengri.components.stellar.sps.precompute as pc
+from tengri.utils.filter_convention import FilterConvention
 
 pytestmark = pytest.mark.contract
 
@@ -55,8 +56,12 @@ def test_second_call_loads_from_disk(
     monkeypatch.delenv("TENGRI_DISABLE_PRECOMP_CACHE", raising=False)
     fw, ft = tophat_filters
 
-    t1 = pc.precompute_photometry_ztable(synthetic_ssp_wide, fw, ft, n_z=7, z_max=2.0)
-    t2 = pc.precompute_photometry_ztable(synthetic_ssp_wide, fw, ft, n_z=7, z_max=2.0)
+    t1 = pc.precompute_photometry_ztable(
+        synthetic_ssp_wide, fw, ft, n_z=7, z_max=2.0, convention=FilterConvention.BESSELL
+    )
+    t2 = pc.precompute_photometry_ztable(
+        synthetic_ssp_wide, fw, ft, n_z=7, z_max=2.0, convention=FilterConvention.BESSELL
+    )
 
     assert len(counting_compute) == 1, "second identical build must be a cache hit"
     assert len(list(tmp_path.glob("ztable_*.npz"))) == 1
@@ -70,13 +75,27 @@ def test_changed_inputs_miss(
     monkeypatch.delenv("TENGRI_DISABLE_PRECOMP_CACHE", raising=False)
     fw, ft = tophat_filters
 
-    pc.precompute_photometry_ztable(synthetic_ssp_wide, fw, ft, n_z=7, z_max=2.0)
-    pc.precompute_photometry_ztable(synthetic_ssp_wide, fw, ft, n_z=9, z_max=2.0)
+    pc.precompute_photometry_ztable(
+        synthetic_ssp_wide, fw, ft, n_z=7, z_max=2.0, convention=FilterConvention.BESSELL
+    )
+    pc.precompute_photometry_ztable(
+        synthetic_ssp_wide, fw, ft, n_z=9, z_max=2.0, convention=FilterConvention.BESSELL
+    )
     # `apply_igm` is this function's OWN parameter, not the retired grammar key
     # -- precompute_photometry_ztable has no `igm` argument. The retirement is
     # about parse_groups; internal flags that happen to share the name stay.
-    pc.precompute_photometry_ztable(synthetic_ssp_wide, fw, ft, n_z=7, z_max=2.0, apply_igm=True)
-    pc.precompute_photometry_ztable(synthetic_ssp_wide, fw[:1], ft[:1], n_z=7, z_max=2.0)
+    pc.precompute_photometry_ztable(
+        synthetic_ssp_wide,
+        fw,
+        ft,
+        n_z=7,
+        z_max=2.0,
+        apply_igm=True,
+        convention=FilterConvention.BESSELL,
+    )
+    pc.precompute_photometry_ztable(
+        synthetic_ssp_wide, fw[:1], ft[:1], n_z=7, z_max=2.0, convention=FilterConvention.BESSELL
+    )
 
     assert len(counting_compute) == 4, "different z grid / flags / filters must recompute"
     assert len(list(tmp_path.glob("ztable_*.npz"))) == 4
@@ -89,8 +108,12 @@ def test_disable_env_bypasses_cache(
     monkeypatch.setenv("TENGRI_DISABLE_PRECOMP_CACHE", "1")
     fw, ft = tophat_filters
 
-    pc.precompute_photometry_ztable(synthetic_ssp_wide, fw, ft, n_z=7, z_max=2.0)
-    pc.precompute_photometry_ztable(synthetic_ssp_wide, fw, ft, n_z=7, z_max=2.0)
+    pc.precompute_photometry_ztable(
+        synthetic_ssp_wide, fw, ft, n_z=7, z_max=2.0, convention=FilterConvention.BESSELL
+    )
+    pc.precompute_photometry_ztable(
+        synthetic_ssp_wide, fw, ft, n_z=7, z_max=2.0, convention=FilterConvention.BESSELL
+    )
 
     assert len(counting_compute) == 2, "disabled cache must recompute every call"
     assert list(tmp_path.glob("ztable_*.npz")) == []

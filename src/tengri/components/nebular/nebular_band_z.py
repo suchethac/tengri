@@ -31,7 +31,12 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components._z_response import z_bracket as _hull_z_bracket
-from tengri.utils.filter_convention import FilterConvention, filter_weight, filter_weight_np
+from tengri.utils.filter_convention import (
+    FilterConvention,
+    filter_weight,
+    filter_weight_np,
+    photon_relative_weight,
+)
 from tengri.utils.grid_interp import filter_support_slice
 from tengri.utils.physics_constants import C_AA
 from tengri.utils.scale import pow10
@@ -129,7 +134,7 @@ def continuum_ztable(
     filter_waves,
     filter_trans,
     lnz_grid,
-    convention: FilterConvention = FilterConvention.BESSELL,
+    convention: FilterConvention,
 ):
     """Band-project per-node continuum SEDs at every redshift of a grid.
 
@@ -174,7 +179,9 @@ def continuum_ztable(
     return out
 
 
-def rendered_line_band_kernel(profiles, wave, filter_waves, filter_trans, redshift):
+def rendered_line_band_kernel(
+    profiles, wave, filter_waves, filter_trans, redshift, *, convention: FilterConvention
+):
     """Band response of each rendered unit-luminosity line at one redshift.
 
     The exact response of a line to a filter, for a build-time-constant redshift:
@@ -208,7 +215,14 @@ def rendered_line_band_kernel(profiles, wave, filter_waves, filter_trans, redshi
     def _one(profile):
         return jnp.stack(
             [
-                lnu_filter_integral(profile, wave, jnp.asarray(fw), jnp.asarray(ft), redshift)
+                lnu_filter_integral(
+                    profile,
+                    wave,
+                    jnp.asarray(fw),
+                    jnp.asarray(ft),
+                    redshift,
+                    convention=convention,
+                )
                 for fw, ft in zip(filter_waves, filter_trans, strict=True)
             ]
         )
@@ -221,21 +235,26 @@ def delta_line_band_kernel(
     line_waves,
     filter_waves,
     filter_trans,
-    convention: FilterConvention = FilterConvention.BESSELL,
+    convention: FilterConvention,
 ):
     r"""Band response of a delta line at the evaluation redshift.
 
     A line of integrated luminosity :math:`L` at rest wavelength
     :math:`\lambda_0` is :math:`L_\nu = L\,\delta(\nu-\nu_0)`. Through the
-    observed-frame bandpass :math:`T_b` with weight :math:`w=1/\lambda`
+    observed-frame bandpass :math:`T_b` with weight :math:`w`
     (:func:`~tengri.observation.photometry.lnu_filter_integral`), substituting
     :math:`\lambda_{\rm obs}=(1+z)\lambda_{\rm rest}`,
 
     .. math::
 
-        \frac{L_b}{L} = \frac{\lambda_0\,T_b\big((1+z)\lambda_0\big)}
-                             {c\,\int T_b\,\mathrm{d}\lambda/\lambda},
+        \frac{L_b}{L} = \frac{\lambda_0\,T_b\big((1+z)\lambda_0\big)\,
+                              w_\lambda\big((1+z)\lambda_0\big)}
+                             {c\,\int T_b\,w\,\mathrm{d}\lambda},
+        \qquad w_\lambda = w\,\lambda,
 
+    where :math:`w_\lambda=1` for the photon-counting weight :math:`w=1/\lambda` and
+    :math:`1/\lambda` for the energy weight :math:`w=1/\lambda^2`
+    (:func:`~tengri.utils.filter_convention.photon_relative_weight`),
     with :math:`\lambda_0` in Angstrom and :math:`c` in Angstrom/s (so the
     result has units of 1/Hz). There is no :math:`d_L` here: the cosmological
     dimming is applied downstream, as for the exact path.
@@ -248,8 +267,8 @@ def delta_line_band_kernel(
         Rest wavelengths of the lines **as the SED renders them** [Angstrom].
     filter_waves, filter_trans : sequence of array_like
         Observed-frame filter curves [Angstrom], [dimensionless].
-    convention : FilterConvention, optional
-        Bandpass weight; ``BESSELL`` (1/lambda) is what the exact path uses.
+    convention : FilterConvention
+        Bandpass weight, the observation's (``BandSpec.convention``).
 
     Returns
     -------
@@ -276,7 +295,8 @@ def delta_line_band_kernel(
         ft = jnp.asarray(ft)
         trans = jnp.interp(obs, fw, ft, left=0.0, right=0.0)
         norm = jnp.trapezoid(ft * filter_weight(fw, convention), fw)
-        cols.append(line_waves * trans / (C_AA * norm))
+        rel = photon_relative_weight(obs, convention)
+        cols.append(line_waves * trans * rel / (C_AA * norm))
     return jnp.stack(cols, axis=-1)
 
 

@@ -311,7 +311,7 @@ def rest_frame_luminosity(
     l_nu: jnp.ndarray,
     filter_wave_aa: jnp.ndarray,
     filter_trans: jnp.ndarray,
-    convention: FilterConvention = FilterConvention.BESSELL,
+    convention: FilterConvention,
 ) -> float:
     r"""Synthetic rest-frame luminosity through a filter.
 
@@ -384,6 +384,8 @@ def rest_frame_color(
     filter1_trans: jnp.ndarray,
     filter2_wave_aa: jnp.ndarray,
     filter2_trans: jnp.ndarray,
+    *,
+    convention: FilterConvention,
 ) -> float:
     r"""Rest-frame color from two filters (magnitude difference).
 
@@ -424,8 +426,12 @@ def rest_frame_color(
     If either flux is zero or negative (due to interpolation artifacts),
     the color is set to 0.
     """
-    l1 = rest_frame_luminosity(wavelength_aa, l_nu, filter1_wave_aa, filter1_trans)
-    l2 = rest_frame_luminosity(wavelength_aa, l_nu, filter2_wave_aa, filter2_trans)
+    l1 = rest_frame_luminosity(
+        wavelength_aa, l_nu, filter1_wave_aa, filter1_trans, convention=convention
+    )
+    l2 = rest_frame_luminosity(
+        wavelength_aa, l_nu, filter2_wave_aa, filter2_trans, convention=convention
+    )
 
     l1_safe = jnp.maximum(l1, 1e-40)
     l2_safe = jnp.maximum(l2, 1e-40)

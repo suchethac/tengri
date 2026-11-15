@@ -117,8 +117,8 @@ from tengri.parameters.translate import (
     check_unknown_params,
     get_internal_params,
 )
+from tengri.utils.band_projection import BandSpec
 from tengri.utils.batching import GALAXY_CHUNK_SIZE
-from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid import (
     grid_spacing,
     interpolate_to_linear_time,
@@ -2419,7 +2419,7 @@ def _fold_igm_exact_into_subbands(
     redshift_spec,
     *,
     lyc_gate=False,
-    convention=FilterConvention.BESSELL,
+    convention,
 ):
     r"""Rebuild the sub-band weights with IGM transmission inside the integrand.
 
@@ -2648,7 +2648,7 @@ def _fold_igm_into_subbands(
     redshift_spec=None,
     *,
     lyc_gate=False,
-    convention=FilterConvention.BESSELL,
+    convention,
 ):
     r"""Fold the IGM transmission into the stellar sub-band quadrature weights.
 
@@ -3320,20 +3320,12 @@ class SEDModel:
     def _resolve_wave_precomp(self, cfg) -> None:
         """Activate the photometry SSP × filter LUT for one ``WavePrecomp`` config.
 
-        The WavePrecomp LUT bakes the filter-convolution convention at build time
-        (ADR-0017). Only the photon-counting Bessell weight is threaded through the
-        component preintegration so far; refuse the energy convention rather than
-        silently producing Bessell fluxes. Shared by the single-object and the
-        composite ``(WavePrecomp, SpectrumPrecomp)`` paths (#610).
+        The LUT bakes the observation's :class:`~tengri.utils.band_projection.BandSpec` (filters,
+        filter convention, sub-band scheme) in at build time (ADR-0017); every builder reads
+        that one spec, so the photon-counting (Bessell) and energy (CIGALE) conventions are
+        both served. Shared by the single-object and the composite
+        ``(WavePrecomp, SpectrumPrecomp)`` paths (#610).
         """
-        _phot = getattr(self.observation, "photometry", None)
-        _conv = getattr(_phot, "convention", FilterConvention.BESSELL)
-        if _conv != FilterConvention.BESSELL:
-            raise NotImplementedError(
-                f"approx=WavePrecomp(...) currently supports only the photon-counting "
-                f"'bessell' convention, got convention={_conv!r}. Use the exact path "
-                f"(approx=None) for the energy/CIGALE convention."
-            )
         self._approx = self._approx.replace(wave_precomp=True)
 
     def _resolve_spectrum_precomp(self, cfg, observation) -> None:
@@ -4825,7 +4817,7 @@ class SEDModel:
             return None
         axis = np.asarray(self.wavelengths, dtype=float) * (1.0 + float(z))
         return filter_coverage_fraction(
-            phot.filter_waves, phot.filter_trans, axis, phot.convention
+            phot.filter_waves, phot.filter_trans, axis, convention=phot.convention
         )
 
     def _photometry_or_none(self):
@@ -12598,6 +12590,19 @@ class SEDModel:
         ctx = self._band_table_context(self._cached_component_chain)
         return provider.band_table(ctx, component=name, slot=slot)
 
+    def _band_spec(self) -> BandSpec:
+        """The observation's band spec: filter curves, its convention, the sub-band count.
+
+        ``lyc_gate`` is False here; a builder with a live Lyman-continuum mask states it with
+        :meth:`BandSpec.replace`.
+        """
+        return BandSpec(
+            filters=(self.filter_waves, self.filter_trans),
+            convention=self.observation.photometry.convention,
+            n_subbands=int(self._approx.get("n_subbands", 0)),
+            lyc_gate=False,
+        )
+
     def _band_table_context(self, chain) -> BandTableContext:
         """The model state a band-table adapter builds from, with ``ask`` bound to the memo.
 
@@ -12611,7 +12616,7 @@ class SEDModel:
         return BandTableContext(
             spec=self.spec,
             wave=self._rest_wavelength,
-            filters=(self.filter_waves, self.filter_trans),
+            bands=self._band_spec(),
             padded_filters=(
                 getattr(state, "phot_fw_padded", None),
                 getattr(state, "phot_ft_padded", None),
@@ -13079,6 +13084,7 @@ class SEDModel:
 
         # Build filter/redshift specs once (reused by all components)
         filters = None
+        bands = None
         redshift_spec = None  # photometry z-table spec
         spec_redshift_spec = None  # spectroscopy z-table spec, kept apart from the above (#2858)
         spec_wave_obs = None
@@ -13101,6 +13107,10 @@ class SEDModel:
                         strict=False,
                     )
                 )
+                # The one band spec every component below integrates with: the
+                # observation's filter curves, its convention, the sub-band count and
+                # whether a live Lyman-continuum mask is in force.
+                bands = self._band_spec().replace(lyc_gate=lyc_mask_live)
 
                 # Redshift spec for photometry
                 if not runtime_z:
@@ -13185,6 +13195,7 @@ class SEDModel:
                         filters=filters,
                         redshift_spec=redshift_spec,
                         lyc_gate=lyc_mask_live,
+                        bands=bands,
                     )
                 elif (isinstance(comp, AGNSEDComponent) and filters is not None) or (
                     isinstance(comp, NebularSEDComponent) and filters is not None
@@ -13196,6 +13207,7 @@ class SEDModel:
                         wave_grid=self.wavelengths if isinstance(comp, AGNSEDComponent) else None,
                         approx=self._approx,
                         filters=filters,
+                        bands=bands,
                     )
                 elif isinstance(comp, IGMSEDComponent):
                     igm_state = comp.precompute_band_factors(
@@ -13233,11 +13245,7 @@ class SEDModel:
                                 filters=filters,
                                 redshift_spec=redshift_spec,
                                 lyc_gate=lyc_mask_live,
-                                convention=getattr(
-                                    self.observation.photometry,
-                                    "convention",
-                                    FilterConvention.BESSELL,
-                                ),
+                                convention=bands.convention,
                             ),
                         )
 

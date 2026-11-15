@@ -391,8 +391,7 @@ class XRaySEDComponent(TemplateThreading):
         filter_eff = state.derived.get("filter_eff_waves")
         if filter_eff is not None:
             band = _term_band_response(template_data, "xray", params)
-            fw_pad = state.derived.get("phot_filter_waves_padded")
-            ft_pad = state.derived.get("phot_filter_trans_padded")
+            bands = state.derived.get("phot_band_spec")
 
             # Compute precomputed photometry if band response is available.
             precomputed = None
@@ -424,7 +423,7 @@ class XRaySEDComponent(TemplateThreading):
             # fail where it used to work.
             z_xray = (
                 jnp.asarray(require_redshift(params, "components.xray.component.apply"))
-                if precomputed is None and fw_pad is not None
+                if precomputed is None and bands is not None
                 else None
             )
 
@@ -434,8 +433,7 @@ class XRaySEDComponent(TemplateThreading):
                 L_xray,
                 wave,
                 filter_eff,
-                fw_pad,
-                ft_pad,
+                bands,
                 z_xray,
                 fallback_fn=_emit,
             )

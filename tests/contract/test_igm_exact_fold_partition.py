@@ -69,6 +69,7 @@ def _quadrature(ssp, filters, z, templates, *, lyc_gate, n_subbands=K):
             taylor=False,
             n_subbands=n_subbands,
             lyc_gate=lyc_gate,
+            convention=FilterConvention.BESSELL,
         ).subband_phot,
         dtype=np.float64,
     )

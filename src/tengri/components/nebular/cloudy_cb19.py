@@ -195,6 +195,7 @@ from tengri.components.nebular._shared import (
 )
 from tengri.components.nebular.ionizing_spectrum import require_ionizing_coverage
 from tengri.config.exceptions import ParameterError, TengriIOError
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
     PreintegratedLines,
@@ -957,6 +958,7 @@ class CB19Backend(NebularBackendDefaults):
         neb_co: float = DEFAULT_NEB_CO,
         neb_dno: float = DEFAULT_NEB_DNO,
         neb_hbfrac: float = DEFAULT_NEB_HBFRAC,
+        convention: FilterConvention,
     ) -> None:
         """Preintegrate CB19 lines through filters; expose CLOUDY-shaped surface.
 
@@ -1079,6 +1081,7 @@ class CB19Backend(NebularBackendDefaults):
             filter_trans,
             redshift,
             axes=surface_axes,
+            convention=convention,
         )
 
         # 6. Apply caller-provided fixed dict (axes are CLOUDY-shape indices: 0,1,2).
