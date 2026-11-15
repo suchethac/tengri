@@ -553,6 +553,7 @@ FITTER_KINDS = {
     ("spectrum", "banded_cov", ""): "spec_banded",
     ("spectrum", "lines_fitted", ""): "spec_lines_fitted",
     ("spectrum", "lines_fitted_dense", ""): "spec_dense_lines_fitted",
+    ("spectrum", "lines_fitted_student_t", ""): "spec_student_t_lines_fitted",
     ("calibration", "cal_marg", ""): "spec_cal",
     ("calibration", "cal_marg_dense", ""): "spec_dense_cal",
     ("calibration", "cal_marg_banded", ""): "spec_banded_cal",
@@ -1004,3 +1005,26 @@ def test_the_scored_error_is_the_one_a_noisy_mock_draws_from():
     np.testing.assert_allclose(total, gaussian(sigma) if noise.dof is None else total, rtol=1e-9)
     control_miss = abs(total - gaussian(err))
     assert control_miss > 1.0, f"control differs by only {control_miss:.3g} nats"
+
+
+@pytest.mark.parametrize(
+    ("channel", "label"),
+    [("calibration", "cal_marg_segments"), ("calibration_lines", "cal_marg_lines_segments")],
+)
+def test_gradient_wrt_the_log_mean_multiplier_matches_finite_differences(channel, label):
+    """``cal_log_q`` enters the marginal through the fiber-fraction window; check its gradient."""
+    preds, data, noise = _synthetic(channel, label)
+    cal = noise.calibration
+    pinned = CalibrationSpec(
+        wavelength=cal.wavelength,
+        n_poly=cal.n_poly,
+        prior_sigma=cal.prior_sigma,
+        segments=cal.segments,
+        n_segments=cal.n_segments,
+        q_window=np.ones(N_PIX),
+        has_q=True,
+    )
+    spec = NoiseSpec(**{**noise.__dict__, "calibration": pinned})
+    assert "cal_log_q" in _scalar_params(preds, spec)
+    assert np.isfinite(float(score(preds, data, spec)))
+    check_gradients(preds, data, spec)
