@@ -894,7 +894,7 @@ def apply_lsf(
     resolution: jnp.ndarray | float,
     sigma_lib_kms: jnp.ndarray | float = 0.0,
     n_bins: int = 16,
-    sigma_v_kms: float = 0.0,
+    sigma_v_kms: jnp.ndarray | float = 0.0,
     *,
     pad_pixels: int | None = None,
 ) -> jnp.ndarray:
@@ -957,7 +957,7 @@ def apply_lsf(
         Number of piecewise-constant segments for variable-R approximation.
         Ignored for scalar R. Higher values are more accurate but slower.
         Typical: 10–20. Default 16.
-    sigma_v_kms : float, optional
+    sigma_v_kms : float or ndarray, optional
         Intrinsic galaxy velocity dispersion :math:`\\sigma_v` [km/s] added
         in quadrature to :math:`\\sigma_{\\rm eff}`. This is the broadening
         from stellar dynamics, distinct from instrument LSF
