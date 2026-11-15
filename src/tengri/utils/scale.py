@@ -347,8 +347,12 @@ def hypot(a, b):
 
     Notes
     -----
-    JIT/grad/vmap-safe. Derivatives are exact to all orders; both derivatives are zero
-    where :math:`a = b = 0`.
+    JIT/grad/vmap-safe. Derivatives are exact to all orders. At :math:`a = b = 0` the
+    function is a cone with no derivative; the convention is the zero subgradient
+    (minimum norm, symmetric in the arguments, and the same as ``jnp.abs`` at 0, from which
+    the model-proportional floors are built). :func:`jnp.hypot` returns (0.5, 0.5) there.
+    The Hessian of the censored energy with a model-error fraction at a prediction of
+    exactly 0 follows this convention and differs from that of ``jnp.hypot``.
     """
     return jnp.hypot(a, b)
 

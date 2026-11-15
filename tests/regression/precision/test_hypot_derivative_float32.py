@@ -84,3 +84,40 @@ def test_effective_noise_gradient_finite_in_float32():
         model = jnp.asarray([1e-29, 2e-29], jnp.float32)
         jac = jax.jacobian(lambda m: compute_effective_noise(noise, m, 0.02))(model)
         assert np.all(np.isfinite(np.asarray(jac)))
+
+
+@pytest.mark.parametrize("x64", [True, False], ids=["float64", "float32"])
+def test_hypot_at_the_origin_has_the_zero_subgradient(x64):
+    """The cone at a = b = 0 has no derivative; the convention is the zero subgradient.
+
+    ``jnp.hypot`` returns (0.5, 0.5) there, a value that depends on how the larger
+    argument is chosen; the zero subgradient is symmetric, the minimum-norm element of the
+    subdifferential, and agrees with ``jnp.abs`` (derivative 0 at 0), which is what the
+    model-proportional floors ``f |m|`` are built from.
+    """
+    with jax.enable_x64(x64):
+        dtype = jnp.float64 if x64 else jnp.float32
+        zero = jnp.asarray(0.0, dtype)
+        ga, gb = jax.grad(hypot, argnums=(0, 1))(zero, zero)
+        assert float(ga) == 0.0 and float(gb) == 0.0
+        ha = jax.hessian(hypot, argnums=0)(zero, jnp.asarray(2.0, dtype))
+        assert np.isfinite(float(ha))
+        # Away from the origin on an axis the derivative is the unit vector.
+        ga, gb = jax.grad(hypot, argnums=(0, 1))(jnp.asarray(3.0, dtype), zero)
+        assert float(ga) == 1.0 and float(gb) == 0.0
+
+
+def test_censored_energy_at_a_zero_prediction_has_a_finite_zero_subgradient_curvature():
+    with jax.enable_x64(True):
+        data = jnp.asarray([1.0, 2.0])
+        noise = jnp.asarray([0.1, 0.2])
+        mask = jnp.asarray([0, 1])
+
+        def energy(theta):
+            return censored_neg_log_likelihood(
+                data, noise, data * theta, mask, 0.05, model_sigma_frac=jnp.asarray(0.1)
+            )
+
+        theta = jnp.zeros(2)
+        assert np.all(np.isfinite(np.asarray(jax.grad(energy)(theta))))
+        assert np.all(np.isfinite(np.asarray(jax.hessian(energy)(theta))))
