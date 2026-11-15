@@ -21,7 +21,7 @@ import pytest
 from scipy.interpolate import PchipInterpolator
 
 import tengri
-from tengri import DEFAULT, Fixed, SEDModel
+from tengri import DEFAULT, Fixed, SEDModel, Uniform
 from tengri.forward.sed_model import SpectrumPrecomp, WavePrecomp
 from tengri.observation import Spectroscopy
 
@@ -194,3 +194,67 @@ def test_spectrum_lut_reads_each_ssp_before_alpha(request, grid):
         f"{grid}: spectrum LUT vs per-SSP ratio spread {spread:.3e} "
         f"(alpha-first reference spread {spread_alpha_first:.3e})"
     )
+
+
+def _build_free_z_lut(ssp4, obs):
+    """Free-redshift twin of :func:`_build_lut`: the ztable photometry route (#3537)."""
+    return SEDModel.build(
+        ssp_data=ssp4,
+        observation=obs,
+        neb={"type": "none"},
+        redshift=Uniform(0.05, 1.0),
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(1.0),
+            "age_frac": Fixed(0.6),
+            "log_total_mass": Fixed(10.0),
+            "all_params": Fixed(DEFAULT),
+            "age_kernel": "cic",
+        },
+        met={"type": "delta", "alpha_fe": Fixed(0.3), "all_params": Fixed(DEFAULT)},
+        dust_attenuation={"type": "none"},
+        dust_emission={"type": "none"},
+        approx=WavePrecomp(),
+    )
+
+
+@pytest.mark.parametrize("grid", ["control_multiplicative", "non_multiplicative"])
+def test_free_z_photometry_reads_metallicity_before_alpha(request, obs, grid):
+    """At a ztable node the free-z route equals the fixed-z route (#3537).
+
+    The fixed-z route reads each SSP across metallicity, then mixes alpha (#3528). The
+    free-z ztable used to collapse alpha first; on a non-multiplicative grid that is a
+    different number at the same redshift. A multiplicative grid is order-independent.
+    """
+    ssp4 = request.getfixturevalue(
+        "ssp_multiplicative" if grid == "control_multiplicative" else "ssp_non_multiplicative"
+    )
+    free = _build_free_z_lut(ssp4, obs)
+    stellar = next(
+        c for c in free._build_component_chain() if type(c).__name__.startswith("Stellar")
+    )
+    z_grid = np.asarray(stellar._state.ssp_phot_ztable.z_grid)
+    z_node = float(z_grid[len(z_grid) // 2])
+    got = np.asarray(free.predict_state({"redshift": z_node}).derived["stellar_phot_lnu_precomp"])
+    fixed = _build_lut(ssp4, obs)
+    fixed = SEDModel.build(
+        ssp_data=ssp4,
+        observation=obs,
+        neb={"type": "none"},
+        redshift=Fixed(z_node),
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(1.0),
+            "age_frac": Fixed(0.6),
+            "log_total_mass": Fixed(10.0),
+            "all_params": Fixed(DEFAULT),
+            "age_kernel": "cic",
+        },
+        met={"type": "delta", "alpha_fe": Fixed(0.3), "all_params": Fixed(DEFAULT)},
+        dust_attenuation={"type": "none"},
+        dust_emission={"type": "none"},
+        approx=WavePrecomp(),
+    )
+    ref = np.asarray(fixed.predict_state({}).derived["stellar_phot_lnu_precomp"])
+    rel = float(np.max(np.abs(got - ref) / np.abs(ref)))
+    assert rel <= 1e-12, f"{grid}: free-z vs fixed-z at a node, max rel {rel:.3e}"

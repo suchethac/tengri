@@ -207,6 +207,10 @@ class PhotometricPrecomputation(NamedTuple):
     #: ``ssp_subband_waves_rest``. Set by the exact IGM fold: the dust screen
     #: multiplying ``ssp_subband_phot_igm`` belongs where the surviving light is.
     ssp_subband_waves_rest_igm: "jnp.ndarray | None" = None
+    #: The same build applied to the native PCHIP slopes across metallicity (#3541),
+    #: as a whole table of the same type. Its arrays are the slope siblings of the
+    #: fields above; ``None`` on a table built without them.
+    slopes: "PhotometricPrecomputation | None" = None
 
 
 class SpectroscopicPrecomputation(NamedTuple):
@@ -250,6 +254,11 @@ class SpectroscopicPrecomputation(NamedTuple):
     #: grid before sampling, or ``None`` for an un-broadened table. Stored so the table
     #: records the kernel it carries; a draw whose dispersion differs must not reuse it.
     sigma_v_kms: "float | None" = None
+    #: The same linear build applied to the native PCHIP slopes across metallicity
+    #: (#3541): ``(n_met, ..., n_pix)`` like ``ssp_on_pixels``. The table is read by the
+    #: cubic Hermite of (values, slopes), which is exact at undeclared scatter. ``None``
+    #: only on a table built without the native slopes, which the stellar read refuses.
+    ssp_on_pixels_slope: "jnp.ndarray | None" = None
 
 
 def precompute_photometry(
@@ -756,6 +765,9 @@ class PhotometricZTable(NamedTuple):
     #: WITH the IGM inside [A]. Set by the exact IGM fold, like the IGM table
     #: itself, so not part of the on-disk z-table.
     subband_waves_rest_igm_table: jnp.ndarray | None = None
+    #: The same z-table build on the native PCHIP slopes across metallicity (#3541), a
+    #: whole table of this type. ``None`` on a table built without it.
+    slopes: "PhotometricZTable | None" = None
 
 
 @dataclasses.dataclass(frozen=True)
