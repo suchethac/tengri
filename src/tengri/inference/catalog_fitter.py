@@ -1010,6 +1010,12 @@ class _CatalogFitterOriginal:
         # model gets no table, a tabulated one a table over this catalog's span, and a
         # declared catalog_z_range is used as it is (#3505). The caller's model is kept.
         per_galaxy_z = [g["redshift"] for g in self.galaxies if "redshift" in g]
+        if per_galaxy_z and len(per_galaxy_z) != self.n_galaxies:
+            missing = [i for i, g in enumerate(self.galaxies) if "redshift" not in g]
+            raise ValueError(
+                f"only some galaxies carry a 'redshift': row(s) {missing} have none. Give "
+                "every galaxy a redshift, or none (all are then fit at the model's own)."
+            )
         if per_galaxy_z:
             from tengri.inference.fitter import promote_to_runtime_redshift
 
