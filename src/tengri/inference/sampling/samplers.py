@@ -25,6 +25,7 @@ from tengri.inference.sampling.chains import (
     PRIOR_SCALE,
     UNADAPTED_START_SCALE,
     jittered_starts,
+    start_scale,
 )
 from tengri.inference.sampling.driver import (
     Sampler,
@@ -39,19 +40,25 @@ _BYTES = 8
 
 
 def _jitter(cfg: dict, target: FlatTarget | None = None) -> float | None:
-    """Start dispersion of independent chains, or ``None`` for the family's own default.
+    """The isotropic start scale of ``target``, or ``None`` for the family's own default.
 
-    ``chain_jitter`` wins. Otherwise a reparametrized target (pilot-whitened, so the posterior
-    has unit scale) gets ``OVERDISPERSION``, a target with the standard prior gets the prior's
-    scale, which the posterior only narrows, and anything else the unadapted default.
+    One rule for every sampler (see :func:`~.chains.start_scale`): ``chain_jitter`` wins; a
+    pilot-whitened target, whose posterior has unit scale, gets ``OVERDISPERSION``; anything
+    else ``None``, which the chain families resolve to the prior's scale when their adaptation
+    estimates a metric and to ``UNADAPTED_START_SCALE`` when it does not, and the
+    samplers without an adapted metric (:func:`_unadapted`) to ``UNADAPTED_START_SCALE``.
     """
     if cfg["chain_jitter"] is not None:
         return float(cfg["chain_jitter"])
     if target is not None and target.extras.get("whitened"):
         return OVERDISPERSION
-    if target is not None and target.prior_is_standard:
-        return PRIOR_SCALE
     return None
+
+
+def _unadapted(cfg: dict, target: FlatTarget) -> float:
+    """The start scale of a sampler with no adapted metric."""
+    scale = _jitter(cfg, target)
+    return UNADAPTED_START_SCALE if scale is None else scale
 
 
 def _bound(target: FlatTarget):
@@ -586,15 +593,11 @@ def _run_lowrank(target, key, n_chains, metric, cfg):
     accept = resolve_accept("hmc", cfg)
     wkey, ckey = jax.random.split(key)
     ld, args = target.logdensity, target.item_args
-    if n_chains == 1:
-        starts = target.init[None, :]
-    else:
-        starts = jittered_starts(
-            target.init, wkey, n_chains, _jitter(cfg, target) or UNADAPTED_START_SCALE
-        )
-    # One warmup shared by every chain, as run_hmc does.
+    # One warmup shared by every chain, as run_hmc does, from the un-jittered centre: the
+    # adaptation then tunes at the point the others are dispersed around, and its metric
+    # sets how far they are dispersed.
     step_size, inv_mass, warm_div = _hmc_low_rank_warmup_only(
-        starts[0],
+        target.init,
         wkey,
         ld,
         args,
@@ -603,6 +606,13 @@ def _run_lowrank(target, key, n_chains, metric, cfg):
         int(cfg["max_rank"]),
         float(accept),
     )
+    if n_chains == 1:
+        starts = target.init[None, :]
+    else:
+        scale = start_scale(
+            inv_mass, PRIOR_SCALE if _jitter(cfg, target) is None else _jitter(cfg, target)
+        )
+        starts = jittered_starts(target.init, wkey, n_chains, scale)
     state0 = blackjax.mcmc.hmc.init(starts[0], lambda p: ld(p, args))
     step_size, _backoff = _stabilize_dense_mass_step(
         _get_hmc_kernel(),

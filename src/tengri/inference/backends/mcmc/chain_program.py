@@ -187,11 +187,16 @@ class Adaptation:
     ensemble : bool
         True when ``state`` is a batch of warmed states, one per sampling chain, that
         the sampling chains start from (MEADS); False when it is one state.
+    adapts_metric : bool
+        True when the returned ``inverse_mass_matrix`` estimates the posterior covariance;
+        False when it is the identity of a family that tunes the step size alone (Barker,
+        MALA), which says nothing about the posterior's scale.
     """
 
     name: str
     run: Any
     ensemble: bool = False
+    adapts_metric: bool = True
 
 
 class CompilePlan(NamedTuple):
@@ -653,7 +658,7 @@ def _dual_averaging_run(warmup_key, init_flat, ld, n_warmup, cfg, info_fn):
 
 #: Dual-averaging step-size adaptation for the first-order family. Adapts the step size
 #: only, with the identity mass matrix, and reports no adaptation info.
-DUAL_AVERAGING = Adaptation(name="dual_averaging", run=_dual_averaging_run)
+DUAL_AVERAGING = Adaptation(name="dual_averaging", run=_dual_averaging_run, adapts_metric=False)
 
 
 def _adapt_body(
@@ -757,7 +762,17 @@ def sample_chain(program, state, chain_keys, ld2, data_args, params, cfg) -> Dra
 
 
 def _run_jittered_chains(
-    program, state, init_flat, warmup_key, init_key, chain_keys, ld, params, cfg, chain_jitter
+    program,
+    state,
+    init_flat,
+    warmup_key,
+    init_key,
+    chain_keys,
+    ld,
+    params,
+    cfg,
+    chain_jitter,
+    adapts_metric=True,
 ):
     """Sample ``chain_keys.shape[0]`` overdispersed chains from one adapted state.
 
@@ -766,7 +781,7 @@ def _run_jittered_chains(
     are jittered. Families that do not start from warmup start at ``init_flat``.
     """
     base = state.position if program.starts_from_warmup else init_flat
-    scale = start_scale(params[1], chain_jitter)
+    scale = start_scale(params[1] if adapts_metric else None, chain_jitter)
     starts = _jittered_starts(base, warmup_key, chain_keys.shape[0], scale)
     return run_jittered_chains(
         lambda s, k: _sample_body(program, s, k, ld, params, cfg),
@@ -859,6 +874,7 @@ def run_chain(
             params,
             cfg,
             chain_jitter,
+            adaptation.adapts_metric,
         ), params
     if not program.starts_from_warmup:
         state = program.init(init_flat, ld, init_key, cfg)

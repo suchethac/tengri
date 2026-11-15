@@ -83,7 +83,15 @@ def start_scale(inverse_mass_matrix, chain_jitter, factor=OVERDISPERSION):
         ``chain_jitter`` without a metric; else the per-coordinate sd, shape (D,), or the
         lower Cholesky factor, shape (D, D), of the start covariance.
     """
-    if inverse_mass_matrix is None or not hasattr(inverse_mass_matrix, "ndim"):
+    if inverse_mass_matrix is None:
+        return chain_jitter
+    if hasattr(inverse_mass_matrix, "U"):
+        # A low-rank metric diag(s)(I + U(L - I)U^T)diag(s): its diagonal is the start sd.
+        variance = inverse_mass_matrix.sigma**2 * (
+            1.0 + (inverse_mass_matrix.U**2) @ (inverse_mass_matrix.lam - 1.0)
+        )
+        return start_scale(variance, chain_jitter, factor)
+    if not hasattr(inverse_mass_matrix, "ndim"):
         return chain_jitter
     if inverse_mass_matrix.ndim == 1:
         iso = jnp.minimum(chain_jitter, START_CAP * jnp.sqrt(inverse_mass_matrix))

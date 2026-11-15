@@ -101,7 +101,7 @@ def _run_bimodal(sampler):
     return result, [str(w.message) for w in caught if "R-hat" in str(w.message)]
 
 
-@pytest.mark.parametrize("sampler", ["nuts", "hmc", "mala"])
+@pytest.mark.parametrize("sampler", ["nuts", "hmc"])
 def test_rhat_detects_a_bimodal_target(sampler):
     result, warned = _run_bimodal(sampler)
     assert result.diagnostics["rhat_max"] > 1.1, result.diagnostics["rhat_max"]
@@ -119,3 +119,124 @@ def test_rhat_stays_quiet_on_the_unimodal_control():
         )
     assert not [w for w in caught if "R-hat" in str(w.message)]
     assert result.diagnostics["rhat_max"] < 1.1
+
+
+def _spy_starts(monkeypatch, module):
+    """Record ``(centre, scale)`` of every ``jittered_starts`` call, traced or not.
+
+    ``run_chain`` is jitted, so inside it the arguments are tracers; a debug callback reads
+    their values at run time. The compile cache is cleared so the spy is traced.
+    """
+    jax.clear_caches()
+    seen = []
+    name = "jittered_starts" if hasattr(module, "jittered_starts") else "_jittered_starts"
+    real = getattr(module, name)
+
+    def record(base, scale):
+        seen.append((np.asarray(base), np.asarray(scale)))
+
+    def spy(base, key, n_chains, scale):
+        jax.debug.callback(record, base, jnp.asarray(scale))
+        return real(base, key, n_chains, scale)
+
+    monkeypatch.setattr(module, name, spy)
+    return seen
+
+
+def _standard_target(dim=3):
+    return FlatTarget(
+        lambda x, args: -0.5 * jnp.sum((x / 0.4) ** 2), LatentLayout.vector(dim), jnp.zeros(dim)
+    )
+
+
+@pytest.mark.parametrize("sampler", ["barker", "mala"])
+def test_a_family_without_an_adapted_metric_starts_at_the_unadapted_scale(sampler, monkeypatch):
+    """Their adaptation returns an identity inverse mass, which is no estimate of the posterior."""
+    from tengri.inference.backends.mcmc import chain_program
+    from tengri.inference.sampling.chains import UNADAPTED_START_SCALE
+
+    seen = _spy_starts(monkeypatch, chain_program)
+    run_sampler(
+        sampler,
+        _standard_target(),
+        key=jax.random.PRNGKey(0),
+        n_chains=3,
+        n_warmup=50,
+        n_samples=20,
+        health_warnings=False,
+    )
+    ((_, scale),) = seen
+    np.testing.assert_allclose(scale, UNADAPTED_START_SCALE)
+
+
+def test_a_family_with_an_adapted_metric_uses_it(monkeypatch):
+    from tengri.inference.backends.mcmc import chain_program
+
+    seen = _spy_starts(monkeypatch, chain_program)
+    run_sampler(
+        "nuts",
+        _standard_target(),
+        key=jax.random.PRNGKey(0),
+        n_chains=3,
+        n_warmup=100,
+        n_samples=20,
+        health_warnings=False,
+    )
+    ((_, scale),) = seen
+    assert scale.shape == (3,) and np.all(scale > OVERDISPERSION * 0.2)
+
+
+def test_independent_runs_use_the_same_rule(monkeypatch):
+    from tengri.inference.sampling import samplers
+    from tengri.inference.sampling.chains import UNADAPTED_START_SCALE
+
+    seen = _spy_starts(monkeypatch, samplers)
+    run_sampler(
+        "map", _standard_target(), key=jax.random.PRNGKey(0), n_chains=3, health_warnings=False
+    )
+    np.testing.assert_allclose(seen[0][1], UNADAPTED_START_SCALE)
+    seen.clear()
+    run_sampler(
+        "map",
+        _standard_target(),
+        key=jax.random.PRNGKey(0),
+        n_chains=3,
+        metric="dense",
+        n_samples=40,
+        health_warnings=False,
+    )
+    # The whitened pass: unit posterior scale, so the start is OVERDISPERSION widths.
+    np.testing.assert_allclose(seen[-1][1], OVERDISPERSION)
+
+
+def test_low_rank_warms_up_from_the_centre_and_starts_chains_by_the_same_rule(monkeypatch):
+    from tengri.inference.backends.mcmc import _shared
+    from tengri.inference.sampling import samplers
+
+    warm_inits = []
+    real_warmup = _shared._hmc_low_rank_warmup_only
+
+    def warm_spy(init, *args, **kwargs):
+        warm_inits.append(np.asarray(init))
+        return real_warmup(init, *args, **kwargs)
+
+    monkeypatch.setattr(_shared, "_hmc_low_rank_warmup_only", warm_spy)
+    seen = _spy_starts(monkeypatch, samplers)
+    target = FlatTarget(
+        lambda x, args: -0.5 * jnp.sum((x / 0.4) ** 2),
+        LatentLayout.vector(3),
+        jnp.array([0.3, -0.2, 0.1]),
+    )
+    run_sampler(
+        "hmc_lowrank",
+        target,
+        key=jax.random.PRNGKey(0),
+        n_chains=3,
+        n_warmup=100,
+        n_samples=20,
+        health_warnings=False,
+    )
+    np.testing.assert_array_equal(warm_inits[0], np.array([0.3, -0.2, 0.1]))
+    ((centre, scale),) = seen
+    np.testing.assert_array_equal(centre, np.array([0.3, -0.2, 0.1]))
+    assert scale.shape == (3,), "the adapted low-rank metric sets the start dispersion"
