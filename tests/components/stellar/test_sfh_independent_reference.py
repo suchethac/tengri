@@ -138,7 +138,7 @@ def _refine(monkeypatch):
 
 
 def _weights(comp, params, ssp):
-    w, m, _ages, _young = comp._joint_weights_impl(params, ssp)
+    w, m, _ages, _young, _met_z = comp._joint_weights_impl(params, ssp)
     return np.asarray(w).sum(axis=0), float(m)
 
 

@@ -217,7 +217,7 @@ def built(synthetic_ssp_wide, synthetic_tophat_obs):
             )
             if met == "table_build":
                 stellar = _with_build_time_met_table(stellar)
-            w_c, m_c, _ages, _yf = stellar._joint_weights_impl(params, synthetic_ssp_wide)
+            w_c, m_c, _ages, _yf, _mz = stellar._joint_weights_impl(params, synthetic_ssp_wide)
             state = stellar.apply(
                 ForwardState(wave=jnp.logspace(3.0, 4.5, 64)), params, synthetic_ssp_wide
             )
