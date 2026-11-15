@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-r"""The N-dimensional PCHIP read is scale-free over the whole exponent range (#3505).
+r"""The N-dimensional PCHIP read is scale-free over the whole exponent range.
 
 The window read divides each column by a power of two near its peak, so the harmonic-mean
 product of two secants can neither overflow (a table of ~1e19 per-Lsun values squares past

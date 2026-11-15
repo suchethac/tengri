@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-r"""The N-dimensional PCHIP read is scale-free in float32 (#3505).
+r"""The N-dimensional PCHIP read is scale-free in float32.
 
 The monotone-cubic tangent test multiplies two secants. A template table of per-solar-
 luminosity values near :math:`10^{19}` (the SKIRTOR band table) squares past float32's

@@ -2101,7 +2101,7 @@ def _scaled_window_cubic_jvp(primals, tangents):
     cubic, and only the derivative with respect to the query (or the node coordinates)
     carries the scale. Autodiff of ``scale * cubic(ys / scale)`` would form the node
     cotangent as ``(ct * scale) * weights / scale``, and for a table of ~1e-37 (float32)
-    or ~1e-300 (float64) the middle product underflows (#3505).
+    or ~1e-300 (float64) the middle product underflows.
     """
     ys, scale, xs, cell, xq = primals
     d_ys, _, d_xs, _, d_xq = tangents
@@ -2142,7 +2142,7 @@ def _window_eval_axis0(st: _AxisStencil, ys: jnp.ndarray, kind: str) -> jnp.ndar
     # The cubic is positively homogeneous in the node values, so it is formed on each
     # column divided by a power of two near its window peak and scaled back: the
     # harmonic-mean test multiplies two secants, so a table of ~1e19 per-Lsun values
-    # overflows float32 and one of ~1e-20 underflows it (#3505). A power of two is exact in
+    # overflows float32 and one of ~1e-20 underflows it. A power of two is exact in
     # binary floating point. The exponent is held in [-(maxexp - 3), maxexp - 3] so both the
     # scale and its reciprocal are normal numbers: a divide that XLA lowers to a multiply by
     # the reciprocal returns 0 when that reciprocal is subnormal (measured for a peak of
