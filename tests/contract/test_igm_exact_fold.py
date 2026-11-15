@@ -233,23 +233,18 @@ def test_more_quadrature_nodes_cannot_substitute_for_the_exact_fold(ssp, observa
 
 
 def test_the_exact_fold_is_free_in_a_band_with_no_structure(ssp, observation):
-    """A band the IGM does not reach must read exactly as it does with no IGM.
+    """It must not perturb bands it has no business touching.
 
-    Across ten bands at z=0.5 only GALEX NUV moved; the other nine were unchanged. The
-    reference is the no-IGM model, not the node fold: the node fold reads its values by
-    PCHIP across Z, which is nonlinear, so it differs from the exact read by round-off
-    amplified by that nonlinearity (6e-7 here, #3541). The exact fold reads the flat band
-    through the same native-slope read as the no-IGM table, so the two agree.
+    Across ten bands at z=0.5 only GALEX NUV moved; the other nine were
+    bit-identical between the folds. A fold that shifted flat bands too would
+    be changing the photometry for some other reason.
     """
-    no_igm = _photometry(
-        _bare_stellar(ssp, observation, WavePrecomp(igm_fold="exact"), igm={"type": "none"})
-    )
+    node = _photometry(_bare_stellar(ssp, observation, WavePrecomp(igm_fold="node")))
     exact = _photometry(_bare_stellar(ssp, observation, WavePrecomp(igm_fold="exact")))
 
-    rel = abs(no_igm[CONTROL] - exact[CONTROL]) / no_igm[CONTROL]
-    assert rel <= 1e-12, (
-        f"the exact fold differs by {rel:.3e} from the no-IGM model in {CONTROL_BAND}, "
-        "which carries no IGM structure"
+    assert node[CONTROL] == exact[CONTROL], (
+        f"the folds differ by {abs(node[CONTROL] - exact[CONTROL]) / node[CONTROL]:.3e} "
+        f"in {CONTROL_BAND}, which carries no IGM structure"
     )
 
 

@@ -3701,12 +3701,16 @@ class StellarSEDComponent:
                 if ssp_sub_phot_igm is not None:
                     # The exact fold's folded integral and its numerator are linear, so each
                     # is read by Hermite with its native-slope sibling (#3541); the node is
-                    # their ratio after the read. The node fold carries neither numerator nor
-                    # sibling (it is nonlinear in F through the node): its values are read by
-                    # PCHIP, as the approximation it is.
+                    # their ratio after the read. The node fold is linear in F too (its
+                    # transmission is flux-free), so it has a sibling and is read the same way,
+                    # with no numerator.
                     num_igm = phot_lut.ssp_subband_num_igm
                     if num_igm is None:
-                        phi_igm_at = jnp.einsum("ma,mafk->afk", joint_x, read(ssp_sub_phot_igm))
+                        phi_igm_at = jnp.einsum(
+                            "ma,mafk->afk",
+                            joint_x,
+                            read(_read_pair(ssp_sub_phot_igm, sl.ssp_subband_phot_igm)),
+                        )
                         num_igm_at = None
                     else:
                         phi_igm_at = jnp.einsum(
@@ -3900,8 +3904,17 @@ class StellarSEDComponent:
                             product=False,
                         )
                     else:
-                        # Node fold: no numerator and no sibling (see the fixed-z read).
-                        phi_igm = _interp(ztable.ssp_subband_phot_igm_table, per_age_rows)
+                        # Node fold: no numerator, but a native-slope sibling (#3541), read
+                        # by the same Hermite as the fixed-z node fold.
+                        phi_igm, _ = _phi_num(
+                            _read_pair(
+                                ztable.ssp_subband_phot_igm_table, zs.ssp_subband_phot_igm_table
+                            ),
+                            _read_pair(
+                                ztable.ssp_subband_phot_igm_table, zs.ssp_subband_phot_igm_table
+                            ),
+                            product=False,
+                        )
                         num_igm = None
                     derived_overrides["stellar_phot_lnu_per_age_subband_igm_precomp"] = (
                         _mass_scale_lnu(phi_igm, total_mass)

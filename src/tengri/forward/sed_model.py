@@ -2762,9 +2762,18 @@ def _fold_igm_into_subbands(
             # Patchy / DLA: nothing to fold at build time; the node fold runs
             # live on the sub-band nodes at every call (#1149).
             return _replace(stellar_state, igm_fold_resolved=igm_fold)
+        # The node is flux-free, so the folded table is linear in F and its native-slope
+        # sibling is the same product on S (#3541): read by Hermite like the exact fold.
+        new_lut = lut._replace(ssp_subband_phot_igm=lut.ssp_subband_phot * trans)
+        if lut.slopes is not None and lut.slopes.ssp_subband_phot is not None:
+            new_lut = new_lut._replace(
+                slopes=lut.slopes._replace(
+                    ssp_subband_phot_igm=lut.slopes.ssp_subband_phot * trans
+                )
+            )
         return _replace(
             stellar_state,
-            ssp_phot_lut=lut._replace(ssp_subband_phot_igm=lut.ssp_subband_phot * trans),
+            ssp_phot_lut=new_lut,
             igm_fold_resolved=igm_fold,
         )
 
@@ -2775,11 +2784,18 @@ def _fold_igm_into_subbands(
             # Patchy / DLA: nothing to fold at build time; the node fold runs
             # live on the sub-band nodes at every call (#1149).
             return _replace(stellar_state, igm_fold_resolved=igm_fold)
+        new_ztable = ztable._replace(
+            ssp_subband_phot_igm_table=ztable.ssp_subband_phot_table * trans
+        )
+        if ztable.slopes is not None and ztable.slopes.ssp_subband_phot_table is not None:
+            new_ztable = new_ztable._replace(
+                slopes=ztable.slopes._replace(
+                    ssp_subband_phot_igm_table=ztable.slopes.ssp_subband_phot_table * trans
+                )
+            )
         return _replace(
             stellar_state,
-            ssp_phot_ztable=ztable._replace(
-                ssp_subband_phot_igm_table=ztable.ssp_subband_phot_table * trans
-            ),
+            ssp_phot_ztable=new_ztable,
             igm_fold_resolved=igm_fold,
         )
 
