@@ -882,6 +882,37 @@ def _observation_serves_line_channel(model) -> bool:
     return obs is not None and getattr(obs, "line_fluxes", None) is not None
 
 
+def _feature_precomp_line_source_decline(model) -> str | None:
+    """Reason a bare ``FeaturePrecomp()`` has no lines to tabulate, or ``None`` if it has.
+
+    Mirrors the line resolution of ``SEDModel._resolve_feature_precomp``: a Q_H-linear
+    (Cue-like) backend tabulates its own lines, any other backend needs the lines of the
+    observation's ``line_fluxes``. Line treatments that live on the spectroscopy
+    (``eline_mode`` fitted or marginalized) name no lines to this table, so ``approx='auto'``
+    must decline it and keep the exact path rather than build a config that refuses (#3505).
+
+    Parameters
+    ----------
+    model : SEDModel
+        The model about to be topped up.
+
+    Returns
+    -------
+    str or None
+        The decline reason, or ``None`` when ``FeaturePrecomp()`` can resolve its lines.
+    """
+    from tengri.forward.sed_model import _is_q_h_linear_backend
+
+    if _is_q_h_linear_backend(getattr(model, "_nebular_backend", None)):
+        return None
+    if _observation_serves_line_channel(model):
+        return None
+    return (
+        "FeaturePrecomp has no lines to tabulate: the nebular backend is not linear in Q_H "
+        "and the Observation carries no line_fluxes"
+    )
+
+
 def _has_line_adjacent_channel(model) -> bool:
     """Whether the observation carries a channel that reads line internals.
 
@@ -2427,9 +2458,10 @@ class Fitter:
         wants_lut = (
             self._fits_lines(model)
             and not _has_line_adjacent_channel(model)
+            and _feature_precomp_line_source_decline(model) is None
             and _feature_precomp_can_pay(model, serves_line_channel=True)
         )
-        configs = (*base, FeaturePrecomp()) if wants_lut else base
+        configs =(*base, FeaturePrecomp()) if wants_lut else base
         if not configs:
             return None
         return configs[0] if len(configs) == 1 else configs
