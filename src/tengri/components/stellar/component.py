@@ -2605,6 +2605,10 @@ class StellarSEDComponentState(SEDComponentState):
     #: nothing modifies per draw (no 4-D alpha collapse, no free AGB weight). The velocity
     #: kernel is frame-invariant, so one cube serves every redshift.
     spec_ssp_broadened: Any | None = None
+    #: The same broadening applied to the native PCHIP slopes across metallicity (#3541),
+    #: ``(n_met, ..., n_wave)`` like ``spec_ssp_broadened``; the cube is read by Hermite of
+    #: (values, slopes). ``None`` whenever ``spec_ssp_broadened`` is.
+    spec_ssp_broadened_slope: Any | None = None
     # Zero-padded observed-frame filter curves (n_filters, max_len), carried so
     # ``apply`` can publish them to ``state.derived`` for the additive-emitter
     # exact-projection path (dust IR / radio / X-ray / AGN). Static; the same
@@ -3045,6 +3049,7 @@ class StellarSEDComponent:
                 spec_lsf_n_bins=spec_state.spec_lsf_n_bins,
                 spec_rest_window=spec_state.spec_rest_window,
                 spec_ssp_broadened=spec_state.spec_ssp_broadened,
+                spec_ssp_broadened_slope=spec_state.spec_ssp_broadened_slope,
             )
 
         # WavePrecomp: photometry SSP×filter LUT. Requires filters + SSP grid.
@@ -3220,6 +3225,7 @@ class StellarSEDComponent:
             n_z=redshift_spec.get("n_z", 100),
         )
         broadened = None
+        broadened_slope = None
         if (
             spec_sigma_v_fixed is not None
             and spec_sigma_v_fixed > 0.0
@@ -3238,12 +3244,21 @@ class StellarSEDComponent:
             broadened = broaden_template_cube(
                 self.ssp_data.ssp_flux, self.ssp_data.ssp_wave, spec_sigma_v_fixed, spec_lsf_n_bins
             )
+            # The same linear broadening of the native PCHIP slopes (#3541): the cube is then
+            # read across Z by the cubic Hermite of (values, slopes).
+            broadened_slope = broaden_template_cube(
+                _native_met_slopes(self.ssp_data),
+                self.ssp_data.ssp_wave,
+                spec_sigma_v_fixed,
+                spec_lsf_n_bins,
+            )
         return StellarSEDComponentState(
             name=self.name,
             ssp_spec_ztable=ztable,
             spec_sigma_v_fixed=spec_sigma_v_fixed,
             spec_lsf_n_bins=spec_lsf_n_bins,
             spec_ssp_broadened=broadened,
+            spec_ssp_broadened_slope=broadened_slope,
         )
 
     def fixed_z_luts_for_threading(self) -> dict | None:
@@ -5048,8 +5063,13 @@ class StellarSEDComponent:
             # per-draw work is the weighted sum and the interpolation, as before sigma_v
             # was applied.
             # On a grid with an [alpha/Fe] axis the broadened cube carries it; each SSP is read
-            # across Z, then the model's alpha bracket is applied (#3434).
-            cube = _collapse_met_then_alpha(spec_state.spec_ssp_broadened, collapse, alpha_bracket)
+            # across Z, then the model's alpha bracket is applied (#3434). Its native-slope
+            # sibling makes the Z read exact (#3541).
+            cube = _collapse_met_then_alpha(
+                _read_pair(spec_state.spec_ssp_broadened, spec_state.spec_ssp_broadened_slope),
+                collapse,
+                alpha_bracket,
+            )
             tot_b = jnp.einsum("ma,maw->w", joint_x, cube)
             age_b = jnp.einsum("ma,maw->aw", joint_x, cube)
             return {

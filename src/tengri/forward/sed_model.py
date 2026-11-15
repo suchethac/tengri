@@ -13273,6 +13273,7 @@ class SEDModel:
                             spec_lsf_n_bins=spec_state.spec_lsf_n_bins,
                             spec_rest_window=spec_state.spec_rest_window,
                             spec_ssp_broadened=spec_state.spec_ssp_broadened,
+                            spec_ssp_broadened_slope=spec_state.spec_ssp_broadened_slope,
                         )
                     else:
                         state = spec_state

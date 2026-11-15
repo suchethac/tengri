@@ -366,9 +366,10 @@ def test_i_free_z_fixed_sigma_v_cube_equals_sum_route(ssp_data_wne, z):
     assert chain[0]._state.spec_ssp_broadened is not None
     s_cube = np.asarray(cube.predict_spectrum({"redshift": z}))
     s_sum = np.asarray(summed.predict_spectrum({"redshift": z, "sigma_v_kms": 300.0}))
-    # Route bar at 3x the measured PCHIP route gap (z=0.08: 1.05e-5, z=0.12: 1.18e-5; main with
-    # the Hermite read: 5.1e-8 and 5.6e-8). Same cause as test_g: PCHIP is non-linear.
-    bar = {0.08: 3.2e-5, 0.12: 3.6e-5}[z]
+    # Route bar at 3x the measured residual with the native-slope Hermite read (#3541: z=0.08
+    # 5.08e-8, z=0.12 5.56e-8, measured 2026-11-15). Before #3541 the PCHIP read of the stored
+    # broadened cube gave 1.05e-5 and 1.18e-5. Same cause as test_g: PCHIP is non-linear.
+    bar = {0.08: 1.6e-7, 0.12: 1.7e-7}[z]
     assert float(np.max(np.abs(s_cube - s_sum))) <= bar * float(np.median(np.abs(s_sum)))
 
 
