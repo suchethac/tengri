@@ -887,18 +887,82 @@ def probe_ionizing_shape_drift(model, ref_params, *, axes, axis_names, wavelengt
     return float(departures[index]), _line_names(waves)[index], float(ratios[index])
 
 
+def _has_free_sfh(spec) -> bool:
+    """True when the SFH carries a free parameter (its history is unknown at build)."""
+    return any(str(name).startswith("sfh_") for name in spec.free_params)
+
+
+def _tabulated_sfh_twin(model):
+    """The model rebuilt with a tabulated SFH: same SSP, nebular, dust and observation.
+
+    The probe needs to run a quenched history through the same nebular and SSP, which
+    a parametric SFH cannot take at runtime. The twin is the exact build with the SFH
+    group swapped for ``{'type': 'table'}``; the rest of the grammar is round-tripped
+    through ``to_dict``.
+
+    Raises
+    ------
+    Exception
+        Whatever the build raises; the caller turns it into a refusal (#3526).
+    """
+    from tengri.forward.sed_model import SEDModel
+
+    groups = dict(model.to_dict())
+    groups["sfh"] = {"type": "table"}
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return SEDModel.build(ssp_data=model.ssp_data, observation=model.observation, **groups)
+
+
+def _twin_probe_params(twin, ref_params):
+    """The model's reference point with the twin's own stand-in history in place."""
+    kept = {k: v for k, v in ref_params.items() if not str(k).startswith("sfh_")}
+    return {
+        **kept,
+        **reference_history_params(twin, redshift=float(ref_params["redshift"])),
+    }
+
+
 def _refuse_ionizing_shape_drift(model, ref_params, *, axes, axis_names, wavelengths):
     """Refuse a table whose per-photon lines move with a quenched history (#3526).
+
+    Which model the probe runs on depends on the SFH:
+
+    - tabulated: the model itself (its history is runtime data);
+    - free parametric: a tabulated twin of the model (its history is unknown at build);
+      if the twin cannot be built the grid is refused, never silently built unverified;
+    - fixed parametric: nothing to probe. The table is built on the model's own fixed
+      history (``ref_params`` carries it), so its per-photon lines are that history's by
+      construction, not a stand-in's.
 
     Raises
     ------
     NebularShapeDriftError
-        When the worst judged line departs from the stand-in by more than
-        ``_SHAPE_DRIFT_TOL``.
+        When the worst judged line departs from the quenched history by more than
+        ``_SHAPE_DRIFT_TOL``, or when the probe's twin cannot be built.
     """
+    if "sfh_t_gyr" in ref_params:
+        probe_model, probe_params = model, ref_params
+    elif _has_free_sfh(model.spec):
+        try:
+            twin = _tabulated_sfh_twin(model)
+        except Exception as exc:
+            raise NebularShapeDriftError(
+                f"FeaturePrecomp cannot verify this grid: the shape probe runs on a "
+                f"tabulated twin of the model (sfh={{'type': 'table'}}, same SSP, nebular "
+                f"and observation), and building that twin failed ({exc}). The table is "
+                f"refused unverified rather than built silently. Fix: use the exact Cue "
+                f"path (no FeaturePrecomp). See #3526.",
+                line="(probe unavailable)",
+                ratio=float("nan"),
+                departure=float("nan"),
+            ) from exc
+        probe_model, probe_params = twin, _twin_probe_params(twin, ref_params)
+    else:
+        return
     probed = probe_ionizing_shape_drift(
-        model,
-        ref_params,
+        probe_model,
+        probe_params,
         axes=axes,
         axis_names=axis_names,
         wavelengths=wavelengths,
@@ -910,13 +974,12 @@ def _refuse_ionizing_shape_drift(model, ref_params, *, axes, axis_names, wavelen
     raise NebularShapeDriftError(
         f"FeaturePrecomp refuses this grid (axes: {grid}). Its per-photon line table is "
         f"built on a constant-SFR stand-in history, and the SFH is not known at build "
-        f"(a tabulated history is runtime data). For line {line}, the per-photon "
-        f"luminosity of a quenched delayed-tau = {_SHAPE_PROBE_TAU_GYR:g} Gyr history is "
-        f"{ratio:.3f}x the stand-in's, a {departure:.1%} departure, above the "
-        f"{_SHAPE_DRIFT_TOL:.0%} tolerance. The cause: this history's ionizing spectrum "
-        f"differs from the constant-SFR stand-in the table was built on. Fix: use the "
-        f"exact Cue path (no FeaturePrecomp; WavePrecomp alone keeps the photometry "
-        f"table). See #3526.",
+        f"(a free or tabulated history). For line {line}, the per-photon luminosity of a "
+        f"quenched delayed-tau = {_SHAPE_PROBE_TAU_GYR:g} Gyr history is {ratio:.3f}x the "
+        f"stand-in's, a {departure:.1%} departure, above the {_SHAPE_DRIFT_TOL:.0%} "
+        f"tolerance. The cause: this history's ionizing spectrum differs from the "
+        f"constant-SFR stand-in the table was built on. Fix: use the exact Cue path (no "
+        f"FeaturePrecomp; WavePrecomp alone keeps the photometry table). See #3526.",
         line=line,
         ratio=ratio,
         departure=departure,

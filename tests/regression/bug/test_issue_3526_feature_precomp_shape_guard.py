@@ -173,24 +173,25 @@ def test_padova_tabulated_history_builds_and_agrees_with_no_warning(phot_and_lin
     assert jnp.isfinite(worst)
 
 
-# ── SFH-free model: a parametric SFH has no history to probe ───────
+# ── the default SFH is free: the twin probe refuses it on the MIST default ──
 
 
-def test_a_parametric_sfh_model_builds_with_feature_precomp_on_the_default_grid(
+def test_the_default_free_sfh_is_refused_with_feature_precomp_on_the_mist_default(
     phot_and_line_obs,
 ):
-    """No tabulated history means the probe does not run, so the build proceeds.
+    """The default SFH carries free parameters, so its history is probed on a twin.
 
-    Recorded as a limit: the probe needs a tabulated stellar SFH to evaluate its
-    quenched reference history, so a parametric SFH on a shape-sensitive grid is not
-    refused here. A fixed parametric SFH is built on its own history (no drift); free
-    parametric SFHs are the open case, see the report.
+    The probe was previously skipped for a parametric SFH and the default build passed
+    silently. The twin probe closes that gap: on the MIST default the free default SFH
+    refuses explicit FeaturePrecomp, as the tabulated history does.
     """
     import tengri
     from tengri import FeaturePrecomp, WavePrecomp
+    from tengri.components.nebular.nebular_grid_precompute import NebularShapeDriftError
 
     obs, _ = phot_and_line_obs
-    _build(tengri.load_ssp(), obs, approx=(WavePrecomp(), FeaturePrecomp()))
+    with pytest.raises(NebularShapeDriftError, match="#3526"):
+        _build(tengri.load_ssp(), obs, approx=(WavePrecomp(), FeaturePrecomp()))
 
 
 # ── approx="auto" through the fitter: fall back with a specific warning ──
@@ -237,3 +238,86 @@ def test_auto_policy_falls_back_to_the_exact_line_path_on_the_mist_default():
     a = np.asarray(exact.predict_line_fluxes(p, target_wavelengths=waves))
     b = np.asarray(fitter.model.predict_line_fluxes(p, target_wavelengths=waves))
     np.testing.assert_allclose(b, a, rtol=1e-6)
+
+
+# ── parametric SFH: the probe runs on a tabulated twin (#3526, second half) ──
+
+
+def _free_delayed():
+    from tengri import FREE
+
+    return {"type": "delayed", "all_params": FREE}
+
+
+def test_free_delayed_sfh_with_explicit_feature_precomp_raises_on_the_mist_default(
+    phot_and_line_obs,
+):
+    """A free SFH's history is unknown at build: its shape is probed on a tabulated twin.
+
+    The twin shares the SSP, nebular and observation, so the MIST default's shape drift
+    is refused for a parametric free SFH exactly as for a tabulated one.
+    """
+    import tengri
+    from tengri import FeaturePrecomp, WavePrecomp
+    from tengri.components.nebular.nebular_grid_precompute import NebularShapeDriftError
+
+    obs, _ = phot_and_line_obs
+    with pytest.raises(NebularShapeDriftError, match="#3526"):
+        _build(
+            tengri.load_ssp(),
+            obs,
+            approx=(WavePrecomp(), FeaturePrecomp()),
+            sfh=_free_delayed(),
+        )
+
+
+def test_free_delayed_sfh_auto_falls_back_with_the_warning_on_the_mist_default(
+    phot_and_line_obs,
+):
+    """Auto keeps the exact line path for a free SFH on the MIST default, and says so."""
+    import tengri
+    from tengri import WavePrecomp
+    from tengri.inference.fitter import Fitter
+    from tengri.observation import Observation
+    from tengri.observation.photometry_config import Photometry
+
+    obs = Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r", "sdss_i"]))
+    ssp = tengri.load_ssp()
+    auto_model = _build(ssp, obs, approx=None, sfh=_free_delayed())
+    phot = np.ones(3) * 1e-16
+    with warnings.catch_warnings(record=True) as seen:
+        warnings.simplefilter("always")
+        fitter = Fitter(auto_model, data=phot, noise=phot * 0.1, data_type="photometry")
+    shape = [w for w in seen if "#3526" in str(w.message)]
+    assert shape, "the auto fallback must warn specifically for a free SFH"
+    assert "Line " in str(shape[0].message)
+    assert not fitter.model.approx.feature_precomp
+
+
+def test_fixed_constant_sfh_builds_with_feature_precomp_on_the_mist_default(phot_and_line_obs):
+    """A fixed parametric SFH is built on its own history, so there is no drift to refuse."""
+    import tengri
+    from tengri import DEFAULT, FeaturePrecomp, WavePrecomp
+    from tengri.parameters.priors import Fixed
+
+    obs, _ = phot_and_line_obs
+    _build(
+        tengri.load_ssp(),
+        obs,
+        approx=(WavePrecomp(), FeaturePrecomp()),
+        sfh={"type": "const", "all_params": Fixed(DEFAULT)},
+    )
+
+
+def test_free_delayed_sfh_builds_with_feature_precomp_on_padova(phot_and_line_obs):
+    """Padova's stand-in holds, so the twin probe passes and the free SFH builds."""
+    import tengri
+    from tengri import FeaturePrecomp, WavePrecomp
+
+    obs, _ = phot_and_line_obs
+    _build(
+        tengri.load_ssp("fsps_prsc_miles_chabrier"),
+        obs,
+        approx=(WavePrecomp(), FeaturePrecomp()),
+        sfh=_free_delayed(),
+    )
