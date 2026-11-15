@@ -48,8 +48,8 @@ from tengri.components.stellar.sfh.registry import (
     resolve_sfh,
 )
 from tengri.cosmology import age_at_z
-from tengri.protocols.component import ForwardState
 from tengri.parameters.resolve import merge_fixed_params
+from tengri.protocols.component import ForwardState
 from tengri.utils.grid import make_log_age_grid
 
 pytestmark = pytest.mark.regression_bug
@@ -81,7 +81,11 @@ CONTRADICTORY = {
         "a runtime Z(t) table (met_history) rides the SFH time axis sfh_t_gyr, which "
         "only sfh_model='table' supplies; apply raises for met_history otherwise"
     )
-    for sfh in [*(k for k in SFH_REGISTRY if k not in NOT_A_FAMILY), COMPOSITE, *MODIFIER_COMPOSITES]
+    for sfh in [
+        *(k for k in SFH_REGISTRY if k not in NOT_A_FAMILY),
+        COMPOSITE,
+        *MODIFIER_COMPOSITES,
+    ]
     if sfh != "table"
 }
 
@@ -157,17 +161,19 @@ def _params(model, sfh, field, met):
 
 
 def _declared_mass(sfh, params):
-    """Declared formed mass [Msun] of this draw, or the table integral for a table."""
+    """Declared formed mass [Msun] of this draw, or the table integral for a table.
+
+    A draw declares exactly one ``*log_total_mass`` (the builder's family prefix
+    need not match the registry name: ``dense_basis`` declares ``sfh_dbp_``).
+    """
     if sfh == "table":
         lbt_yr = (float(age_at_z(Z_OBS)) - T_NODES_GYR[::-1]) * 1e9
         return float(np.trapezoid(SFR_NODES[::-1], lbt_yr))
-    members = set(sfh) if isinstance(sfh, tuple) else {sfh}
-    keys = [
-        k
-        for k in params
-        if k.endswith("log_total_mass") and any(k.startswith(f"sfh_{m}_") for m in members)
-    ]
-    assert len(keys) == 1, f"expected one declared mass for {sfh!r}, found {keys}"
+    keys = [k for k in params if k.endswith("log_total_mass")]
+    assert len(keys) == 1, (
+        f"expected one declared mass for {sfh!r}, found {keys}; "
+        f"params carrying 'total': {sorted(k for k in params if 'total' in k)}"
+    )
     return float(10.0 ** params[keys[0]])
 
 
@@ -210,14 +216,11 @@ def test_joint_weights_agree_between_compute_and_apply(built, cell):
     np.testing.assert_allclose(float(c["m_compute"]), float(c["m_apply"]), rtol=1e-10)
 
 
-@pytest.mark.parametrize(
-    "cell", [c for c in _sweep_cells() if c[1]], ids=_cell_id
-)
+@pytest.mark.parametrize("cell", [c for c in _sweep_cells() if c[1]], ids=_cell_id)
 def test_field_draw_forms_the_declared_mass(built, cell):
     """With the field on, this draw forms the declared mass (#2622, owner ruling B25)."""
-    sfh, field, met = cell
     c = built(*cell)
-    np.testing.assert_allclose(float(c["m_apply"]), _declared_mass(sfh, c["params"]), rtol=1e-10)
+    np.testing.assert_allclose(float(c["m_apply"]), _declared_mass(cell[0], c["params"]), rtol=1e-10)
 
 
 @pytest.mark.parametrize(
