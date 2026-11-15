@@ -8,7 +8,7 @@ first and reads Z second is a different number whenever the alpha nodes are not 
 constant factor apart.
 
 The check is against the LUT's own table, so the LUT's approximation error (about 4e-5
-on this grid, from its filter discretisation, and the same on the control) cancels:
+on this grid, from its filter discretization, and the same on the control) cancels:
 the derived ``stellar_phot_lnu_precomp`` must be proportional, with one constant over
 filters, to the per-SSP reference built from that table.
 """
