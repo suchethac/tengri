@@ -53,13 +53,47 @@ def test_the_diagonal_request_is_recorded_as_diagonal():
     assert result.diagnostics["metric_applied"] == "diag"
 
 
-def test_map_is_invariant_under_whitening():
-    target = _target()
-    direct = run_sampler("map", target, key=jax.random.PRNGKey(0), map_steps=400)
-    factor = jnp.array([[1.5, 0.0, 0.0], [0.7, 0.4, 0.0], [-0.3, 0.2, 2.0]])
-    whitened, back = target.whiten(jnp.array([0.3, -0.2, 0.1]), factor)
-    moved = run_sampler("map", whitened, key=jax.random.PRNGKey(0), map_steps=4000)
-    np.testing.assert_allclose(np.asarray(back(moved.draws)), np.asarray(direct.draws), atol=1e-3)
+def _ill_conditioned_quadratic():
+    """A proper posterior, precision eigenvalues 1.01 to 1e4 + 1, mean two sd from the start."""
+    eig = jnp.array([1e-2, 1.0, 1e4])
+    rot = jnp.linalg.qr(jax.random.normal(jax.random.PRNGKey(0), (3, 3)))[0]
+    precision = rot @ jnp.diag(eig) @ rot.T + jnp.eye(3)
+    mean = rot @ (2.0 / jnp.sqrt(eig + 1.0))
+    linear = precision @ mean
+
+    def logdensity(x, args):
+        return -0.5 * x @ precision @ x + linear @ x
+
+    return FlatTarget(logdensity, LatentLayout.vector(3), jnp.zeros(3)), mean
+
+
+def test_map_reaches_the_optimum_dense_where_diagonal_does_not():
+    """Adam in the unwhitened coordinates cannot resolve a condition number of 1e4."""
+    target, mean = _ill_conditioned_quadratic()
+    key = jax.random.PRNGKey(1)
+    error = {}
+    for metric in ("diag", "dense"):
+        result = run_sampler("map", target, key=key, metric=metric, health_warnings=False)
+        error[metric] = float(jnp.max(jnp.abs(result.draws[0, 0] - mean)))
+    assert error["dense"] < 1e-6, error
+    assert error["diag"] > 1e-2, error
+    assert result.diagnostics["metric_applied"] == "pilot"
+
+
+def test_laplace_starts_from_the_map_under_the_requested_metric():
+    target, mean = _ill_conditioned_quadratic()
+    result = run_sampler(
+        "laplace",
+        target,
+        key=jax.random.PRNGKey(2),
+        metric="dense",
+        n_samples=4000,
+        health_warnings=False,
+    )
+    draws = np.asarray(result.draws).reshape(-1, 3)
+    # The soft direction has sd about 1: 4 sd / sqrt(4000) = 0.063 bounds the Monte Carlo error.
+    np.testing.assert_allclose(draws.mean(0), np.asarray(mean), atol=0.063)
+    assert result.diagnostics["grad_inf_norm"] < 1e-2
 
 
 def test_laplace_is_invariant_under_whitening():

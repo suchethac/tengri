@@ -116,6 +116,9 @@ class Sampler:
         How ``metric="dense"`` is served: by the pilot-whitening layer, by the family's own
         dense adaptation, by the runner itself (it delegates to another sampler), or not at
         all because the result is invariant under the whitening.
+    pilot : str or None
+        Name of the sampler that supplies the pilot draws of the dense-metric layer when this
+        one does not draw a posterior (a point estimate); ``None`` is the sampler itself.
     advisory : str or None
         A warning emitted once per :func:`run_sampler` call, however many internal passes
         (a pilot, then the final run) the layers make.
@@ -129,6 +132,7 @@ class Sampler:
     run: Callable
     fidelity: str = "exact"
     metric_mode: str = "layer"
+    pilot: str | None = None
     advisory: str | None = None
     vmappable: bool = False
 
@@ -282,7 +286,8 @@ def run_sampler(
     # rows to be full rank, and PILOT_ROWS_PER_DIM rows per coordinate keep its estimate from
     # being dominated by noise. A request for fewer draws than that is raised, not refused.
     pilot_cfg = {**full, "n_samples": max(full["n_samples"], pilot_rows(target.n_dim))}
-    pilot = sampler.run(target, pilot_key, 1, "diag", pilot_cfg)
+    pilot_sampler = get_sampler(sampler.pilot) if sampler.pilot else sampler
+    pilot = pilot_sampler.run(target, pilot_key, 1, "diag", pilot_cfg)
     rows, mask = _usable_rows(pilot)
     mu, factor, fallback = pilot_whitening(rows, mask)
     if bool(fallback):

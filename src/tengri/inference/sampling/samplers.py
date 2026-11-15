@@ -387,7 +387,15 @@ def _run_laplace(target, key, n_chains, metric, cfg):
         # MAP + a Gaussian covariance from the curvature AT A VERIFIED MODE: the bare point
         # estimate under 'laplace' would silently drop the error bars, and curvature off a
         # mode is a plausible wrong answer (#1537).
-        mode = guards.adam_map_ascent(logp, tgt.init, cfg["map_steps"], cfg["map_learning_rate"])
+        # The mode comes from the MAP sampler, under the requested metric, so a dense request
+        # optimizes in whitened coordinates before the Hessian is read.
+        mode = run_sampler(
+            "map",
+            tgt,
+            key=k,
+            metric=metric,
+            **{**cfg, "health_warnings": False},
+        ).draws[0, 0]
         # Adam alone plateaus at hierarchical D; the Newton polish reaches the actual mode
         # with the same Hessian machinery the covariance needs.
         mode = guards.newton_polish_mode(logp, mode, tol=cfg["laplace_grad_tol"], max_iters=40)
@@ -708,9 +716,7 @@ register_sampler(Sampler("adjusted_mclmc", "chain", ("mcmc_adjusted_mclmc",), _m
 register_sampler(Sampler("hmc_lowrank", "chain", ("mcmc_hmc_lowrank",), _run_lowrank))
 register_sampler(Sampler("hmc_is", "chain", ("hmc_is",), _run_hmc_is, metric_mode="internal"))
 register_sampler(Sampler("nss", "nested", ("nss",), _run_nss))
-register_sampler(
-    Sampler("map", "point", ("map",), _run_map, fidelity="point", metric_mode="invariant")
-)
+register_sampler(Sampler("map", "point", ("map",), _run_map, fidelity="point", pilot="nuts"))
 register_sampler(Sampler("laplace", "point", ("laplace",), _run_laplace, metric_mode="invariant"))
 register_sampler(Sampler("vi_fullrank", "variational", ("vi_fullrank",), _vi_runner("fullrank")))
 register_sampler(
