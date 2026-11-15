@@ -3166,14 +3166,21 @@ class StellarSEDComponent:
                 precompute_restband_photometry,
             )
 
+            rb_kwargs = dict(
+                filter_waves=filter_list,
+                filter_trans=filter_trans_list,
+                n_subbands=int(approx.get("n_subbands", 0)),
+            )
+            # The same build on the native PCHIP slopes across Z (#3541), the sibling the
+            # metallicity read needs.
+            rb_lut = precompute_restband_photometry(ssp_data=self.ssp_data, **rb_kwargs)
+            rb_slopes = precompute_restband_photometry(
+                ssp_data=self.ssp_data._replace(ssp_flux=_native_met_slopes(self.ssp_data)),
+                **rb_kwargs,
+            )
             state = _replace_state(
                 state,
-                restband_lut=precompute_restband_photometry(
-                    ssp_data=self.ssp_data,
-                    filter_waves=filter_list,
-                    filter_trans=filter_trans_list,
-                    n_subbands=int(approx.get("n_subbands", 0)),
-                ),
+                restband_lut=rb_lut._replace(slopes=rb_slopes),
             )
 
         return state
@@ -3936,6 +3943,14 @@ class StellarSEDComponent:
         # rest band does not move with redshift, so there is nothing to interpolate.
         if self._state is not None and self._state.restband_lut is not None:
             rb = self._state.restband_lut
+            # The rest-band tables are read by Hermite of (values, native slopes) (#3541):
+            # a table without its slope sibling is refused, not read as PCHIP of its values.
+            rbs = rb.slopes
+            if rbs is None:
+                raise ValueError(
+                    "the rest-band table reached the metallicity read without its native-slope "
+                    "sibling (#3541); rebuild it with the slope build."
+                )
             # 4D grid: the restband tables keep their [alpha/Fe] axis and read per SSP (#3434).
             if alpha_bracket is not None:
 
@@ -3945,15 +3960,31 @@ class StellarSEDComponent:
             else:
                 read = collapse
             derived_overrides["stellar_restband_lnu_precomp"] = _mass_scale_lnu(
-                jnp.einsum("ma,maf->f", joint_x, read(rb.ssp_restband_phot)), total_mass
+                jnp.einsum(
+                    "ma,maf->f",
+                    joint_x,
+                    read(_read_pair(rb.ssp_restband_phot, rbs.ssp_restband_phot)),
+                ),
+                total_mass,
             )
             derived_overrides["filter_restband_eff_waves"] = jnp.asarray(rb.restband_eff_waves)
             if rb.ssp_restband_subband_phot is not None:
-                rb_phi = jnp.einsum("ma,mafk->afk", joint_x, read(rb.ssp_restband_subband_phot))
+                rb_phi = jnp.einsum(
+                    "ma,mafk->afk",
+                    joint_x,
+                    read(_read_pair(rb.ssp_restband_subband_phot, rbs.ssp_restband_subband_phot)),
+                )
+                # The numerator is waves x phi: linear in the flux with the node fixed, so its
+                # sibling is the same product on the sibling tables (node x slope-flux).
                 rb_num = jnp.einsum(
                     "ma,mafk->afk",
                     joint_x,
-                    read(rb.ssp_restband_subband_waves * rb.ssp_restband_subband_phot),
+                    read(
+                        _read_pair(
+                            rb.ssp_restband_subband_waves * rb.ssp_restband_subband_phot,
+                            rbs.ssp_restband_subband_waves * rbs.ssp_restband_subband_phot,
+                        )
+                    ),
                 )
                 derived_overrides["stellar_restband_lnu_per_age_subband_precomp"] = (
                     _mass_scale_lnu(rb_phi, total_mass)

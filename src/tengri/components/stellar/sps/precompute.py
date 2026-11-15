@@ -403,6 +403,9 @@ class RestBandPrecomputation(NamedTuple):
     ssp_restband_subband_phot: "jnp.ndarray | None"
     ssp_restband_subband_waves: "jnp.ndarray | None"
     restband_eff_waves: jnp.ndarray
+    #: The same build on the native PCHIP slopes across metallicity (#3541), as a whole table
+    #: of this type. ``None`` on a table built without them; the metallicity read refuses that.
+    slopes: "RestBandPrecomputation | None" = None
 
 
 def precompute_restband_photometry(
