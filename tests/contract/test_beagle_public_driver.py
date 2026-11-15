@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Contract: the BEAGLE public-ingredient driver reads only committed or user-supplied inputs.
 
 The driver repackages public nebular tables (Gutkin+2016, Feltre+2016) and the CANDELS workshop
