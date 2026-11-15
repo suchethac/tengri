@@ -66,9 +66,6 @@ from .beagle_output import (
 
 DEFAULT_IMAGE = "beagletool/beagle:0.29.2"
 SETUP_HINT = "export BEAGLE_WORKDIR=~/beagle/BEAGLE-general"
-ZSUN = 0.01524  # BEAGLE's solar metallicity (log Z/0.01524 in the input tables)
-MPC_CM = 3.0856775814913673e24
-AIR_VACUUM_CUTOFF_AA = 2000.0
 ID_COLUMN = "ID"
 DEFAULT_MIN_REL_ERR = 0.02  # BEAGLE floor on the relative flux error, added in quadrature
 _NAME_RE = re.compile(r"[A-Za-z_][A-Za-z_0-9]*")

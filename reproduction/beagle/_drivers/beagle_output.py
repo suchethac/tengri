@@ -24,10 +24,10 @@ import numpy as np
 from astropy.io import fits
 
 from tengri.utils.air_vacuum import air_to_vac
+from tengri.utils.physics_constants import MPC_CM
 
 from . import units
 
-MPC_CM = 3.0856775814913673e24
 AIR_VACUUM_CUTOFF_AA = 2000.0
 _LINE_RE = re.compile(r"^(?P<name>.+)_(?P<wl>\d+(?:\.\d+)?)_lum_(?P<kind>obs|em)$")
 _MAGNITUDES = {"APPARENT MAGNITUDES": "_APP", "ABSOLUTE MAGNITUDES": "_ABS"}

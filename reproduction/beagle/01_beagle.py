@@ -56,7 +56,13 @@ from reproduction.beagle._drivers.beagle_matrix import RUN_MATRIX, by_section
 
 import tengri
 from tengri import DEFAULT, Fixed, SEDModel, load_ssp_data
-from tengri.utils.physics_constants import L_SUN
+from tengri.utils.physics_constants import AB_ZEROPOINT, L_SUN, LYMAN_LIMIT_AA, Z_SUN
+from tengri.components.nebular.cloudy_cb19 import _HB_PER_QH_LSUN
+from tengri.observation.line_list import LineList
+
+_TENGRI_LINES = LineList.from_names(["Halpha", "Lya"])
+_LINE_AA = dict(zip(_TENGRI_LINES.names, (float(w) for w in _TENGRI_LINES.wavelengths)))
+HALPHA_AA, LYA_REST_AA = _LINE_AA["Halpha"], _LINE_AA["Lya"]  # vacuum [Angstrom], tengri line list
 from tengri.components.dust.attenuation import calzetti, cardelli, chevallard13, lmc, power_law, smc
 from tengri import FREE
 from tengri.components.agn import get_feltre_backend
@@ -564,8 +570,7 @@ GK_WAVE_AA = np.array([wave for _, wave in beagle_driver.GUTKIN_LINES])
 HB = GK_LABELS.index("Hb")
 HA = GK_LABELS.index("Ha")
 ALL_LABELS = GK_LABELS + ("He II 4686",)
-Z_SOLAR_TENGRI = 0.0142
-CASE_B_ERG = 4.78e-13  # H-beta per ionizing photon, case B [erg] (Osterbrock & Ferland 2006)
+CASE_B_ERG = _HB_PER_QH_LSUN * L_SUN  # case B H-beta per ionizing photon [erg] (Osterbrock & Ferland 2006)
 HEII_4686_AA = (4685.0, 4689.0)  # BEAGLE only: the public table has no He II 4686
 MARKERS = ("o", "s", "^")
 LINESTYLES = ("-", "--", ":")
@@ -615,7 +620,7 @@ def neb_model(z_abs, *, continuum="analytic", onset_gyr=1.0):
 
     The constant history runs from lookback ``onset_gyr`` [Gyr] to the present.
     """
-    lz = float(np.log10(z_abs / Z_SOLAR_TENGRI))
+    lz = float(np.log10(z_abs / Z_SUN))
     return SEDModel.build(
         ssp_data=ssp,
         met={"logzsol": Fixed(lz), "logzsol_scatter": Fixed(0.001), "all_params": Fixed(DEFAULT)},
@@ -698,10 +703,10 @@ RB, RT, RR = (a / a[:, [HB]] for a in (B_LINES, T_LINES, RAW_LINES))
 # Build check: one row rebuilt with logU and xi_d fixed, against the free build predicted at the same values.
 _fixed = SEDModel.build(
     ssp_data=ssp,
-    met={"logzsol": Fixed(float(np.log10(0.014 / Z_SOLAR_TENGRI))), "logzsol_scatter": Fixed(0.001), "all_params": Fixed(DEFAULT)},
+    met={"logzsol": Fixed(float(np.log10(0.014 / Z_SUN))), "logzsol_scatter": Fixed(0.001), "all_params": Fixed(DEFAULT)},
     sfh={"type": "const", "log_total_mass": Fixed(LOG_MASS), "start_gyr": Fixed(1.0), "end_gyr": Fixed(1e-4), "other_params": Fixed(DEFAULT)},
     dust_attenuation={"type": "none"},
-    neb={"type": "gutkin16", "logU": Fixed(-3.0), "logZ_gas": Fixed(float(np.log10(0.014 / Z_SOLAR_TENGRI))),
+    neb={"type": "gutkin16", "logU": Fixed(-3.0), "logZ_gas": Fixed(float(np.log10(0.014 / Z_SUN))),
          "xi_d": Fixed(0.3), "log_nH": Fixed(2.0), "co_ratio": Fixed(1.0), "mup": 100, "other_params": Fixed(DEFAULT)},
     redshift=Fixed(0.001),
 )
@@ -949,7 +954,7 @@ for k, (lo, hi) in enumerate(CONT_WINDOWS_AA):
 # %%
 from tengri.utils.physics_constants import C_AA  # noqa: E402
 
-TENGRI_LOG_ZSOL_NEB = float(np.log10(0.014 / Z_SOLAR_TENGRI))
+TENGRI_LOG_ZSOL_NEB = float(np.log10(0.014 / Z_SUN))
 EPISODE_AGE_GYR = 1.0  # BEAGLE `tau` and `max_stellar_age` are 9 (log yr): a 1 Gyr history
 HA_I, HB_I, O3_I = GK_LABELS.index("Ha"), GK_LABELS.index("Hb"), GK_LABELS.index("[OIII]5007")
 
@@ -983,7 +988,7 @@ def tengri_gk_lines(pred):
 def continuum_lambda_ha(wave, l_nu):
     """Mean continuum L_λ [erg/s/Å] at H-alpha from the line-free windows 6400–6500 and 6605–6640 Å."""
     lnu = 0.5 * (window_mean(wave, l_nu, 6400.0, 6500.0) + window_mean(wave, l_nu, 6605.0, 6640.0))
-    return lnu * C_AA / 6564.61**2
+    return lnu * C_AA / HALPHA_AA**2
 
 
 def binned_lnu(wave, l_nu, lo, hi, width=20.0):
@@ -1535,13 +1540,6 @@ AGN_WIN = {
     "OII3727": ((3725.0, 3731.0),), "HeII4686": ((4685.0, 4688.0),), "OIII5007": ((5005.0, 5009.0),),
     "NII6584": ((6582.0, 6586.0),), "SII": ((6714.0, 6734.0),),
 }
-# tengri Feltre line wavelengths [Angstrom, vacuum, as the grid returns them] for each name; doublets are
-# summed. Empty where the Feltre table has no such line. The header names differ from these for [C III] 1910.
-TENGRI_NLR_WAVES = {
-    "Hb": (4862.69,), "Ha": (6564.61,), "CIV": (1548.2, 1550.77), "HeII1640": (1640.4,),
-    "CIII]1908": (1906.68, 1908.73), "NeV3426": (), "OII3727": (3727.09,), "HeII4686": (),
-    "OIII5007": (5008.24,), "NII6584": (6585.27,), "SII": (6718.29, 6732.68),
-}
 
 
 def z_abs_of(zrel):
@@ -1563,8 +1561,9 @@ def tengri_nlr_lines(z_abs, log_u, lacc, *, xi=AGN_XI, log_n=AGN_LOG_N, alpha=AG
     """tengri NLR line luminosities [erg/s] by AGN_WIN name, from the backend at L_acc 10^lacc erg/s."""
     w, lum = tengri_nlr(z_abs, log_u, l_acc=10.0**lacc, xi=xi, log_n=log_n, alpha=alpha)
     out = {}
-    for name, waves in TENGRI_NLR_WAVES.items():
-        out[name] = sum(line_at(w, lum, wave_aa) for wave_aa in waves) if waves else np.nan
+    for name, windows in AGN_WIN.items():  # the backend's own wavelengths inside each window; doublets summed
+        inside = np.any([(w >= lo) & (w <= hi) for lo, hi in windows], axis=0)
+        out[name] = float(lum[inside].sum()) if inside.any() else np.nan
     return out
 
 
@@ -1906,7 +1905,7 @@ print(f"  {'z':>2s} {'rest center [A]':>16s} {'BEAGLE':>9s} {'tengri':>9s} {'dif
 for zi, c, tb, tt in igm_rows:
     print(f"  {zi:2d} {c:16.1f} {tb:9.4f} {tt:9.4f} {tt - tb:9.4f}")
 _d = np.array([r[3] - r[2] for r in igm_rows])
-_edge = np.array([abs(r[1] - 911.76) < 8.0 or abs(r[1] - 1215.67) < 8.0 for r in igm_rows])
+_edge = np.array([abs(r[1] - LYMAN_LIMIT_AA) < 8.0 or abs(r[1] - LYA_REST_AA) < 8.0 for r in igm_rows])
 print(f"§12 bands away from the Lyman limit and Lyman-alpha: largest |difference| {np.abs(_d[~_edge]).max():.4f}, "
       f"median {np.median(np.abs(_d[~_edge])):.4f}")
 for zi in (1, 3, 6):
@@ -1915,7 +1914,6 @@ for zi in (1, 3, 6):
           + ", ".join(f"{x:+.4f}" for x in _d[sel]))
 
 # Lyman-alpha edge band at z = 6, at native template resolution and with REBIN TEMPLATES = 10.
-LYA_REST_AA = 1215.67
 for label, sec_i, sec_n in (
     ("native", "s12_igm_inoue_z6", "s12_igm_none_z6"),
     ("REBIN TEMPLATES = 10", "s12_igm_inoue_z6_rebin10", "s12_igm_none_z6_rebin10"),
@@ -2029,7 +2027,6 @@ CAPSTONE_LABEL = {79: "red", 7837: "blue", 15775: "dusty", 1826: "mid-infrared A
 CAPSTONE_RUN = capstone_run()
 CAPSTONE = beagle_run.run(CAPSTONE_RUN)
 CAPSTONE_CATALOG = beagle_driver.workshop_catalog(1)
-AB_OFFSET = 48.6
 BEAGLE_TO_TENGRI = {
     "CTIO_U": "ctio_u", "VIMOS_U": "vimos_u", "ACS_F435W": "hst_f435w", "ACS_F606W": "hst_f606w",
     "ACS_F775W": "hst_f775w", "ACS_F814W": "hst_f814w", "ACS_F850LP": "hst_f850lp",
@@ -2239,7 +2236,7 @@ def sed_convention_check(gid):
     """Median ratio of the BEAGLE median SED, band-averaged on the CANDELS curves, to its APPARENT MAGNITUDES."""
     res = RESULTS[gid]
     wl_obs, sed = beagle_sed_observed(gid, res["params"]["z"])
-    mags = 10.0 ** (-0.4 * (beagle_model_mags(gid, res["beagle_names"]) + AB_OFFSET))
+    mags = 10.0 ** (-0.4 * (beagle_model_mags(gid, res["beagle_names"]) - AB_ZEROPOINT))
     ratios = []
     for name, m in zip(res["beagle_names"], mags):
         fw, ft = CANDELS_CURVE[name]
@@ -2268,7 +2265,7 @@ for k, gid in enumerate(CAPSTONE_IDS):
     ax.plot(wl_t, f_t, color="C1", lw=1.0, label="tengri at the same parameters")
     pivots = np.array([CANDELS_PIVOT[n] for n in res["beagle_names"]])
     ax.errorbar(pivots, res["fnu"], yerr=res["sig"], fmt="o", color="k", ms=3, capsize=0, label="observed")
-    ax.plot(pivots, 10.0 ** (-0.4 * (beagle_model_mags(gid, res["beagle_names"]) + AB_OFFSET)), "s", color="C0", ms=3, mfc="none")
+    ax.plot(pivots, 10.0 ** (-0.4 * (beagle_model_mags(gid, res["beagle_names"]) - AB_ZEROPOINT)), "s", color="C0", ms=3, mfc="none")
     ax.plot(pivots, res["photometry"][: len(pivots)], "^", color="C1", ms=3, mfc="none")
     ax.set_xscale("log"); ax.set_yscale("log")
     ax.set_title(f"{gid} ({CAPSTONE_LABEL[gid]}), z = {z:.3f}", fontsize=9)
@@ -2277,7 +2274,7 @@ for k, gid in enumerate(CAPSTONE_IDS):
         ax.legend(fontsize=7, frameon=False)
     obs = np.asarray(res["fnu"], float)
     axr.axhline(0.0, color="0.6", lw=0.8)
-    axr.plot(pivots, (10.0 ** (-0.4 * (beagle_model_mags(gid, res["beagle_names"]) + AB_OFFSET)) - obs) / obs, "s", color="C0", ms=3, mfc="none")
+    axr.plot(pivots, (10.0 ** (-0.4 * (beagle_model_mags(gid, res["beagle_names"]) - AB_ZEROPOINT)) - obs) / obs, "s", color="C0", ms=3, mfc="none")
     axr.plot(pivots, (res["photometry"][: len(pivots)] - obs) / obs, "^", color="C1", ms=3, mfc="none")
     axr.set_xscale("log"); axr.set_ylim(-1.0, 1.0)
     axr.set_xlabel(r"observed wavelength [$\mu$m]" if k >= 2 else "")

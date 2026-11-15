@@ -21,8 +21,8 @@ from collections.abc import Sequence
 
 import numpy as np
 
+from .beagle_driver import Z_SUN_BEAGLE
 from .beagle_run import (
-    ZSUN,
     FilterSpec,
     MockRun,
     mock_fixed,
@@ -31,7 +31,7 @@ from .beagle_run import (
 
 # ── Run matrix ──────────────────────────────────────────────────────────────
 def _logz(z_abs: float) -> float:
-    return math.log10(z_abs / ZSUN)
+    return math.log10(z_abs / Z_SUN_BEAGLE)
 
 
 def _delayed_rows(taus: Sequence[float], z: float, z_abs: float) -> tuple[dict[str, float], ...]:

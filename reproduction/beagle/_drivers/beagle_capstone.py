@@ -28,6 +28,7 @@ import numpy as np
 from astropy.table import Table
 
 from tengri.utils.cosmology import age_at_z
+from tengri.units import fnu_to_ujy
 
 from . import beagle_driver as D
 from .beagle_run import FilterSpec, FitRun, Param, fit_fitted, fit_fixed
@@ -35,7 +36,6 @@ from .beagle_run import FilterSpec, FitRun, Param, fit_fitted, fit_fixed
 CAPSTONE_IDS = (79, 7837, 15775, 1826)
 REDSHIFT_COLUMN = "zz"
 SAMPLER_FILE = "MCMC_example.param"  # BEAGLE's MultiNest settings, read from $BEAGLE_PARAM_DIR
-MICROJY_PER_CGS = 1.0e29  # 1 microJy = 1e-29 erg/s/cm^2/Hz
 MASKED_VALUE = -99.0  # negative flux and negative error: BEAGLE ignores the band
 TAU_V_RANGE = (1.0e-3, 5.0)
 MASS_RANGE = (5.0, 12.0)
@@ -70,8 +70,8 @@ def _catalog_table(table: Table, bands: list[str]) -> Table:
     }
     per_galaxy = [D.photometry_for_row(_single_row(table, g), bands) for g in CAPSTONE_IDS]
     for j, band in enumerate(bands):
-        flux = [np.ma.filled(f[j] * MICROJY_PER_CGS, MASKED_VALUE) for _, f, _ in per_galaxy]
-        err = [np.ma.filled(s[j] * MICROJY_PER_CGS, MASKED_VALUE) for _, _, s in per_galaxy]
+        flux = [np.ma.filled(np.asarray(fnu_to_ujy(f[j])), MASKED_VALUE) for _, f, _ in per_galaxy]
+        err = [np.ma.filled(np.asarray(fnu_to_ujy(s[j])), MASKED_VALUE) for _, _, s in per_galaxy]
         columns[f"flux_{band}"] = np.array(flux, dtype=float)
         columns[f"fluxerr_{band}"] = np.array(err, dtype=float)
     return Table(columns)
