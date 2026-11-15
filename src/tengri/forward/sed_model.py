@@ -12260,6 +12260,19 @@ class SEDModel:
         # tabulated on it (:meth:`_nebular_grid_will_serve_dust`). Built only then,
         # so a model without the grid keeps its exact absorbed integral.
         needs_l_ir = needs_l_ir or self._nebular_grid_will_serve_dust(chain)
+        # The verdict is recorded where it is made (#3505 X1); the engagement report reads it.
+        if dust is None:
+            decline = "no dust attenuation component in the chain"
+        elif not needs_l_ir:
+            decline = "no consumer of L_ir (dust emission, radio) and no nebular grid dust channel"
+        elif not self._approx.get("wave_precomp"):
+            decline = "approx=WavePrecomp() not enabled"
+        elif unsafe_free:
+            decline = f"free dust parameters outside allowlist: {sorted(unsafe_free)}"
+        elif self.ssp_data is None:
+            decline = "ssp_data is None"
+        else:
+            decline = None
         if (
             needs_l_ir
             and dust is not None
@@ -12462,6 +12475,9 @@ class SEDModel:
                     lyc_escape_geometry=dust.config.lyc_escape_geometry,
                 )
 
+        if lut is None and decline is None:
+            decline = "the energy-balance LUT builder produced no table for this configuration"
+        self._energy_balance_lut_decline = None if lut is not None else decline
         self._energy_balance_lut_cache = lut
         return lut
 

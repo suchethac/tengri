@@ -166,7 +166,7 @@ def additive_term_band_response(ctx, name):
         return Decline(refusal)
     fw_pad, ft_pad = ctx.padded_filters
     if not ctx.wave_precomp:
-        return Decline("approx=WavePrecomp() is not enabled")
+        return Decline("approx=WavePrecomp() not enabled")
     if fw_pad is None or ft_pad is None:
         return Decline("the padded filter curves are absent, so no band response can be built")
     if not (hasattr(comp, "emission_terms") and hasattr(comp, "EMITTER_PROBE_INPUTS")):
@@ -355,7 +355,7 @@ def additive_term_shape_table(ctx, name) -> BandTable | Decline:
     if not any(p.startswith(prefix) for p in ctx.spec.free_params):
         return Decline(f"no {name} parameter is free, so there is no shape to tabulate")
     if not ctx.wave_precomp:
-        return Decline("approx=WavePrecomp() is not enabled")
+        return Decline("approx=WavePrecomp() not enabled")
     if fw_pad is None or ft_pad is None:
         return Decline("the padded filter curves are absent, so no band response can be built")
     if ctx.z_nodes is not None:

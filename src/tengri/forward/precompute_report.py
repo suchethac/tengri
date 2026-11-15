@@ -128,7 +128,10 @@ def precompute_engagement_report(model: Any) -> PrecomputeEngagementReport:
     if eb_lut_cached == "unset":
         eb_state_obj = PrecomputeState(state="never_attempted")
     elif eb_lut_cached is None:
-        reason = _infer_lut_decline_reason(model)
+        # The reason recorded at the gate beats one inferred from outside.
+        reason = getattr(model, "_energy_balance_lut_decline", None) or _infer_lut_decline_reason(
+            model
+        )
         eb_state_obj = PrecomputeState(state="declined", reason=reason)
     else:
         eb_state_obj = PrecomputeState(state="engaged")

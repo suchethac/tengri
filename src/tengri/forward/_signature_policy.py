@@ -281,6 +281,7 @@ SIGNATURE_POLICY: KeyPolicy = {
         "[component][slot]; built from keyed structure, read by no numerical path"
     ),
     "_energy_balance_lut_cache": exclude("memo cache computed from keyed structure"),
+    "_energy_balance_lut_decline": exclude("decline reason of the memo above; read by no numerical path"),
     "_index_window_lut_cache": exclude("memo cache computed from keyed structure"),
     "_line_window_lut_cache": exclude("memo cache computed from keyed structure"),
     "_property_catalog": exclude("memo cache computed from keyed structure"),

@@ -1546,7 +1546,7 @@ def _dust_gate_decline_reason(emitter, wave_precomp, shape_free, fw_pad, ft_pad)
     if emitter is None:
         return "no dust emission component configured"
     if not wave_precomp:
-        return "approx=WavePrecomp() is not enabled"
+        return "approx=WavePrecomp() not enabled"
     if shape_free:
         return f"free dust shape parameters: {sorted(shape_free)}"
     if fw_pad is None or ft_pad is None:
