@@ -59,6 +59,9 @@ T_NODES_GYR = np.linspace(1.0, 10.0, 19)
 SFR_NODES = 2.0 + 3.0 * np.exp(-0.5 * ((T_NODES_GYR - 4.0) / 1.5) ** 2)
 MET_NODES = np.linspace(-1.0, 0.0, 19)
 COMPOSITE = ("dpl", "burst")
+#: A composite with a binned (non-parametric) member: the build-time ladder must reach it
+#: in apply, the fast path and the prior sampler (#3505).
+COMPOSITE_BINNED = ("continuity", "burst")
 #: Additive-only modifiers: each raises alone (it has no base to act on), so each is
 #: swept as a composite with a smooth partner, and its standalone form is listed here.
 ADDITIVE_ONLY = {
@@ -82,6 +85,7 @@ CONTRADICTORY = {
     for sfh in [
         *(k for k in SFH_REGISTRY if k not in NOT_A_FAMILY),
         COMPOSITE,
+        COMPOSITE_BINNED,
         *MODIFIER_COMPOSITES,
     ]
     if sfh != "table"
@@ -97,7 +101,7 @@ PRIOR_EXCLUSIONS = {
 
 def _sfh_cases():
     families = sorted(k for k in SFH_REGISTRY if k not in (*NOT_A_FAMILY, *ADDITIVE_ONLY))
-    return [*families, COMPOSITE, *MODIFIER_COMPOSITES]
+    return [*families, COMPOSITE, COMPOSITE_BINNED, *MODIFIER_COMPOSITES]
 
 
 def _sweep_cells():

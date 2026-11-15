@@ -2387,6 +2387,11 @@ class StellarSEDComponentConfig(SEDComponentConfig):
             return {"bin_edges_gyr": edges}
         if self.sfh_bin_edges_gyr is None:
             return {}
+        if isinstance(self.sfh_model, list):
+            # A composite binds the ladder onto each of its binned members inside
+            # ``resolve_sfh`` (see ``evaluate_sfh``); the composed callable reads no
+            # ``bin_edges_gyr`` keyword, so there is nothing to merge here.
+            return {}
         from tengri.components.stellar.sfh.registry import _NONPARAM_NAMES
 
         if self.sfh_model not in _NONPARAM_NAMES:
@@ -2694,7 +2699,7 @@ def evaluate_sfh(
     is_composite = isinstance(sfh_model, list)
     if is_composite:
         sfh_fn_composed, spec_params, internal_param_map, _ = resolve_sfh(
-            sfh_model, bin_edges_gyr=getattr(config, "bin_edges_gyr", None)
+            sfh_model, bin_edges_gyr=config.sfh_bin_edges_gyr
         )
         # Bin-edge knot discovery (#765) inspects the first member's callable.
         sfh_spec = SFH_REGISTRY[sfh_model[0]]
