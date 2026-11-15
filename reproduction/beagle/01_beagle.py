@@ -588,12 +588,12 @@ LINE_WINDOWS_AA = (
 assert len(LINE_WINDOWS_AA) == len(GK_LABELS)
 
 
-def beagle_lines(run, windows):
+def beagle_lines(run, windows, kind="_lum_em"):
     """BEAGLE line luminosities [erg/s], shape (rows, len(windows)); each column sums the keys in its windows.
 
     Keys carry the air label and the vacuum wavelength after the underscore, so the match uses vacuum.
     """
-    keys = [k for k in run.line_lums_lsun if k.endswith("_lum_em")]
+    keys = [k for k in run.line_lums_lsun if k.endswith(kind)]
     vac = {k: float(k.split("@")[1].split("_")[1]) for k in keys}
     cols = []
     for groups in windows:
@@ -889,6 +889,288 @@ for k, (lo, hi) in enumerate(CONT_WINDOWS_AA):
 # Lyman-alpha and no continuum, so tengri's Lyman-alpha is the Case B value and its continuum is the analytic
 # free-free plus two-photon term; the continuum is compared with BEAGLE in §8d. BEAGLE writes lines at air
 # wavelengths above 2000 A, and the match above uses the vacuum wavelength in each key.
+
+# %% [markdown]
+# ### §8e Recent star formation
+#
+# The `s8b_episode` runs put a constant current episode on the 1 Gyr delayed history: the episode rate
+# is log SFR in {-1, 0, 0.5, 1, 1.5} over 10 Myr, plus log SFR 0.5 over 31.6 and 100 Myr. The formed
+# mass is 10^10 M☉ in both codes, and the stellar and gas metallicity are 0.014 with log U = -2.5 and
+# xi_d = 0.3. tengri's `recent` episode is the same constant rate over `timescale_myr`. The equivalent
+# width of H-alpha divides the line by the continuum L_λ averaged over the line-free windows 6400–6500 Å
+# and 6605–6640 Å, so both codes use the same continuum estimate.
+
+# %%
+from tengri.utils.physics_constants import C_AA  # noqa: E402
+
+TENGRI_LOG_ZSOL_NEB = float(np.log10(0.014 / Z_SOLAR_TENGRI))
+EPISODE_AGE_GYR = 1.0  # BEAGLE `tau` and `max_stellar_age` are 9 (log yr): a 1 Gyr history
+HA_I, HB_I, O3_I = GK_LABELS.index("Ha"), GK_LABELS.index("Hb"), GK_LABELS.index("[OIII]5007")
+
+
+def episode_model(*, log_sfr, timescale_myr, dust=None, fesc=None):
+    """tengri gutkin16 build: 1 Gyr delayed history plus a current episode, at BEAGLE's Z, log U and xi_d."""
+    neb = {"type": "gutkin16", "logU": Fixed(-2.5), "xi_d": Fixed(0.3), "log_nH": Fixed(2.0),
+           "co_ratio": Fixed(1.0), "other_params": Fixed(DEFAULT)}
+    if fesc is not None:
+        neb["fesc"] = Fixed(fesc)  # the grammar short key of neb_fesc
+    return SEDModel.build(
+        ssp_data=ssp,
+        met={"logzsol": Fixed(TENGRI_LOG_ZSOL_NEB), "logzsol_scatter": Fixed(0.001), "all_params": Fixed(DEFAULT)},
+        sfh={"type": ["delayed", "recent"], "tau_gyr": Fixed(EPISODE_AGE_GYR), "age_gyr": Fixed(EPISODE_AGE_GYR),
+             "log_total_mass": Fixed(LOG_MASS), "log_sfr": Fixed(log_sfr), "timescale_myr": Fixed(timescale_myr),
+             "other_params": Fixed(DEFAULT)},
+        dust_attenuation=dust or {"type": "none"},
+        neb=neb,
+        redshift=Fixed(0.001),
+    )
+
+
+def tengri_gk_lines(pred):
+    """gutkin16 line luminosities [erg/s] in the Gutkin+2016 table order, checked against its wavelengths."""
+    waves = np.asarray(pred.lines.all_waves, float)[: len(GK_LABELS)]
+    if np.max(np.abs(waves - GK_WAVE_AA)) > 5.0:
+        raise ValueError("tengri line order no longer matches the Gutkin+2016 table")
+    return np.asarray(pred.lines.all_lums, float)[: len(GK_LABELS)]
+
+
+def continuum_lambda_ha(wave, l_nu):
+    """Mean continuum L_λ [erg/s/Å] at H-alpha from the line-free windows 6400–6500 and 6605–6640 Å."""
+    lnu = 0.5 * (window_mean(wave, l_nu, 6400.0, 6500.0) + window_mean(wave, l_nu, 6605.0, 6640.0))
+    return lnu * C_AA / 6564.61**2
+
+
+def binned_lnu(wave, l_nu, lo, hi, width=20.0):
+    """Mean L_ν over ``width`` Å bins from ``lo`` to ``hi``: returns (bin centers [Å], binned L_ν)."""
+    edges = np.arange(lo, hi + 0.5 * width, width)
+    grid = np.arange(lo, hi, 1.0) + 0.5
+    f = np.interp(grid, wave, l_nu)
+    idx = np.digitize(grid, edges) - 1
+    vals = np.array([f[idx == k].mean() for k in range(len(edges) - 1)])
+    return 0.5 * (edges[:-1] + edges[1:]), vals
+
+
+EP_ROWS = by_section("s8b_episode")[0].input_table()
+EP_SFR = np.asarray(EP_ROWS["sfr"], float)
+EP_WIN_MYR = 10.0 ** (np.asarray(EP_ROWS["current_sfr_timescale"], float) - 6.0)
+r_ep = beagle("s8b_episode")
+B_EP_LINES = beagle_lines(r_ep, LINE_WINDOWS_AA)
+T_EP = []
+for s, w_myr in zip(EP_SFR, EP_WIN_MYR):
+    pred = episode_model(log_sfr=float(s), timescale_myr=float(w_myr)).predict({})
+    T_EP.append((np.asarray(pred.wave_rest, float), np.asarray(pred.rest_sed(), float), tengri_gk_lines(pred)))
+
+W_EP_B = np.asarray(r_ep.wl_rest_aa, float)
+EW_B = np.array([
+    B_EP_LINES[i, HA_I] / continuum_lambda_ha(W_EP_B, np.asarray(r_ep.continuum_sed[i], float))
+    for i in range(len(EP_SFR))
+])
+EW_T = np.array([lines[HA_I] / continuum_lambda_ha(w, l) for w, l, lines in T_EP])
+O3_B = B_EP_LINES[:, O3_I] / B_EP_LINES[:, HB_I]
+O3_T = np.array([lines[O3_I] / lines[HB_I] for _, _, lines in T_EP])
+
+# Constant-history reference at the same logU, Z and xi_d from §8a: isolates the episode history.
+_ref = NEB_ROWS.index((-2.5, 0.014, 0.3))
+print(f"§8e constant 1 Gyr reference (logU -2.5, Z 0.014, xi 0.3, §8a rows): [OIII]5007/H-beta BEAGLE "
+      f"{RB[_ref, GK_LABELS.index('[OIII]5007')]:.3f}, tengri {RT[_ref, GK_LABELS.index('[OIII]5007')]:.3f}")
+print("§8e episode rows: H-alpha equivalent width [Å] and [O III] 5007 / H-beta, BEAGLE / tengri")
+print(f"  {'log SFR':>8s} {'window [Myr]':>12s} {'EW BEAGLE':>10s} {'EW tengri':>10s} {'T/B':>7s} "
+      f"{'O3/Hb B':>8s} {'O3/Hb T':>8s} {'T-B':>8s}")
+for i in range(len(EP_SFR)):
+    print(f"  {EP_SFR[i]:8.2f} {EP_WIN_MYR[i]:12.1f} {EW_B[i]:10.1f} {EW_T[i]:10.1f} {EW_T[i] / EW_B[i]:7.3f} "
+          f"{O3_B[i]:8.3f} {O3_T[i]:8.3f} {O3_T[i] - O3_B[i]:+8.3f}")
+
+_i1 = int(np.where((EP_SFR == 1.0) & (EP_WIN_MYR == 10.0))[0][0])
+_w_t, _l_t, _lines_t = T_EP[_i1]
+_ha_ratio = _lines_t[HA_I] / B_EP_LINES[_i1, HA_I]
+_cont_ratio = continuum_lambda_ha(_w_t, _l_t) / continuum_lambda_ha(W_EP_B, np.asarray(r_ep.continuum_sed[_i1], float))
+print(f"§8e row log SFR 1, 10 Myr: H-alpha luminosity tengri/BEAGLE {_ha_ratio:.3f}, continuum L_λ at H-alpha "
+      f"tengri/BEAGLE {_cont_ratio:.3f}, EW ratio {EW_T[_i1] / EW_B[_i1]:.3f} (= luminosity / continuum)")
+
+fig, (ax_a, ax_b) = plt.subplots(1, 2, figsize=(9.5, 3.6))
+ten = EP_WIN_MYR == 10.0
+ax_a.plot(EP_SFR[ten], EW_B[ten], "o", color="C0", ms=4, label="BEAGLE")
+ax_a.plot(EP_SFR[ten], EW_T[ten], "-s", color="C1", ms=3.5, lw=1.0, label="tengri")
+ax_a.set_xlabel(r"episode $\log_{10}$ SFR [M$_\odot$/yr] over 10 Myr", fontsize=8)
+ax_a.set_ylabel(r"H$\alpha$ EW [Å]", fontsize=8)
+ax_a.set_yscale("log")
+ax_a.legend(fontsize=7, frameon=False)
+mid = (EP_SFR == 0.5)
+order = np.argsort(EP_WIN_MYR[mid])
+ax_b.plot(EP_WIN_MYR[mid][order], EW_B[mid][order], "o-", color="C0", lw=1.0, ms=4, label="BEAGLE EW")
+ax_b.plot(EP_WIN_MYR[mid][order], EW_T[mid][order], "s-", color="C1", lw=1.0, ms=4, label="tengri EW")
+ax_b.set_xscale("log")
+ax_b.set_xlabel("episode window [Myr], log SFR 0.5", fontsize=8)
+ax_b.set_ylabel(r"H$\alpha$ EW [Å]", fontsize=8)
+ax_b.legend(fontsize=7, frameon=False)
+fig.tight_layout()
+save_fig("beagle_08e_episode.png")
+plt.show()
+
+fig, axes = plt.subplots(2, 2, figsize=(9.5, 5.2), sharex="col", gridspec_kw={"height_ratios": (3.0, 1.0)})
+for col, i in enumerate((3, 6)):
+    wb, lb = W_EP_B, np.asarray(r_ep.sed_lnu[i], float)
+    wt, lt, _ = T_EP[i]
+    cen, bb = binned_lnu(wb, lb, 3600.0, 7000.0)
+    _, bt = binned_lnu(wt, lt, 3600.0, 7000.0)
+    axes[0, col].plot(cen, bb, color="C0", lw=1.0, label="BEAGLE")
+    axes[0, col].plot(cen, bt, color="C1", lw=1.0, label="tengri")
+    axes[0, col].set_yscale("log")
+    axes[0, col].set_title(f"log SFR {EP_SFR[i]:g}, window {EP_WIN_MYR[i]:g} Myr", fontsize=8)
+    axes[1, col].plot(cen, bt / bb, color="k", lw=0.8)
+    axes[1, col].axhline(1.0, color="0.6", lw=0.8)
+    axes[1, col].set_xlabel(r"rest wavelength [Å], 20 Å bins", fontsize=8)
+axes[0, 0].legend(fontsize=7, frameon=False)
+axes[0, 0].set_ylabel(r"$L_\nu$ [erg/s/Hz]", fontsize=8)
+axes[1, 0].set_ylabel("tengri / BEAGLE", fontsize=8)
+fig.tight_layout()
+save_fig("beagle_08e_spectra.png")
+plt.show()
+
+# %% [markdown]
+# The H-alpha EW ratio tengri/BEAGLE is 0.82 to 0.86 on the rows where BEAGLE's EW exceeds 10 Å. On the
+# log SFR 1, 10 Myr row the line luminosity ratio is 0.875 and the continuum ratio at H-alpha is 1.027, so the
+# EW gap is the line part: the ionizing output of CB16 (BEAGLE) against BC03 STELIB (tengri), the library
+# bracket that §8c measures per SFR (0.73). On the log SFR -1 row BEAGLE's EW is 1.3 Å and tengri's is 1.41
+# times larger; this row is at the continuum-dominated limit and is not classified beyond that.
+#
+# The [O III]/H-beta ratio does not change with the episode rate in either code. BEAGLE's stays at
+# 3.649 to 3.651, and the constant-history reference at the same log U, Z and xi_d (§8a) is 3.651. tengri's
+# constant reference is 3.327, and with the episode it is 5.189, so the episode raises tengri's ratio by
+# 0.19 dex while BEAGLE's is unchanged. This is not isolated in this lane; the candidate is tengri's
+# episode ionizing spectrum, which is model physics on the tengri side.
+
+# %% [markdown]
+# ### §8f Dust inside H II regions
+#
+# The `s8c_hiidust_on` and `s8c_hiidust_off` runs share the episode (log SFR 1 over 10 Myr) and CF00 depths
+# tau_V,eff of 0.3, 1 and 2 with mu = 0.4. BEAGLE applies dust inside the H II regions only in the `on`
+# run. tengri has no separate H II-region dust term: its two-component birth-cloud screen acts on the
+# nebular light and the stellar light of ages below 10 Myr, with the power-law slopes -1.3 and -0.7 of
+# §5. The table places tengri between the two BEAGLE runs with the fraction (tengri - off) / (on - off).
+
+# %%
+TAUV_HII = np.asarray(by_section("s8c_hiidust_on")[0].input_table()["tauV_eff"], float)
+np.testing.assert_allclose(np.asarray(by_section("s8c_hiidust_off")[0].input_table()["tauV_eff"], float), TAUV_HII)
+r_hon, r_hoff = beagle("s8c_hiidust_on"), beagle("s8c_hiidust_off")
+BON = beagle_lines(r_hon, LINE_WINDOWS_AA, kind="_lum_obs")
+BOFF = beagle_lines(r_hoff, LINE_WINDOWS_AA, kind="_lum_obs")
+PRED_HII = [episode_model(log_sfr=1.0, timescale_myr=10.0, dust=cf00_dict(float(tv))).predict({}) for tv in TAUV_HII]
+TLINES_HII = [tengri_gk_lines(p) for p in PRED_HII]
+
+BAL_ON = BON[:, HA_I] / BON[:, HB_I]
+BAL_OFF = BOFF[:, HA_I] / BOFF[:, HB_I]
+BAL_T = np.array([t[HA_I] / t[HB_I] for t in TLINES_HII])
+O3_ON = BON[:, O3_I] / BON[:, HB_I]
+O3_OFF = BOFF[:, O3_I] / BOFF[:, HB_I]
+O3_TH = np.array([t[O3_I] / t[HB_I] for t in TLINES_HII])
+
+print("§8f H II-region dust: H-alpha / H-beta and [O III] 5007 / H-beta, observed (attenuated) lines")
+print(f"  {'tauV':>5s} {'Ha/Hb on':>9s} {'Ha/Hb off':>10s} {'Ha/Hb T':>9s} {'frac':>7s} "
+      f"{'O3/Hb on':>9s} {'O3/Hb off':>10s} {'O3/Hb T':>9s} {'frac':>7s}")
+for k, tv in enumerate(TAUV_HII):
+    frac_bal = (BAL_T[k] - BAL_OFF[k]) / (BAL_ON[k] - BAL_OFF[k])
+    # The [O III]/H-beta on-off gap is below 1 %, so its fraction is not defined; the column says so.
+    o3_gap = abs(O3_ON[k] - O3_OFF[k]) / O3_OFF[k]
+    frac_o3 = f"{(O3_TH[k] - O3_OFF[k]) / (O3_ON[k] - O3_OFF[k]):7.3f}" if o3_gap > 0.01 else f"{'n/a':>7s}"
+    print(f"  {tv:5.1f} {BAL_ON[k]:9.3f} {BAL_OFF[k]:10.3f} {BAL_T[k]:9.3f} {frac_bal:7.3f} "
+          f"{O3_ON[k]:9.3f} {O3_OFF[k]:10.3f} {O3_TH[k]:9.3f} {frac_o3}")
+
+TIDX = 1  # tauV_eff = 1 for the spectrum ratio
+cen_h, b_on = binned_lnu(W_EP_B, np.asarray(r_hon.sed_lnu[TIDX], float), 3600.0, 7000.0)
+_, b_off = binned_lnu(W_EP_B, np.asarray(r_hoff.sed_lnu[TIDX], float), 3600.0, 7000.0)
+_, b_t = binned_lnu(np.asarray(PRED_HII[TIDX].wave_rest, float), np.asarray(PRED_HII[TIDX].rest_sed(), float), 3600.0, 7000.0)
+fig, ax = plt.subplots(figsize=(8.0, 3.6))
+ax.plot(cen_h, b_on / b_off, color="C0", lw=1.0, label="BEAGLE on / off")
+ax.plot(cen_h, b_t / b_on, color="C1", lw=1.0, label="tengri / BEAGLE on")
+ax.plot(cen_h, b_t / b_off, color="C2", lw=1.0, ls="--", label="tengri / BEAGLE off")
+ax.axhline(1.0, color="0.6", lw=0.8)
+ax.set_xlabel("rest wavelength [Å], 20 Å bins", fontsize=8)
+ax.set_ylabel("spectrum ratio", fontsize=8)
+ax.set_title(r"$\tau_{V,\rm eff}=1$, $\mu=0.4$", fontsize=9)
+ax.legend(fontsize=7, frameon=False)
+fig.tight_layout()
+save_fig("beagle_08f_hii_dust.png")
+plt.show()
+print(f"§8f spectrum ratio at tauV_eff 1, 3600-7000 A (20 A bins): BEAGLE on/off median {np.median(b_on / b_off):.3f}, "
+      f"tengri/BEAGLE on median {np.median(b_t / b_on):.3f}, tengri/BEAGLE off median {np.median(b_t / b_off):.3f}")
+
+# %% [markdown]
+# BEAGLE's on run has the lower Balmer decrement at every tauV_eff (3.11 against 3.26 at 0.3, 3.87 against 4.05
+# at 1, 5.27 against 5.52 at 2), the opposite of what extra dust on the Balmer lines would give. The sign is
+# a BEAGLE convention for the H II term and is not explained in this lane. The [O III]/H-beta on-off gap is
+# under 1 % at every depth, so its fraction is not defined. tengri sits between the two BEAGLE runs at
+# fractions 0.42, 0.46 and 0.59 of the way from off to on in the Balmer decrement. tengri applies the
+# birth-cloud screen to the nebular light and has no H II-internal term, so it cannot match either BEAGLE run
+# exactly; the 3600–7000 Å spectra agree to a median of 1.4 % with BEAGLE on and 0.5 % with BEAGLE off. The
+# [O III]/H-beta gap to BEAGLE (about 0.15 dex, §8e) is the same gap as in the episode rows, not a new one.
+
+# %% [markdown]
+# ### §8g LyC escape
+#
+# The `s8d_fesc` runs set the escape fraction to 0, 0.1, 0.3 and 0.6 on the 10 Myr episode with no dust.
+# BEAGLE's `LyC_f_esc` removes that fraction of the ionizing photons from the line emission. tengri's
+# `neb_fesc` scales every nebular amplitude, lines and continuum, by one common factor, so the line
+# ratios depend on f_esc only through that factor. The expected line ratio is 1 - f_esc for BEAGLE and
+# (1 - f_esc) / (1 + 0.597 f_esc) for tengri. The continuum column compares the light between 800 and 900 Å,
+# below the Lyman limit, relative to f_esc = 0.
+
+# %%
+FESC_VALS = np.asarray(by_section("s8d_fesc")[0].input_table()["LyC_f_esc"], float)
+r_fe = beagle("s8d_fesc")
+B_FE = beagle_lines(r_fe, LINE_WINDOWS_AA)
+W_FE = np.asarray(r_fe.wl_rest_aa, float)
+T_FE_PRED = [episode_model(log_sfr=1.0, timescale_myr=10.0, fesc=float(f)).predict({}) for f in FESC_VALS]
+T_FE_LINES = np.array([tengri_gk_lines(p) for p in T_FE_PRED])
+K0 = int(np.where(FESC_VALS == 0.0)[0][0])
+HB_B = B_FE[:, HB_I] / B_FE[K0, HB_I]
+HA_B = B_FE[:, HA_I] / B_FE[K0, HA_I]
+HB_T = T_FE_LINES[:, HB_I] / T_FE_LINES[K0, HB_I]
+HA_T = T_FE_LINES[:, HA_I] / T_FE_LINES[K0, HA_I]
+CONT_B = np.array([window_mean(W_FE, np.asarray(r_fe.continuum_sed[i], float), 800.0, 900.0) for i in range(len(FESC_VALS))])
+CONT_T = np.array([window_mean(np.asarray(p.wave_rest, float), np.asarray(p.rest_sed(), float), 800.0, 900.0) for p in T_FE_PRED])
+
+print("§8g LyC escape: line ratios to f_esc = 0 and the continuum at 800-900 Å, BEAGLE / tengri")
+print(f"  {'f_esc':>5s} {'Hb B':>7s} {'Hb T':>7s} {'Ha B':>7s} {'Ha T':>7s} {'1-f':>7s} {'T theory':>9s}")
+for k, f in enumerate(FESC_VALS):
+    t_theory = (1.0 - f) / (1.0 + 0.597 * f)
+    print(f"  {f:5.2f} {HB_B[k]:7.3f} {HB_T[k]:7.3f} {HA_B[k]:7.3f} {HA_T[k]:7.3f} {1.0 - f:7.3f} {t_theory:9.3f}")
+print(f"  {'f_esc':>5s} {'cont 800-900 A B [erg/s/Hz]':>28s} {'tengri':>12s} {'T/B':>8s}")
+for k, f in enumerate(FESC_VALS):
+    print(f"  {f:5.2f} {CONT_B[k]:28.4e} {CONT_T[k]:12.4e} {CONT_T[k] / CONT_B[k]:8.3f}")
+
+fig, (ax_l, ax_c) = plt.subplots(1, 2, figsize=(9.5, 3.5))
+ax_l.plot(FESC_VALS, HB_B, "o", color="C0", ms=4, label=r"BEAGLE H$\beta$")
+ax_l.plot(FESC_VALS, HA_B, "^", color="C0", ms=4, mfc="none", label=r"BEAGLE H$\alpha$")
+ax_l.plot(FESC_VALS, HB_T, "s", color="C1", ms=4, label=r"tengri H$\beta$")
+ax_l.plot(FESC_VALS, HA_T, "v", color="C1", ms=4, mfc="none", label=r"tengri H$\alpha$")
+fine = np.linspace(0.0, 0.6, 61)
+ax_l.plot(fine, 1.0 - fine, "k--", lw=0.8, label=r"$1-f_{\rm esc}$")
+ax_l.plot(fine, (1.0 - fine) / (1.0 + 0.597 * fine), "k:", lw=0.8, label="tengri form")
+ax_l.set_xlabel(r"$f_{\rm esc}$", fontsize=8)
+ax_l.set_ylabel("line / value at 0", fontsize=8)
+ax_l.legend(fontsize=6, frameon=False)
+ax_c.plot(FESC_VALS, CONT_B, "o", color="C0", ms=4, label="BEAGLE")
+ax_c.plot(FESC_VALS, CONT_T, "s", color="C1", ms=4, label="tengri")
+ax_c.set_yscale("log")
+ax_c.set_xlabel(r"$f_{\rm esc}$", fontsize=8)
+ax_c.set_ylabel(r"mean $L_\nu$ 800-900 Å [erg/s/Hz]", fontsize=8)
+ax_c.legend(fontsize=7, frameon=False)
+fig.tight_layout()
+save_fig("beagle_08g_lyc_escape.png")
+plt.show()
+
+# %% [markdown]
+# BEAGLE's H-beta and H-alpha fall exactly as 1 - f_esc (0.900, 0.700, 0.400). tengri's fall as
+# (1 - f_esc) / (1 + 0.597 f_esc), the form stated in `docs/model_reference/nebular.md`, and its printed
+# values match that form to 0.001 at every escape fraction. This is a convention: BEAGLE removes photons from
+# the lines, while tengri applies one factor that also scales the continuum, so its line ratios leave the
+# Balmer decrement unchanged and fall to 0.849, 0.594 and 0.295 instead.
+#
+# Below 912 Å the two codes carry the escaping light. At f_esc 0.1, 0.3 and 0.6 the continuum ratio
+# tengri/BEAGLE is 0.585, 0.612 and 0.619, which sits near the 0.73 per-SFR ratio of §8c, so it is a library
+# bracket candidate and is not isolated. At f_esc 0 the two codes differ by six orders of magnitude (BEAGLE
+# 1.98e26, tengri 2.18e20 erg/s/Hz). That residual is not isolated in this lane.
 
 # %% [markdown]
 # ## 9. AGN narrow-line region
