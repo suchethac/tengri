@@ -72,7 +72,7 @@ def _curve(lo: float, hi: float, name: str, n: int = 60) -> FilterCurve:
 
 
 def _wide(center: float, name: str) -> FilterCurve:
-    """A band spanning 0.5 centre either side, so a steep emitter shows its slope."""
+    """A band spanning 0.5 center either side, so a steep emitter shows its slope."""
     return _curve(center * 0.5, center * 1.5, name)
 
 
