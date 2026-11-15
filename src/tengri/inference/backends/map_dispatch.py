@@ -21,7 +21,7 @@ from jax.scipy.optimize import minimize as _jax_minimize
 from tengri.config.exceptions import warn_measured
 from tengri.inference._model_cache import _default_owner as _model_cache_owner
 from tengri.inference.context import InferenceContext
-from tengri.inference.lbfgs_driver import lbfgs_to_gtol
+from tengri.inference.lbfgs_driver import BoundLoss, lbfgs_to_gtol
 from tengri.inference.likelihoods.gaussian import inv_noise_std
 from tengri.inference.map_stationarity import (
     MAP_DECREMENT_BAR,
@@ -554,10 +554,12 @@ def _accept_round(candidate, best, bar: float) -> bool:
 
 
 def _bind_data(flat_loss, data):
-    """``vec -> flat_loss(vec, data)``, or ``flat_loss`` itself when there is no data."""
-    if data is None:
-        return flat_loss
-    return lambda vec: flat_loss(vec, data)
+    """``flat_loss`` bound to ``data`` as a traced argument (see :class:`BoundLoss`).
+
+    Each continuation round binds afresh, but the compiled driver keys on ``flat_loss`` and
+    the data shapes, so the rounds share one program (#3530).
+    """
+    return BoundLoss(flat_loss, data)
 
 
 def _scipy_stop_accepted(flat_loss, x, *, scipy_success, gtol, data=None):

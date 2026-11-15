@@ -754,6 +754,22 @@ def _measure_slope(
 WINDOW_SUPPORT_EDGES: float = 30.0
 
 
+def exact_window_precomp(pc, joint, lgmet, met_z):
+    """A window precomputation with its integrands read exactly over metallicity (#3434).
+
+    ``joint`` is the metallicity-read joint of ``compute_joint_weights_exact``: with a
+    single row it is the age marginal and the integrands are PCHIP-read at ``met_z``
+    first, so the window contraction is exact. Declared scatter: unchanged.
+    """
+    import dataclasses
+
+    from tengri.components.stellar.sps.met_pchip import exact_table
+
+    pts = pc.points
+    integrands = exact_table(pts.integrands, joint, lgmet, met_z, age_axis=1)
+    return dataclasses.replace(pc, points=dataclasses.replace(pts, integrands=integrands))
+
+
 @dataclasses.dataclass(frozen=True)
 class WindowPoints:
     """SSP window integrals resolved by grid point, for an in-window dust screen.

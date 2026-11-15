@@ -1737,7 +1737,7 @@ class DustSEDComponent(TemplateThreading):
             _dir = template_data.get("dust_ir")
             if isinstance(_dir, dict):
                 eb_lut = _dir.get("energy_balance_lut")
-        jw = state.derived.get("joint_weights")
+        jw = state.derived.get("met_exact_joint")
         # The log10 offset, not the linear ~1e43 scale: the latter is ``inf``
         # in pure float32 for any galaxy above ~9e4 Msun, and logging it here
         # would recover ``inf`` rather than the finite value the producer
@@ -1757,6 +1757,7 @@ class DustSEDComponent(TemplateThreading):
             from tengri.components.dust.energy_balance_precompute import (
                 collapse_lut_alpha,
                 lut_l_absorbed_stellar_log10,
+                read_lut_met,
             )
             from tengri.forward.energy_balance import bolometric_absorbed_log10
             from tengri.utils.scale import log10_add, log10_add_signed
@@ -1775,6 +1776,9 @@ class DustSEDComponent(TemplateThreading):
             # when lyc_in_energy_balance=True and a live photoionized nebular
             # component is in the chain): passing ``lyc_fesc`` here is always
             # safe, it is simply ignored otherwise.
+            eb_lut, jw = read_lut_met(
+                eb_lut, jw, state.derived["met_exact_z"], state.derived["met_exact_lgmet"]
+            )
             log_stellar, sign_stellar = lut_l_absorbed_stellar_log10(
                 eb_lut,
                 jnp.asarray(jw),

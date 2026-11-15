@@ -9504,14 +9504,20 @@ class SEDModel:
         full_params = self._evaluation_params(params, fixed_values)
 
         # SED-free (met, age) weights, raises on unsupported SFH / metallicity.
-        joint_weights, _total_mass, ssp_ages_yr = stellar.compute_joint_weights(full_params)
+        _joint_weights, _total_mass, ssp_ages_yr, met_joint, met_z, met_lgmet = (
+            stellar.compute_joint_weights_exact(full_params)
+        )
         younger_fraction = (
             stellar.compute_age_boundary_fractions(full_params)
             if stellar.config.age_boundaries_yr
             else None
         )
 
-        pc = self._index_window_precomp(index_defs)
+        from tengri.observation.spectral_indices import exact_window_precomp
+
+        pc = exact_window_precomp(
+            self._index_window_precomp(index_defs), met_joint, met_lgmet, met_z
+        )
 
         # per-age transmission at every window grid point, from the model's own dust
         # (single-sourced with the forward), or unity when there is no dust.
@@ -9527,7 +9533,7 @@ class SEDModel:
         # total_mass x L_sun cancels. Applied here it is ~1e43 for a 1e10 Msun
         # galaxy and overflows float32 in the F_lambda conversion (#3149).
         values = measure_indices_from_window_lut(
-            joint_weights, 1.0, transmission, pc, alpha=self._fast_alpha_bracket(full_params)
+            met_joint, 1.0, transmission, pc, alpha=self._fast_alpha_bracket(full_params)
         )
 
         # Slope indices are not a single-window functional → the LUT leaves NaN
@@ -9797,8 +9803,14 @@ class SEDModel:
             # ``z`` was just resolved above via ``_get_redshift``.
             chain = self._feature_chain()
             stellar = self._require_feature_fast_eligible(chain, caller="measure_line_fluxes")
-            joint_weights, total_mass, ssp_ages_yr = stellar.compute_joint_weights(full_params)
-            pc = self._line_window_precomp(line_defs)
+            _joint_weights, total_mass, ssp_ages_yr, met_joint, met_z, met_lgmet = (
+                stellar.compute_joint_weights_exact(full_params)
+            )
+            from tengri.observation.spectral_indices import exact_window_precomp
+
+            pc = exact_window_precomp(
+                self._line_window_precomp(line_defs), met_joint, met_lgmet, met_z
+            )
             dust = next((c for c in chain if isinstance(c, DustSEDComponent)), None)
             if dust is None:
                 transmission = jnp.ones((ssp_ages_yr.shape[0], pc.points.waves.shape[0]))
@@ -9809,7 +9821,7 @@ class SEDModel:
                     stellar.compute_age_boundary_fractions(full_params),
                 )
             fluxes = measure_line_fluxes_from_window_lut(
-                joint_weights,
+                met_joint,
                 total_mass,
                 transmission,
                 pc,
@@ -11459,13 +11471,10 @@ class SEDModel:
         spec_lut = bool(self._approx.get("spectrum_precomp")) and observation.can_do_spectroscopy
         phot_lut = bool(self._approx.get("wave_precomp"))
         # Photometry uses the LUT whenever it is on, also beside an exact spectrum. A
-        # nebular grid blocks it: serving photometry from the grid zeroes ``sed_nebular``,
-        # which the exact spectrum reads.
+        # nebular grid does not change that: a spectrum keeps ``sed_nebular`` materialized
+        # (``must_materialize_sed``), so the grid never zeroes the continuum it reads.
         mixed_phot_lut = (
-            phot_lut
-            and observation.can_do_spectroscopy
-            and observation.can_do_photometry
-            and getattr(self, "_nebular_grid_table", None) is None
+            phot_lut and observation.can_do_spectroscopy and observation.can_do_photometry
         )
 
         # Warm the component-chain cache OUTSIDE the JIT trace. The chain

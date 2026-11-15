@@ -65,6 +65,11 @@ _PARAMS = {
 }
 _TWO = "two"
 _ONE = "one"
+# The undeclared metallicity read (#3434): the age-marginal joint, one log Z per SSP age
+# (off the nodes, inside the hull), and the SSP metallicity nodes.
+_LGMET = np.linspace(-0.8, 0.3, _N_MET)
+_MET_Z = np.array([-0.5, -0.05, 0.1, 0.25])
+_AGE_JOINT = np.random.default_rng(3).random((1, _N_AGE))
 
 
 def _orientation(wave) -> float:
@@ -124,6 +129,42 @@ def _lut(kind: str) -> EnergyBalanceLUT:
     )
 
 
+def _exact_read_operands() -> dict:
+    """The operands the forward publishes for the undeclared metallicity read (#3434)."""
+    return {
+        "met_exact_joint": jnp.asarray(_AGE_JOINT),
+        "met_exact_z": jnp.asarray(_MET_Z),
+        "met_exact_lgmet": jnp.asarray(_LGMET),
+    }
+
+
+def _pchip_read_lut(lut: EnergyBalanceLUT, lgmet, met_z) -> EnergyBalanceLUT:
+    """B and G PCHIP-read over metallicity per age by SciPy, collapsed to one row (#3434).
+
+    An independent reference for the undeclared read: every age column is read at its own
+    log Z by SciPy's monotone PCHIP, then kept as the single row the age marginal contracts.
+    """
+    from scipy.interpolate import PchipInterpolator
+
+    lgmet = np.asarray(lgmet, dtype=float)
+    z = np.clip(np.asarray(met_z, dtype=float), lgmet[0], lgmet[-1])
+
+    def read(table):
+        t = np.asarray(table, dtype=float)
+        per_age = [PchipInterpolator(lgmet, t[:, a], axis=0)(z[a]) for a in range(t.shape[1])]
+        return jnp.asarray(np.stack(per_age)[None])
+
+    return lut._replace(B=read(lut.B), G=read(lut.G))
+
+
+def _stellar_reference(kind: str, log_mass_scale, tau_bc, tau_diff):
+    """The stellar absorbed term, from the SciPy-PCHIP-read LUT and the exact age marginal."""
+    lut = _pchip_read_lut(_lut(kind), _LGMET, _MET_Z)
+    return lut_l_absorbed_stellar_log10(
+        lut, jnp.asarray(_AGE_JOINT), log_mass_scale, tau_bc, tau_diff
+    )
+
+
 def _grid_channels(kind: str) -> dict:
     tau_a = _TAU_A_GRID if kind == _TWO else np.zeros(1)
     orientation = _orientation(_WAVE)
@@ -172,12 +213,8 @@ def _state(wave, *, derived=None, nebular=None) -> ForwardState:
 def _flagged_state(kind: str, *, with_bands: bool = True) -> ForwardState:
     wave = _WAVE
     derived = _grid_channels(kind)
-    derived.update(
-        {
-            "joint_weights": jnp.asarray(np.random.default_rng(3).random((_N_MET, _N_AGE))),
-            "log_stellar_mass_scale": jnp.asarray(40.0),
-        }
-    )
+    derived.update(_exact_read_operands())
+    derived.update({"log_stellar_mass_scale": jnp.asarray(40.0)})
     if with_bands:
         derived.update(
             {
@@ -252,12 +289,10 @@ def test_grid_energy_balance_is_the_bilinear_bracket(kind):
     state = _flagged_state(kind, with_bands=False)
     out = _apply(_component(kind, flagged=True), kind, state, params)
 
-    lut = _lut(kind)
     tau_a = params["dust_tau_bc"] if kind == _TWO else 0.0
     tau_b = params["dust_tau_diff"] if kind == _TWO else params["dust_tau_v"]
-    log_stellar, sign = lut_l_absorbed_stellar_log10(
-        lut,
-        state.derived["joint_weights"],
+    log_stellar, sign = _stellar_reference(
+        kind,
         state.derived["log_stellar_mass_scale"],
         jnp.asarray(tau_a),
         jnp.asarray(tau_b),
@@ -285,9 +320,8 @@ def test_tau_zero_leaves_the_stellar_term_alone(kind):
     params = dict(_PARAMS, dust_tau_bc=0.0, dust_tau_diff=0.0, dust_tau_v=0.0)
     state = _flagged_state(kind, with_bands=False)
     out = _apply(_component(kind, flagged=True), kind, state, params)
-    log_stellar, _ = lut_l_absorbed_stellar_log10(
-        _lut(kind),
-        state.derived["joint_weights"],
+    log_stellar, _ = _stellar_reference(
+        kind,
         state.derived["log_stellar_mass_scale"],
         jnp.asarray(0.0),
         jnp.asarray(0.0),
@@ -335,10 +369,7 @@ def test_flagged_energy_balance_equals_the_materialized_continuum(kind, with_lut
     slab = _nebular_eb_channel(
         sed[None, :], np.asarray([-_LOG_NION]), _WAVE, plain, params, (tau_a, _TAU_B_GRID)
     )[0]
-    stellar = {
-        "joint_weights": jnp.asarray(np.random.default_rng(3).random((_N_MET, _N_AGE))),
-        "log_stellar_mass_scale": jnp.asarray(40.0),
-    }
+    stellar = _exact_read_operands() | {"log_stellar_mass_scale": jnp.asarray(40.0)}
     exact_state = _state(_WAVE, derived=stellar, nebular=sed)
     dark_state = _state(_WAVE, derived=stellar, nebular=np.zeros(_WAVE.shape))
     grid_state = _state(
