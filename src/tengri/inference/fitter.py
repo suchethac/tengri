@@ -527,6 +527,30 @@ def _approx_clone_key(cfg) -> tuple[str, str]:
     return (type(cfg).__name__, repr(cfg))
 
 
+def _warn_shape_fallback(exc, *, stacklevel: int) -> None:
+    """Announce that ``approx="auto"`` kept the exact line path (#3526).
+
+    Raised only for a :class:`NebularShapeDriftError`: the table's per-photon lines
+    move with a quenched history by more than the tolerance, so the auto policy
+    serves the lines exactly. Photometry keeps its ``WavePrecomp`` table.
+    """
+    from tengri.components.nebular.nebular_grid_precompute import _SHAPE_DRIFT_TOL
+    from tengri.config.exceptions import warn_measured
+
+    warn_measured(
+        f"approx='auto' keeps the exact line path for this model: FeaturePrecomp would "
+        f"serve a table whose ionizing shape departs from its constant-SFR stand-in "
+        f"(#3526). Line {exc.line}: the per-photon luminosity of a quenched history is "
+        f"{exc.ratio:.3f}x the stand-in's, a {exc.departure:.1%} departure, above the "
+        f"{_SHAPE_DRIFT_TOL:.0%} tolerance. The fit is correct, only slower; photometry "
+        f"keeps its WavePrecomp table. Pass approx=None to silence this, or see #3526.",
+        UserWarning,
+        stacklevel=stacklevel + 1,
+        ratio=exc.ratio,
+        departure=exc.departure,
+    )
+
+
 def _forget_memoized_approx_clone(model, cfg) -> None:
     """Drop the memo entry for ``(model, cfg)``, if any.
 
@@ -808,7 +832,15 @@ def _photometry_grid_engages(model) -> bool:
     # resolvers attach, so a positive answer reuses the memoized clone. A negative
     # one is forgotten, so the probe is not kept alive by the memo.
     pair = (WavePrecomp(), FeaturePrecomp())
-    engages = fast_nebular_can_engage(_memoized_approx_clone(model, pair))
+    from tengri.components.nebular.nebular_grid_precompute import NebularShapeDriftError
+
+    try:
+        engages = fast_nebular_can_engage(_memoized_approx_clone(model, pair))
+    except NebularShapeDriftError as exc:
+        # #3526: the table would drift for this model's ionizing shape, so the auto
+        # policy stays on the exact photometry path too, with a specific warning.
+        _warn_shape_fallback(exc, stacklevel=4)
+        return False
     if not engages:
         _forget_memoized_approx_clone(model, pair)
     return engages
@@ -1378,8 +1410,16 @@ def _resolve_batch_fit_approx(model, approx, data_type):
             ):
                 existing = tuple(getattr(model, "approx_configs", ()))
                 extra = (FeaturePrecomp(),) if has_wave else (cfg, FeaturePrecomp())
-                with contextlib.suppress(Exception):
+                from tengri.components.nebular.nebular_grid_precompute import (
+                    NebularShapeDriftError,
+                )
+
+                try:
                     return _memoized_approx_clone(model, (*existing, *extra))
+                except NebularShapeDriftError as exc:
+                    _warn_shape_fallback(exc, stacklevel=4)
+                except Exception:  # #1596: a backend with nothing to tabulate keeps the wave LUT
+                    pass
             if has_wave:
                 return model
         elif data_type == "spectroscopy" or data_type == "joint":
@@ -1401,8 +1441,14 @@ def _resolve_batch_fit_approx(model, approx, data_type):
     else:
         resolved = approx
 
+    from tengri.components.nebular.nebular_grid_precompute import NebularShapeDriftError
+
     try:
         return _memoized_approx_clone(model, resolved)
+    except NebularShapeDriftError:
+        # #3526: an explicit FeaturePrecomp on a drifting table is refused, never
+        # quietly turned into a slower fit. The auto top-up above handles its own.
+        raise
     except Exception as exc:  # broad on purpose, never break a working fit
         import warnings
 
@@ -2503,9 +2549,15 @@ class Fitter:
         if not _feature_precomp_can_pay(model, serves_line_channel=serves_line_channel):
             return model
         existing = tuple(getattr(model, "approx_configs", ()))
+        from tengri.components.nebular.nebular_grid_precompute import NebularShapeDriftError
+
         try:
             return _memoized_approx_clone(model, (*existing, FeaturePrecomp()))
-        except Exception as exc:  # broad on purpose, never break a working fit
+        except NebularShapeDriftError as exc:
+            # #3526: the drifting-shape refusal gets its own specific warning.
+            _warn_shape_fallback(exc, stacklevel=4)
+            return model
+        except Exception as exc:  # broad on purpose, never break a working fit (#1596)
             if not warn_on_failure:
                 return model
             import warnings
@@ -2617,8 +2669,18 @@ class Fitter:
                 from tengri.forward.sed_model import FeaturePrecomp
 
                 base = cfg if isinstance(cfg, tuple) else (cfg,)
-                with contextlib.suppress(Exception):
+                from tengri.components.nebular.nebular_grid_precompute import (
+                    NebularShapeDriftError,
+                )
+
+                try:
                     return _memoized_approx_clone(model, (*base, FeaturePrecomp()))
+                except NebularShapeDriftError as exc:
+                    # #3526: a drifting table is not attached; the exact line path
+                    # is kept, announced, and photometry keeps the WavePrecomp table.
+                    _warn_shape_fallback(exc, stacklevel=4)
+                except Exception:  # #1596: nothing to tabulate keeps the wave LUT
+                    pass
             return _memoized_approx_clone(model, cfg)
 
         resolved = _memoized_approx_clone(model, approx)

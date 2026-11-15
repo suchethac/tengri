@@ -751,6 +751,178 @@ def _refuse_tabulated_metallicity(model):
     )
 
 
+# Shape probe (#3526). The per-Q_H table is built on a constant-SFR stand-in, and the
+# per-photon line luminosity depends on the ionizing spectrum, which depends on the
+# SFH: a quenched history's ionizing mix differs from the stand-in's. A tabulated SFH
+# is runtime data the build cannot see, so the probe measures one quenched reference
+# history against the stand-in, at the grid center, and refuses the grid when they differ.
+#: Delayed-tau reference history [Gyr] of the probe: the quenched shape of #3526.
+_SHAPE_PROBE_TAU_GYR = 0.5
+#: Tolerance on the probe's worst strong-line departure [relative]. Measured at the grid
+#: center (z = 0.1, a quenched tau = 0.5 Gyr history against the constant-SFR stand-in):
+#: MIST C3K hr noNE departs 85 % (OIII_5007 1.85x); fsps_prsc_miles_chabrier departs
+#: 0.14 % (OIII_5007 0.9986x). At the #1718 test point (logU -2.5, logZ_gas -0.2,
+#: met -0.3) MIST OIII is 3.16x, the issue's 3.2x. 5 % sits between the two grids.
+_SHAPE_DRIFT_TOL = 0.05
+#: Lines weaker than this fraction of the strongest per-photon line are not judged.
+_SHAPE_PROBE_LINE_FLOOR = 1e-3
+
+
+class NebularShapeDriftError(ValueError):
+    """An explicit FeaturePrecomp whose ionizing shape departs from its stand-in (#3526).
+
+    The ``approx="auto"`` policy catches exactly this class and falls back to the exact
+    line path with a warning; every other error surfaces.
+
+    Attributes
+    ----------
+    line : str
+        The strongest-departing target line, named from the line catalog when possible.
+    ratio : float
+        Per-photon luminosity of the reference history over the stand-in, for that line.
+    departure : float
+        ``|ratio - 1|``, the relative departure the tolerance is applied to.
+    """
+
+    def __init__(self, message: str, *, line: str, ratio: float, departure: float):
+        super().__init__(message)
+        self.line = line
+        self.ratio = ratio
+        self.departure = departure
+
+
+def _quenched_reference_history(ref_params):
+    """The stand-in's time axis carrying a delayed-tau quenched SFH (#3526 probe).
+
+    Peak-normalized to 40 Msun/yr; the table is per-Q_H, so the amplitude divides out.
+    """
+    t = np.asarray(ref_params["sfh_t_gyr"])
+    sfr = (t / _SHAPE_PROBE_TAU_GYR) * np.exp(-t / _SHAPE_PROBE_TAU_GYR)
+    sfr = sfr * (40.0 / sfr.max())
+    sfr[0] = 0.0
+    return {**ref_params, "sfh_sfr": jnp.asarray(sfr)}
+
+
+def _log10_line_per_qh_eager(model, p, wavelengths):
+    """log10 of the per-Q_H line fluxes at one point, eagerly (build-time probe).
+
+    Distance and IGM factors are omitted: both histories are evaluated at the same
+    wavelengths and redshift, so they cancel in the ratio the probe takes.
+    """
+    state = model.predict_state(p, fixed_values={})
+    log_nion = float(_log_nion_of_state(state))
+    flux = model.predict_line_fluxes(
+        p,
+        target_wavelengths=wavelengths,
+        redden=False,
+        state=state,
+        params_are_resolved=True,
+    )
+    with np.errstate(divide="ignore"):
+        return np.log10(np.asarray(flux, dtype=float)) - log_nion
+
+
+def _line_names(wavelengths) -> list[str]:
+    """Catalog names for the target lines, falling back to the wavelength."""
+    from tengri.observation.line_list import LineList
+
+    cat = LineList.default_optical()
+    names = []
+    for w in np.asarray(wavelengths, dtype=float):
+        near = np.argmin(np.abs(np.asarray(cat.wavelengths, dtype=float) - w))
+        ok = abs(float(cat.wavelengths[near]) - w) < 1.0
+        names.append(str(cat.names[near]) if ok else f"{w:.1f} A")
+    return names
+
+
+def _probe_wavelengths(wavelengths):
+    """The lines the probe judges: the grid's targets, else the strong optical set.
+
+    A photometry-only grid tabulates no target lines, but the probe still needs lines to
+    judge the ionizing shape by, so it falls back to the four strongest optical lines.
+    """
+    if len(np.asarray(wavelengths)) > 0:
+        return jnp.asarray(wavelengths)
+    from tengri.observation.line_list import LineList
+
+    cat = LineList.default_optical()
+    wanted = ("Hbeta", "OIII_5007", "Halpha", "NII_6584")
+    pairs = [(n, w) for n, w in zip(cat.names, cat.wavelengths, strict=True) if n in wanted]
+    return jnp.asarray([float(w) for _, w in pairs])
+
+
+def probe_ionizing_shape_drift(model, ref_params, *, axes, axis_names, wavelengths):
+    """Worst strong-line departure of a quenched history from the stand-in (#3526).
+
+    One point, the grid center: the per-photon line luminosity of the stand-in and of a
+    delayed-tau quenched history (``_SHAPE_PROBE_TAU_GYR``), both evaluated eagerly. A
+    real history weights the ionizing regimes by their photons, so this is the shape a
+    quenched history actually produces.
+
+    Returns
+    -------
+    tuple or None
+        ``(departure, line, ratio)``: the worst relative departure over the judged lines,
+        the line's name and the quenched/stand-in per-photon ratio. ``None`` for a
+        parametric SFH (no tabulated history to probe) or when no line is judged.
+    """
+    if "sfh_t_gyr" not in ref_params:
+        return None
+    waves = _probe_wavelengths(wavelengths)
+    center = {n: jnp.asarray(float(a[len(a) // 2])) for n, a in zip(axis_names, axes, strict=True)}
+    quenched = _quenched_reference_history(ref_params)
+    std = _log10_line_per_qh_eager(model, {**ref_params, **center}, waves)
+    qnc = _log10_line_per_qh_eager(model, {**quenched, **center}, waves)
+    lin_std = 10.0**std
+    ok = (
+        np.isfinite(std)
+        & np.isfinite(qnc)
+        & (lin_std > _SHAPE_PROBE_LINE_FLOOR * np.nanmax(lin_std))
+    )
+    if not np.any(ok):
+        return None
+    ratios = np.where(ok, 10.0 ** (qnc - np.where(ok, std, 0.0)), np.nan)
+    departures = np.where(ok, np.abs(ratios - 1.0), -np.inf)
+    index = int(np.argmax(departures))
+    return float(departures[index]), _line_names(waves)[index], float(ratios[index])
+
+
+def _refuse_ionizing_shape_drift(model, ref_params, *, axes, axis_names, wavelengths):
+    """Refuse a table whose per-photon lines move with a quenched history (#3526).
+
+    Raises
+    ------
+    NebularShapeDriftError
+        When the worst judged line departs from the stand-in by more than
+        ``_SHAPE_DRIFT_TOL``.
+    """
+    probed = probe_ionizing_shape_drift(
+        model,
+        ref_params,
+        axes=axes,
+        axis_names=axis_names,
+        wavelengths=wavelengths,
+    )
+    if probed is None or probed[0] <= _SHAPE_DRIFT_TOL:
+        return
+    departure, line, ratio = probed
+    grid = ", ".join(axis_names) or "no free axes"
+    raise NebularShapeDriftError(
+        f"FeaturePrecomp refuses this grid (axes: {grid}). Its per-photon line table is "
+        f"built on a constant-SFR stand-in history, and the SFH is not known at build "
+        f"(a tabulated history is runtime data). For line {line}, the per-photon "
+        f"luminosity of a quenched delayed-tau = {_SHAPE_PROBE_TAU_GYR:g} Gyr history is "
+        f"{ratio:.3f}x the stand-in's, a {departure:.1%} departure, above the "
+        f"{_SHAPE_DRIFT_TOL:.0%} tolerance. The cause: this history's ionizing spectrum "
+        f"differs from the constant-SFR stand-in the table was built on. Fix: use the "
+        f"exact Cue path (no FeaturePrecomp; WavePrecomp alone keeps the photometry "
+        f"table). See #3526.",
+        line=line,
+        ratio=ratio,
+        departure=departure,
+    )
+
+
 def _refuse_freed_optional_axes(spec):
     """Refuse parameters freed but baked into the per-Q_H grid (#2307).
 
@@ -1361,6 +1533,16 @@ def precompute_nebular_grid(
             axis_kinds.append("pchip")
     axes = tuple(axes)
     axis_kinds = tuple(axis_kinds)
+    # The table is built on the stand-in; a tabulated SFH is runtime data the build cannot
+    # see, so the table is refused when a quenched history moves the per-photon lines past
+    # the tolerance (#3526).
+    _refuse_ionizing_shape_drift(
+        model,
+        ref_params,
+        axes=axes,
+        axis_names=axis_names,
+        wavelengths=wavelengths,
+    )
 
     def _params_at(point_values):
         """Resolved reference parameters with the grid axes set to ``point_values``."""
