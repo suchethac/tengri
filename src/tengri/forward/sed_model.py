@@ -83,6 +83,7 @@ from tengri.config.exceptions import (
     FilterCoverageWarning,
     ParameterError,
     ParameterMapError,
+    PrecomputeRefusal,
     warn_measured,
 )
 from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
@@ -4008,7 +4009,7 @@ class SEDModel:
             elif cue_like:
                 lines = []
             else:
-                raise ValueError(
+                raise PrecomputeRefusal(
                     "approx=FeaturePrecomp() has no emission lines to tabulate: the "
                     "Observation carries no line_fluxes and FeaturePrecomp(lines=...) "
                     "was not given. Either fit lines, Observation(..., "
@@ -4021,7 +4022,7 @@ class SEDModel:
             return
 
         if self._has_line_catalog():
-            raise ValueError(
+            raise PrecomputeRefusal(
                 f"approx=FeaturePrecomp() does not support the "
                 f"{type(backend).__name__} nebular backend: it publishes a discrete "
                 "line catalog but is not linear in Q_H, so neither the per-Q_H grid "
@@ -8865,7 +8866,7 @@ class SEDModel:
         if self._nebular_backend is None or not hasattr(
             self._nebular_backend, "predict_nebular_line_luminosities"
         ):
-            raise ValueError(
+            raise PrecomputeRefusal(
                 "enable_fast_nebular requires a Q_H-linear nebular backend with "
                 "line prediction (Cue). The configured backend is "
                 f"{type(self._nebular_backend).__name__ if self._nebular_backend else 'none'}."
@@ -9250,7 +9251,7 @@ class SEDModel:
         )
 
     @staticmethod
-    def _free_agb_dust_lut_error(table: str) -> ValueError:
+    def _free_agb_dust_lut_error(table: str) -> PrecomputeRefusal:
         """The refusal for a precompute table built from the SSP cube (#2534).
 
         Parameters
@@ -9260,10 +9261,10 @@ class SEDModel:
 
         Returns
         -------
-        ValueError
+        PrecomputeRefusal
             Naming the exact path and the Fixed-weight alternative.
         """
-        return ValueError(
+        return PrecomputeRefusal(
             f"A free agb_dust_weight (agb_dust={{'type': 'fsps_shell', 'weight': "
             f"Uniform(...)}}) cannot be represented in a {table} table: the SSP cube it "
             "corrects is parameter-dependent, but the table is built once, before any "

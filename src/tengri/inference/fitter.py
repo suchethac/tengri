@@ -65,7 +65,12 @@ logger = logging.getLogger(__name__)
 import jax.numpy as jnp
 
 from tengri._cache_keys import derive_key
-from tengri.config.exceptions import BackendError, ParameterError, TengriError
+from tengri.config.exceptions import (
+    BackendError,
+    ParameterError,
+    PrecomputeRefusal,
+    TengriError,
+)
 from tengri.inference._engine_policy import ENGINE_POLICY, ENGINE_VERSION
 from tengri.inference._model_cache import _default_owner as _model_cache_owner
 from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
@@ -487,9 +492,9 @@ _APPROX_CLONE_CACHE: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 def _try_feature_top_up(model, configs):
     """Clone ``model`` with a ``FeaturePrecomp`` top-up, or ``None`` if the table refuses.
 
-    The refusal of a table with nothing to tabulate is a ``ValueError`` (``ConfigError`` is one),
-    and it is the detection ``approx='auto'`` relies on to keep the wave LUT. Only that is
-    caught; any other exception is a bug and propagates. The reason is recorded on ``model`` as
+    A table's refusal is a :class:`~tengri.config.exceptions.PrecomputeRefusal`, raised only at
+    the refusal site, and it is the detection ``approx='auto'`` relies on to keep the wave LUT.
+    Only that is caught; any other exception, a ``ValueError`` from a bug included, propagates. The reason is recorded on ``model`` as
     ``_approx_declines['feature_precomp']`` so the engagement report can show it (#3505 X1).
 
     Parameters
@@ -506,7 +511,7 @@ def _try_feature_top_up(model, configs):
     """
     try:
         return _memoized_approx_clone(model, configs)
-    except ValueError as refusal:
+    except PrecomputeRefusal as refusal:
         model._approx_declines = {
             **getattr(model, "_approx_declines", {}),
             "feature_precomp": str(refusal),

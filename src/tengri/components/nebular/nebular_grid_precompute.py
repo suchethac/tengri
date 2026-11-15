@@ -78,6 +78,7 @@ from tengri.components.nebular.nebular_grid_dust_build import (
     _nebular_subband_channels,
 )
 from tengri.components.stellar.reference_history import reference_history_params
+from tengri.config.exceptions import PrecomputeRefusal
 from tengri.parameters.resolve import merge_fixed_params
 from tengri.parameters.timing import reference_timing_fracs
 from tengri.parameters.translate import LOG10_ZSUN
@@ -737,7 +738,7 @@ def _refuse_tabulated_metallicity(model):
     cfg = stellar_config_of(model)
     if cfg is None or getattr(cfg, "metallicity_model", None) != "table":
         return
-    raise ValueError(
+    raise PrecomputeRefusal(
         "FeaturePrecomp cannot serve a tabulated metallicity. Its grid axes are "
         "the model's free parameters, and met={'type': 'table'} declares "
         "none: so met_logzsol is absent, the metallicity axis silently drops, "
@@ -776,7 +777,7 @@ def _refuse_freed_optional_axes(spec):
     short_keys = [name.removeprefix("neb_") for name in offenders]
     detail = ", ".join(offenders)
 
-    raise ValueError(
+    raise PrecomputeRefusal(
         f"enable_fast_nebular refuses to proceed with free parameters the grid bakes in: "
         f"{detail}. The fast grid's axes are {', '.join(_CANDIDATE_AXES)} only; "
         f"every other parameter is baked in at its reference value, so a "

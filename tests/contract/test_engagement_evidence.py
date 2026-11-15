@@ -6,6 +6,7 @@ from __future__ import annotations
 import pytest
 
 from tengri import DEFAULT, Fixed, SEDModel
+from tengri.config.exceptions import PrecomputeRefusal
 from tengri.forward.precompute.band_table import Decline
 from tengri.forward.precompute_report import precompute_engagement_report
 
@@ -28,7 +29,7 @@ def test_feature_top_up_records_a_refusal_and_returns_none(monkeypatch):
     from tengri.inference import fitter
 
     def refuse(model, cfg):
-        raise ValueError("no lines to tabulate")
+        raise PrecomputeRefusal("no lines to tabulate")
 
     monkeypatch.setattr(fitter, "_memoized_approx_clone", refuse)
     model = _Model()
@@ -36,15 +37,33 @@ def test_feature_top_up_records_a_refusal_and_returns_none(monkeypatch):
     assert model._approx_declines == {"feature_precomp": "no lines to tabulate"}
 
 
-def test_feature_top_up_lets_a_real_bug_propagate(monkeypatch):
+@pytest.mark.parametrize("bug", [RuntimeError("a bug"), ValueError("a shape bug")])
+def test_feature_top_up_lets_a_bug_propagate_even_when_it_is_a_value_error(monkeypatch, bug):
     from tengri.inference import fitter
 
     def broken(model, cfg):
-        raise RuntimeError("a bug, not a refusal")
+        raise bug
 
     monkeypatch.setattr(fitter, "_memoized_approx_clone", broken)
-    with pytest.raises(RuntimeError, match="a bug"):
-        fitter._try_feature_top_up(_Model(), ("cfg",))
+    model = _Model()
+    with pytest.raises(type(bug), match="bug"):
+        fitter._try_feature_top_up(model, ("cfg",))
+    assert not hasattr(model, "_approx_declines")
+
+
+def test_the_real_refusal_sites_raise_the_refusal_class(ssp_data_wne, synthetic_tophat_obs):
+    """A FeaturePrecomp with no lines to tabulate raises PrecomputeRefusal (a ValueError too)."""
+    from tengri.forward.sed_model import FeaturePrecomp
+
+    model = SEDModel.build(
+        ssp_data=ssp_data_wne,
+        observation=synthetic_tophat_obs,
+        sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+        neb={"type": "ssp"},
+        redshift=Fixed(0.1),
+    )
+    with pytest.raises(PrecomputeRefusal, match="no emission lines to tabulate"):
+        model.with_approx(FeaturePrecomp())
 
 
 def test_report_carries_the_recorded_approx_declines():
