@@ -31,7 +31,7 @@ five bands, free floor   3  4.6e-06    986      4.5e-03    0.018 sigma  0.0058
 
 The Hessian budget alone is 0.2-0.5 %; the remainder of the covariance gap is the mode
 shift. The tolerances are twice the largest measured gap (0.05 sigma, 0.02), which is a few
-times the cancelled sampling noise and 3-5x tighter than a bound set from it. The test
+times the canceled sampling noise and 3-5x tighter than a bound set from it. The test
 also fails if the Hessian budget itself exceeds half the covariance tolerance.
 """
 
@@ -77,8 +77,8 @@ def _model(ssp, case):
         obs = Observation(photometry=Photometry.from_names(["sdss_r"]))
         return SEDModel.build(ssp_data=ssp, observation=obs, **recipes.mock_recovery_minimal())
     curves = []
-    for i, centre in enumerate(CENTERS):
-        wave = np.linspace(centre - 500, centre + 500, 32)
+    for i, center in enumerate(CENTERS):
+        wave = np.linspace(center - 500, center + 500, 32)
         curves.append(FilterCurve(wave=wave, trans=np.ones_like(wave), name=f"b{i}"))
     obs = Observation(
         photometry=Photometry(filters=tuple(curves)),
