@@ -4103,15 +4103,21 @@ class SEDModel:
             return
         z_rep = self._representative_redshift()
         names = list(getattr(self.observation.photometry, "names", []) or [])
+        from tengri.utils.band_projection import BandSpec
+
+        # The band pivot under the observation's own convention, read from the BandSpec the
+        # table builders use, so the warning names the wavelength the dust law is misjudged at.
+        pivots_obs = BandSpec(
+            filters=(self.filter_waves, self.filter_trans),
+            convention=self.observation.photometry.convention,
+            n_subbands=None,
+            lyc_gate=False,
+        ).pivot_wavelengths()
         blue: list[tuple[str, float]] = []
         for i, (w, t) in enumerate(zip(self.filter_waves, self.filter_trans)):
-            w = jnp.asarray(w)
-            t = jnp.asarray(t)
-            denom = float(jnp.sum(t * w))
-            if denom <= 0.0:
+            if float(jnp.sum(jnp.asarray(t) * jnp.asarray(w))) <= 0.0:
                 continue
-            # Bessell photon-counting pivot ∫ λ²T dλ / ∫ λT dλ (observed frame).
-            lam_eff_rest = float(jnp.sum(t * w * w) / denom) / (1.0 + z_rep)
+            lam_eff_rest = float(pivots_obs[i]) / (1.0 + z_rep)
             if lam_eff_rest < 2000.0:  # rest-UV: Calzetti steepens / is extrapolated
                 blue.append((names[i] if i < len(names) else f"band[{i}]", lam_eff_rest))
         if not blue:
