@@ -46,6 +46,7 @@ from tengri.components.agn.blocks.atten import (
     polar_dust_reemission_lnu,
 )
 from tengri.components.agn.blocks.runner import compose_l_nu as _compose_l_nu
+from tengri.components.agn.disc import kubota_done_unemitted_fraction
 from tengri.components.agn.fritz import load_fritz_default_grid
 from tengri.components.agn.polar_dust import polar_dust_extinction
 from tengri.components.dust.attenuation import smc
@@ -1218,7 +1219,8 @@ def test_fritz_type2_corona_under_the_torus_screen_matches_cigale_accretion_powe
 
     Below the library's 10 A edge the tied disc vanishes and the corona alone is left: the
     model's corona ``H`` times the torus screen ``T`` (the dusty torus's own transmission at
-    this sightline, tau_V = 1) times ``b = P_D,tied / ((1 - f) L_acc)``. ``P_D,tied`` is CIGALE
+    this sightline, tau_V = 1) times ``b = P_D,tied / ((1 - f - R_unem/L) L_acc)``, the
+    denominator being the power the model's disc and warm zones emit. ``P_D,tied`` is CIGALE
     ``fritz2006``'s ``accretion_power`` (``int AGN1.disk x norm``; the Fritz disc is isotropic,
     hemisphere mean 1), and it carries CIGALE's ``1/(1 + l_ext)`` under polar dust, so the
     corona shares the disc's normalization. Measured ``b`` against that: see the tolerance.
@@ -1259,7 +1261,11 @@ def test_fritz_type2_corona_under_the_torus_screen_matches_cigale_accretion_powe
         1.0 - pc_on["agn.polar_dust_luminosity"], rel=1e-6
     )
     accretion = pc_off["agn.accretion_power"] * (1.0 - polar / agn_power)
-    expected = accretion * agn_power / ((1.0 - float(f_corona)) * 10.0**_LOG_LBOL * L_SUN)
+    # The model's disc and warm zones emit (1 - f - R_unem/L) of the accretion power: the
+    # K&D disc does not emit what it dissipates beyond R_out (Kubota & Done 2018 Sec. 2.2).
+    r_unem = float(kubota_done_unemitted_fraction(mbh, _LOG_LBOL))
+    p_disc_model = (1.0 - float(f_corona) - r_unem) * 10.0**_LOG_LBOL * L_SUN
+    expected = accretion * agn_power / p_disc_model
     assert b[0] == pytest.approx(expected, rel=_CORONA_REL), (
         f"psy={psy}, E(B-V)={ebv}: b = {b[0]:.5f}, CIGALE-derived {expected:.5f}"
     )
