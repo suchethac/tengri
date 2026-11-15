@@ -51,7 +51,7 @@ def test_table_sfh_with_its_arrays_is_served_and_matches_apply(
 ):
     """With its runtime arrays, the tabulated SFH is served: fast path equals apply.
 
-    The refusal map that used to guard the placeholder is gone (#3505 M7). The
+    The refusal map that used to guard the placeholder is gone (#3505). The
     placeholder can no longer be reached: the table is routed to its runtime arrays
     before it is evaluated, on both paths.
     """
@@ -81,8 +81,11 @@ def test_binned_family_fast_path_is_served_with_normalized_weights(
     The binned families used to be refused by the fast path's map. They now share
     evaluate_sfh with apply; the weights are finite and normalized.
     """
-    model = _build({"type": "continuity", "all_params": Fixed(DEFAULT)}, synthetic_ssp_wide,
-                   synthetic_tophat_obs)
+    model = _build(
+        {"type": "continuity", "all_params": Fixed(DEFAULT)},
+        synthetic_ssp_wide,
+        synthetic_tophat_obs,
+    )
     stellar = _stellar_of(model)
     params = merge_fixed_params(model.spec, dict(model.spec.sample(jax.random.PRNGKey(0))))
     weights, mass, _ages = stellar.compute_joint_weights(params)
