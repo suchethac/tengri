@@ -108,7 +108,10 @@ def _driver_samplers():
 
 def _run_catalog(sampler, n_chains, metric):
     """Two galaxies through the vmapped catalog engine; returns (n_gal, n_chains, n, D)."""
-    from tengri.inference.backends.mcmc.catalog import build_catalog_mcmc_engine
+    from tengri.inference.backends.mcmc.catalog import (
+        build_catalog_mcmc_engine,
+        ghmc_ensemble_size,
+    )
 
     run_one, _ = build_catalog_mcmc_engine(
         None,
@@ -126,7 +129,9 @@ def _run_catalog(sampler, n_chains, metric):
         jnp.zeros(_DIM), keys, jnp.asarray(_Y), None, None, None, None, None, None
     )
     pos = np.asarray(pos)
-    return [pos[g].reshape(n_chains, -1, _DIM) for g in range(2)], _Y
+    # ghmc returns every chain of its MEADS ensemble, a minimum of ``n_chains``.
+    returned = ghmc_ensemble_size(_DIM, n_chains) if sampler == "ghmc" else n_chains
+    return [pos[g].reshape(returned, -1, _DIM) for g in range(2)], _Y
 
 
 def _run_hierarchical(method, n_chains, metric, monkeypatch):

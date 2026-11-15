@@ -173,6 +173,34 @@ def ghmc_default_chains(n_dim, n_superchains=GHMC_DEFAULT_SUPERCHAINS, n_folds=G
     return -(-need // unit) * unit
 
 
+def ghmc_ensemble_size(n_dim, n_chains, n_superchains=None, n_folds=None):
+    """Return how many chains the ghmc catalog engine runs and returns per galaxy.
+
+    Parameters
+    ----------
+    n_dim : int
+        Number of sampled coordinates D.
+    n_chains : int
+        Requested chains, a minimum.
+    n_superchains, n_folds : int or None
+        MEADS geometry. When either is given the ensemble is exactly ``n_chains`` and the
+        counts are validated by the engine; otherwise the defaults apply.
+
+    Returns
+    -------
+    int
+        ``n_chains`` for an explicit geometry; else the smallest multiple of
+        ``lcm(n_superchains, n_folds)`` that is at least ``n_chains`` and
+        :func:`ghmc_default_chains`. Every one of these chains is returned.
+    """
+    n_chains = max(1, int(n_chains))
+    if n_superchains is not None or n_folds is not None:
+        return n_chains
+    n_superchains, n_folds = GHMC_DEFAULT_SUPERCHAINS, GHMC_DEFAULT_FOLDS
+    unit = math.lcm(n_superchains, n_folds)
+    return max(ghmc_default_chains(n_dim, n_superchains, n_folds), -(-n_chains // unit) * unit)
+
+
 def ghmc_superchain_starts(init_flat, key, n_chains, n_superchains, jitter_scale):
     """Return the MEADS ensemble's starting positions, one distinct draw per superchain.
 
@@ -523,7 +551,9 @@ def _mapped_program(fn, batch_size):
     return program
 
 
-def _catalog_live_chains(sampler: str, *, n_chains: int, n_ensemble: int | str) -> int:
+def _catalog_live_chains(
+    sampler: str, *, n_chains: int, n_ensemble: int | str, n_dim: int | None = None
+) -> int:
     """Chains one galaxy carries through the catalog engine, the width its budget divides by.
 
     ChEES vmaps its resolved adaptation ensemble, a superset of the sampling chains,
@@ -537,6 +567,8 @@ def _catalog_live_chains(sampler: str, *, n_chains: int, n_ensemble: int | str) 
         Requested sampling chains per galaxy.
     n_ensemble : int or ``"auto"``
         ChEES adaptation ensemble; ignored by the other samplers.
+    n_dim : int or None
+        Sampled coordinates, read by ``"ghmc"``, whose MEADS ensemble is returned whole.
 
     Returns
     -------
@@ -545,6 +577,8 @@ def _catalog_live_chains(sampler: str, *, n_chains: int, n_ensemble: int | str) 
     """
     if sampler == "chees":
         return _resolve_chees_ensemble(n_ensemble, n_chains)
+    if sampler == "ghmc" and n_dim is not None:
+        return ghmc_ensemble_size(n_dim, n_chains)
     return max(1, int(n_chains))
 
 
@@ -631,10 +665,13 @@ def build_catalog_mcmc_engine(
         unchanged. When True, per-galaxy line_flux_obs and line_flux_err arrays
         are substituted into data_args.
     n_chains : int, default 1
-        Sampling chains **per galaxy**, concatenated into that galaxy's draws.
-        ``"nuts"`` and ``"hmc"`` accept only 1 here; ChEES accepts more, which is
-        what lets a catalog fit carry a split R-hat over genuinely separate
-        chains rather than over two halves of one.
+        Sampling chains **per galaxy**, concatenated into that galaxy's draws. Every sampler
+        accepts any count, which is what lets a catalog fit carry a split R-hat over
+        genuinely separate chains rather than over two halves of one. ``"ghmc"`` is the one
+        exception to "returns ``n_chains``": MEADS adapts from an ensemble of at least
+        ``2 D K`` chains, and every chain of it is a sampling chain, so ``n_chains`` is a
+        minimum and the engine returns :func:`ghmc_ensemble_size` chains (``n_chains``
+        itself when ``n_superchains`` or ``n_folds`` is given, which must then divide it).
     n_ensemble : int or "auto", default :data:`CATALOG_CHEES_ENSEMBLE`
         ChEES adaptation-ensemble width, **within each galaxy**. Ignored by
         ``"nuts"`` / ``"hmc"``.
@@ -779,10 +816,7 @@ def build_catalog_mcmc_engine(
         if explicit_ensemble:
             _check_ghmc_chains_per_fold(n_chains, n_folds, n_dim)
         else:
-            unit = math.lcm(n_superchains, n_folds)
-            n_ensemble_ghmc = max(
-                ghmc_default_chains(n_dim, n_superchains, n_folds), -(-n_chains // unit) * unit
-            )
+            n_ensemble_ghmc = ghmc_ensemble_size(n_dim, n_chains)
     strength = (
         GHMC_WHITENING_STRENGTH
         if sampler == "ghmc" and precondition is None
@@ -869,7 +903,7 @@ def build_catalog_mcmc_engine(
                     n_folds,
                     float(rewhiten_at),
                 )
-                return positions[:n_chains], divergent[:n_chains]
+                return positions, divergent
             if sampler == "chees":
                 # This galaxy's OWN ChEES adaptation, over an ensemble of ``ensemble_size``
                 # chains that all target THIS galaxy's posterior: per-galaxy adaptation,
