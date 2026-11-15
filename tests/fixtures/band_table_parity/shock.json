@@ -6,7 +6,7 @@
   "shock_velocity": 782.0199742671562
  },
  "platform": "darwin-arm64",
- "repin_note": "Re-pinned 2026-11-15: monotone PCHIP metallicity read (#3434, owner ruling 'True PCHIP on the spectra'). Against real main: the PCHIP move is up to 4.1e-4 relative (dust_fixed_z, exact, shock) and 3.3e-5 (free_z_radio_xray); the re-pinned arrays also carry 1-6 ulp (max 1.3e-15 relative) from the restructured contraction order, measured on a Hermite control.",
+ "repin_note": "Re-pinned 2026-11-15 (#3529 x #3528): the windowed velocity line render (#3529) sums the shock line profiles in a different order; 2 elements of leaf_006 move by at most 4.1e-16 relative (one ulp), no physics change. #3528 re-pinned this golden on a tree without #3529, so main failed it on darwin-arm64 only (bit identity applies on the capture platform). Earlier: Re-pinned 2026-11-15: monotone PCHIP metallicity read (#3434, owner ruling 'True PCHIP on the spectra'). Against real main: the PCHIP move is up to 4.1e-4 relative (dust_fixed_z, exact, shock) and 3.3e-5 (free_z_radio_xray); the re-pinned arrays also carry 1-6 ulp (max 1.3e-15 relative) from the restructured contraction order, measured on a Hermite control.",
  "signature_sha256": "040f1357881045f68ed92121dd476386a1a34a20e3f95ace76454c688543e29f",
  "summary": "Precompute Engagement Summary\n===========================\n\n\u2022 Energy-balance LUT: DECLINED\n  Reason: no two-component dust attenuation component\n\u2022 Dust band response: DECLINED\n  Reason: no dust emission component configured\n\n\u2022 Observed facts:\n  components: stellar, nebular, shock\n  dust_emission_configured: False\n  free_params: sfh_dpl_log_total_mass, shock_log_density, shock_log_lhalpha, shock_velocity\n  igm_fold: declared=auto, resolved=None\n  redshift_fixed: 0.1\n  wave_precomp_enabled: True\n  ztable_enabled: False",
  "tree": [
@@ -76,7 +76,7 @@
    "dtype": "float64",
    "kind": "array",
    "path": "/shock_band_table",
-   "sha256": "6ce7d60ea13b05ef810add2f78cfeba139a5c5b6d51ae0716e2ce7b4a1edaed2",
+   "sha256": "c7adfc0404d118acb4fbc388d15c583ad1f589b77199a078132225825b002366",
    "shape": [
     24,
     2,
