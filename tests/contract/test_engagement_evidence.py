@@ -21,34 +21,35 @@ def test_decline_keeps_its_reason():
     assert Decline("why").reason == "why"
 
 
-class _Model:
-    """Stands in for a model: only an attribute bag."""
-
-
-def test_feature_top_up_records_a_refusal_and_returns_none(monkeypatch):
+def test_feature_top_up_records_a_refusal_as_a_decline_in_the_one_memo(
+    monkeypatch, synthetic_tophat_obs, ssp_data_wne
+):
+    from tengri.forward.precompute.band_table import Decline
     from tengri.inference import fitter
 
     def refuse(model, cfg):
         raise PrecomputeRefusal("no lines to tabulate")
 
     monkeypatch.setattr(fitter, "_memoized_approx_clone", refuse)
-    model = _Model()
+    model = _eb_model(ssp_data_wne, synthetic_tophat_obs, approx=None)
     assert fitter._try_feature_top_up(model, ("cfg",)) is None
-    assert model._approx_declines == {"feature_precomp": "no lines to tabulate"}
+    assert model.band_table_decline("approx", "feature_precomp") == Decline("no lines to tabulate")
 
 
 @pytest.mark.parametrize("bug", [RuntimeError("a bug"), ValueError("a shape bug")])
-def test_feature_top_up_lets_a_bug_propagate_even_when_it_is_a_value_error(monkeypatch, bug):
+def test_feature_top_up_lets_a_bug_propagate_even_when_it_is_a_value_error(
+    monkeypatch, bug, synthetic_tophat_obs, ssp_data_wne
+):
     from tengri.inference import fitter
 
     def broken(model, cfg):
         raise bug
 
     monkeypatch.setattr(fitter, "_memoized_approx_clone", broken)
-    model = _Model()
+    model = _eb_model(ssp_data_wne, synthetic_tophat_obs, approx=None)
     with pytest.raises(type(bug), match="bug"):
         fitter._try_feature_top_up(model, ("cfg",))
-    assert not hasattr(model, "_approx_declines")
+    assert model.band_table_decline("approx", "feature_precomp") is None
 
 
 def test_the_real_refusal_sites_raise_the_refusal_class(ssp_data_wne, synthetic_tophat_obs):
@@ -66,12 +67,15 @@ def test_the_real_refusal_sites_raise_the_refusal_class(ssp_data_wne, synthetic_
         model.with_approx(FeaturePrecomp())
 
 
-def test_report_carries_the_recorded_approx_declines():
+def test_the_decline_is_carried_to_the_fallback_clone(ssp_data_wne, synthetic_tophat_obs):
     from tengri.forward.precompute_report import _gather_observed_facts
+    from tengri.inference.fitter import _carry_approx_declines
 
-    model = _Model()
-    model._approx_declines = {"feature_precomp": "why"}
-    assert _gather_observed_facts(model).get("approx_declines") == {"feature_precomp": "why"}
+    model = _eb_model(ssp_data_wne, synthetic_tophat_obs, approx=None)
+    model.record_decline("approx", "feature_precomp", "why")
+    clone = _eb_model(ssp_data_wne, synthetic_tophat_obs, approx=None)
+    assert _carry_approx_declines(model, clone) is clone
+    assert _gather_observed_facts(clone).get("approx_declines") == {"feature_precomp": "why"}
 
 
 def _eb_model(ssp, obs, approx):
@@ -97,7 +101,7 @@ def test_energy_balance_lut_decline_is_recorded_at_the_gate(synthetic_tophat_obs
     """The gate that declines the LUT records its own reason; the report only reads it."""
     model = _eb_model(ssp_data_wne, synthetic_tophat_obs, approx=None)
     model._energy_balance_lut(model._build_component_chain())
-    recorded = model._energy_balance_lut_decline
+    recorded = model.band_table_decline("energy_balance", "lut").reason
     assert recorded and "WavePrecomp" in recorded
     report = precompute_engagement_report(model)
     assert report.energy_balance_lut.state == "declined"

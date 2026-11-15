@@ -495,7 +495,8 @@ def _try_feature_top_up(model, configs):
     A table's refusal is a :class:`~tengri.config.exceptions.PrecomputeRefusal`, raised only at
     the refusal site, and it is the detection ``approx='auto'`` relies on to keep the wave LUT.
     Only that is caught; any other exception, a ``ValueError`` from a bug included, propagates. The reason is recorded on ``model`` as
-    ``_approx_declines['feature_precomp']`` so the engagement report can show it (#3505 X1).
+    a ``Decline`` in the model's one memo, ``_band_tables['approx']['feature_precomp']``, which the
+    engagement report reads (#3505 X1).
 
     Parameters
     ----------
@@ -512,18 +513,15 @@ def _try_feature_top_up(model, configs):
     try:
         return _memoized_approx_clone(model, configs)
     except PrecomputeRefusal as refusal:
-        model._approx_declines = {
-            **getattr(model, "_approx_declines", {}),
-            "feature_precomp": str(refusal),
-        }
+        model.record_decline("approx", "feature_precomp", str(refusal))
         return None
 
 
 def _carry_approx_declines(model, resolved):
-    """Copy the declines recorded on ``model`` onto the ``resolved`` fallback and return it."""
-    declines = getattr(model, "_approx_declines", None)
-    if declines and resolved is not model:
-        resolved._approx_declines = dict(declines)
+    """Copy the approx declines recorded on ``model`` onto the ``resolved`` fallback and return it."""
+    if resolved is not model:
+        for slot, entry in getattr(model, "_band_tables", {}).get("approx", {}).items():
+            resolved.record_decline("approx", slot, entry.reason)
     return resolved
 
 

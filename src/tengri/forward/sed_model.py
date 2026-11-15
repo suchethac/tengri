@@ -12478,7 +12478,8 @@ class SEDModel:
 
         if lut is None and decline is None:
             decline = "the energy-balance LUT builder produced no table for this configuration"
-        self._energy_balance_lut_decline = None if lut is not None else decline
+        if lut is None:
+            self.record_decline("energy_balance", "lut", decline)
         self._energy_balance_lut_cache = lut
         return lut
 
@@ -12577,6 +12578,32 @@ class SEDModel:
         if memo is not None:
             return memo
         entry = self._provided_band_table(name, slot)
+        self._band_tables.setdefault(name, {})[slot] = entry
+        return entry
+
+    def record_decline(self, name: str, slot: str, reason: str) -> Decline:
+        """Record the refusal of a table gate in the one memo, and return the record.
+
+        The band-table providers return a :class:`Decline` that :meth:`_band_table` stores.
+        A gate that is not a provider (the energy-balance LUT, the ``FeaturePrecomp`` top-up
+        of ``approx='auto'``) records its refusal through here, so every outcome is one
+        ``Decline`` in ``_band_tables[name][slot]`` and the engagement report only reads it.
+
+        Parameters
+        ----------
+        name : str
+            Gate or component name, for example ``"energy_balance"`` or ``"approx"``.
+        slot : str
+            The gate's slot, for example ``"lut"`` or ``"feature_precomp"``.
+        reason : str
+            Why the table is not applicable; required.
+
+        Returns
+        -------
+        Decline
+            The stored record.
+        """
+        entry = Decline(reason)
         self._band_tables.setdefault(name, {})[slot] = entry
         return entry
 

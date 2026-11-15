@@ -128,11 +128,10 @@ def precompute_engagement_report(model: Any) -> PrecomputeEngagementReport:
     if eb_lut_cached == "unset":
         eb_state_obj = PrecomputeState(state="never_attempted")
     elif eb_lut_cached is None:
-        # The reason recorded at the gate beats one inferred from outside.
-        reason = getattr(model, "_energy_balance_lut_decline", None) or _infer_lut_decline_reason(
-            model
+        # The reason is the one the gate recorded in the memo; nothing is inferred from outside.
+        eb_state_obj = PrecomputeState(
+            state="declined", reason=_recorded_reason(model, "energy_balance", "lut")
         )
-        eb_state_obj = PrecomputeState(state="declined", reason=reason)
     else:
         eb_state_obj = PrecomputeState(state="engaged")
 
@@ -142,8 +141,10 @@ def precompute_engagement_report(model: Any) -> PrecomputeEngagementReport:
     if dust_state == "never_attempted":
         dust_state_obj = PrecomputeState(state="never_attempted")
     elif dust_state == "declined":
-        reason = _infer_dust_response_decline_reason(model)
-        dust_state_obj = PrecomputeState(state="declined", reason=reason)
+        dust_state_obj = PrecomputeState(
+            state="declined",
+            reason=_recorded_reason(model, "dust_emission", "emission_band_response"),
+        )
     else:
         dust_state_obj = PrecomputeState(state="engaged")
 
@@ -154,8 +155,10 @@ def precompute_engagement_report(model: Any) -> PrecomputeEngagementReport:
         if entry is None:
             continue
         if _state_from_memo(entry) == "declined":
-            reason = _infer_term_response_decline_reason(model, emitter_name)
-            emitter_caches[emitter_name] = PrecomputeState(state="declined", reason=reason)
+            emitter_caches[emitter_name] = PrecomputeState(
+                state="declined",
+                reason=_recorded_reason(model, emitter_name, "term_band_response"),
+            )
         else:
             emitter_caches[emitter_name] = PrecomputeState(state="engaged")
 
@@ -173,6 +176,12 @@ def precompute_engagement_report(model: Any) -> PrecomputeEngagementReport:
 def _memo_entry(model: Any, name: str, slot: str) -> Any:
     """Return the band-table memo entry of one component slot, or None when absent."""
     return getattr(model, "_band_tables", {}).get(name, {}).get(slot)
+
+
+def _recorded_reason(model: Any, name: str, slot: str) -> str | None:
+    """Return the reason the gate recorded for one slot, or None when it holds no ``Decline``."""
+    entry = _memo_entry(model, name, slot)
+    return entry.reason if isinstance(entry, Decline) else None
 
 
 def _state_from_memo(entry: Any) -> str:
@@ -193,121 +202,6 @@ def _state_from_memo(entry: Any) -> str:
     return "engaged" if isinstance(entry, BandTable) else "declined"
 
 
-def _infer_lut_decline_reason(model: Any) -> str | None:
-    """Infer reason why energy-balance LUT declined if possible.
-
-    Checks observable conditions that gate the LUT.
-
-    Returns
-    -------
-    str | None
-        Reason string, or None if unable to determine.
-    """
-    from tengri.components.dust.two_component import DustSEDComponent
-
-    free = set(model.spec.free_params)
-
-    # Check for two-component dust component
-    dust = None
-    if hasattr(model, "_cached_component_chain") and model._cached_component_chain:
-        dust = next(
-            (c for c in model._cached_component_chain if isinstance(c, DustSEDComponent)),
-            None,
-        )
-
-    if dust is None:
-        return "no two-component dust attenuation component"
-
-    # Check for unsafe free parameters
-    unsafe_free = {p for p in free if p.startswith("dust_") and p not in model._EB_ATTEN_FREE_OK}
-
-    if unsafe_free:
-        return f"free dust parameters outside allowlist: {sorted(unsafe_free)}"
-
-    # Check for WavePrecomp
-    if not (hasattr(model, "_approx") and model._approx.get("wave_precomp")):
-        return "approx=WavePrecomp() not enabled"
-
-    # Check for SSP data
-    if model.ssp_data is None:
-        return "ssp_data is None"
-
-    return "unknown reason (gate conditions appear satisfied)"
-
-
-def _infer_dust_response_decline_reason(model: Any) -> str | None:
-    """Infer reason why dust emission band response declined if possible.
-
-    Returns
-    -------
-    str | None
-        Reason string, or None if unable to determine.
-    """
-    # A verdict the builder recorded beats one inferred from outside. The
-    # homogeneity probe is the only gate a caller cannot re-check, because it
-    # evaluates the template rather than reading the spec, so without this the
-    # report calls a refusal it cannot see "unknown reason" (#2497).
-    entry = _memo_entry(model, "dust_emission", "emission_band_response")
-    recorded = entry.reason if isinstance(entry, Decline) else None
-    if recorded:
-        return str(recorded)
-
-    free = set(model.spec.free_params)
-    free_dust = {p for p in free if p.startswith("dust_")}
-
-    # Check for free shape parameters
-    # A free redshift is not a reason: the response is tabulated over it.
-    extra_params = free_dust - model._EB_ATTEN_FREE_OK
-    if extra_params:
-        return f"free shape parameters: {sorted(extra_params)}"
-
-    # Check for WavePrecomp
-    if not (hasattr(model, "_approx") and model._approx.get("wave_precomp")):
-        return "approx=WavePrecomp() not enabled"
-
-    # Check for dust emission component
-    if model._dust_emission_model is None:
-        return "no dust emission component configured"
-
-    return "unknown reason (gate conditions appear satisfied)"
-
-
-def _infer_term_response_decline_reason(model: Any, emitter_name: str) -> str | None:
-    """Infer reason why an emitter term response declined if possible.
-
-    Parameters
-    ----------
-    model : SEDModel
-        Built model instance.
-    emitter_name : str
-        Name of the emitter (e.g., 'radio', 'xray').
-
-    Returns
-    -------
-    str | None
-        Reason string, or None if unable to determine.
-    """
-    # The verdict recorded at the decision is the explanation; re-deriving it is the fallback.
-    entry = _memo_entry(model, emitter_name, "term_band_response")
-    recorded = entry.reason if isinstance(entry, Decline) else None
-    if recorded:
-        return str(recorded)
-
-    free = set(model.spec.free_params)
-    prefix = f"{emitter_name}_"
-
-    # Check for free emitter parameters
-    free_emitter = {p for p in free if p.startswith(prefix)}
-    if free_emitter:
-        return f"free {emitter_name} parameters: {sorted(free_emitter)}"
-
-    # Check for WavePrecomp
-    if not (hasattr(model, "_approx") and model._approx.get("wave_precomp")):
-        return "approx=WavePrecomp() not enabled"
-
-    return "unknown reason (gate conditions appear satisfied)"
-
-
 def _gather_observed_facts(model: Any) -> dict[str, Any]:
     """Collect observable facts that may explain precompute decisions.
 
@@ -325,9 +219,13 @@ def _gather_observed_facts(model: Any) -> dict[str, Any]:
         facts["ztable_enabled"] = model._approx.get("ztable", False)
 
     # Declines recorded by the approx='auto' resolvers: table attempted, refused, with a reason.
-    declines = getattr(model, "_approx_declines", None)
+    declines = {
+        slot: entry.reason
+        for slot, entry in getattr(model, "_band_tables", {}).get("approx", {}).items()
+        if isinstance(entry, Decline)
+    }
     if declines:
-        facts["approx_declines"] = dict(declines)
+        facts["approx_declines"] = declines
 
     # Free parameters
     if hasattr(model, "spec"):
