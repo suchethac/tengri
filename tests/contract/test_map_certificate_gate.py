@@ -46,7 +46,7 @@ def _fitter(template, g):
 
 @pytest.fixture
 def certify_calls(monkeypatch):
-    """Count calls to the certificate, leaving its behaviour unchanged."""
+    """Count calls to the certificate, leaving its behavior unchanged."""
     real = map_dispatch._certify_map_point
     calls = []
 
