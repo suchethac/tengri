@@ -141,7 +141,7 @@ class Sampler:
     run: Callable
     fidelity: str = "exact"
     metric_mode: str = "layer"
-    pilot: Any = None
+    pilot: str | Callable[..., SamplerResult] | None = None
     advisory: str | None = None
     engine: str | None = None
     dense_default: bool = False

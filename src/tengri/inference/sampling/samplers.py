@@ -235,12 +235,13 @@ def _mclmc_runner(adjusted: bool):
 
         _check_blackjax_floor()
         import blackjax
+        from blackjax.mcmc import integrators
 
         label = "adjusted_mclmc" if adjusted else "mclmc"
         bound = _bound(target)
         # One kernel object for every chain: it is a static argument of the sampling scan.
         family = blackjax.mcmc.adjusted_mclmc if adjusted else blackjax.mcmc.mclmc
-        kernel = family.build_kernel(integrator=blackjax.mcmc.integrators.isokinetic_mclachlan)
+        kernel = family.build_kernel(integrator=integrators.isokinetic_mclachlan)
 
         def single(tgt, k):
             # The target of every chain shares its density and data, so one bound function is

@@ -8,6 +8,7 @@ a non-mode, a non-finite tuning, a live set that cannot span the space.
 from __future__ import annotations
 
 import jax
+import jax.numpy as jnp
 
 from tengri.inference.newton import newton_polish
 
@@ -35,7 +36,7 @@ def _require_moving_chain(chain, method):
     )
 
 
-def adam_map_ascent(logp, init, map_steps, map_learning_rate):
+def adam_map_ascent(logp, init, map_steps, map_learning_rate) -> jax.Array:
     """Adam gradient ascent on ``logp`` from ``init``, shared by map and laplace.
 
     One implementation so the two drivers cannot drift: laplace IS this
@@ -53,7 +54,7 @@ def adam_map_ascent(logp, init, map_steps, map_learning_rate):
         return (optax.apply_updates(pos, updates), st), None
 
     (best, _), _ = jax.lax.scan(_step, (init, state), None, length=map_steps)
-    return best
+    return jnp.asarray(best)
 
 
 def newton_polish_mode(logp, mode, *, tol, max_iters=12):

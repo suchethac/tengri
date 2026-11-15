@@ -97,8 +97,8 @@ class LatentLayout:
             Bounds of the population PSD amplitude [dex] and timescale [Myr].
         """
         blocks = [
-            LatentBlock("", "psd_sigma_u", (), tuple(sigma_bounds)),
-            LatentBlock("", "psd_tau_u", (), tuple(tau_bounds)),
+            LatentBlock("", "psd_sigma_u", (), (float(sigma_bounds[0]), float(sigma_bounds[1]))),
+            LatentBlock("", "psd_tau_u", (), (float(tau_bounds[0]), float(tau_bounds[1]))),
             *(LatentBlock("gal", name, (int(n_galaxies),)) for name in free_names),
         ]
         if n_grid:
