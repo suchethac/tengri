@@ -33,6 +33,7 @@ from tengri.inference.channels import (
 from tengri.inference.likelihoods.gaussian import inv_noise_std
 from tengri.inference.likelihoods.noise_spec import ColumnBuilders, noise_spec_of
 from tengri.inference.likelihoods.protocol import log_normalization_of
+from tengri.observation.banded import banded_cholesky
 
 __all__ = [
     "DataTerm",
@@ -408,7 +409,9 @@ def _add_observation_channels(args, obs, model, line_flux_data, line_model_sigma
             args["spec_chol_data"] = spec_cfg.chol_data
         else:
             args["spec_cov_inv"] = spec_cfg.cov_inv
-            args["spec_cov_chol_data"] = _dense_cholesky_bands(spec_cfg.cov_inv)
+            args["spec_cov_chol_data"] = banded_cholesky(
+                np.linalg.inv(np.asarray(spec_cfg.cov_inv, dtype=np.float64))
+            ).data
 
     line_flux_cfg = (
         line_flux_data if line_flux_data is not None else getattr(obs, "line_fluxes", None)
@@ -433,27 +436,6 @@ def _add_observation_channels(args, obs, model, line_flux_data, line_model_sigma
     if index_cfg is not None:
         args["index_obs"] = index_cfg.values
         args["index_err"] = index_cfg.errors
-
-
-def _dense_cholesky_bands(cov_inv):
-    """Lower Cholesky factor of the covariance, in the banded layout of a full-width factor.
-
-    The marginalized terms whiten with a lower factor ``L`` of the pixel covariance, stored
-    as ``data[k, i] = L[i, i - k]`` for every lag ``k``. A dense covariance is factored once
-    here, on the host, so no evaluation inverts a matrix. Only the lower triangle of the
-    inverse is read and the factor overwrites it, so the peak is two ``N x N`` float64
-    arrays (the factor and its bands); a banded covariance never reaches this function.
-    """
-    import scipy.linalg
-
-    covariance = np.linalg.inv(np.asarray(cov_inv, dtype=np.float64))
-    lower = scipy.linalg.cholesky(covariance, lower=True, overwrite_a=True, check_finite=False)
-    n = lower.shape[0]
-    bands = np.zeros((n, n))
-    for lag in range(n):
-        bands[lag, lag:] = np.diagonal(lower, -lag)
-    del lower, covariance
-    return jnp.asarray(bands)
 
 
 def _line_model_sigma(model, line_flux_cfg, enabled):

@@ -526,19 +526,16 @@ def banded_cholesky(
        Johns Hopkins University Press, Section 4.3.6 (band Cholesky).
     """
     if isinstance(cov, BandedMatrix):
-        bm = cov
+        ab = _lower_storage(cov)
     else:
         dense = np.asarray(cov, dtype=float)
         n_dense = dense.shape[0]
-        i_idx, j_idx = np.nonzero(dense)
-        half = int(np.max(np.abs(i_idx - j_idx))) if i_idx.size else 0
-        offs = np.arange(-half, half + 1)
-        data = np.zeros((offs.size, n_dense))
-        for k, off in enumerate(offs):
-            rows = np.arange(max(0, -off), min(n_dense, n_dense - off))
-            data[k, rows] = dense[rows, rows + off]
-        bm = BandedMatrix(offsets=jnp.asarray(offs), data=jnp.asarray(data))
-    ab = _lower_storage(bm)
+        half = next(
+            (k for k in range(n_dense - 1, 0, -1) if np.any(np.diagonal(dense, -k) != 0.0)), 0
+        )
+        ab = np.zeros((half + 1, n_dense))
+        for k in range(half + 1):
+            ab[k, : n_dense - k] = np.diagonal(dense, -k)
     half, n = ab.shape[0] - 1, ab.shape[1]
     if pix_mask is None:
         mask = np.ones(n)
