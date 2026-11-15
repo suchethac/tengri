@@ -276,7 +276,6 @@ def test_free_delayed_sfh_auto_falls_back_with_the_warning_on_the_mist_default(
 ):
     """Auto keeps the exact line path for a free SFH on the MIST default, and says so."""
     import tengri
-    from tengri import WavePrecomp
     from tengri.inference.fitter import Fitter
     from tengri.observation import Observation
     from tengri.observation.photometry_config import Photometry
