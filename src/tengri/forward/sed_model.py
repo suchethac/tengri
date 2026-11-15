@@ -2507,11 +2507,11 @@ def _fold_igm_exact_into_subbands(
             "convention": convention,
         }
 
-    from tengri.components.stellar.sps.met_pchip import pchip_node_slopes
+    from tengri.components.stellar.sps.met_pchip import native_slope_flux
 
     def _slope_ssp(ssp):
         """The SSP grid whose flux is the native PCHIP slopes across Z (#3541)."""
-        return ssp._replace(ssp_flux=pchip_node_slopes(ssp.ssp_flux, ssp.ssp_lgmet))
+        return ssp._replace(ssp_flux=native_slope_flux(ssp.ssp_flux, ssp.ssp_lgmet))
 
     def _folded(fold, bare_phi, bare_num):
         """The folded integrals, with the bare ones where the IGM does not reach (#3541)."""
@@ -3949,8 +3949,13 @@ class SEDModel:
             # here. Falling back to the exact per-call path would produce correct
             # numbers while hiding the defect (#2826 was a KeyError swallowed
             # this way).
-            chain = self._cached_component_chain = self._build_component_chain()
-            self._energy_balance_lut(chain)
+            # One slope scope for the chain and the energy-balance LUT: each grid's native
+            # tangents are computed once for the whole build (#3541).
+            from tengri.components.stellar.sps.met_pchip import native_slope_scope
+
+            with native_slope_scope():
+                chain = self._cached_component_chain = self._build_component_chain()
+                self._energy_balance_lut(chain)
             # Every band table is filled into the memo here, eagerly, from chain0: a
             # build inside a jit trace would see tracers, and the grid chain attached
             # below must not be the one a table is built from.
@@ -13056,8 +13061,16 @@ class SEDModel:
 
         Builds on :meth:`_build_chain_configs` (structural-only) with the
         per-component ``precompute()`` pass that resolves template data and,
-        when active, the ``WavePrecomp``/``SpectrumPrecomp`` LUTs.
+        when active, the ``WavePrecomp``/``SpectrumPrecomp`` LUTs. The pass runs
+        inside a native-slope scope, so each grid's PCHIP tangents are taken once (#3541).
         """
+        from tengri.components.stellar.sps.met_pchip import native_slope_scope
+
+        with native_slope_scope():
+            return self._build_component_chain_in_scope()
+
+    def _build_component_chain_in_scope(self):
+        """The chain build of :meth:`_build_component_chain`, run inside its slope scope."""
         chain = self._build_chain_configs()
 
         # SINGLE BUILD-TIME PRECOMPUTATION PASS: resolve all component data before

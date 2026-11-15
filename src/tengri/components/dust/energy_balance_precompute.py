@@ -570,11 +570,11 @@ def build_energy_balance_lut_with_slopes(builder, ssp_data, **kwargs):
     The B and G families are linear in the SSP flux, so the same build on the native PCHIP
     slopes across metallicity is the sibling that the Hermite metallicity read needs.
     """
-    from tengri.components.stellar.sps.met_pchip import pchip_node_slopes
+    from tengri.components.stellar.sps.met_pchip import native_slope_flux
 
     ssp_wave = jnp.asarray(ssp_data.ssp_wave)
     lut = builder(jnp.asarray(ssp_data.ssp_flux), ssp_wave, **kwargs)
-    slope_flux = pchip_node_slopes(ssp_data.ssp_flux, ssp_data.ssp_lgmet)
+    slope_flux = native_slope_flux(ssp_data.ssp_flux, ssp_data.ssp_lgmet)
     return lut._replace(slopes=builder(slope_flux, ssp_wave, **kwargs))
 
 

@@ -153,7 +153,7 @@ from tengri.components.stellar.sps.met_pchip import (
     met_collapsed,
     met_collapsed_hermite,
     met_weights,
-    pchip_node_slopes,
+    native_slope_flux,
 )
 from tengri.parameters.translate import LOG10_ZSUN
 from tengri.protocols.component import declared_default
@@ -1439,10 +1439,11 @@ def _delta_met_weights(log_z, lgmet_scatter, ssp_lgmet, *, declared):
 def _native_met_slopes(ssp_data):
     """Native PCHIP tangents of the SSP flux across metallicity (#3541).
 
-    Computed once on the native grid; every table's slope sibling is the same linear
-    build applied to these slopes, so the table reads by Hermite of (values, slopes).
+    Computed once per grid inside a :func:`native_slope_scope` (the model build opens one);
+    every table's slope sibling is the same linear build applied to these slopes, so the
+    table reads by Hermite of (values, slopes).
     """
-    return pchip_node_slopes(ssp_data.ssp_flux, ssp_data.ssp_lgmet)
+    return native_slope_flux(ssp_data.ssp_flux, ssp_data.ssp_lgmet)
 
 
 def _lut_array_fields(lut) -> dict:

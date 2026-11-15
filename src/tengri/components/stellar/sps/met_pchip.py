@@ -14,8 +14,12 @@ column by column. Outside the grid the query is held at the edge node.
 
 from __future__ import annotations
 
+import threading
+from contextlib import contextmanager
+
 import jax
 import jax.numpy as jnp
+from jax import lax
 
 from tengri.utils.grid_interp import _pchip_slopes, pchip_interp_1d, pchip_interp_local
 
@@ -23,12 +27,30 @@ __all__ = [
     "met_collapsed",
     "met_collapsed_hermite",
     "met_weights",
+    "native_slope_flux",
+    "native_slope_scope",
     "pchip_node_slopes",
     "read_met",
     "read_met_hermite",
     "read_met_hermite_per_age",
     "read_met_per_age",
 ]
+
+#: Wavelength columns per tangent call. The PCHIP tangents are eager, so a whole-grid call
+#: holds about ten cubes of the slope shape at once (a 600 MB transient on the wNE grid,
+#: #3541). Each column is an independent map along the last axis, so the chunked result is
+#: bit-identical to the whole-grid one.
+_SLOPE_CHUNKS = 16
+
+#: Per-thread stack of open :func:`native_slope_scope` memos, innermost last.
+_SLOPE_STATE = threading.local()
+
+
+def _open_scopes() -> list[dict]:
+    """The calling thread's stack of open slope scopes."""
+    if not hasattr(_SLOPE_STATE, "scopes"):
+        _SLOPE_STATE.scopes = []
+    return _SLOPE_STATE.scopes
 
 
 def _clamp_to_grid(log_z, x):
@@ -174,7 +196,61 @@ def pchip_node_slopes(table, ssp_lgmet):
     x = jnp.asarray(ssp_lgmet)
     if x.shape[0] == 1:
         return jnp.zeros_like(table)
-    return _pchip_slopes(x, table)
+    n_wave = table.shape[-1]
+    k = min(_SLOPE_CHUNKS, n_wave)
+    if k <= 1:
+        return _pchip_slopes(x, table)
+    # Fixed-width windows: every call has one shape, so the eager ops compile once. The last
+    # window is clamped to the grid end and trimmed to the columns it owns.
+    width = -(-n_wave // k)
+    pieces = []
+    for i in range(k):
+        lo = i * width
+        if lo >= n_wave:
+            break
+        hi = min(lo + width, n_wave)
+        start = min(lo, n_wave - width)
+        window = _pchip_slopes(x, lax.dynamic_slice_in_dim(table, start, width, axis=-1))
+        pieces.append(window[..., lo - start : hi - start])
+    return jnp.concatenate(pieces, axis=-1)
+
+
+@contextmanager
+def native_slope_scope():
+    """Compute each SSP grid's native PCHIP tangents once while this scope is open (#3541).
+
+    Reentrant: a scope opened inside an open one shares its memo, so a whole model build
+    takes the tangents once per grid, and the memo (one slope cube per grid) is released
+    when the outermost scope exits. Outside any scope nothing is cached.
+    """
+    scopes = _open_scopes()
+    if scopes:
+        yield
+        return
+    scopes.append({})
+    try:
+        yield
+    finally:
+        scopes.pop()
+
+
+def native_slope_flux(ssp_flux, ssp_lgmet):
+    """Native PCHIP tangents of an SSP flux cube, shared within an open scope (#3541).
+
+    The one place the native slopes are formed. Inside :func:`native_slope_scope` the cube is
+    keyed on the identity of the flux and grid objects it was built from, so a second request
+    for the same grid returns the first result instead of recomputing it.
+    """
+    scopes = _open_scopes()
+    if not scopes:
+        return pchip_node_slopes(ssp_flux, ssp_lgmet)
+    memo = scopes[-1]
+    hit = memo.get(id(ssp_flux))
+    if hit is not None and hit[0] is ssp_flux and hit[1] is ssp_lgmet:
+        return hit[2]
+    slopes = pchip_node_slopes(ssp_flux, ssp_lgmet)
+    memo[id(ssp_flux)] = (ssp_flux, ssp_lgmet, slopes)
+    return slopes
 
 
 def read_met_hermite(values, slopes, ssp_lgmet, log_z):
