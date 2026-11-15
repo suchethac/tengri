@@ -1,0 +1,27 @@
+name: probe-cue-digest
+# Temporary (not for merge): records the x64-off Cue spectrum digest per runner CPU.
+on:
+  pull_request:
+    paths: [".github/probe/**", ".github/workflows/probe-cue-digest.yml"]
+permissions:
+  contents: read
+env:
+  SETUPTOOLS_SCM_PRETEND_VERSION_FOR_DSPS: "0.4.7"
+  PIP_CONSTRAINT: ${{ github.workspace }}/.github/ci-constraints.txt
+  TENGRI_DISABLE_JAX_CACHE: "1"
+  JAX_PLATFORMS: cpu
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        i: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - run: python .github/probe/cue_digest.py
