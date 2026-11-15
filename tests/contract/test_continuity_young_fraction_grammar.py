@@ -111,15 +111,18 @@ def test_hierarchical_flat_seam_refuses_the_young_fraction_spec():
 # SHA-256 of the rest-frame SED (float64 bytes), stellar mass and SED sum, as hex, of a
 # continuity model in ratio coordinates on the synthetic narrow SSP, recorded on the tree
 # before the young-fraction change. Three parameter points, each with a different ladder.
+# Re-pinned 2026-11-15 after #3434 (in #3462): an undeclared metallicity scatter is now a node-
+# exact cubic-Hermite read of the SSP (the fixed-Z metallicity is declared-free here). The SED
+# sums move +0.055% to +0.081%; 8aff37cb3 reproduces the previous digests exactly (macOS).
 _RATIO_GOLDEN = (
     {
         "params": {
             "sfh_cont_log_total_mass": 10.0,
             **{f"sfh_cont_ratio_{k}": 0.0 for k in range(6)},
         },
-        "sha256": "e7b79580b6099d1bf2811eda10d5932e8f32c9ec9554768c2b77291de217a73f",
+        "sha256": "d2711a43a9d25631299546308ee9eafeeea24e5cf413bed541a47ac85d336486",
         "stellar_mass_hex": "0x1.2a05f20000000p+33",
-        "sed_sum_hex": "0x1.27ef9d4f44926p+141",
+        "sed_sum_hex": "0x1.2825ba6cb3848p+141",
     },
     {
         "params": {
@@ -131,9 +134,9 @@ _RATIO_GOLDEN = (
             "sfh_cont_ratio_4": 0.3,
             "sfh_cont_ratio_5": -0.7,
         },
-        "sha256": "0f8cda714fe0e0e03ef598f583d3f98a53254034a6b1b9975d769524cf548250",
-        "stellar_mass_hex": "0x1.2b70b0bf04e7fp+31",
-        "sed_sum_hex": "0x1.27a268adc5279p+139",
+        "sha256": "b6e0d497c98ecd3bed39cf69d122315445020471575c52d222c8bdbe07e714c6",
+        "stellar_mass_hex": "0x1.2b70b0bf04e6ap+31",
+        "sed_sum_hex": "0x1.27dfac7fa2871p+139",
     },
     {
         "params": {
@@ -145,9 +148,9 @@ _RATIO_GOLDEN = (
             "sfh_cont_ratio_4": -0.05,
             "sfh_cont_ratio_5": 0.9,
         },
-        "sha256": "21587c6d21de64b2806f2f0a109db8b016c3a072ddf5dc62ebfcb5b5c350d7dc",
+        "sha256": "ac0d8f6a56f6e4906ce139a33894ab997ba30b75a88abb0fd917d94714f44a45",
         "stellar_mass_hex": "0x1.d4fc7bafb6aa7p+36",
-        "sed_sum_hex": "0x1.c96a83a869ae3p+144",
+        "sed_sum_hex": "0x1.c9ab35d539bb4p+144",
     },
 )
 
