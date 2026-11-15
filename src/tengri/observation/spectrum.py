@@ -1202,7 +1202,8 @@ def _lattice_edge_readout(g, origin, n_cells, edges):
     cum = jnp.concatenate([zero, jnp.cumsum(g * h)])
     slope = jnp.concatenate([g[:1], 0.5 * (g[1:] + g[:-1]), g[-1:]])
     kb = jnp.clip(jnp.floor((le - origin) / h).astype(jnp.int32), 0, n_cells - 1)
-    t = (le - (origin + kb * h)) / h
+    cell_lo = origin + h * jnp.arange(n_cells, dtype=le.dtype)
+    t = (le - cell_lo[kb]) / h
     t2 = t * t
     t3 = t2 * t
     cum_edge = (
@@ -1280,7 +1281,8 @@ def _interp_cells(wave_rest, sed_rest, has_lyc_edge):
     n_ion = jnp.sum(ionizing_mask(w, LYMAN_LIMIT_AA).astype(jnp.int32))
     has_bracket = (n_ion > 0) & (n_ion < n)
     ia = jnp.clip(n_ion - 1, 0, n - 2)
-    is_bracket = (jnp.arange(n - 1) == ia) & has_bracket
+    # With a bracket, n_ion - 1 is already in [0, n - 2]; without one the mask is False.
+    is_bracket = (jnp.arange(n - 1) == n_ion - 1) & has_bracket
     w_hi = jnp.where(is_bracket, LYMAN_LIMIT_AA, w_hi)
     q = jnp.where(is_bracket, 0.0, q)
     upper = jnp.where(has_bracket, w[ia + 1], LYMAN_LIMIT_AA)
