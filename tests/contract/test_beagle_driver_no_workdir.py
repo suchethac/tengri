@@ -12,6 +12,7 @@ present.
 from __future__ import annotations
 
 import dataclasses
+import itertools
 import re
 from pathlib import Path
 
@@ -22,6 +23,8 @@ from reproduction.beagle._drivers import beagle_matrix as M, beagle_output as O,
 pytestmark = pytest.mark.contract
 
 TEMPLATE_LINE = re.compile(r"^TEMPLATES( NEBULAR)? = ", re.MULTILINE)
+# Sections with no IGM keyword: the no-IGM controls and the z = 0.001 nebular-physics block.
+NO_IGM_PREFIXES = ("s12_igm_none", "s8b_", "s8c_", "s8d_", "s8e_", "s8f_", "s9_")
 
 
 def _synthetic_mock_file(path: Path, n_obj: int = 3, n_wl: int = 2198) -> Path:
@@ -140,10 +143,11 @@ def test_ssp_section_does_not_print_the_sfh() -> None:
 
 
 @pytest.mark.parametrize("run", M.RUN_MATRIX, ids=lambda r: r.section)
-def test_igm_is_inoue_unless_the_section_is_the_no_igm_control(run: B.MockRun) -> None:
+def test_igm_is_inoue_unless_the_section_is_a_no_igm_section(run: B.MockRun) -> None:
     lines = run.param_text().splitlines()
     igm = [line for line in lines if line.startswith("IGM ABSORPTION")]
-    if run.section.startswith("s12_igm_none"):
+    if run.section.startswith(NO_IGM_PREFIXES):
+        assert run.igm is None
         assert igm == []
     else:
         assert igm == ["IGM ABSORPTION = Inoue"]
@@ -368,3 +372,219 @@ def test_fit_parser_survives_a_cache_round_trip(tmp_path: Path) -> None:
         loaded.posterior["7"]["FULL SED"]["p50"], parsed.posterior["7"]["FULL SED"]["p50"]
     )
     assert loaded.provenance["tag"] == "test"
+
+
+# ── Nebular-physics and AGN sections ────────────────────────────────────────
+AGN_SECTIONS = ("s9_agn", "s9_agn_only")
+
+
+@pytest.mark.parametrize("section", AGN_SECTIONS)
+def test_agn_sections_carry_the_agn_template_and_no_rebin(section: str) -> None:
+    text = M.by_section(section)[0].param_text()
+    assert f"TEMPLATES AGN = $BEAGLE_TEMPLATES/{B.AGN_LISTING}" in text
+    assert "PRINT AGN SPECTRUM = T" in text
+    assert "TEMPLATES NEBULAR = " in text
+    assert "EMISSION LINES CONFIGURATION = " in text
+    assert "REBIN TEMPLATES" not in text
+
+
+@pytest.mark.parametrize("run", [r for r in M.RUN_MATRIX if not r.agn], ids=lambda r: r.section)
+def test_non_agn_sections_carry_no_agn_keywords(run: B.MockRun) -> None:
+    text = run.param_text()
+    assert "TEMPLATES AGN" not in text
+    assert "PRINT AGN SPECTRUM" not in text
+
+
+def test_agn_grid_covers_the_declared_nodes() -> None:
+    grid = M.by_section("s9_agn")[0]
+    assert len(grid.rows) == 24
+    assert {r["agn_lacc"] for r in grid.rows} == {43.0, 44.0, 45.0, 46.0}
+    combos = {(r["agn_logU"], r["agn_Z"]) for r in grid.rows}
+    assert combos == set(itertools.product((-3.5, -2.5, -1.5), (-0.5, 0.0)))
+    assert "PARAMETER = name:agn_xi mock:type:fixed value:0.3" in grid.param_text()
+    only = M.by_section("s9_agn_only")[0]
+    assert len(only.rows) == 6
+    assert all(r["sfr"] == -3.0 and r["mass"] == 8.0 for r in only.rows)
+    assert "PARAMETER = name:agn_lacc mock:type:fixed value:45.0" in only.param_text()
+
+
+def test_agn_run_needs_nebular_emission_and_no_rebin() -> None:
+    row = {"redshift": 0.001, "mass": 10.0}
+    with pytest.raises(ValueError, match="AGN"):
+        B.MockRun(section="bad", rows=(row,), templates="bc03", agn=True, rebin=None)
+    with pytest.raises(ValueError, match="AGN"):
+        B.MockRun(section="bad", rows=(row,), templates="ineb_june16", nebular=True, agn=True)
+
+
+@pytest.mark.parametrize(("section", "flag"), [("s8c_hiidust_on", "T"), ("s8c_hiidust_off", "F")])
+def test_hii_dust_keyword_follows_the_section(section: str, flag: str) -> None:
+    assert f"ACCOUNT FOR HII DUST = {flag}" in M.by_section(section)[0].param_text()
+
+
+def test_hii_dust_keyword_absent_when_unset() -> None:
+    assert "ACCOUNT FOR HII DUST" not in M.by_section("s8_nebular")[0].param_text()
+
+
+def test_lyc_escape_fraction_is_a_from_file_parameter() -> None:
+    run = M.by_section("s8d_fesc")[0]
+    assert "PARAMETER = name:LyC_f_esc type:from_file" in run.param_text()
+    assert sorted(r["LyC_f_esc"] for r in run.rows) == [0.0, 0.1, 0.3, 0.6]
+
+
+def test_episode_section_varies_the_current_timescale_per_row() -> None:
+    run = M.by_section("s8b_episode")[0]
+    assert len(run.rows) == 7
+    assert "SF_PARAMETER = name:current_sfr_timescale type:from_file" in run.param_text()
+    off_fiducial = {(r["sfr"], r["current_sfr_timescale"]) for r in run.rows}
+    assert {(0.5, 7.5), (0.5, 8.0)} <= off_fiducial
+    assert {r["sfr"] for r in run.rows if r["current_sfr_timescale"] == 7.0} == {
+        -1.0,
+        0.0,
+        0.5,
+        1.0,
+        1.5,
+    }
+
+
+def test_const100_uses_the_s8_node_grid() -> None:
+    const = M.by_section("s8e_const100")[0]
+    assert const.rows == M.by_section("s8_nebular")[0].rows
+    assert "max_stellar_age mock:type:fixed value:8.0" in const.param_text()
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [(609.789978, "609.789978"), (615.0, "615.000000"), (10829.9, "10829.9004")],
+)
+def test_lambda_suffix_is_float32_with_nine_significant_digits(
+    value: float, expected: str
+) -> None:
+    assert B._lambda_suffix(value) == expected
+
+
+def _write_line_list(path: Path, entries: list[tuple[str, str]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("".join(f"wl:{wl} use:T print:T label:{label}\n" for wl, label in entries))
+
+
+def _write_agn_tables(src: Path) -> None:
+    from astropy.io import fits
+
+    src.mkdir(parents=True, exist_ok=True)
+    (src / "nlr_list.dat").write_text("nlr_test.fits\n")
+    wl_names = ["wl_cont", "Mg10@610", "@615", "@1909"]
+    wl_values = [1000.0, 609.789978, 615.0, 1907.7]
+    hdus = [
+        fits.PrimaryHDU(),
+        fits.BinTableHDU.from_columns(
+            [fits.Column(name=n, format="1E", array=[v]) for n, v in zip(wl_names, wl_values)],
+            name="WAVELENGTHS",
+        ),
+        fits.BinTableHDU.from_columns(
+            [fits.Column(name="xi", format="1E", array=[0.3])], name="PARAMETERS"
+        ),
+        fits.BinTableHDU.from_columns(
+            [
+                fits.Column(name="Z", format="1E", array=[0.02]),
+                fits.Column(name="Mg10@610", format="1E", array=[1.0]),
+                fits.Column(name="@1909", format="1E", array=[2.0]),
+            ],
+            name="LOGU_1.5",
+        ),
+    ]
+    fits.HDUList(hdus).writeto(src / "nlr_test.fits", overwrite=True)
+
+
+def test_prepare_agn_templates_names_columns_the_way_beagle_looks_them_up(tmp_path: Path) -> None:
+    from astropy.io import fits
+
+    _write_agn_tables(tmp_path / "AGN_NLR")
+    _write_line_list(
+        tmp_path / B.NEBULAR_TEMPLATES["ineb_june16"][1],
+        [("609.79", "Mg10@610"), ("615.00", "@615"), ("1907.70", "X1"), ("1500.00", "Far")],
+    )
+    out = B.prepare_agn_templates(tmp_path)
+    assert out == tmp_path / B.AGN_TEMPLATE_DIR
+    assert (out / "nlr_list.dat").read_text() == "nlr_test.fits\n"
+    with fits.open(out / "nlr_test.fits") as hdul:
+        assert hdul["WAVELENGTHS"].columns.names == [
+            "wl_cont",
+            "Mg10@610_609.789978",
+            "@615_615.000000",
+            "@1909_1907.69995",
+        ]
+        assert hdul["PARAMETERS"].columns.names == ["xi"]
+        assert hdul["LOGU_1.5"].columns.names == ["Z", "Mg10@610_609.789978", "@1909_1907.69995"]
+        assert hdul["LOGU_1.5"].data["@1909_1907.69995"][0] == pytest.approx(2.0)
+
+
+def test_prepare_agn_templates_refuses_an_unmatched_column(tmp_path: Path) -> None:
+    _write_agn_tables(tmp_path / "AGN_NLR")
+    _write_line_list(tmp_path / B.NEBULAR_TEMPLATES["ineb_june16"][1], [("1500.00", "Far")])
+    with pytest.raises(ValueError, match="AGN column"):
+        B.prepare_agn_templates(tmp_path)
+
+
+def test_prepare_agn_templates_needs_the_downloaded_tables(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError, match="AGN_NLR"):
+        B.prepare_agn_templates(tmp_path)
+
+
+def _synthetic_agn_mock(path: Path, n_obj: int = 2, n_wl: int = 6) -> Path:
+    from astropy.io import fits
+
+    wl = np.linspace(1000.0, 5000.0, n_wl)
+    hdus = [
+        fits.PrimaryHDU(),
+        fits.BinTableHDU.from_columns(
+            [fits.Column(name="luminosity_distance", format="1D", array=np.full(n_obj, 1e26))],
+            name="GALAXY PROPERTIES",
+        ),
+        fits.BinTableHDU.from_columns(
+            [fits.Column(name="wl", format=f"{n_wl}D", array=wl[None, :])], name="FULL SED WL"
+        ),
+        fits.ImageHDU(data=np.full((n_obj, n_wl), 1e-20), name="FULL SED"),
+        fits.BinTableHDU.from_columns(
+            [
+                fits.Column(name="agn_present", format="1E", array=np.ones(n_obj)),
+                fits.Column(name="Mg10@610_609.789978_lum_obs", format="1E", array=[1.0e5, 2.0e5]),
+                fits.Column(name="Mg10@610_609.789978_flux", format="1E", array=[1e-15, 2e-15]),
+            ],
+            name="AGN EMISSION",
+        ),
+        fits.ImageHDU(data=np.full((n_obj, n_wl), 3e-21), name="AGN FULL SED"),
+    ]
+    fits.HDUList(hdus).writeto(path, overwrite=True)
+    return path
+
+
+def test_parser_reads_agn_lines_and_the_agn_sed(tmp_path: Path) -> None:
+    parsed = O.parse_mock_output(_synthetic_agn_mock(tmp_path / "agn.fits"))
+    assert set(parsed.agn_line_lums_lsun) == {"Mg10@610_609.79_lum_obs"}
+    assert np.array_equal(parsed.agn_line_lums_lsun["Mg10@610_609.79_lum_obs"], [1e5, 2e5])
+    assert parsed.agn_sed is not None
+    assert parsed.agn_sed.shape == (2, 6)
+    # Same 4 pi d_L^2 convention as the total SED: the AGN flux is 0.3 of the total here.
+    assert np.allclose(parsed.agn_sed, 0.3 * parsed.sed_lnu)
+
+
+def test_agn_fields_survive_a_cache_round_trip(tmp_path: Path) -> None:
+    parsed = O.parse_mock_output(_synthetic_agn_mock(tmp_path / "agn.fits"))
+    O.save_cache(tmp_path, "agn", parsed)
+    loaded = O.load_cache(tmp_path, "agn")
+    assert np.array_equal(loaded.agn_sed, parsed.agn_sed)
+    assert set(loaded.agn_line_lums_lsun) == set(parsed.agn_line_lums_lsun)
+    assert np.array_equal(
+        loaded.agn_line_lums_lsun["Mg10@610_609.79_lum_obs"],
+        parsed.agn_line_lums_lsun["Mg10@610_609.79_lum_obs"],
+    )
+
+
+def test_mock_without_agn_extensions_leaves_the_fields_none(tmp_path: Path) -> None:
+    parsed = O.parse_mock_output(_synthetic_mock_file(tmp_path / "plain.fits"))
+    assert parsed.agn_sed is None
+    assert parsed.agn_line_lums_lsun is None
+    O.save_cache(tmp_path, "plain", parsed)
+    loaded = O.load_cache(tmp_path, "plain")
+    assert loaded.agn_sed is None
+    assert loaded.agn_line_lums_lsun is None

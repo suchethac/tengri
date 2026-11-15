@@ -31,7 +31,7 @@ MPC_CM = 3.0856775814913673e24
 AIR_VACUUM_CUTOFF_AA = 2000.0
 _LINE_RE = re.compile(r"^(?P<name>.+)_(?P<wl>\d+(?:\.\d+)?)_lum_(?P<kind>obs|em)$")
 _MAGNITUDES = {"APPARENT MAGNITUDES": "_APP", "ABSOLUTE MAGNITUDES": "_ABS"}
-_ARRAY_FIELDS = ("wl_rest_aa", "sed_lnu", "sed_flam_at_dl", "continuum_sed")
+_ARRAY_FIELDS = ("wl_rest_aa", "sed_lnu", "sed_flam_at_dl", "continuum_sed", "agn_sed")
 _DICT_FIELDS = (
     "galaxy_properties",
     "star_formation",
@@ -40,6 +40,7 @@ _DICT_FIELDS = (
     "magnitudes_abs",
     "line_lums_lsun",
     "line_fluxes",
+    "agn_line_lums_lsun",
 )
 
 
@@ -70,6 +71,12 @@ class ParsedRun:
         writes them.
     continuum_sed : ndarray or None
         Continuum-only :math:`L_\\nu` on ``wl_rest_aa``, when ``CONTINUUM SED`` is on the same grid.
+    agn_line_lums_lsun : dict or None
+        ``AGN EMISSION`` line luminosities in :math:`L_\\odot`, keyed like ``line_lums_lsun``.
+        Present only for runs with the AGN narrow-line region switched on.
+    agn_sed : ndarray or None
+        AGN-only :math:`L_\\nu` [erg/s/Hz], shape ``(n_obj, n_wl)``, from ``AGN FULL SED`` on
+        ``wl_rest_aa``; converted with the same :math:`4\\pi d_L^2` convention as ``sed_lnu``.
     posterior : dict or None
         Fits only: ``{object_id: {extension: {column: array}}}``; images are under ``"image"``.
     provenance : dict
@@ -87,6 +94,8 @@ class ParsedRun:
     line_lums_lsun: Mapping[str, np.ndarray] | None = None
     line_fluxes: Mapping[str, np.ndarray] | None = None
     continuum_sed: np.ndarray | None = None
+    agn_line_lums_lsun: Mapping[str, np.ndarray] | None = None
+    agn_sed: np.ndarray | None = None
     posterior: Mapping[str, Mapping[str, Mapping[str, np.ndarray]]] | None = None
     provenance: Mapping[str, object] = field(default_factory=dict)
 
@@ -187,6 +196,8 @@ def parse_mock_output(
         abs_ = _maybe(hdul, "ABSOLUTE MAGNITUDES")
         lines = _maybe(hdul, "HII EMISSION")
         cont = _continuum(hdul, flam.shape, wl, gp)
+        agn_lines = _maybe(hdul, "AGN EMISSION")
+        agn_sed = _agn_sed(hdul, wl, gp)
     prov = {**dict(provenance or {}), "extensions": present, "path": str(path)}
     return ParsedRun(
         wl_rest_aa=wl,
@@ -202,6 +213,8 @@ def parse_mock_output(
         if lines is None
         else {c: a for c, a in lines.items() if c.endswith("_flux")},
         continuum_sed=cont,
+        agn_line_lums_lsun=None if agn_lines is None else _line_luminosities(agn_lines),
+        agn_sed=agn_sed,
         provenance=prov,
     )
 
@@ -209,6 +222,19 @@ def parse_mock_output(
 def _maybe(hdul: fits.HDUList, name: str) -> dict[str, np.ndarray] | None:
     hdu = _hdu(hdul, name)
     return None if hdu is None else _columns(hdu)
+
+
+def _agn_sed(
+    hdul: fits.HDUList, wl: np.ndarray, gp: Mapping[str, np.ndarray]
+) -> np.ndarray | None:
+    """AGN-only :math:`L_\\nu` on the FULL SED grid, or ``None`` without ``AGN FULL SED``."""
+    hdu = _hdu(hdul, "AGN FULL SED")
+    if hdu is None:
+        return None
+    flam = _image(hdu)
+    if flam.ndim != 2 or flam.shape[1] != wl.shape[0]:
+        raise ValueError(f"AGN FULL SED has shape {flam.shape}; expected (n_obj, {wl.shape[0]})")
+    return _to_lnu(wl, flam, gp["luminosity_distance"])
 
 
 def _continuum(

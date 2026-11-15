@@ -118,6 +118,132 @@ def _igm_sections() -> tuple[MockRun, ...]:
     return tuple(runs)
 
 
+# ── Nebular physics and AGN sections ────────────────────────────────────────
+# Fiducial: delayed history tau 9 Gyr, current episode 7 yr (log), Z = 0.014, log U = -2.5,
+# xi = 0.3, SFR 1 Msun/yr at 10 log Msun formed. Each section varies one thing.
+_FIDUCIAL_EPISODE = (
+    _DELAYED,
+    mock_fixed("tau", value=9.0),
+    mock_fixed("max_stellar_age", value=9.0),
+    mock_fixed("current_sfr_timescale", value=7.0),
+)
+
+
+def _fid_row(**overrides: float) -> dict[str, float]:
+    """One fiducial nebular row; ``overrides`` replace a key in place, keeping the key order."""
+    base = {
+        "redshift": 0.001,
+        "mass": 10.0,
+        "sfr": 1.0,
+        "metallicity": _logz(0.014),
+        "nebular_logU": -2.5,
+        "nebular_xi": 0.3,
+        "nebular_Z": _logz(0.014),
+    }
+    return {**base, **overrides}
+
+
+def _episode_sections() -> tuple[MockRun, ...]:
+    """Current-episode timescale (s8b) and the HII-dust switch (s8c), both on the fiducial."""
+    rows = tuple(
+        _fid_row(sfr=sfr, current_sfr_timescale=7.0) for sfr in (-1.0, 0.0, 0.5, 1.0, 1.5)
+    )
+    rows += tuple(_fid_row(sfr=0.5, current_sfr_timescale=t) for t in (7.5, 8.0))
+    episode = MockRun(
+        section="s8b_episode",
+        rows=rows,
+        templates="ineb_june16",
+        nebular=True,
+        igm=None,
+        params=(_DELAYED, mock_fixed("tau", value=9.0), mock_fixed("max_stellar_age", value=9.0)),
+    )
+    hii = tuple(
+        MockRun(
+            section=f"s8c_hiidust_{label}",
+            rows=tuple(_fid_row(tauV_eff=tau_v) for tau_v in (0.3, 1.0, 2.0)),
+            templates="ineb_june16",
+            nebular=True,
+            igm=None,
+            dust="CF00",
+            params=(*_FIDUCIAL_EPISODE, mock_fixed("mu", value=0.4)),
+            hii_dust=flag,
+        )
+        for label, flag in (("on", True), ("off", False))
+    )
+    return (episode, *hii)
+
+
+def _nebular_physics_sections() -> tuple[MockRun, ...]:
+    """Escape fraction (s8d), SFH against template version (s8e) and population age (s8f)."""
+    fesc = MockRun(
+        section="s8d_fesc",
+        rows=tuple(_fid_row(LyC_f_esc=f) for f in (0.0, 0.1, 0.3, 0.6)),
+        templates="ineb_june16",
+        nebular=True,
+        igm=None,
+        params=_FIDUCIAL_EPISODE,
+    )
+    const100 = MockRun(
+        section="s8e_const100",
+        rows=_nebular_rows(),
+        templates="ineb_june16",
+        nebular=True,
+        igm=None,
+        params=(
+            mock_fixed("sfh_type", char_value="constant"),
+            mock_fixed("max_stellar_age", value=8.0),
+        ),
+    )
+    age = MockRun(
+        section="s8f_age",
+        rows=tuple(_fid_row(max_stellar_age=age) for age in (6.5, 7.0, 7.5, 8.0, 9.0)),
+        templates="ineb_june16",
+        nebular=True,
+        igm=None,
+        params=(mock_fixed("sfh_type", char_value="constant"),),
+    )
+    return (fesc, const100, age)
+
+
+def _agn_sections() -> tuple[MockRun, ...]:
+    """The AGN narrow-line region on the fiducial (s9_agn) and alone (s9_agn_only)."""
+    grid = tuple(
+        _fid_row(agn_lacc=lacc, agn_logU=log_u, agn_Z=log_z)
+        for lacc, log_u, log_z in itertools.product(
+            (43.0, 44.0, 45.0, 46.0), (-3.5, -2.5, -1.5), (-0.5, 0.0)
+        )
+    )
+    combos = tuple(itertools.product((-3.5, -2.5, -1.5), (-0.5, 0.0)))
+    agn_only = tuple(
+        _fid_row(sfr=-3.0, mass=8.0, agn_logU=log_u, agn_Z=log_z) for log_u, log_z in combos
+    )
+    common = {
+        "templates": "ineb_june16",
+        "nebular": True,
+        "agn": True,
+        "rebin": None,
+        "igm": None,
+    }
+    return (
+        MockRun(
+            section="s9_agn",
+            rows=grid,
+            params=(*_FIDUCIAL_EPISODE, mock_fixed("agn_xi", value=0.3)),
+            **common,
+        ),
+        MockRun(
+            section="s9_agn_only",
+            rows=agn_only,
+            params=(
+                *_FIDUCIAL_EPISODE,
+                mock_fixed("agn_lacc", value=45.0),
+                mock_fixed("agn_xi", value=0.3),
+            ),
+            **common,
+        ),
+    )
+
+
 # CCWW13_full is not run: its Tuffs et al. (2004) radiative-transfer tables are not distributed
 # with the public BEAGLE package, and BEAGLE stops with "Radiative transfer calculations not
 # initialized" without them. tengri implements the universal relation (CCWW13_universal). For anyone
@@ -194,6 +320,9 @@ RUN_MATRIX: tuple[MockRun, ...] = (
             mock_fixed("max_stellar_age", value=9.0),
         ),
     ),
+    *_episode_sections(),
+    *_nebular_physics_sections(),
+    *_agn_sections(),
     *_igm_sections(),
 )
 

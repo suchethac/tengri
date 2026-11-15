@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import math
 import os
 import platform
 import re
@@ -97,6 +98,10 @@ NEBULAR_TEMPLATES = {
     ),
 }
 ATTENUATION_LAWS = ("CF00", "Calzetti", "CCWW13_universal", "mw", "lmc", "smc")
+AGN_SOURCE_DIR = "AGN_NLR"  # the AGN NLR tables as downloaded, under the templates directory
+AGN_TEMPLATE_DIR = "AGN_NLR_v029"  # BEAGLE 0.29.2 column names, written by prepare_agn_templates
+AGN_LISTING = f"{AGN_TEMPLATE_DIR}/nlr_list.dat"
+AGN_LINE_MATCH_A = 0.06  # nearest line-list wavelength accepted for an unlabelled AGN column [A]
 
 
 @dataclass(frozen=True)
@@ -311,7 +316,9 @@ def _filter_config(run_name: str, filters: Sequence[FilterSpec], *, fitting: boo
     return "\n".join(lines) + "\n"
 
 
-def _output_lines(*, photometry: bool, spectrum: bool, sfh: bool, nebular: bool) -> list[str]:
+def _output_lines(
+    *, photometry: bool, spectrum: bool, sfh: bool, nebular: bool, agn: bool = False
+) -> list[str]:
     lines = [
         f"PRINT PHOTOMETRY = {_tf(photometry)}",
         f"PRINT SPECTRUM = {_tf(spectrum)}",
@@ -320,6 +327,8 @@ def _output_lines(*, photometry: bool, spectrum: bool, sfh: bool, nebular: bool)
     ]
     if nebular:
         lines += ["PRINT CONTINUUM = T", "PRINT LINE FLUXES = T"]
+    if agn:
+        lines.append("PRINT AGN SPECTRUM = T")
     return lines
 
 
@@ -391,6 +400,13 @@ class MockRun:
         default when fitting; ``None`` omits the keyword, which is the no-IGM control
         (the manual documents no ``"none"`` value; the omission is to be confirmed
         by a run). IGM acts on the photometry only; ``FULL SED`` carries none.
+    hii_dust : bool, optional
+        Write ``ACCOUNT FOR HII DUST`` (a global keyword). ``None`` omits it, which leaves
+        BEAGLE's default in force.
+    agn : bool
+        Add the AGN narrow-line region: ``TEMPLATES AGN`` on the converted tables, and
+        ``PRINT AGN SPECTRUM``. Needs ``nebular=True`` and ``rebin=None``, since the AGN
+        table set is not compatible with ``REBIN TEMPLATES``.
     print_sfh : bool
         Request the ``STAR FORMATION HISTORIES`` printout. BEAGLE 0.29.2 cannot print
         the star formation history of an ``ssp`` mock (it segfaults in
@@ -411,6 +427,8 @@ class MockRun:
     seed: int = 12345
     cosmology: Cosmology = PLANCK18_BEAGLE
     igm: str | None = "Inoue"
+    hii_dust: bool | None = None
+    agn: bool = False
     mode: Literal["mock"] = field(default="mock", init=False)
 
     def __post_init__(self) -> None:
@@ -424,6 +442,8 @@ class MockRun:
             raise ValueError(f"{self.section}: {sorted(clash)} are both rows and params")
         if self.dust is not None and self.dust not in ATTENUATION_LAWS:
             raise ValueError(f"{self.section}: unknown attenuation law {self.dust!r}")
+        if self.agn and not (self.nebular and self.rebin is None):
+            raise ValueError(f"{self.section}: an AGN run needs nebular=True and rebin=None")
 
     def _is_ssp(self) -> bool:
         return any(p.name == "sfh_type" and p.char_value == "ssp" for p in self.params)
@@ -442,10 +462,14 @@ class MockRun:
         params = self._params()
         lines = ["[main]", "VERBOSE = 2", f"SEED = {self.seed}", *self.cosmology.lines()]
         lines += _template_lines(self.templates, self.nebular)
+        if self.agn:
+            lines.append(f"TEMPLATES AGN = $BEAGLE_TEMPLATES/{AGN_LISTING}")
         if self.rebin is not None:
             lines.append(f"REBIN TEMPLATES = {self.rebin}")
         if self.igm:
             lines.append(f"IGM ABSORPTION = {self.igm}")
+        if self.hii_dust is not None:
+            lines.append(f"ACCOUNT FOR HII DUST = {_tf(self.hii_dust)}")
         lines += [p.render() for p in params if p.name in SF_NAMES]
         lines += [p.render() for p in params if p.name not in SF_NAMES]
         lines += _output_lines(
@@ -453,6 +477,7 @@ class MockRun:
             spectrum=self.print_sed,
             sfh=self.print_sfh and not self._is_ssp(),
             nebular=self.nebular,
+            agn=self.agn,
         )
         lines += [
             f"N_OBJECTS = {len(self.rows)}",
@@ -741,6 +766,113 @@ def run(run: Run, *, allow_docker: bool = False) -> ParsedRun:
     return _execute(root, run)
 
 
+# ── AGN template copies (BEAGLE input only) ─────────────────────────────────
+_LINE_ENTRY = re.compile(r"^wl:(?P<wl>\S+)\s.*?label:(?P<label>\S+)")
+
+
+def read_line_list(path: Path) -> list[tuple[float, str]]:
+    """``(wavelength [A], label)`` for every ``wl:... label:...`` entry of a BEAGLE line list."""
+    entries = []
+    for raw in path.read_text().splitlines():
+        match = _LINE_ENTRY.match(raw)
+        if match:
+            entries.append((float(match["wl"]), match["label"]))
+    return entries
+
+
+def _lambda_suffix(wl: float) -> str:
+    """A line-list wavelength as float32, nine significant digits, trailing zeros kept."""
+    value = float(np.float32(wl))
+    decimals = max(0, 9 - (math.floor(math.log10(value)) + 1))
+    return f"{value:.{decimals}f}"
+
+
+def _line_column_names(
+    columns: Sequence[str], table_wl: Mapping[str, float], entries: Sequence[tuple[float, str]]
+) -> dict[str, str]:
+    """BEAGLE names for the AGN line columns: label match first, then the nearest unused line."""
+    by_label: dict[str, int] = {}
+    for index, (_, label) in enumerate(entries):
+        by_label.setdefault(label, index)
+    used: set[int] = set()
+    chosen: dict[str, int] = {}
+    for col in columns:
+        index = by_label.get(col)
+        if index is not None and index not in used:
+            chosen[col] = index
+            used.add(index)
+    for col in columns:
+        if col in chosen:
+            continue
+        wl = table_wl[col]
+        near = [
+            (abs(entries[i][0] - wl), i)
+            for i in range(len(entries))
+            if i not in used and abs(entries[i][0] - wl) < AGN_LINE_MATCH_A
+        ]
+        if not near:
+            raise ValueError(
+                f"no line-list entry within {AGN_LINE_MATCH_A} A of AGN column {col!r}"
+            )
+        _, index = min(near)
+        chosen[col] = index
+        used.add(index)
+    return {col: f"{col}_{_lambda_suffix(entries[i][0])}" for col, i in chosen.items()}
+
+
+def _rename_line_columns(src: Path, dst: Path, entries: Sequence[tuple[float, str]]) -> None:
+    from astropy.io import fits
+
+    with fits.open(src) as hdul:
+        if "WAVELENGTHS" not in hdul:
+            raise ValueError(f"{src.name} has no WAVELENGTHS table")
+        wl_hdu = hdul["WAVELENGTHS"]
+        names = [n for n in wl_hdu.columns.names if n != "wl_cont"]
+        table_wl = {n: float(wl_hdu.data[n][0]) for n in names}
+        mapping = _line_column_names(names, table_wl, entries)
+        for hdu in hdul[1:]:
+            if isinstance(hdu, fits.BinTableHDU):
+                for old, new in mapping.items():
+                    if old in hdu.columns.names:
+                        hdu.columns.change_name(old, new)
+        hdul.writeto(dst, overwrite=True)
+
+
+def prepare_agn_templates(templates: Path) -> Path:
+    """Write BEAGLE-named copies of the AGN NLR tables and return their directory.
+
+    The downloaded tables name each line column by its label (``Mg10@610``). BEAGLE 0.29.2
+    looks the column up as ``label_wavelength``, with the line-list wavelength written as
+    float32 to nine significant digits (``Mg10@610_609.789978``). Line columns are renamed by
+    label match against the line list, then by the nearest unused entry within
+    :data:`AGN_LINE_MATCH_A`. Other columns are unchanged, and ``nlr_list.dat`` is copied.
+
+    This output feeds BEAGLE only; tengri code and the notebook never call it.
+
+    Parameters
+    ----------
+    templates : Path
+        The templates directory, holding ``AGN_NLR/`` and the line list.
+
+    Returns
+    -------
+    Path
+        ``templates / AGN_TEMPLATE_DIR``, the directory named by :data:`AGN_LISTING`.
+    """
+    src = templates / AGN_SOURCE_DIR
+    if not (src / "nlr_list.dat").is_file():
+        raise FileNotFoundError(
+            f"no AGN tables at {src}; fetch AGN_NLR/ into the templates directory"
+        )
+    entries = read_line_list(templates / NEBULAR_TEMPLATES["ineb_june16"][1])
+    dst = templates / AGN_TEMPLATE_DIR
+    dst.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(src / "nlr_list.dat", dst / "nlr_list.dat")
+    for fits_path in sorted(src.glob("*.fits")):
+        _rename_line_columns(fits_path, dst / fits_path.name, entries)
+    return dst
+
+
 # ── Command line ────────────────────────────────────────────────────────────
 def _status(runs: Sequence[Run]) -> int:
     root = workdir()
@@ -789,6 +921,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument("--status", action="store_true", help="show which runs are cached")
     parser.add_argument("--allow-docker", action="store_true", help="allow runs through Docker")
+    parser.add_argument(
+        "--prepare-agn-templates",
+        action="store_true",
+        help="write BEAGLE-named AGN NLR table copies under the templates directory",
+    )
     args = parser.parse_args(argv)
     try:
         return _dispatch(args, parser, RUN_MATRIX, by_section)
@@ -802,6 +939,9 @@ def _dispatch(
 ) -> int:
     from .beagle_capstone import capstone_run
 
+    if args.prepare_agn_templates:
+        print(prepare_agn_templates(templates_dir()))
+        return 0
     if args.render_params:
         out = args.out if args.out is not None else workdir()
         return _render([*matrix, capstone_run()], out)

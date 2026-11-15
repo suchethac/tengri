@@ -42,7 +42,10 @@ are the record.
      the list copy in `mup100/`.
    - `ineb_June16/mup100/n2/C100/`: 300 `.ineb` files of 12,119,336 bytes each. Check the sizes:
      the server truncates files silently.
-   - `AGN_NLR/`.
+   - `AGN_NLR/`: the three `nlr_xi*.fits` tables and `nlr_list.dat`, as downloaded. BEAGLE 0.29.2 reads
+     the copy in `AGN_NLR_v029/`, where each line column is renamed to `label_wavelength` (for example
+     `Mg10@610_609.789978`). Write that copy once with `--prepare-agn-templates` (below). It goes only
+     into the templates directory, and BEAGLE is its only reader.
 
    Keep the credentials in your shell session only; do not write them into a file in this repository.
 5. **Optional, for section 15b.** `export ART_SEDFITTING_DIR=...` names a local checkout of
@@ -57,8 +60,9 @@ invokes the containerized binary, parses the FITS output into tengri's units and
 python -m reproduction.beagle._drivers.beagle_run --render-params                  # write every parameter file, no Docker
 python -m reproduction.beagle._drivers.beagle_run --status                         # list which sections are cached
 python -m reproduction.beagle._drivers.beagle_run --run s3_fiducial --allow-docker # run one section
-python -m reproduction.beagle._drivers.beagle_run --run-all --allow-docker         # run the 20 matrix sections once
+python -m reproduction.beagle._drivers.beagle_run --run-all --allow-docker         # run the 28 matrix sections once
 python -m reproduction.beagle._drivers.beagle_run --fit-capstone --allow-docker    # the four Paper I fits
+python -m reproduction.beagle._drivers.beagle_run --prepare-agn-templates          # BEAGLE-named AGN table copies, no Docker
 ```
 
 `--run`, `--run-all` and `--fit-capstone` require `--allow-docker`; without it they refuse to start
