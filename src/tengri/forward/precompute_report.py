@@ -17,6 +17,23 @@ from typing import Any, NamedTuple
 from tengri.forward.precompute.band_table import BandTable, Decline
 
 
+class PrecomputeState(NamedTuple):
+    """State of a single precompute mechanism.
+
+    Attributes
+    ----------
+    state : str
+        One of: 'engaged' (object stored), 'declined' (None stored),
+        'never_attempted' (attribute unset).
+    reason : str | None
+        Human-readable explanation of why the mechanism declined (if state
+        is 'declined'). None for 'engaged' or 'never_attempted'.
+    """
+
+    state: str
+    reason: str | None = None
+
+
 class PrecomputeEngagementReport(NamedTuple):
     """Structured report of precompute mechanism engagement.
 
@@ -31,12 +48,16 @@ class PrecomputeEngagementReport(NamedTuple):
     observed_facts : dict[str, str | list]
         Context for why mechanisms declined (e.g., free parameters that
         trigger gates).
+    feature_precomp : PrecomputeState
+        The ``FeaturePrecomp`` top-up of ``approx='auto'``: engaged when live on the model,
+        declined with the recorded reason when its table refused.
     """
 
     energy_balance_lut: "PrecomputeState"
     dust_band_response: "PrecomputeState"
     emitter_term_responses: dict[str, "PrecomputeState"]
     observed_facts: dict[str, Any]
+    feature_precomp: "PrecomputeState" = PrecomputeState(state="never_attempted")
 
     def summary_text(self) -> str:
         """Human-readable summary of engagement.
@@ -70,6 +91,11 @@ class PrecomputeEngagementReport(NamedTuple):
                 if st == "declined" and state_obj.reason:
                     lines.append(f"    Reason: {state_obj.reason}")
 
+        # FeaturePrecomp top-up of approx='auto'; only a refusal is worth a line
+        if self.feature_precomp.state == "declined":
+            lines.append("\n• FeaturePrecomp top-up: DECLINED")
+            lines.append(f"  Reason: {self.feature_precomp.reason}")
+
         # Observed facts
         if self.observed_facts:
             lines.append("\n• Observed facts:")
@@ -85,22 +111,38 @@ class PrecomputeEngagementReport(NamedTuple):
 
         return "\n".join(lines)
 
+    def state_of(self, what: str) -> "PrecomputeState":
+        """Return the engagement state of one mechanism by its key.
 
-class PrecomputeState(NamedTuple):
-    """State of a single precompute mechanism.
+        Parameters
+        ----------
+        what : str
+            ``"energy_balance_lut"``, ``"dust_band_response"`` or ``"dust_emission"`` (the same
+            mechanism), an emitter name in ``emitter_term_responses``, or ``"feature_precomp"``.
 
-    Attributes
-    ----------
-    state : str
-        One of: 'engaged' (object stored), 'declined' (None stored),
-        'never_attempted' (attribute unset).
-    reason : str | None
-        Human-readable explanation of why the mechanism declined (if state
-        is 'declined'). None for 'engaged' or 'never_attempted'.
-    """
+        Returns
+        -------
+        PrecomputeState
+            The state, with the recorded reason when the mechanism declined.
 
-    state: str
-    reason: str | None = None
+        Raises
+        ------
+        KeyError
+            If ``what`` is not a known mechanism; the message lists the known keys.
+
+        """
+        if what == "energy_balance_lut":
+            return self.energy_balance_lut
+        if what in ("dust_band_response", "dust_emission"):
+            return self.dust_band_response
+        if what in self.emitter_term_responses:
+            return self.emitter_term_responses[what]
+        if what == "feature_precomp":
+            return self.feature_precomp
+        known = ["dust_band_response", "dust_emission", "energy_balance_lut", "feature_precomp"]
+        raise KeyError(
+            f"unknown precompute mechanism {what!r}; known: {known + sorted(self.emitter_term_responses)}"
+        )
 
 
 def precompute_engagement_report(model: Any) -> PrecomputeEngagementReport:
@@ -162,6 +204,15 @@ def precompute_engagement_report(model: Any) -> PrecomputeEngagementReport:
         else:
             emitter_caches[emitter_name] = PrecomputeState(state="engaged")
 
+    # The FeaturePrecomp top-up: live on the model, or the refusal its gate recorded.
+    refusal = _recorded_reason(model, "approx", "feature_precomp")
+    if refusal is not None:
+        feature_state_obj = PrecomputeState(state="declined", reason=refusal)
+    elif getattr(getattr(model, "approx", None), "feature_precomp", False):
+        feature_state_obj = PrecomputeState(state="engaged")
+    else:
+        feature_state_obj = PrecomputeState(state="never_attempted")
+
     # Gather observed facts that may explain decline decisions
     observed_facts = _gather_observed_facts(model)
 
@@ -170,6 +221,7 @@ def precompute_engagement_report(model: Any) -> PrecomputeEngagementReport:
         dust_band_response=dust_state_obj,
         emitter_term_responses=emitter_caches,
         observed_facts=observed_facts,
+        feature_precomp=feature_state_obj,
     )
 
 
@@ -217,15 +269,6 @@ def _gather_observed_facts(model: Any) -> dict[str, Any]:
     if hasattr(model, "_approx"):
         facts["wave_precomp_enabled"] = model._approx.get("wave_precomp", False)
         facts["ztable_enabled"] = model._approx.get("ztable", False)
-
-    # Declines recorded by the approx='auto' resolvers: table attempted, refused, with a reason.
-    declines = {
-        slot: entry.reason
-        for slot, entry in getattr(model, "_band_tables", {}).get("approx", {}).items()
-        if isinstance(entry, Decline)
-    }
-    if declines:
-        facts["approx_declines"] = declines
 
     # Free parameters
     if hasattr(model, "spec"):
@@ -278,3 +321,80 @@ def _gather_observed_facts(model: Any) -> dict[str, Any]:
     }
 
     return facts
+
+
+def engagement_reports(
+    target: object, *, regime: str | None = None
+) -> tuple[PrecomputeEngagementReport, ...]:
+    """Return the engagement report of each model the target evaluates, in galaxy order.
+
+    Parameters
+    ----------
+    target : SEDModel, ForwardModel, Fitter, CatalogFitter, Posterior or CatalogPosterior
+        What the report is about. A catalog target gives one report per galaxy.
+    regime : {"single", "catalog"} or None
+        Optional kind check. ``None`` accepts any target.
+
+    Returns
+    -------
+    tuple of PrecomputeEngagementReport
+        One report per galaxy; a single-model target gives a one-element tuple.
+
+    Raises
+    ------
+    TypeError
+        If the target is not a recognised kind.
+    ValueError
+        If ``regime`` is not a known value, does not match the target, or a posterior carries
+        no model reference.
+    """
+    kind, models = _targets(target)
+    if regime is not None:
+        if regime not in ("single", "catalog"):
+            raise ValueError(f"regime must be None, 'single' or 'catalog', got {regime!r}")
+        if regime != kind:
+            raise ValueError(
+                f"regime mismatch: {type(target).__name__} is a {kind} target, "
+                f"but the check asked for a {regime} one"
+            )
+    return tuple(precompute_engagement_report(_evaluated_model(model)) for model in models)
+
+
+def _targets(target: object) -> tuple[str, tuple[Any, ...]]:
+    """Return the regime of a target and the models it covers, in galaxy order."""
+    from tengri.forward.forward_model import ForwardModel
+    from tengri.forward.sed_model import SEDModel
+    from tengri.inference.catalog_fitter import CatalogPosterior, _CatalogFitterOriginal
+    from tengri.inference.fitter import Fitter
+    from tengri.inference.posterior import Posterior
+
+    if isinstance(target, CatalogPosterior):
+        return "catalog", tuple(_posterior_model(post) for post in target.posteriors)
+    if isinstance(target, _CatalogFitterOriginal):
+        return "catalog", (target.model,)
+    if isinstance(target, Posterior):
+        return "single", (_posterior_model(target),)
+    if isinstance(target, Fitter):
+        return "single", (target.model,)
+    if isinstance(target, (SEDModel, ForwardModel)):
+        return "single", (target,)
+    raise TypeError(f"no engagement target for {type(target).__name__}")
+
+
+def _posterior_model(posterior: Any) -> Any:
+    """Return the model a posterior was fitted with, or refuse when it carries none."""
+    if posterior._model is None:
+        raise ValueError(
+            "posterior has no model reference, so its engagement cannot be read; "
+            "Fitter.run() attaches one"
+        )
+    return posterior._model
+
+
+def _evaluated_model(model: Any) -> Any:
+    """Return the model the fit actually evaluates.
+
+    Today this is the model itself. It switches to the runtime-promoted model when #3531 lands;
+    that promotion has no API yet, so nothing is invented here.
+    """
+    return model

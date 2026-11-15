@@ -68,14 +68,15 @@ def test_the_real_refusal_sites_raise_the_refusal_class(ssp_data_wne, synthetic_
 
 
 def test_the_decline_is_carried_to_the_fallback_clone(ssp_data_wne, synthetic_tophat_obs):
-    from tengri.forward.precompute_report import _gather_observed_facts
+    from tengri.forward.precompute_report import precompute_engagement_report
     from tengri.inference.fitter import _carry_approx_declines
 
     model = _eb_model(ssp_data_wne, synthetic_tophat_obs, approx=None)
     model.record_decline("approx", "feature_precomp", "why")
     clone = _eb_model(ssp_data_wne, synthetic_tophat_obs, approx=None)
     assert _carry_approx_declines(model, clone) is clone
-    assert _gather_observed_facts(clone).get("approx_declines") == {"feature_precomp": "why"}
+    state = precompute_engagement_report(clone).feature_precomp
+    assert (state.state, state.reason) == ("declined", "why")
 
 
 def _eb_model(ssp, obs, approx):
