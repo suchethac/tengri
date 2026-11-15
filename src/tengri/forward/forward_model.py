@@ -1052,23 +1052,70 @@ class ForwardModel:
         """
         import dataclasses
 
-        new_pops = tuple(self._population_at_redshift(pop, redshift) for pop in self.populations)
+        new_pops = tuple(
+            self._population_rebuilt(pop, "with_fixed_redshift", redshift)
+            for pop in self.populations
+        )
         if all(new is old for new, old in zip(new_pops, self.populations, strict=True)):
             return self
         return dataclasses.replace(self, populations=new_pops)
 
+    def with_runtime_redshift(self, z_range=None):
+        """Return a copy whose populations all read redshift at call time (#3505).
+
+        Promotes the SED of **every** population via
+        :meth:`SEDModel.with_runtime_redshift` and re-wraps them as
+        :meth:`with_fixed_redshift` does, so a bare ``redshift`` in ``params`` (or
+        the fitter's per-galaxy value) reaches every population through one path.
+
+        Parameters
+        ----------
+        z_range : tuple of float or None, optional
+            ``(z_lo, z_hi)`` table range [dimensionless] for tabulated
+            populations; None for exact ones.
+
+        Returns
+        -------
+        ForwardModel
+            The promoted forward model, or ``self`` when every population already
+            reads redshift at call time.
+
+        Notes
+        -----
+        Costs one model construction per population. **JIT-compatible** after
+        construction.
+        """
+        import dataclasses
+
+        new_pops = tuple(
+            self._population_rebuilt(pop, "with_runtime_redshift", z_range)
+            for pop in self.populations
+        )
+        if all(new is old for new, old in zip(new_pops, self.populations, strict=True)):
+            return self
+        return dataclasses.replace(self, populations=new_pops)
+
+    @property
+    def _z_runtime(self) -> bool:
+        """Whether every population reads redshift at call time (#3505)."""
+        return all(
+            bool(getattr(getattr(pop.sed, "sed", pop.sed), "_z_runtime", False))
+            for pop in self.populations
+        )
+
     @staticmethod
-    def _population_at_redshift(pop, redshift):
+    def _population_rebuilt(pop, method, arg):
+        """``pop`` with its inner SED rebuilt by ``SEDModel.<method>(arg)``."""
         import dataclasses
 
         sub = pop.sed
         inner = getattr(sub, "sed", sub)
-        if not hasattr(inner, "with_fixed_redshift"):
+        if not hasattr(inner, method):
             raise NotImplementedError(
-                f"population {pop.name!r}: {type(inner).__name__} has no with_fixed_redshift, "
+                f"population {pop.name!r}: {type(inner).__name__} has no {method}, "
                 "so a redshift override cannot rebuild its redshift-dependent tables."
             )
-        new_inner = inner.with_fixed_redshift(redshift)
+        new_inner = getattr(inner, method)(arg)
         if new_inner is inner:
             return pop
         if inner is sub:

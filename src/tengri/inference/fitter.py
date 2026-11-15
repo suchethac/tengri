@@ -566,7 +566,8 @@ def _override_span(model, z: float):
     An exact model has no table (None). A tabulated one must bracket ``z``; the
     span is a small pad around it, so a table is built per distinct override z.
     """
-    if not model._approx["wave_precomp"]:
+    inner = model.populations[0].sed if hasattr(model, "populations") else model
+    if not inner._approx["wave_precomp"]:
         return None
     pad = _OVERRIDE_Z_PAD * (1.0 + z)
     return (max(0.0, z - pad), z + pad)
