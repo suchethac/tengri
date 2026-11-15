@@ -569,10 +569,11 @@ def student_t_log_density(
     predicted: jnp.ndarray,
     dof: float,
     present: jnp.ndarray | None = None,
+    f_cal: float | jnp.ndarray = 0.0,
 ) -> jnp.ndarray:
     r"""Normalized log-density of independent location-scale Student-t data.
 
-    The energy is :func:`variable_noise_hamiltonian` without a floor; adding the
+    The energy is :func:`variable_noise_hamiltonian`; adding the
     :math:`-\tfrac12 n \ln 2\pi` it omits makes the value the full log-density of the
     present data. This is the one Student-t density; the marginalized terms evaluate it too.
 
@@ -584,6 +585,8 @@ def student_t_log_density(
         Degrees of freedom :math:`\nu` [dimensionless].
     present : array_like of bool, shape (n,), optional
         Entries that exist. An absent entry adds exactly zero, whatever its value.
+    f_cal : float, optional
+        Fractional calibration floor [dimensionless]. Default 0.
 
     Returns
     -------
@@ -599,7 +602,7 @@ def student_t_log_density(
         data = jnp.where(present, data, 0.0)
         predicted = jnp.where(present, predicted, 0.0)
         noise_obs = jnp.where(present, noise_obs, 1.0)
-    value = -variable_noise_hamiltonian(data, noise_obs, predicted, 0.0, dof)
+    value = -variable_noise_hamiltonian(data, noise_obs, predicted, f_cal, dof)
     value = value - 0.5 * n_total * LOG_2PI
     if present is None:
         return value

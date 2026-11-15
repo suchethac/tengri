@@ -49,6 +49,7 @@ from tengri.inference.likelihoods.terms import (
     floor_value,
     student_t_term,
 )
+from tengri.observation.noise import student_t_log_density
 
 __all__ = [
     "BOOKKEEPING_KEYS",
@@ -384,13 +385,9 @@ def _phot_inputs(preds, data, noise):
 
 
 def _student_t_with_presence(pred, obs, err, f_cal, dof, present):
-    value = student_t_term(pred, obs, err, f_cal, dof)
-    if present is None:
-        return value
-    # A neutralized band still carries the per-point Student-t constant; remove it.
-    zero = jnp.zeros(1)
-    baseline = student_t_term(zero, zero, jnp.ones(1), 0.0, dof)
-    return value - jnp.sum(jnp.logical_not(present)) * baseline
+    """The Student-t energy of the present bands, without the 2 pi constant ``_*_norm`` returns."""
+    value = student_t_log_density(obs, err, pred, dof, present, f_cal)
+    return value + 0.5 * _n_present(obs, present) * LOG_2PI
 
 
 def _n_present(obs, present):
