@@ -98,10 +98,8 @@ NOISES = (
     "floor_cal_marg_lines_segments_model",
     "floor_lines_fitted",
     "cal_marg_fitted_lines",
-    "student_t_cal_marg",
-    "student_t_lines_marginalized",
 )
-REFUSED = ("cal_marg_fitted_lines", "student_t_cal_marg", "student_t_lines_marginalized")
+REFUSED = ("cal_marg_fitted_lines",)
 DOF = 4.0
 F_CAL = 0.07
 N_BAND, N_PIX, N_LINE, N_CONSTRAINT = 5, 24, 3, 4
@@ -164,14 +162,6 @@ REFUSED_REASON = {
     "cal_marg_fitted_lines": (
         "calibration marginalization with fitted line amplitudes cannot share one marginal; "
         "validate() refuses it (test_unscorable_noise_is_refused_by_name)"
-    ),
-    "student_t_cal_marg": (
-        "heavy-tailed noise with a marginalized calibration polynomial has no closed form; "
-        "the scorer and the Fitter refuse it by name (test_unscorable_noise_is_refused_by_name)"
-    ),
-    "student_t_lines_marginalized": (
-        "heavy-tailed noise with marginalized line amplitudes has no closed form; the scorer "
-        "and the Fitter refuse it by name (test_unscorable_noise_is_refused_by_name)"
     ),
 }
 
@@ -983,34 +973,15 @@ def test_flat_line_prior_limit_is_the_log_width_asymptote():
 
 
 def test_unscorable_noise_is_refused_by_name():
-    preds, data, noise = _synthetic("calibration", "cal_marg")
+    _preds, data, noise = _synthetic("calibration", "cal_marg")
     fitted = LineSpec(mode="fitted", amplitude_names=("a0",))
     both = NoiseSpec(data_type="spectroscopy", calibration=noise.calibration, lines=fitted)
     with pytest.raises(NotImplementedError, match="fitted"):
         channels.validate(both, data.keys())
-    heavy = NoiseSpec(
-        data_type="spectroscopy", calibration=noise.calibration, student_t=True, dof=DOF
-    )
-    for spec in (
-        heavy,
-        NoiseSpec(
-            **{
-                **heavy.__dict__,
-                "calibration": None,
-                "lines": LineSpec(mode="marginalized", prior_sigma=1.0),
-            }
-        ),
-    ):
-        with pytest.raises(NotImplementedError, match="noise_dof"):
-            score(preds, data, spec)
-        with pytest.raises(NotImplementedError, match="noise_dof"):
-            channels.validate(spec, data.keys())
 
 
-def test_the_fitter_refuses_heavy_tailed_noise_with_marginalization_but_takes_a_floor():
-    with pytest.raises(NotImplementedError, match="noise_dof") as heavy:
-        fixtures.fitter_of("spec_student_t_cal")
-    assert "calibration_marginalize" in str(heavy.value)
+def test_the_fitter_takes_heavy_tailed_noise_and_a_floor_with_marginalization():
+    assert fixtures.fitter_of("spec_student_t_cal") is not None
     assert fixtures.fitter_of("spec_floor_cal") is not None
 
 
@@ -1215,13 +1186,6 @@ def test_every_noise_family_covariance_and_nuisance_has_a_term_or_a_named_error(
     """No combination is scored by a term that ignores part of the noise model."""
     preds, data, noise = _product_cell(family, covariance, nuisance)
     marginalized = nuisance in ("calibration", "lines", "calibration_lines")
-    if family == "student_t" and marginalized:
-        with pytest.raises(NotImplementedError, match="noise_dof"):
-            score(preds, data, noise)
-        with pytest.raises(NotImplementedError, match="noise_dof"):
-            channels.validate(noise, data.keys())
-        return
-
     used = []
     for name in TERM_NAMES:
         original = getattr(channels, name)

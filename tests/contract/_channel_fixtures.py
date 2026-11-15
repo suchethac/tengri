@@ -54,6 +54,8 @@ EXTRA_KINDS = (
     "spec_dense_lines",
     "spec_dense_lines_fitted",
     "spec_student_t_cal",
+    "spec_student_t_lines",
+    "spec_student_t_cal_lines",
     "spec_floor_cal",
     "spec_floor_lines",
     "spec_floor_cal_lines",
@@ -193,6 +195,12 @@ def fitter_of(kind: str) -> Fitter:
         return _spectroscopy_fitter("floor", calibration_marginalize=True)
     if kind == "spec_student_t_cal":
         return _spectroscopy_fitter("student_t", calibration_marginalize=True)
+    if kind == "spec_student_t_lines":
+        return _spectroscopy_fitter("student_t", eline="marginalized")
+    if kind == "spec_student_t_cal_lines":
+        return _spectroscopy_fitter(
+            "student_t", eline="marginalized", calibration_marginalize=True
+        )
     if kind.startswith("mask"):
         noise = {"mask": None, "mask_student_t": "student_t", "mask_floor": "floor"}[kind]
         return _photometry_fitter(noise, mask=jnp.array([0, 1, -1]))

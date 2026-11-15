@@ -35,6 +35,12 @@ class NoiseModel:
     student_t_dof : float or None
         Degrees of freedom for a Student-t likelihood (heavier tails for
         outlier robustness). ``None`` uses a standard Gaussian likelihood.
+        With marginalized calibration or marginalized emission lines the nuisance
+        coefficients cannot be integrated out in closed form under Student-t noise; the
+        marginal is then a Laplace approximation at the iteratively reweighted
+        least-squares mode (within 0.46 nat of numerical integration in the cases measured,
+        one or two coefficients and 3 to 30 degrees of freedom; see
+        :func:`~tengri.observation.linear_marginal.marginalize_linear_nuisance`).
         Default: None.
 
     Returns

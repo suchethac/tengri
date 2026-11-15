@@ -45,6 +45,13 @@ or the line amplitudes are added to, not the calibrated or line-added spectrum. 
 integrated out exactly given ``N``; ``ln det N`` depends on the model and enters the value
 and the gradient. The batched catalog path does not take a floor.
 
+A Student-t ``noise_dof`` with ``calibration_marginalize`` or marginalized emission lines
+has no closed-form marginal. The marginal is then a Laplace approximation of the integral over
+the coefficients at the mode found by iteratively reweighted least squares (the Gaussian
+scale-mixture form of the Student-t), with the expected information as its curvature; it
+equals the Gaussian marginal as ``noise_dof`` tends to infinity. See
+:func:`~tengri.observation.linear_marginal.marginalize_linear_nuisance`.
+
 Example::
 
     spec = Parameters(
@@ -57,13 +64,14 @@ Example::
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import jax
 import jax.numpy as jnp
 from jax.core import Tracer
 
-from tengri.utils.scale import whiten
+from tengri.utils.scale import LOG_2PI, whiten
 
 # ── Core noise computation (pure JAX, JIT-compatible) ─────────────
 
@@ -553,6 +561,91 @@ def variable_noise_hamiltonian(
     else:
         # Gaussian: ½ Σ r² + Σ log(σ_eff)
         return 0.5 * jnp.sum(r**2) + logdet
+
+
+def student_t_log_density(
+    data: jnp.ndarray,
+    noise_obs: jnp.ndarray,
+    predicted: jnp.ndarray,
+    dof: float | jnp.ndarray,
+    present: jnp.ndarray | None = None,
+) -> jnp.ndarray:
+    r"""Normalized log-density of independent location-scale Student-t data.
+
+    The energy is :func:`variable_noise_hamiltonian` without a floor; adding the
+    :math:`-\tfrac12 n \ln 2\pi` it omits makes the value the full log-density of the
+    present data. This is the one Student-t density; the marginalized terms evaluate it too.
+
+    Parameters
+    ----------
+    data, noise_obs, predicted : array_like, shape (n,)
+        Data, one-sigma scale and model [flux units].
+    dof : float
+        Degrees of freedom :math:`\nu` [dimensionless].
+    present : array_like of bool, shape (n,), optional
+        Entries that exist. An absent entry adds exactly zero, whatever its value.
+
+    Returns
+    -------
+    scalar
+        :math:`\sum_i \ln t_\nu(d_i - m_i; \sigma_i)` over the present entries [nats].
+
+    Notes
+    -----
+    **JIT-compatible**: yes; ``present`` may be traced.
+    """
+    n_total = data.shape[0]
+    if present is not None:
+        data = jnp.where(present, data, 0.0)
+        predicted = jnp.where(present, predicted, 0.0)
+        noise_obs = jnp.where(present, noise_obs, 1.0)
+    value = -variable_noise_hamiltonian(data, noise_obs, predicted, 0.0, dof)
+    value = value - 0.5 * n_total * LOG_2PI
+    if present is None:
+        return value
+    zero = jnp.zeros(1)
+    baseline = -variable_noise_hamiltonian(zero, jnp.ones(1), zero, 0.0, dof) - 0.5 * LOG_2PI
+    return value - jnp.sum(jnp.logical_not(present)) * baseline
+
+
+def multivariate_student_t_log_density(
+    chi2: jnp.ndarray, log_det: jnp.ndarray, n: jnp.ndarray, dof: float | jnp.ndarray
+) -> jnp.ndarray:
+    r"""Log-density of a multivariate Student-t with scale matrix :math:`C`, constants included.
+
+    .. math::
+
+        \ln\Gamma\!\left(\tfrac{\nu+n}{2}\right) - \ln\Gamma\!\left(\tfrac{\nu}{2}\right)
+        - \tfrac{n}{2}\ln(\nu\pi) - \tfrac12\ln\det C
+        - \tfrac{\nu+n}{2}\ln\!\left(1 + \chi^2/\nu\right).
+
+    Parameters
+    ----------
+    chi2 : scalar
+        :math:`r^\mathsf{T} C^{-1} r` [dimensionless].
+    log_det : scalar
+        :math:`\ln\det C` [log flux units squared times n].
+    n : scalar
+        Number of data [dimensionless].
+    dof : float
+        Degrees of freedom :math:`\nu` [dimensionless].
+
+    Returns
+    -------
+    scalar
+        Log-density [nats]; tends to the Gaussian log-density as ``dof`` tends to infinity.
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+    """
+    return (
+        jax.scipy.special.gammaln(0.5 * (dof + n))
+        - jax.scipy.special.gammaln(0.5 * dof)
+        - 0.5 * n * jnp.log(dof * math.pi)
+        - 0.5 * log_det
+        - 0.5 * (dof + n) * jnp.log1p(chi2 / dof)
+    )
 
 
 def variable_noise_metric_vec(

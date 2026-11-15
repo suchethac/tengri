@@ -125,17 +125,20 @@ def build_base_likelihood(context: InferenceContext):
     # f_cal applies to both phot and spec channels for joint data,
     # matches the legacy `variable_noise_hamiltonian` semantics.
     floor_param = None
+    marginal_dof = None
     if has_noise_model(context.spec) or uses_student_t(context.spec):
         dof = get_noise_dof(context.spec) if uses_student_t(context.spec) else None
         if context.has_spectroscopy:
             _validate_variable_noise(context, dof)
         # A floor with a marginalized calibration or line block is scored by the marginal
-        # adapters, which whiten with the floored noise; heavy tails were refused above.
+        # adapters, which whiten with the floored noise and, with a Student-t dof, score the
+        # Laplace approximation of the marginal.
         marginalizing = context.has_spectroscopy and (
             context.calibration_marginalize or context.eline_marginalize
         )
         if marginalizing:
             floor_param = "noise_frac_cal"
+            marginal_dof = dof
         else:
             if context.has_spectroscopy:
                 if context.eline_fitted:
@@ -305,6 +308,7 @@ def build_base_likelihood(context: InferenceContext):
         )
         cal_eline_lk = CalibrationELineMarginalizedLikelihood(
             f_cal_param=floor_param,
+            dof=marginal_dof,
             fnu_obs=spec_obs,
             fnu_err=spec_err,
             fnu_obs_key="data",
@@ -326,7 +330,7 @@ def build_base_likelihood(context: InferenceContext):
         if context.data_type == "spectroscopy":
             return cal_eline_lk
         return CompositeLikelihood(
-            _phot_block(context, n_phot, floor_param),
+            _phot_block(context, n_phot, floor_param, marginal_dof),
             cal_eline_lk,
         )
 
@@ -340,6 +344,7 @@ def build_base_likelihood(context: InferenceContext):
             )
         cal_lk = CalibrationMarginalizedLikelihood(
             f_cal_param=floor_param,
+            dof=marginal_dof,
             fnu_obs=context.data
             if context.data_type == "spectroscopy"
             else context.data[_n_phot_split(context) :],
@@ -364,7 +369,7 @@ def build_base_likelihood(context: InferenceContext):
             return cal_lk
         n_phot = _n_phot_split(context)
         return CompositeLikelihood(
-            _phot_block(context, n_phot, floor_param),
+            _phot_block(context, n_phot, floor_param, marginal_dof),
             cal_lk,
         )
 
@@ -411,6 +416,7 @@ def build_base_likelihood(context: InferenceContext):
             _require_cloudy_prior_params(context)
             eline_lk = CloudyELineMarginalizedLikelihood(
                 f_cal_param=floor_param,
+                dof=marginal_dof,
                 fnu_obs=spec_obs,
                 fnu_err=spec_err,
                 fnu_obs_key="data",
@@ -430,6 +436,7 @@ def build_base_likelihood(context: InferenceContext):
             match_index, matched = _model_line_match(context)
             eline_lk = ModelELineMarginalizedLikelihood(
                 f_cal_param=floor_param,
+                dof=marginal_dof,
                 fnu_obs=spec_obs,
                 fnu_err=spec_err,
                 fnu_obs_key="data",
@@ -451,6 +458,7 @@ def build_base_likelihood(context: InferenceContext):
         else:
             eline_lk = ELineMarginalizedLikelihood(
                 f_cal_param=floor_param,
+                dof=marginal_dof,
                 fnu_obs=spec_obs,
                 fnu_err=spec_err,
                 fnu_obs_key="data",
@@ -468,7 +476,7 @@ def build_base_likelihood(context: InferenceContext):
         if context.data_type == "spectroscopy":
             return eline_lk
         return CompositeLikelihood(
-            _phot_block(context, _n_phot_split(context), floor_param),
+            _phot_block(context, _n_phot_split(context), floor_param, marginal_dof),
             eline_lk,
         )
 
@@ -598,8 +606,8 @@ def build_likelihood_extras(context: InferenceContext):
 # ── Helpers (private) ────────────────────────────────────────────────
 
 
-def _phot_block(context, n_phot, floor_param):
-    """The photometric block of a joint marginal: Gaussian, or floored when a floor is free."""
+def _phot_block(context, n_phot, floor_param, marginal_dof):
+    """The photometric block of a joint marginal: Gaussian, or floored and heavy-tailed."""
     from tengri.inference.likelihoods import StudentTLikelihood
     from tengri.inference.photometry_likelihood import PhotometryLikelihood
 
@@ -612,7 +620,7 @@ def _phot_block(context, n_phot, floor_param):
     return StudentTLikelihood(
         obs=context.data[:n_phot],
         err=context.noise[:n_phot],
-        dof=None,
+        dof=marginal_dof,
         f_cal_param=floor_param,
         channel="phot_fnu",
         obs_key="data",

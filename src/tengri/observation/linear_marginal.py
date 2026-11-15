@@ -11,10 +11,18 @@ from __future__ import annotations
 
 from typing import NamedTuple
 
+import jax
 import jax.numpy as jnp
 
 from tengri.observation.banded import BandedMatrix, banded_forward_substitution
+from tengri.observation.noise import multivariate_student_t_log_density, student_t_log_density
 from tengri.utils.scale import diag_gaussian_log_normalization
+
+#: Iteratively-reweighted least-squares steps of the Student-t mode, fixed so the marginal has
+#: a static shape under jit. The objective stops changing by more than 1e-10 nat after at most
+#: 33 steps on the quadrature cells of ``tests/contract`` (``dof`` 3 to 30, 20 to 200 data, one
+#: 50-sigma outlier; the slowest is ``dof = 3``, two coefficients, an outlier); 40 leaves margin.
+_IRLS_STEPS = 40
 
 
 class MarginalResult(NamedTuple):
@@ -29,12 +37,17 @@ class MarginalResult(NamedTuple):
         Posterior mean of the nuisance coefficients (units of the design columns).
     coef_cov : ndarray, shape (k, k)
         Posterior covariance of the nuisance coefficients (units of the design columns
-        squared).
+        squared). With Student-t noise, the inverse curvature at the mode.
+    weight_change : ndarray, shape () or None
+        Student-t noise only: the largest change of an iteratively-reweighted weight under one
+        further iteration (dimensionless), the convergence diagnostic of the mode. ``None``
+        for the Gaussian marginal, which has no iteration.
     """
 
     log_like: jnp.ndarray
     coef_hat: jnp.ndarray
     coef_cov: jnp.ndarray
+    weight_change: jnp.ndarray | None = None
 
 
 def marginalize_linear_nuisance(
@@ -50,6 +63,7 @@ def marginalize_linear_nuisance(
     col_mask: jnp.ndarray | None = None,
     scale: float | jnp.ndarray | None = None,
     flat_mask: jnp.ndarray | None = None,
+    dof: float | jnp.ndarray | None = None,
 ) -> MarginalResult:
     r"""Integrate linear nuisance coefficients out of a Gaussian data model in closed form.
 
@@ -97,6 +111,11 @@ def marginalize_linear_nuisance(
         contributes the Jacobian :math:`+\ln s` and no prior determinant, exactly as
         the all-flat branch does, so a block of flat columns can sit beside a proper
         Gaussian block. Default: no flat columns.
+    dof : float, optional
+        Degrees of freedom :math:`\nu` of Student-t noise. ``None`` is Gaussian noise and the
+        marginal is exact. Given, the marginal is the Laplace approximation at the
+        iteratively-reweighted mode described in the Notes: independent Student-t data with
+        ``sigma``, one multivariate Student-t with ``chol_lower``. Default: None.
 
     Returns
     -------
@@ -203,13 +222,66 @@ def marginalize_linear_nuisance(
     The scale :math:`s` keeps :math:`\tilde X` at order unity when the raw design is at
     flux scale, so float32 never forms :math:`(X/\sigma)^2`.
 
+    **Student-t noise (``dof``).** With independent Student-t noise of :math:`\nu` degrees of
+    freedom and scale :math:`\sigma_i` the marginal has no closed form. The value is a
+    Laplace approximation of the integral over :math:`\beta` at the posterior mode
+    :math:`\hat\beta`,
+
+    .. math::
+
+        \ln L \approx \sum_i \ln t_\nu(r_i(\hat\beta); \sigma_i)
+        + \ln\mathcal{N}(\hat\beta; \mu, \Lambda)
+        + \tfrac{k}{2}\ln 2\pi - \tfrac12\ln\det H, \qquad
+        H = \frac{\nu+1}{\nu+3}\,X^\mathsf{T}\mathrm{diag}(\sigma^{-2})X + \Lambda^{-1},
+
+    with :math:`r_i = d_i - m_{0,i} - (X\beta)_i`. The mode is found by iteratively
+    reweighted least squares, the Gaussian scale-mixture form of the Student-t [2]_: each step
+    is this function's Gaussian solve with :math:`\sigma_i` replaced by
+    :math:`\sigma_i/\sqrt{w_i}`, :math:`w_i = (\nu+1)/(\nu + z_i^2)`, :math:`z_i = r_i/\sigma_i`,
+    started from the Gaussian solution (:math:`w_i = 1`) and run for a fixed number of steps.
+    With ``chol_lower`` the noise is one multivariate Student-t of scale matrix :math:`C`: a
+    single weight :math:`w = (\nu+n)/(\nu+r^\mathsf{T}C^{-1}r)` rescales :math:`C`, and the
+    curvature below has :math:`(\nu+n)/(\nu+n+2)` in place of :math:`(\nu+1)/(\nu+3)`. The
+    value reuses the Gaussian solve at the final weights (prior terms, flat-column Jacobians
+    and masks included), replaces its data term by the Student-t density, and replaces its
+    determinant by the one of the expected (Fisher) information :math:`H` above.
+
+    This is an approximation. The Laplace integral treats the posterior of :math:`\beta` as
+    Gaussian about its mode, and :math:`H` is the expected rather than the observed curvature
+    at the mode; it is positive definite by construction, which the observed curvature
+    :math:`(\nu+1)(\nu-z_i^2)/(\nu+z_i^2)^2` is not for :math:`|z_i| > \sqrt\nu`. Against
+    quadrature the error is below 0.2 nat for :math:`\nu \ge 3` with one or two coefficients
+    and falls as :math:`\nu` and the number of data grow (``tests/contract``); it is exact as
+    :math:`\nu\to\infty`. The mode is differentiated by the implicit function theorem
+    (:func:`jax.lax.custom_root`), so reverse mode stores one weighted solve however many
+    steps run, and second derivatives are supported. ``weight_change`` of the result is the
+    largest change of a weight under one more step.
+
     References
     ----------
     .. [1] B. D. Johnson et al., "Prospector: Stellar Population Inference from Spectra
        and SEDs," ApJS, 254, 22 (2021). arXiv:2012.01426.
        https://doi.org/10.3847/1538-4365/abef67
+    .. [2] K. L. Lange, R. J. A. Little and J. M. G. Taylor, "Robust Statistical Modeling
+       Using the t Distribution," J. Am. Stat. Assoc., 84, 881-896 (1989).
+       https://doi.org/10.1080/01621459.1989.10478852
 
     """
+    if dof is not None:
+        return _student_t_marginal(
+            data,
+            model0,
+            design,
+            dof=dof,
+            sigma=sigma,
+            chol_lower=chol_lower,
+            pix_mask=pix_mask,
+            prior_mean=prior_mean,
+            prior_precision=prior_precision,
+            col_mask=col_mask,
+            scale=scale,
+            flat_mask=flat_mask,
+        )
     n_pix, n_col = design.shape
     dtype = design.dtype
     eye = jnp.eye(n_col, dtype=dtype)
@@ -269,4 +341,87 @@ def marginalize_linear_nuisance(
         log_like=log_like,
         coef_hat=coef_scale * beta_s,
         coef_cov=coef_scale**2 * cov_s,
+    )
+
+
+def _solve_linear_map(g, y):
+    """Solve ``g(x) = y`` for a linear ``g``, one tangent at a time to keep memory at one solve."""
+    columns = jax.lax.map(g, jnp.eye(y.shape[0], dtype=y.dtype))
+    return jnp.linalg.solve(columns.T, y)
+
+
+def _student_t_marginal(data, model0, design, *, dof, sigma, chol_lower, pix_mask, **gaussian):
+    """Laplace marginal under Student-t noise, from the Gaussian solve (see the primitive)."""
+    if (sigma is None) == (chol_lower is None):
+        raise ValueError("exactly one of sigma and chol_lower must be given")
+    joint = chol_lower is not None
+    weight = jnp.ones(design.shape[0], design.dtype) if pix_mask is None else pix_mask
+    n_eff = jnp.sum(weight)
+
+    def gaussian_at(variance_factor):
+        if joint:
+            factor = BandedMatrix(chol_lower.offsets, chol_lower.data * jnp.sqrt(variance_factor))
+            noise = {"chol_lower": factor}
+        else:
+            noise = {"sigma": sigma * jnp.sqrt(variance_factor)}
+        return marginalize_linear_nuisance(
+            data, model0, design, **noise, pix_mask=pix_mask, **gaussian
+        )
+
+    def residual(beta):
+        return weight * (data - model0 - design @ beta)
+
+    def statistic(beta):
+        """Whitened residuals, or the chi-square of the joint block."""
+        if joint:
+            whitened = banded_forward_substitution(chol_lower, residual(beta))
+            return jnp.dot(whitened, whitened)
+        return residual(beta) / sigma
+
+    def weights(beta):
+        stat = statistic(beta)
+        if joint:
+            return (dof + n_eff) / (dof + stat)
+        return (dof + 1.0) / (dof + stat * stat)
+
+    def step(beta):
+        return gaussian_at(1.0 / weights(beta)).coef_hat
+
+    start = jax.lax.stop_gradient(gaussian_at(1.0).coef_hat)
+    beta = jax.lax.custom_root(
+        lambda b: b - step(b),
+        start,
+        lambda _f, b0: jax.lax.fori_loop(0, _IRLS_STEPS, lambda _i, b: step(b), b0),
+        _solve_linear_map,
+    )
+    w = weights(beta)
+    final = gaussian_at(1.0 / w)
+    stat = statistic(beta)
+    if joint:
+        diagonal = chol_lower.data[0]
+        weighted = diag_gaussian_log_normalization(diagonal / jnp.sqrt(w), weight) - 0.5 * w * stat
+        density = multivariate_student_t_log_density(
+            stat, 2.0 * jnp.sum(jnp.log(diagonal)), n_eff, dof
+        )
+        block = n_eff
+    else:
+        weighted = diag_gaussian_log_normalization(sigma / jnp.sqrt(w), weight) - 0.5 * jnp.sum(
+            w * stat * stat
+        )
+        density = student_t_log_density(
+            data,
+            sigma,
+            model0 + design @ beta,
+            dof,
+            present=None if pix_mask is None else weight > 0,
+        )
+        block = 1.0
+    fisher = gaussian_at((dof + block + 2.0) / (dof + block))
+    logdet_change = jnp.linalg.slogdet(fisher.coef_cov)[1] - jnp.linalg.slogdet(final.coef_cov)[1]
+    next_w = weights(final.coef_hat)
+    return MarginalResult(
+        log_like=final.log_like + density - weighted + 0.5 * logdet_change,
+        coef_hat=beta,
+        coef_cov=fisher.coef_cov,
+        weight_change=jax.lax.stop_gradient(jnp.max(jnp.abs(next_w - w))),
     )

@@ -138,6 +138,7 @@ class CalibrationMarginalizedLikelihood:
     chol_offsets: tuple[int, ...] | None = None
     chol_key: str | None = None
     f_cal_param: str | None = None
+    dof: float | None = None
 
     def log_prob(
         self,
@@ -162,6 +163,7 @@ class CalibrationMarginalizedLikelihood:
             has_q=self.has_q,
             chol_data=_resolve_chol(self.chol_data, self.chol_key, data_args),
             f_cal=floor_value(params, self.f_cal_param),
+            dof=self.dof,
             chol_offsets=self.chol_offsets,
         )
 
@@ -197,6 +199,7 @@ _CALIBRATION_MARGINALIZED_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
     "chol_offsets": content("diagonal offsets of the factor are static program structure"),
     "chol_key": content("data_args routing key changes which traced input is read"),
     "f_cal_param": content("routing to a free calibration floor changes the graph"),
+    "dof": content("heavy-tailed noise changes the marginal"),
 }
 
 
@@ -274,6 +277,7 @@ class ELineMarginalizedLikelihood:
     chol_offsets: tuple[int, ...] | None = None
     chol_key: str | None = None
     f_cal_param: str | None = None
+    dof: float | None = None
 
     def __post_init__(self) -> None:
         # Exactly one of (static design matrix) | (per-call builder)
@@ -329,6 +333,7 @@ class ELineMarginalizedLikelihood:
             pix_mask=pix_mask,
             chol_data=_resolve_chol(self.chol_data, self.chol_key, data_args),
             f_cal=floor_value(params, self.f_cal_param),
+            dof=self.dof,
             chol_offsets=self.chol_offsets,
         )
 
@@ -370,6 +375,7 @@ _ELINE_MARGINALIZED_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
     "chol_offsets": content("diagonal offsets of the factor are static program structure"),
     "chol_key": content("data_args routing key changes which traced input is read"),
     "f_cal_param": content("routing to a free calibration floor changes the graph"),
+    "dof": content("heavy-tailed noise changes the marginal"),
 }
 
 
@@ -430,6 +436,7 @@ class CloudyELineMarginalizedLikelihood:
     chol_offsets: tuple[int, ...] | None = None
     chol_key: str | None = None
     f_cal_param: str | None = None
+    dof: float | None = None
 
     def log_prob(
         self,
@@ -452,6 +459,7 @@ class CloudyELineMarginalizedLikelihood:
             prior_width_dex=self.prior_width_dex,
             chol_data=_resolve_chol(self.chol_data, self.chol_key, data_args),
             f_cal=floor_value(params, self.f_cal_param),
+            dof=self.dof,
             chol_offsets=self.chol_offsets,
         )
 
@@ -487,6 +495,7 @@ _CLOUDY_ELINE_MARGINALIZED_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
     "chol_offsets": content("diagonal offsets of the factor are static program structure"),
     "chol_key": content("data_args routing key changes which traced input is read"),
     "f_cal_param": content("routing to a free calibration floor changes the graph"),
+    "dof": content("heavy-tailed noise changes the marginal"),
 }
 
 
@@ -545,6 +554,7 @@ class ModelELineMarginalizedLikelihood:
     chol_offsets: tuple[int, ...] | None = None
     chol_key: str | None = None
     f_cal_param: str | None = None
+    dof: float | None = None
 
     def log_prob(
         self,
@@ -569,6 +579,7 @@ class ModelELineMarginalizedLikelihood:
             prior_width_dex=self.prior_width_dex,
             chol_data=_resolve_chol(self.chol_data, self.chol_key, data_args),
             f_cal=floor_value(params, self.f_cal_param),
+            dof=self.dof,
             chol_offsets=self.chol_offsets,
         )
 
@@ -602,6 +613,7 @@ _MODEL_ELINE_MARGINALIZED_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
     "chol_offsets": content("diagonal offsets of the factor are static program structure"),
     "chol_key": content("data_args routing key changes which traced input is read"),
     "f_cal_param": content("routing to a free calibration floor changes the graph"),
+    "dof": content("heavy-tailed noise changes the marginal"),
 }
 
 
@@ -830,6 +842,7 @@ class CalibrationELineMarginalizedLikelihood:
     chol_offsets: tuple[int, ...] | None = None
     chol_key: str | None = None
     f_cal_param: str | None = None
+    dof: float | None = None
 
     def log_prob(
         self,
@@ -865,6 +878,7 @@ class CalibrationELineMarginalizedLikelihood:
             has_q=self.has_q,
             chol_data=_resolve_chol(self.chol_data, self.chol_key, data_args),
             f_cal=floor_value(params, self.f_cal_param),
+            dof=self.dof,
             chol_offsets=self.chol_offsets,
         )
 
@@ -913,4 +927,5 @@ _CALIBRATION_ELINE_MARGINALIZED_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
     "chol_offsets": content("diagonal offsets of the factor are static program structure"),
     "chol_key": content("data_args routing key changes which traced input is read"),
     "f_cal_param": content("routing to a free calibration floor changes the graph"),
+    "dof": content("heavy-tailed noise changes the marginal"),
 }

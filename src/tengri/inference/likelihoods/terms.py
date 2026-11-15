@@ -35,6 +35,7 @@ from tengri.observation.eline_marginalization import (
 from tengri.observation.linear_marginal import marginalize_linear_nuisance
 from tengri.observation.noise import (
     censored_neg_log_likelihood,
+    multivariate_student_t_log_density,
     variable_noise_hamiltonian,
 )
 from tengri.utils.scale import representable_floor as _representable_floor
@@ -136,13 +137,7 @@ def correlated_noise_term(
     chi2 = jnp.dot(whitened, whitened)
     if dof is None:
         return -0.5 * chi2 - 0.5 * log_det - 0.5 * n * LOG_2PI
-    return (
-        jax.scipy.special.gammaln(0.5 * (dof + n))
-        - jax.scipy.special.gammaln(0.5 * dof)
-        - 0.5 * n * jnp.log(dof * jnp.pi)
-        - 0.5 * log_det
-        - 0.5 * (dof + n) * jnp.log1p(chi2 / dof)
-    )
+    return multivariate_student_t_log_density(chi2, log_det, n, dof)
 
 
 def _segments_or_zeros(segments, wavelength):
@@ -260,6 +255,7 @@ def calibration_marginal_term(
     chol_data=None,
     chol_offsets=None,
     f_cal=None,
+    dof=None,
 ):
     """Marginal log-likelihood with the Chebyshev calibration polynomial integrated out.
 
@@ -269,6 +265,19 @@ def calibration_marginal_term(
     covariance. ``N`` is fixed at ``m0`` and the nuisance coefficients are integrated out
     exactly, so ``ln det N`` is part of the value and of its gradient (see
     :func:`floored_noise`).
+
+    With ``dof`` (Student-t noise) the marginal over the nuisance coefficients has no closed
+    form. The value is then the Laplace approximation of that integral at the mode found by
+    iteratively reweighted least squares (the Gaussian scale-mixture form of the Student-t),
+    fully normalized, and equal to the Gaussian value above as ``dof`` tends to infinity. It
+    is an approximation: the Laplace integral uses the expected (Fisher) information at the
+    mode. Against numerical quadrature with one or two nuisance coefficients, 20 or 200 data
+    and one outlier of 50 sigma, its error is at most 0.46 nat (``dof = 3``, two coefficients,
+    20 data) and at most 0.04 nat with 200 data, and it falls as the number of data and
+    ``dof`` grow (``tests/contract/test_student_t_marginal_quadrature.py``); it is not
+    measured for more coefficients, where it is expected to grow. The information is positive
+    definite by construction. A pixel covariance makes the noise one multivariate Student-t (see
+    :func:`~tengri.observation.linear_marginal.marginalize_linear_nuisance`).
     """
     err, chol_data, chol_offsets = floored_noise(model_flux, err, chol_data, chol_offsets, f_cal)
     if n_segments > 0 or cal_prior != "gaussian" or has_q:
@@ -287,6 +296,7 @@ def calibration_marginal_term(
             q_prior=True,
             chol_data=chol_data,
             chol_offsets=chol_offsets,
+            dof=dof,
         )[0]
     log_lik, _c_hat, _c_err = marginalize_calibration(
         model_flux=model_flux,
@@ -297,6 +307,7 @@ def calibration_marginal_term(
         prior_sigma=prior_sigma,
         chol_data=chol_data,
         chol_offsets=chol_offsets,
+        dof=dof,
     )
     return log_lik
 
@@ -313,6 +324,7 @@ def eline_flat_marginal_term(
     chol_data=None,
     chol_offsets=None,
     f_cal=None,
+    dof=None,
 ):
     """Normalized marginal log-likelihood under a zero-mean Gaussian line prior.
 
@@ -330,6 +342,9 @@ def eline_flat_marginal_term(
     covariance. ``N`` is fixed at ``m0`` and the nuisance coefficients are integrated out
     exactly, so ``ln det N`` is part of the value and of its gradient (see
     :func:`floored_noise`).
+
+    With ``dof`` (Student-t noise) the value is the Laplace approximation described in
+    :func:`calibration_marginal_term`.
     """
     err, chol_data, chol_offsets = floored_noise(model_flux, err, chol_data, chol_offsets, f_cal)
     result, _width, _scatter = line_marginal(
@@ -341,6 +356,7 @@ def eline_flat_marginal_term(
         pix_mask=pix_mask,
         chol_data=chol_data,
         chol_offsets=chol_offsets,
+        dof=dof,
     )
     return result.log_like
 
@@ -358,6 +374,7 @@ def eline_cloudy_marginal_term(
     chol_data=None,
     chol_offsets=None,
     f_cal=None,
+    dof=None,
 ):
     """Normalized marginal log-likelihood with line amplitudes under the Cloudy-ratio prior.
 
@@ -370,6 +387,9 @@ def eline_cloudy_marginal_term(
     covariance. ``N`` is fixed at ``m0`` and the nuisance coefficients are integrated out
     exactly, so ``ln det N`` is part of the value and of its gradient (see
     :func:`floored_noise`).
+
+    With ``dof`` (Student-t noise) the value is the Laplace approximation described in
+    :func:`calibration_marginal_term`.
     """
     err, chol_data, chol_offsets = floored_noise(model_flux, err, chol_data, chol_offsets, f_cal)
     from tengri.observation.eline_priors import cloudy_line_priors
@@ -388,6 +408,7 @@ def eline_cloudy_marginal_term(
         prior_variance=sigmas**2,
         chol_data=chol_data,
         chol_offsets=chol_offsets,
+        dof=dof,
     )
 
 
@@ -406,6 +427,7 @@ def eline_model_marginal_term(
     chol_data=None,
     chol_offsets=None,
     f_cal=None,
+    dof=None,
 ):
     """Marginal log-likelihood with line amplitudes centered on the model's own lines.
 
@@ -415,6 +437,9 @@ def eline_model_marginal_term(
     covariance. ``N`` is fixed at ``m0`` and the nuisance coefficients are integrated out
     exactly, so ``ln det N`` is part of the value and of its gradient (see
     :func:`floored_noise`).
+
+    With ``dof`` (Student-t noise) the value is the Laplace approximation described in
+    :func:`calibration_marginal_term`.
     """
     err, chol_data, chol_offsets = floored_noise(model_flux, err, chol_data, chol_offsets, f_cal)
     prior = _model_prior(
@@ -431,6 +456,7 @@ def eline_model_marginal_term(
         prior_mean=unit.prior_mean,
         prior_precision=unit.prior_precision,
         scale=unit.scale,
+        dof=dof,
     )
     return result.log_like
 
@@ -517,6 +543,7 @@ def calibration_eline_marginal_term(
     chol_data=None,
     chol_offsets=None,
     f_cal=None,
+    dof=None,
 ):
     """Joint marginal over the calibration polynomial and the line amplitudes.
 
@@ -526,6 +553,9 @@ def calibration_eline_marginal_term(
     covariance. ``N`` is fixed at ``m0`` and the nuisance coefficients are integrated out
     exactly, so ``ln det N`` is part of the value and of its gradient (see
     :func:`floored_noise`).
+
+    With ``dof`` (Student-t noise) the value is the Laplace approximation described in
+    :func:`calibration_marginal_term`.
     """
     err, chol_data, chol_offsets = floored_noise(model_flux, err, chol_data, chol_offsets, f_cal)
     params = params or {}
@@ -563,6 +593,7 @@ def calibration_eline_marginal_term(
             q_prior=True,
             chol_data=chol_data,
             chol_offsets=chol_offsets,
+            dof=dof,
         )[0]
         return marginal
     basis = calibration_basis(wavelength, wavelength.min(), wavelength.max(), n_poly)
@@ -583,6 +614,6 @@ def calibration_eline_marginal_term(
         )
         line = unit_line_prior(design, line_width, noise=sigma, prior_mean=line_mean)
     result = joint_calibration_line_marginal(
-        obs, model_flux, basis, line, prior_sigma, whitening=whitening
+        obs, model_flux, basis, line, prior_sigma, whitening=whitening, dof=dof
     )
     return result.log_like

@@ -212,7 +212,7 @@ def _fold_marginal(member, fields):
     if getattr(member, "f_cal_param", None) is not None and not isinstance(
         member, ELineFittedLikelihood
     ):
-        fields.update(student_t=True, dof=None, f_cal_param=member.f_cal_param)
+        fields.update(student_t=True, dof=member.dof, f_cal_param=member.f_cal_param)
     if getattr(member, "chol_data", None) is not None:
         if member.chol_key == "spec_cov_chol_data":
             fields.update(covariance="dense")

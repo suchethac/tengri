@@ -252,6 +252,7 @@ def joint_calibration_line_marginal(
     whitening,
     pix_mask=None,
     col_mask=None,
+    dof=None,
 ):
     """Return the linear-Gaussian marginal over the calibration polynomial and the lines.
 
@@ -279,6 +280,10 @@ def joint_calibration_line_marginal(
         Pixel weights; zero drops a pixel.
     col_mask : ndarray, shape (n_poly + n_lines,), optional
         Column weights over the calibration and line columns together.
+    dof : float, optional
+        Student-t degrees of freedom of the noise; given, the marginal is the Laplace
+        approximation at the iteratively reweighted mode (see
+        :func:`~tengri.observation.linear_marginal.marginalize_linear_nuisance`).
 
     Returns
     -------
@@ -301,6 +306,7 @@ def joint_calibration_line_marginal(
         prior_precision=prior_precision,
         col_mask=col_mask,
         scale=line.scale,
+        dof=dof,
     )
 
 
@@ -317,6 +323,7 @@ def marginalize_calibration(
     wave_range: tuple[float, float] | None = None,
     chol_data: jnp.ndarray | None = None,
     chol_offsets: tuple[int, ...] | None = None,
+    dof: jnp.ndarray | None = None,
 ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
     r"""Analytically marginalize over calibration polynomial coefficients.
 
@@ -360,6 +367,11 @@ def marginalize_calibration(
     chol_offsets : tuple of int, optional, keyword-only
         Diagonal offsets ``(0, -1, ..., -p)`` of ``chol_data``. Static. Required with
         ``chol_data``.
+    dof : float, optional, keyword-only
+        Student-t degrees of freedom of the noise. Given, the value is the Laplace
+        approximation at the iteratively reweighted mode (see
+        :func:`~tengri.observation.linear_marginal.marginalize_linear_nuisance`). Default:
+        None (Gaussian noise, exact).
 
     Returns
     -------
@@ -413,6 +425,7 @@ def marginalize_calibration(
         **noise,
         pix_mask=pix_mask,
         prior_precision=jnp.eye(n_poly) / prior_sigma**2,
+        dof=dof,
     )
     c_hat_err = jnp.sqrt(jnp.diag(result.coef_cov))
     return result.log_like, result.coef_hat, c_hat_err
@@ -529,6 +542,7 @@ def marginalize_calibration_segments(
     q_prior: bool = False,
     chol_data: jnp.ndarray | None = None,
     chol_offsets: tuple[int, ...] | None = None,
+    dof: jnp.ndarray | None = None,
 ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
     r"""Marginalize per-segment calibration scales and a Chebyshev tilt in closed form.
 
@@ -601,6 +615,11 @@ def marginalize_calibration_segments(
     chol_offsets : tuple of int, optional, keyword-only
         Diagonal offsets of ``chol_data``, static under JIT. Given together with
         ``chol_data``. Default: ``None``.
+    dof : float, optional, keyword-only
+        Student-t degrees of freedom of the noise. Given, the value is the Laplace
+        approximation at the iteratively reweighted mode (see
+        :func:`~tengri.observation.linear_marginal.marginalize_linear_nuisance`). Default:
+        None (Gaussian noise, exact).
 
     Returns
     -------
@@ -736,6 +755,7 @@ def marginalize_calibration_segments(
         col_mask=col_mask,
         scale=coef_scale,
         flat_mask=flat_mask,
+        dof=dof,
     )
     log_like = result.log_like - n_eff * jnp.log(unit)
     if log_q is not None and q_prior:

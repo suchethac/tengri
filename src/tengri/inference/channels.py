@@ -300,9 +300,14 @@ def _part(arr, block, noise):
 
 def _floor(preds, noise):
     """The calibration floor a marginal whitens with, or ``None`` when there is none."""
-    if noise.student_t and noise.dof is None:
+    if noise.student_t:
         return floor_value(preds.params, noise.f_cal_param)
     return None
+
+
+def _dof(noise):
+    """The Student-t degrees of freedom a marginal is scored with, or ``None`` for Gaussian."""
+    return noise.dof if noise.student_t else None
 
 
 def _has_mask(data):
@@ -529,8 +534,7 @@ def _spectrum_norm(data, noise):
 
 
 def _marginal_active(data, noise):
-    heavy_tailed = noise.student_t and noise.dof is not None
-    return _is_spec(noise) and not _has_mask(data) and not heavy_tailed
+    return _is_spec(noise) and not _has_mask(data)
 
 
 def _lines_marginalized(noise):
@@ -564,6 +568,7 @@ def _calibration_loglik(preds, data, noise):
         chol_data=chol,
         chol_offsets=offsets,
         f_cal=_floor(preds, noise),
+        dof=_dof(noise),
     )
 
 
@@ -598,6 +603,7 @@ def _lines_loglik(preds, data, noise):
             chol_data=chol,
             chol_offsets=offsets,
             f_cal=_floor(preds, noise),
+            dof=_dof(noise),
         )
     if lines.prior_type == "model":
         return eline_model_marginal_term(
@@ -614,6 +620,7 @@ def _lines_loglik(preds, data, noise):
             chol_data=chol,
             chol_offsets=offsets,
             f_cal=_floor(preds, noise),
+            dof=_dof(noise),
         )
     return eline_flat_marginal_term(
         model,
@@ -624,6 +631,7 @@ def _lines_loglik(preds, data, noise):
         chol_data=chol,
         chol_offsets=offsets,
         f_cal=_floor(preds, noise),
+        dof=_dof(noise),
     )
 
 
@@ -663,6 +671,7 @@ def _calibration_lines_loglik(preds, data, noise):
         chol_data=chol,
         chol_offsets=offsets,
         f_cal=_floor(preds, noise),
+        dof=_dof(noise),
     )
 
 
@@ -849,17 +858,6 @@ def _refuse_unscorable(noise: NoiseSpec) -> None:
             "eline_prior_type) for the standard Prospector-style configuration, or set "
             "calibration_marginalize=False."
         )
-    marginalized = noise.calibration is not None or (
-        lines is not None and lines.mode == "marginalized"
-    )
-    if noise.student_t and marginalized and noise.dof is not None:
-        raise NotImplementedError(
-            "A Student-t noise_dof cannot be combined with calibration_marginalize=True or "
-            "eline_mode='marginalized': the marginal has no closed form under heavy-tailed "
-            "noise. Drop noise_dof for Gaussian noise, or fit the nuisance coefficients "
-            "explicitly (calibration_order > 0 with calibration_marginalize=False, "
-            "eline_mode='fitted')."
-        )
 
 
 def validate(noise: NoiseSpec, data_keys_present) -> None:
@@ -875,8 +873,8 @@ def validate(noise: NoiseSpec, data_keys_present) -> None:
     Raises
     ------
     NotImplementedError
-        Calibration marginalization together with fitted line amplitudes, or Student-t
-        noise together with marginalized nuisance coefficients: neither has a closed form.
+        Calibration marginalization together with fitted line amplitudes: the two cannot
+        share one marginal.
     ValueError
         A ``data`` key that is neither a channel key nor bookkeeping, or a spectrum
         covariance without its data keys.

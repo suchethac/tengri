@@ -714,6 +714,7 @@ def line_marginal(
     prior_sigma=None,
     chol_data=None,
     chol_offsets=None,
+    dof=None,
 ):
     r"""The normalized marginal of line amplitudes under a Gaussian prior, as a primitive result.
 
@@ -757,6 +758,7 @@ def line_marginal(
         prior_precision=line.prior_precision,
         col_mask=col_mask,
         scale=coef_scale,
+        dof=dof,
     )
     return result, width, scatter
 
@@ -773,6 +775,7 @@ def marginalize_emission_lines(
     prior_sigma: jnp.ndarray | None = None,
     chol_data: jnp.ndarray | None = None,
     chol_offsets: tuple[int, ...] | None = None,
+    dof: jnp.ndarray | None = None,
 ) -> tuple:
     r"""Analytically marginalize emission-line amplitudes under a Gaussian prior.
 
@@ -820,6 +823,13 @@ def marginalize_emission_lines(
     chol_offsets : tuple of int, optional
         Diagonal offsets ``(0, -1, ..., -p)`` of ``chol_data``. Static. Required with
         ``chol_data``.
+    dof : float, optional
+        Student-t degrees of freedom of the noise. Given, the value is the Laplace
+        approximation at the iteratively reweighted mode of
+        :func:`~tengri.observation.linear_marginal.marginalize_linear_nuisance` (independent
+        Student-t data, or one multivariate Student-t with ``chol_data``), and the Gaussian
+        normalization added back below is the one the caller removes again. Default: None
+        (Gaussian, exact).
 
     Returns
     -------
@@ -875,6 +885,7 @@ def marginalize_emission_lines(
         prior_sigma=prior_sigma,
         chol_data=chol_data,
         chol_offsets=chol_offsets,
+        dof=dof,
     )
     ln_l_marg = result.log_like - diag_gaussian_log_normalization(scatter, pix_mask)
     a_hat = width * result.coef_hat
