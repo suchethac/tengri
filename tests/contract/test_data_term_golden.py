@@ -1,18 +1,14 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""``DataTerm`` values are pinned to golden values.
+"""``DataTerm`` values are pinned bit for bit at the prior's reference draw.
 
 ``data/data_term_golden.npy`` holds ``(log_prob, log_normalization)`` of every Fitter structure
-in :data:`tests.contract._channel_fixtures.KINDS`, evaluated at the prior's reference draw.
-Fourteen rows are the values origin/main produced before the data term scored through
-:func:`tengri.inference.channels.score`, reproduced bit for bit. Three rows carry the corrected
-normalization of the marginalized terms and were re-derived against the independent dense
-Gaussian references of ``test_channel_engine_sweep.py``:
-
-- ``spec_lines``: log_prob -120.78369111368295 -> 851.1300535022867
-- ``spec_cal_lines``: log_prob -131.6665620996181 -> 840.2471825163516
-- ``spec_lines_fitted``: log_normalization 0.0 -> 971.9137446159697
-
-Each of the three moved by the data-only Gaussian constant (971.9137446159697 on these data).
+in :data:`tests.contract._channel_fixtures.KINDS`. ``log_prob + log_normalization`` is the
+normalized log-density of the data: the diagonal, censored and correlated terms drop their
+Gaussian constant from ``log_prob`` and return it in ``log_normalization``, and the
+marginalized terms (``spec_cal``, ``spec_lines``, ``spec_cal_lines``) return it inside
+``log_prob`` with ``log_normalization`` zero. ``spec_lines_fitted`` returns the diagonal
+constant of its spectrum, 971.9137446159697 on these data. The independent dense-Gaussian
+references of ``test_channel_engine_sweep.py`` check the same structures against scipy.
 Regenerate with ``python -m tests.contract.test_data_term_golden OUT.npy`` only from a build
 that is known to be right.
 """

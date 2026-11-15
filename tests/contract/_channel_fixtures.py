@@ -3,7 +3,7 @@
 
 Each builder returns a :class:`~tengri.Fitter` on the 8x15x200 synthetic SSP grid whose data
 sit within a few sigma of the model at the prior's reference draw, so every channel is scored
-at an O(1) residual rather than at the underflowed ``data = 1`` of the cache-key fixtures.
+at an O(1) residual.
 """
 
 from __future__ import annotations
@@ -54,6 +54,7 @@ EXTRA_KINDS = (
     "spec_dense_lines",
     "spec_dense_lines_fitted",
     "spec_student_t_cal",
+    "spec_floor_cal",
     "spec_student_t_lines_fitted",
     "spec_student_t_dense",
     "spec_floor_banded",
@@ -182,6 +183,8 @@ def fitter_of(kind: str) -> Fitter:
         return _spectroscopy_fitter("student_t", covariance="dense", eline="fitted")
     if kind == "spec_student_t_lines_fitted":
         return _spectroscopy_fitter("student_t", eline="fitted")
+    if kind == "spec_floor_cal":
+        return _spectroscopy_fitter("floor", calibration_marginalize=True)
     if kind == "spec_student_t_cal":
         return _spectroscopy_fitter("student_t", calibration_marginalize=True)
     if kind.startswith("mask"):

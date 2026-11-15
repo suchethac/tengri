@@ -950,15 +950,19 @@ def test_unscorable_noise_is_refused_by_name():
             }
         ),
     ):
-        with pytest.raises(NotImplementedError, match="closed form"):
+        with pytest.raises(NotImplementedError, match="noise_dof"):
             score(preds, data, spec)
-        with pytest.raises(NotImplementedError, match="closed form"):
+        with pytest.raises(NotImplementedError, match="noise_dof"):
             channels.validate(spec, data.keys())
 
 
-def test_the_fitter_refuses_heavy_tailed_noise_with_marginalization():
-    with pytest.raises(NotImplementedError, match="closed form"):
+def test_the_fitter_refuses_heavy_tailed_noise_and_a_floor_with_marginalization():
+    with pytest.raises(NotImplementedError, match="noise_dof") as heavy:
         fixtures.fitter_of("spec_student_t_cal")
+    assert "calibration_marginalize" in str(heavy.value)
+    with pytest.raises(NotImplementedError, match="noise_frac_cal") as floor:
+        fixtures.fitter_of("spec_floor_cal")
+    assert "calibration_marginalize" in str(floor.value)
 
 
 # ── Seams that read the mask outside the loss ─────────────────────────────────────────
@@ -1101,9 +1105,9 @@ def test_a_calibration_floor_with_marginalization_is_refused_with_its_own_reason
         dof=None,
         f_cal_param="noise_frac_cal",
     )
-    with pytest.raises(NotImplementedError, match="calibration floor"):
+    with pytest.raises(NotImplementedError, match="noise_frac_cal"):
         score(preds, data, floor)
-    with pytest.raises(NotImplementedError, match="calibration floor"):
+    with pytest.raises(NotImplementedError, match="noise_frac_cal"):
         channels.validate(floor, data.keys())
 
 
@@ -1179,7 +1183,7 @@ def test_every_noise_family_covariance_and_nuisance_has_a_term_or_a_named_error(
     preds, data, noise = _product_cell(family, covariance, nuisance)
     marginalized = nuisance in ("calibration", "lines", "calibration_lines")
     if family != "gaussian" and marginalized:
-        match = "calibration floor" if family == "floor" else "closed form"
+        match = "noise_frac_cal" if family == "floor" else "noise_dof"
         with pytest.raises(NotImplementedError, match=match):
             score(preds, data, noise)
         with pytest.raises(NotImplementedError, match=match):

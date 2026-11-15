@@ -831,28 +831,30 @@ def _refuse_unscorable(noise: NoiseSpec) -> None:
     lines = noise.lines
     if noise.calibration is not None and lines is not None and lines.mode == "fitted":
         raise NotImplementedError(
-            "Combined calibration marginalization + fitted (non-marginalized) "
-            "emission-line amplitudes is not currently supported. "
-            "Use eline_marginalize=True (with optional eline_prior_type) for "
-            "the standard Prospector-style configuration, or disable "
-            "calibration_marginalize."
+            "calibration_marginalize=True cannot be combined with eline_mode='fitted': the "
+            "two cannot share one marginal. Use eline_mode='marginalized' (with optional "
+            "eline_prior_type) for the standard Prospector-style configuration, or set "
+            "calibration_marginalize=False."
         )
     marginalized = noise.calibration is not None or (
         lines is not None and lines.mode == "marginalized"
     )
     if noise.student_t and marginalized and noise.dof is None:
         raise NotImplementedError(
-            "A calibration floor (noise_frac_cal) with a marginalized calibration polynomial "
-            "or marginalized emission-line amplitudes is not scored: the floor scales with the "
-            "model, and which model (before or after the polynomial and the line amplitudes) "
-            "is a convention the batched path does not define. Drop noise_frac_cal, or fit "
-            "the nuisance coefficients explicitly (calibration_order > 0, eline_mode='fitted')."
+            "A free noise_frac_cal (calibration floor) cannot be combined with "
+            "calibration_marginalize=True or eline_mode='marginalized': the floor scales with "
+            "the model, and which model (before or after the polynomial and the line "
+            "amplitudes) is a convention the batched path does not define. Fix "
+            "noise_frac_cal at zero, or fit the nuisance coefficients explicitly "
+            "(calibration_order > 0 with calibration_marginalize=False, eline_mode='fitted')."
         )
     if noise.student_t and marginalized:
         raise NotImplementedError(
-            "Student-t noise with a marginalized calibration polynomial or marginalized "
-            "emission-line amplitudes has no closed form. Fit the nuisance coefficients "
-            "explicitly (calibration_order > 0, eline_mode='fitted') or use Gaussian noise."
+            "A Student-t noise_dof cannot be combined with calibration_marginalize=True or "
+            "eline_mode='marginalized': the marginal has no closed form under heavy-tailed "
+            "noise. Drop noise_dof for Gaussian noise, or fit the nuisance coefficients "
+            "explicitly (calibration_order > 0 with calibration_marginalize=False, "
+            "eline_mode='fitted')."
         )
 
 
