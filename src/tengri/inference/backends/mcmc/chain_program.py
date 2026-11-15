@@ -71,6 +71,16 @@ class NUTSSamplerConfig:
     max_doublings: int
 
 
+#: Relative half-width of the per-step step-size jitter of fixed-trajectory HMC. A fixed
+#: ``n_leapfrog * step_size`` is periodic on a Gaussian: when it sits near a multiple of a
+#: mode's half-period the trajectory returns to its start, the chain stops mixing in that
+#: mode and the second moment is wrong while the mean is not (measured on a linear-Gaussian
+#: target: |std ratio - 1| up to 0.65 at 10 leapfrogs against 0.07 at 3). Drawing the step
+#: size uniformly in ``eps * [1 - j, 1 + j]`` independently of the state keeps the kernel
+#: reversible (Neal 2011, sec. 5.4.2.2) and breaks the periodicity.
+HMC_STEP_JITTER = 0.2
+
+
 @dataclass(frozen=True)
 class HMCConfig:
     """Static statics of the HMC family.
@@ -83,11 +93,15 @@ class HMCConfig:
         Dense mass matrix when True, diagonal when False.
     target_accept_rate : float
         Target acceptance rate of the step-size adaptation.
+    step_jitter : float
+        Relative half-width of the per-step step-size jitter (:data:`HMC_STEP_JITTER`);
+        0 is the plain BlackJAX kernel.
     """
 
     n_leapfrog: int
     use_dense: bool
     target_accept_rate: float
+    step_jitter: float = HMC_STEP_JITTER
 
 
 @dataclass(frozen=True)
@@ -342,22 +356,14 @@ def _hmc_init(position, ld, key=None, cfg=None):
     return blackjax.mcmc.hmc.init(position, ld)
 
 
-#: Relative half-width of the per-step step-size jitter of fixed-trajectory HMC. A fixed
-#: ``n_leapfrog * step_size`` is periodic on a Gaussian: when it sits near a multiple of a
-#: mode's half-period the trajectory returns to its start, the chain stops mixing in that
-#: mode and the second moment is wrong while the mean is not (measured on a linear-Gaussian
-#: target: |std ratio - 1| up to 0.65 at 10 leapfrogs against 0.07 at 3). Drawing the step
-#: size uniformly in ``eps * [1 - j, 1 + j]`` independently of the state keeps the kernel
-#: reversible (Neal 2011, sec. 5.4.2.2) and breaks the periodicity.
-HMC_STEP_JITTER = 0.2
-
-
 def _hmc_step(kernel, state, key, ld, params, cfg):
     """Advance HMC one step with the tuned step size, jittered, and mass matrix."""
     step_size, inv_mass_matrix = params
+    if cfg.step_jitter == 0.0:
+        return kernel(key, state, ld, step_size, inv_mass_matrix, cfg.n_leapfrog)
     key, jitter_key = jax.random.split(key)
     u = jax.random.uniform(jitter_key, dtype=jnp.result_type(step_size))
-    step = step_size * (1.0 + HMC_STEP_JITTER * (2.0 * u - 1.0))
+    step = step_size * (1.0 + cfg.step_jitter * (2.0 * u - 1.0))
     return kernel(key, state, ld, step, inv_mass_matrix, cfg.n_leapfrog)
 
 

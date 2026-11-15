@@ -283,7 +283,10 @@ def test_divergence_record_reduces_the_mask_once():
 
 
 HMC_LEAPFROG = 10
-HMC_CFG = HMCConfig(n_leapfrog=HMC_LEAPFROG, use_dense=False, target_accept_rate=0.85)
+# step_jitter=0: the parity tests compare the program with the raw BlackJAX kernel.
+HMC_CFG = HMCConfig(
+    n_leapfrog=HMC_LEAPFROG, use_dense=False, target_accept_rate=0.85, step_jitter=0.0
+)
 
 
 def _raw_hmc_sampling_scan(state, chain_keys, scales, step_size, inv_mass):
