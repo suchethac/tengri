@@ -294,6 +294,8 @@ def _run_nss(target, key, n_chains, metric, cfg):
         sample as ns_sample,
     )
 
+    _gaussian_prior_or_refuse(target, "nss")
+
     def single(tgt, k):
         guards._require_nondegenerate_live_set(cfg["nss_n_live"], tgt.n_dim, "nss")
         num_inner = tgt.n_dim if cfg["nss_num_inner_steps"] is None else cfg["nss_num_inner_steps"]
