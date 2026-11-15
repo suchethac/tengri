@@ -1,5 +1,9 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""The line-emitter precompute adapters project delta lines with the observation's convention.
+"""The line-emitter precompute builders project delta lines with the observation's convention.
+
+This is a builder-level check: it calls each ``line_weight_matrix`` builder directly, not the
+runtime model. ``mappings_photo_precompute`` is not registered in
+``forward/precompute/registry.py`` yet (#3074), so its entry tests the builder alone.
 
 A delta line's band flux carries the weight at its observed wavelength and the filter
 normalization of the convention (#3505); a builder that takes only the transmission at the line
@@ -93,7 +97,7 @@ def _reference(rest_wave, fw, ft, convention):
 
 
 @pytest.mark.parametrize("name", list(BUILDERS))
-def test_line_weights_match_the_exact_projection_and_follow_the_convention(name):
+def test_builder_line_weights_match_the_exact_projection_and_follow_the_convention(name):
     fw, ft = _bands()
     matrices = {}
     for convention in CONVENTIONS:

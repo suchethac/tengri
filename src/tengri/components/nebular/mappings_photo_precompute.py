@@ -1,7 +1,12 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Precompute adapter for MAPPINGS V photoionization grid (Flury et al. 2024).
 
-Implements :class:`~tengri.forward.precompute.protocol.PrecomputeModule` for
+.. note::
+   This module is not registered in ``tengri.forward.precompute.registry`` and no ``src``
+   module imports it; the model does not use it yet. Wiring it is tracked in #3074. Its
+   builders are tested in isolation only.
+
+Written to :class:`~tengri.forward.precompute.protocol.PrecomputeModule` for
 the Flury et al. (2024) MAPPINGS V photoionization grids with stellar (SB99/BPASS)
 and AGN (OPTXAGNF) modes. This adapter wraps stellar mode with 4D grid axes:
 
