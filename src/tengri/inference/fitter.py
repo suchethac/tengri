@@ -517,6 +517,11 @@ def _try_feature_top_up(model, configs):
         return None
 
 
+def _recorded_feature_decline(model) -> str:
+    """The reason ``_try_feature_top_up`` just recorded on ``model`` for its refusal."""
+    return model.band_table_decline("approx", "feature_precomp").reason
+
+
 def _carry_approx_declines(model, resolved):
     """Copy the approx declines recorded on ``model`` onto the ``resolved`` fallback and return it."""
     if resolved is not model:
@@ -1088,7 +1093,7 @@ def _lut_forward_bias(exact_model, lut_model, data_type, *, redshift=None):
     bias = np.abs(m_lut - m_exact) / np.maximum(np.abs(m_exact), np.finfo(float).tiny)
     # A frozen model just recomputes; the advisory still works.
     if redshift is None:
-        with contextlib.suppress(Exception):
+        with contextlib.suppress(AttributeError):
             lut_model._lut_forward_bias_cache = (exact_model, bias, data_type)
     return bias
 
@@ -2577,23 +2582,24 @@ class Fitter:
         if not _feature_precomp_can_pay(model, serves_line_channel=serves_line_channel):
             return model
         existing = tuple(getattr(model, "approx_configs", ()))
-        try:
-            return _memoized_approx_clone(model, (*existing, FeaturePrecomp()))
-        except Exception as exc:  # broad on purpose, never break a working fit
-            if not warn_on_failure:
-                return model
-            import warnings
-
-            warnings.warn(
-                f"Fitting an emission-line channel, but the line look-up table "
-                f"could not be enabled for this model ({exc}). Every likelihood "
-                f"evaluation will reconstruct the full-wavelength SED to obtain "
-                f"the line fluxes, measured at ~21x the per-gradient cost. The "
-                f"fit is correct, only slow.",
-                UserWarning,
-                stacklevel=4,
-            )
+        topped_up = _try_feature_top_up(model, (*existing, FeaturePrecomp()))
+        if topped_up is not None:
+            return topped_up
+        if not warn_on_failure:
             return model
+        import warnings
+
+        warnings.warn(
+            f"Fitting an emission-line channel, but the line look-up table "
+            f"could not be enabled for this model "
+            f"({_recorded_feature_decline(model)}). Every likelihood "
+            f"evaluation will reconstruct the full-wavelength SED to obtain "
+            f"the line fluxes, measured at ~21x the per-gradient cost. The "
+            f"fit is correct, only slow.",
+            UserWarning,
+            stacklevel=4,
+        )
+        return model
 
     def _resolve_fit_approx(self, model: Any, approx):
         """Select the fit-time forward model per the ``approx`` policy.

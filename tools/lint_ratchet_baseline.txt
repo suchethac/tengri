@@ -20,7 +20,7 @@ BLE001	src/tengri/inference/_sample_utils.py	2
 BLE001	src/tengri/inference/_strategy.py	1
 BLE001	src/tengri/inference/backends/mcmc/_shared.py	2
 BLE001	src/tengri/inference/catalog_fitter.py	1
-BLE001	src/tengri/inference/fitter.py	6
+BLE001	src/tengri/inference/fitter.py	5
 BLE001	src/tengri/inference/mass_profile.py	1
 BLE001	src/tengri/inference/posterior.py	1
 BLE001	src/tengri/observation/filters/__init__.py	2

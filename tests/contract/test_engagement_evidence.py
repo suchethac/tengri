@@ -107,3 +107,87 @@ def test_energy_balance_lut_decline_is_recorded_at_the_gate(synthetic_tophat_obs
     report = precompute_engagement_report(model)
     assert report.energy_balance_lut.state == "declined"
     assert report.energy_balance_lut.reason == recorded
+
+
+def _refusing_clone(monkeypatch, fitter, message):
+    def refuse(model, cfg):
+        raise PrecomputeRefusal(message)
+
+    monkeypatch.setattr(fitter, "_memoized_approx_clone", refuse)
+
+
+@pytest.mark.parametrize("bug", [RuntimeError("a bug"), ValueError("a shape bug")])
+def test_add_feature_precomp_lets_a_bug_propagate(
+    monkeypatch, bug, synthetic_tophat_obs, ssp_data_wne
+):
+    from tengri.inference import fitter
+
+    monkeypatch.setattr(fitter, "_has_line_adjacent_channel", lambda m: False)
+    monkeypatch.setattr(fitter, "_feature_precomp_can_pay", lambda m, **kw: True)
+
+    def broken(model, cfg):
+        raise bug
+
+    monkeypatch.setattr(fitter, "_memoized_approx_clone", broken)
+    model = _eb_model(ssp_data_wne, synthetic_tophat_obs, approx=None)
+    with pytest.raises(type(bug), match="bug"):
+        fitter.Fitter._add_feature_precomp(None, model)
+
+
+def test_add_feature_precomp_records_a_refusal_and_warns_with_its_reason(
+    monkeypatch, synthetic_tophat_obs, ssp_data_wne
+):
+    from tengri.inference import fitter
+
+    monkeypatch.setattr(fitter, "_has_line_adjacent_channel", lambda m: False)
+    monkeypatch.setattr(fitter, "_feature_precomp_can_pay", lambda m, **kw: True)
+    _refusing_clone(monkeypatch, fitter, "nothing to tabulate")
+    model = _eb_model(ssp_data_wne, synthetic_tophat_obs, approx=None)
+    with pytest.warns(UserWarning, match="nothing to tabulate"):
+        out = fitter.Fitter._add_feature_precomp(None, model)
+    assert out is model
+    assert model.band_table_decline("approx", "feature_precomp") == Decline("nothing to tabulate")
+
+
+class _SlottedModel:
+    __slots__ = ()
+    _lut_forward_bias_cache = None
+
+    def predict_photometry(self, params):
+        import numpy as np
+
+        return np.array([1.0, 2.0])
+
+
+class _ReadOnlyModel:
+    def predict_photometry(self, params):
+        import numpy as np
+
+        return np.array([1.0, 2.0])
+
+    def __setattr__(self, name, value):
+        raise RuntimeError("a bug in __setattr__")
+
+
+def _bias_stub():
+    import numpy as np
+    from types import SimpleNamespace
+
+    return SimpleNamespace(spec=None, predict_photometry=lambda p: np.array([1.0, 2.0]))
+
+
+def test_lut_bias_cache_write_refused_by_a_slotted_model_is_best_effort(monkeypatch):
+    from tengri.inference import fitter
+
+    monkeypatch.setattr(fitter, "_central_params", lambda spec: {})
+    bias = fitter._lut_forward_bias(_bias_stub(), _SlottedModel(), "photometry")
+    assert bias.shape == (2,)
+
+
+def test_lut_bias_cache_write_bug_propagates(monkeypatch):
+    from tengri.inference import fitter
+
+    monkeypatch.setattr(fitter, "_central_params", lambda spec: {})
+    lut = _ReadOnlyModel()
+    with pytest.raises(RuntimeError, match="a bug in __setattr__"):
+        fitter._lut_forward_bias(_bias_stub(), lut, "photometry")
