@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Read the :class:`~tengri.inference.channels.NoiseSpec` off a built likelihood cohort (#3505).
+"""Read the :class:`~tengri.inference.channels.NoiseSpec` off a built likelihood cohort.
 
 The Fitter still assembles its likelihood as a cohort of adapters. :func:`noise_spec_of`
 translates that cohort into the noise model and the two engine-side column builders the
@@ -206,7 +206,12 @@ def _fold_marginal(member, fields):
     else:
         fields["lines"] = _line_spec_of(member)
     if getattr(member, "chol_data", None) is not None:
-        fields.update(covariance="banded", chol_offsets=_chol_offsets(member))
+        if member.chol_key == "spec_cov_chol_data":
+            fields.update(covariance="dense")
+        else:
+            fields.update(covariance="banded", chol_offsets=_chol_offsets(member))
+    elif getattr(member, "cov_inv", None) is not None:
+        fields.update(covariance="dense")
     return True
 
 

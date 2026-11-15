@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""The one per-galaxy likelihood scorer: model observables in, log-likelihood out (#3505).
+"""The one per-galaxy likelihood scorer: model observables in, log-likelihood out.
 
 An inference engine has two jobs. *Prediction* produces the model observables (band fluxes,
 line fluxes, spectrum pixels, design columns) and is specific to the engine's batching and
@@ -22,7 +22,6 @@ carry their normalization inside :func:`score` and add nothing here.
 
 from __future__ import annotations
 
-import warnings
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, fields
 from typing import Any
@@ -43,9 +42,9 @@ from tengri.inference.likelihoods.terms import (
     censored_term,
     correlated_term,
     eline_cloudy_marginal_term,
-    eline_fitted_term,
     eline_flat_marginal_term,
     eline_model_marginal_term,
+    fitted_line_model,
     student_t_term,
 )
 
@@ -232,17 +231,6 @@ class NoiseSpec:
         Marginalize the calibration polynomial.
     lines : LineSpec or None, optional
         Marginalize or fit the emission-line amplitudes.
-    observed_floor : float, optional
-        Fractional error floor scaled by the observed flux, added in quadrature. Zero is
-        the only value scored today; :func:`validate` refuses any other.
-    extra_sigma : callable or None, optional
-        ``extra_sigma(preds, data)``: an error term added in quadrature that depends on
-        traced inputs (for instance a template error that varies with redshift). It is
-        evaluated inside the scorer, never frozen at build. Not scored yet;
-        :func:`validate` refuses it.
-    nonpositive_error : {"refuse"}, optional
-        Policy for a data error at or below zero. A fit refuses it, the one value scored
-        today; :func:`validate` refuses any other.
 
     Notes
     -----
@@ -258,9 +246,6 @@ class NoiseSpec:
     chol_offsets: tuple | None = None
     calibration: CalibrationSpec | None = None
     lines: LineSpec | None = None
-    observed_floor: float = 0.0
-    nonpositive_error: str = "refuse"
-    extra_sigma: Callable | None = None
 
 
 # ── Channels ──────────────────────────────────────────────────────────────────────────
@@ -288,14 +273,8 @@ class Channel:
     supersedes : tuple of str, optional
         Channels it replaces when it applies.
     log_norm : callable, optional
-        ``log_norm(data, noise)``: the constant ``loglik`` omits [nats]. ``None`` means the
-        term has no separate constant and a warning says so.
-    legacy_name : callable, optional
-        ``legacy_name(noise)``: the adapter class name the missing-normalization warning
-        quotes.
-    kind : str, optional
-        What the channel scores. ``"data"`` is a measured observable; the value space is
-        left open for a channel that scores a derived property of the model.
+        ``log_norm(data, noise)``: the constant ``loglik`` omits [nats]; zero for a term
+        that already returns its normalization.
     """
 
     name: str
@@ -305,9 +284,7 @@ class Channel:
     optional_keys: tuple = ()
     applies: Callable = lambda data, noise: True
     supersedes: tuple = ()
-    log_norm: Callable | None = None
-    legacy_name: Callable = lambda noise: ""
-    kind: str = "data"
+    log_norm: Callable = lambda data, noise: 0.0
 
 
 def _part(arr, block, noise):
@@ -343,33 +320,63 @@ def _photometry_applies(data, noise):
     return _is_phot(noise)
 
 
-def _photometry_loglik(preds, data, noise):
+def _present(data, noise):
+    """Boolean band presence, or ``None`` when every band is present."""
+    if noise.data_type == "photometry" and "presence" in data:
+        return data["presence"] > 0
+    return None
+
+
+def _phot_inputs(preds, data, noise):
+    """Photometry prediction, data and error with absent bands neutralized.
+
+    An absent band stores zero flux and zero noise, so it is replaced before any division,
+    logarithm or ``hypot``: prediction, data and mask-free residual are zero and the error
+    is one. It then adds exactly zero to every noise family and carries no gradient.
+    """
     obs, err = _part(data["data"], "phot", noise), _part(data["noise"], "phot", noise)
-    if noise.student_t:
-        return student_t_term(preds.phot_fnu, obs, err, _f_cal(preds, noise), noise.dof)
-    return diag_gaussian_log_prob(preds.phot_fnu, obs, err)
-
-
-def _photometry_norm(data, noise):
-    obs, err = _part(data["data"], "phot", noise), _part(data["noise"], "phot", noise)
-    if noise.student_t:
-        return -0.5 * jnp.size(obs) * LOG_2PI
-    return diag_gaussian_log_normalization(jnp.hypot(err, 0.0 * obs), None)
-
-
-def _presence_applies(data, noise):
-    return noise.data_type == "photometry" and not noise.student_t and not _has_mask(data)
-
-
-def _presence_loglik(preds, data, noise):
-    return diag_gaussian_log_prob(
-        preds.phot_fnu, data["data"], data["noise"], presence=data["presence"]
+    present = _present(data, noise)
+    pred = preds.phot_fnu
+    if present is None:
+        return pred, obs, err, None
+    return (
+        jnp.where(present, pred, 0.0),
+        jnp.where(present, obs, 0.0),
+        jnp.where(present, err, 1.0),
+        present,
     )
 
 
-def _presence_norm(data, noise):
-    sigma_eff = jnp.hypot(data["noise"], 0.0 * data["data"])
-    return diag_gaussian_log_normalization(sigma_eff, data["presence"])
+def _student_t_with_presence(pred, obs, err, f_cal, dof, present):
+    value = student_t_term(pred, obs, err, f_cal, dof)
+    if present is None:
+        return value
+    # A neutralized band still carries the per-point Student-t constant; remove it.
+    zero = jnp.zeros(1)
+    baseline = student_t_term(zero, zero, jnp.ones(1), 0.0, dof)
+    return value - jnp.sum(jnp.logical_not(present)) * baseline
+
+
+def _n_present(obs, present):
+    return jnp.size(obs) if present is None else jnp.sum(present)
+
+
+def _photometry_loglik(preds, data, noise):
+    pred, obs, err, present = _phot_inputs(preds, data, noise)
+    if noise.student_t:
+        return _student_t_with_presence(pred, obs, err, _f_cal(preds, noise), noise.dof, present)
+    return diag_gaussian_log_prob(pred, obs, err)
+
+
+def _photometry_norm(data, noise):
+    obs = _part(data["data"], "phot", noise)
+    err = _part(data["noise"], "phot", noise)
+    present = _present(data, noise)
+    if noise.student_t:
+        return -0.5 * _n_present(obs, present) * LOG_2PI
+    if present is not None:
+        err = jnp.where(present, err, 1.0)
+    return diag_gaussian_log_normalization(jnp.hypot(err, 0.0 * obs), present)
 
 
 def _censoring_applies(data, noise):
@@ -380,23 +387,28 @@ def _censored_prediction(preds, noise):
     if noise.data_type == "photometry":
         return preds.phot_fnu
     if noise.data_type == "spectroscopy":
-        return preds.spec_fnu
-    return jnp.concatenate([preds.phot_fnu, preds.spec_fnu])
+        return _spectrum_model(preds, noise)
+    return jnp.concatenate([preds.phot_fnu, _spectrum_model(preds, noise)])
 
 
 def _censoring_loglik(preds, data, noise):
-    return censored_term(
-        _censored_prediction(preds, noise),
-        data["data"],
-        data["noise"],
-        data["data_mask"],
-        _f_cal(preds, noise),
-        noise.dof,
-    )
+    pred, obs, err = _censored_prediction(preds, noise), data["data"], data["noise"]
+    mask = data["data_mask"]
+    present = _present(data, noise)
+    if present is not None:
+        pred = jnp.where(present, pred, 0.0)
+        obs = jnp.where(present, obs, 0.0)
+        err = jnp.where(present, err, 1.0)
+        mask = jnp.where(present, mask, 0)
+    return censored_term(pred, obs, err, mask, _f_cal(preds, noise), noise.dof)
 
 
 def _censoring_norm(data, noise):
-    n_detected = jnp.sum(data["data_mask"] == 0)
+    detected = data["data_mask"] == 0
+    present = _present(data, noise)
+    if present is not None:
+        detected = jnp.logical_and(detected, present)
+    n_detected = jnp.sum(detected)
     if noise.dof is not None:
         return n_detected * student_t_log_norm_per_point(noise.dof)
     return -0.5 * n_detected * LOG_2PI
@@ -405,30 +417,49 @@ def _censoring_norm(data, noise):
 # spectrum -----------------------------------------------------------------------------
 
 
+def _fitted(noise):
+    return noise.lines is not None and noise.lines.mode == "fitted"
+
+
 def _marginalizes(noise):
-    return noise.calibration is not None or noise.lines is not None
+    lines = noise.lines is not None and noise.lines.mode == "marginalized"
+    return noise.calibration is not None or lines
 
 
 def _spectrum_applies(data, noise):
     if not _is_spec(noise) or _has_mask(data):
         return False
-    return noise.student_t or noise.covariance == "dense" or not _marginalizes(noise)
+    return not _marginalizes(noise)
+
+
+def _spectrum_model(preds, noise):
+    """The predicted spectrum, with fitted line amplitudes added when they are latent."""
+    if not _fitted(noise):
+        return preds.spec_fnu
+    amplitudes = jnp.array([preds.params[name] for name in noise.lines.amplitude_names])
+    return fitted_line_model(preds.spec_fnu, preds.eline_design, amplitudes)
 
 
 def _chol(data, noise):
-    if noise.covariance != "banded":
-        return None, None
-    return data["spec_chol_data"], noise.chol_offsets
+    """Cholesky bands and offsets of the pixel covariance a marginal whitens with."""
+    if noise.covariance == "banded":
+        return data["spec_chol_data"], noise.chol_offsets
+    if noise.covariance == "dense":
+        bands = data["spec_cov_chol_data"]
+        return bands, tuple(-k for k in range(bands.shape[1]))
+    return None, None
 
 
 def _spectrum_loglik(preds, data, noise):
     obs, err = _part(data["data"], "spec", noise), _part(data["noise"], "spec", noise)
+    model = _spectrum_model(preds, noise)
     if noise.student_t:
-        return student_t_term(preds.spec_fnu, obs, err, _f_cal(preds, noise), noise.dof)
+        return student_t_term(model, obs, err, _f_cal(preds, noise), noise.dof)
     if noise.covariance == "diagonal":
-        return diag_gaussian_log_prob(preds.spec_fnu, obs, err)
-    chol, offsets = _chol(data, noise)
-    return correlated_term(preds.spec_fnu, obs, data.get("spec_cov_inv"), chol, offsets)
+        return diag_gaussian_log_prob(model, obs, err)
+    if noise.covariance == "banded":
+        return correlated_term(model, obs, None, data["spec_chol_data"], noise.chol_offsets)
+    return correlated_term(model, obs, data["spec_cov_inv"], None, None)
 
 
 def _spectrum_norm(data, noise):
@@ -440,23 +471,26 @@ def _spectrum_norm(data, noise):
     if noise.covariance == "dense":
         log_det = -jnp.linalg.slogdet(data["spec_cov_inv"])[1]
     else:
-        chol, offsets = _chol(data, noise)
-        diagonal = chol[int(np.where(np.asarray(offsets, dtype=int) == 0)[0][0])]
+        chol = data["spec_chol_data"]
+        diagonal = chol[int(np.where(np.asarray(noise.chol_offsets, dtype=int) == 0)[0][0])]
         log_det = 2.0 * jnp.sum(jnp.log(diagonal))
     return -0.5 * log_det - 0.5 * jnp.size(obs) * LOG_2PI
 
 
 def _marginal_active(data, noise):
-    return (
-        _is_spec(noise)
-        and not _has_mask(data)
-        and not noise.student_t
-        and noise.covariance != "dense"
-    )
+    return _is_spec(noise) and not _has_mask(data) and not noise.student_t
+
+
+def _lines_marginalized(noise):
+    return noise.lines is not None and noise.lines.mode == "marginalized"
 
 
 def _calibration_applies(data, noise):
-    return _marginal_active(data, noise) and noise.calibration is not None and noise.lines is None
+    return (
+        _marginal_active(data, noise)
+        and noise.calibration is not None
+        and not _lines_marginalized(noise)
+    )
 
 
 def _calibration_loglik(preds, data, noise):
@@ -487,7 +521,9 @@ def _flat_variance(lines):
 
 
 def _lines_applies(data, noise):
-    return _marginal_active(data, noise) and noise.lines is not None and noise.calibration is None
+    return (
+        _marginal_active(data, noise) and _lines_marginalized(noise) and noise.calibration is None
+    )
 
 
 def _lines_loglik(preds, data, noise):
@@ -495,9 +531,6 @@ def _lines_loglik(preds, data, noise):
     obs, err = _part(data["data"], "spec", noise), _part(data["noise"], "spec", noise)
     model = preds.spec_fnu
     design = preds.eline_design
-    if lines.mode == "fitted":
-        amplitudes = jnp.array([preds.params[nm] for nm in lines.amplitude_names])
-        return eline_fitted_term(model, obs, err, design, amplitudes)
     chol, offsets = _chol(data, noise)
     if lines.prior_type == "cloudy":
         return eline_cloudy_marginal_term(
@@ -524,6 +557,8 @@ def _lines_loglik(preds, data, noise):
             line_wavelengths=lines.line_wavelengths,
             prior_inputs=preds.eline_prior_inputs,
             prior_width_dex=lines.prior_width_dex,
+            chol_data=chol,
+            chol_offsets=offsets,
         )
     return eline_flat_marginal_term(
         model,
@@ -539,8 +574,7 @@ def _lines_loglik(preds, data, noise):
 def _calibration_lines_applies(data, noise):
     return (
         _marginal_active(data, noise)
-        and noise.lines is not None
-        and noise.lines.mode == "marginalized"
+        and _lines_marginalized(noise)
         and noise.calibration is not None
     )
 
@@ -637,17 +671,6 @@ def _indices_norm(data, noise):
     return diag_gaussian_log_normalization(jnp.hypot(err, 0.0 * obs), None)
 
 
-def _lines_legacy_name(noise):
-    lines = noise.lines
-    if lines.mode == "fitted":
-        return "ELineFittedLikelihood"
-    if lines.prior_type == "cloudy":
-        return "CloudyELineMarginalizedLikelihood"
-    if lines.prior_type == "model":
-        return "ModelELineMarginalizedLikelihood"
-    return "ELineMarginalizedLikelihood"
-
-
 _BASE = ("data", "noise")
 
 #: Every channel, in summation order: the main data, the spectrum, then the constraints.
@@ -657,25 +680,18 @@ CHANNELS: tuple = (
         _BASE,
         _photometry_loglik,
         True,
+        optional_keys=("presence",),
         applies=_photometry_applies,
         log_norm=_photometry_norm,
-    ),
-    Channel(
-        "presence",
-        (*_BASE, "presence"),
-        _presence_loglik,
-        True,
-        applies=_presence_applies,
-        supersedes=("photometry",),
-        log_norm=_presence_norm,
     ),
     Channel(
         "censoring",
         (*_BASE, "data_mask"),
         _censoring_loglik,
         False,
+        optional_keys=("presence",),
         applies=_censoring_applies,
-        supersedes=("photometry", "presence"),
+        supersedes=("photometry",),
         log_norm=_censoring_norm,
     ),
     Channel(
@@ -683,7 +699,7 @@ CHANNELS: tuple = (
         _BASE,
         _spectrum_loglik,
         True,
-        optional_keys=("spec_cov_inv", "spec_chol_data"),
+        optional_keys=("spec_cov_inv", "spec_chol_data", "spec_cov_chol_data"),
         applies=_spectrum_applies,
         log_norm=_spectrum_norm,
     ),
@@ -692,27 +708,24 @@ CHANNELS: tuple = (
         _BASE,
         _calibration_loglik,
         True,
-        optional_keys=("spec_chol_data",),
+        optional_keys=("spec_chol_data", "spec_cov_chol_data"),
         applies=_calibration_applies,
-        legacy_name=lambda noise: "CalibrationMarginalizedLikelihood",
     ),
     Channel(
         "lines",
         _BASE,
         _lines_loglik,
         True,
-        optional_keys=("spec_chol_data",),
+        optional_keys=("spec_chol_data", "spec_cov_chol_data"),
         applies=_lines_applies,
-        legacy_name=_lines_legacy_name,
     ),
     Channel(
         "calibration_lines",
         _BASE,
         _calibration_lines_loglik,
         True,
-        optional_keys=("spec_chol_data",),
+        optional_keys=("spec_chol_data", "spec_cov_chol_data"),
         applies=_calibration_lines_applies,
-        legacy_name=lambda noise: "CalibrationELineMarginalizedLikelihood",
     ),
     Channel(
         "line_fluxes",
@@ -769,6 +782,28 @@ def selected_channels(data: Mapping, noise: NoiseSpec) -> list:
     return [c for c in active if c.name not in superseded]
 
 
+def _refuse_unscorable(noise: NoiseSpec) -> None:
+    """Refuse noise models with no closed-form score, naming the conflict."""
+    lines = noise.lines
+    if noise.calibration is not None and lines is not None and lines.mode == "fitted":
+        raise NotImplementedError(
+            "Combined calibration marginalization + fitted (non-marginalized) "
+            "emission-line amplitudes is not currently supported. "
+            "Use eline_marginalize=True (with optional eline_prior_type) for "
+            "the standard Prospector-style configuration, or disable "
+            "calibration_marginalize."
+        )
+    marginalized = noise.calibration is not None or (
+        lines is not None and lines.mode == "marginalized"
+    )
+    if noise.student_t and marginalized:
+        raise NotImplementedError(
+            "Student-t noise with a marginalized calibration polynomial or marginalized "
+            "emission-line amplitudes has no closed form. Fit the nuisance coefficients "
+            "explicitly (calibration_order > 0, eline_mode='fitted') or use Gaussian noise."
+        )
+
+
 def validate(noise: NoiseSpec, data_keys_present) -> None:
     """Refuse a noise model that no channel combination can score.
 
@@ -782,40 +817,26 @@ def validate(noise: NoiseSpec, data_keys_present) -> None:
     Raises
     ------
     NotImplementedError
-        Calibration marginalization together with fitted line amplitudes: the two cannot
-        share one marginal. An observed-scaled error floor or an error policy other than
-        refusal, which no channel scores yet.
+        Calibration marginalization together with fitted line amplitudes, or Student-t
+        noise together with marginalized nuisance coefficients: neither has a closed form.
     ValueError
         A ``data`` key that is neither a channel key nor bookkeeping, or a spectrum
-        covariance key without its noise setting.
+        covariance without its data keys.
     """
     present = set(data_keys_present)
-    unknown = present - data_keys() - BOOKKEEPING_KEYS - {"spec_cov_inv", "spec_chol_data"}
+    unknown = present - data_keys() - BOOKKEEPING_KEYS
     if unknown:
         raise ValueError(f"data keys read by no channel: {sorted(unknown)}")
-    if noise.calibration is not None and noise.lines is not None and noise.lines.mode == "fitted":
-        raise NotImplementedError(
-            "Combined calibration marginalization + fitted (non-marginalized) "
-            "emission-line amplitudes is not currently supported. "
-            "Use eline_marginalize=True (with optional eline_prior_type) for "
-            "the standard Prospector-style configuration, or disable "
-            "calibration_marginalize."
-        )
-    if noise.extra_sigma is not None:
-        raise NotImplementedError("a traced extra error term is not scored yet")
-    if noise.observed_floor != 0.0:
-        raise NotImplementedError("an observed-scaled error floor is not scored yet")
-    if noise.nonpositive_error != "refuse":
-        raise NotImplementedError(
-            f"nonpositive_error={noise.nonpositive_error!r}: a fit refuses an error at or "
-            "below zero and no other policy is scored"
-        )
+    _refuse_unscorable(noise)
     if noise.covariance == "banded" and noise.chol_offsets is None:
         raise ValueError("a banded covariance needs chol_offsets")
     if noise.covariance == "dense" and "spec_cov_inv" not in present:
         raise ValueError("a dense covariance needs the spec_cov_inv data key")
     if noise.covariance == "banded" and "spec_chol_data" not in present:
         raise ValueError("a banded covariance needs the spec_chol_data data key")
+    marginalized = noise.calibration is not None or _lines_marginalized(noise)
+    if noise.covariance == "dense" and marginalized and "spec_cov_chol_data" not in present:
+        raise ValueError("a dense covariance with marginalization needs spec_cov_chol_data")
 
 
 def effective_sigma(err, predicted, f_cal=0.0):
@@ -867,6 +888,7 @@ def score(preds: Predictions, data: Mapping, noise: NoiseSpec):
     -----
     **JIT-compatible**: pure in ``(preds, data)``; ``noise`` is static structure.
     """
+    _refuse_unscorable(noise)
     total = jnp.asarray(0.0)
     for channel in selected_channels(data, noise):
         total = total + channel.loglik(preds, data, noise)
@@ -886,34 +908,14 @@ def log_normalization(data: Mapping, noise: NoiseSpec):
     Returns
     -------
     scalar
-        The normalization [nats]. A censored joint or spectrum fit scores its constraint
-        channels without constants and warns.
+        The normalization [nats], summed over the selected channels.
     """
-    selected = selected_channels(data, noise)
-    legacy_censored = _has_mask(data) and noise.data_type != "photometry"
     total = jnp.asarray(0.0)
-    skipped = False
-    for channel in selected:
-        if legacy_censored and channel.name not in ("censoring",):
-            skipped = True
-            continue
-        if channel.log_norm is None:
-            warnings.warn(
-                f"{channel.legacy_name(noise)} has no exact log normalization: log_evidence "
-                "omits its constant (#3427).",
-                stacklevel=3,
-            )
-            continue
+    for channel in selected_channels(data, noise):
         total = total + channel.log_norm(data, noise)
-    if skipped:
-        warnings.warn(
-            "The censored fall-through has line-flux, line-ratio or index channels; their "
-            "normalization constants are not in log_evidence (#3427).",
-            stacklevel=3,
-        )
     return total
 
 
-#: Engines whose likelihood is :func:`score`. An engine joins this set in the change that
-#: moves it onto the scorer; the engine sweep in ``tests/contract`` then requires its cells.
+#: Engines whose likelihood is :func:`score`. The engine sweep in ``tests/contract`` expects
+#: every engine outside this set to fail its cells, and every engine inside it to pass.
 ENGINES_ON_SCORER = frozenset({"sequential"})

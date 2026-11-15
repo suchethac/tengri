@@ -524,6 +524,9 @@ class ModelELineMarginalizedLikelihood:
     fnu_obs_key: str | None = None
     fnu_err_key: str | None = None
     data_slice: tuple[int, int] | None = None
+    chol_data: jnp.ndarray | None = None
+    chol_offsets: tuple[int, ...] | None = None
+    chol_key: str | None = None
 
     def log_prob(
         self,
@@ -546,6 +549,8 @@ class ModelELineMarginalizedLikelihood:
             line_wavelengths=self.line_wavelengths,
             prior_inputs=self.prior_inputs_builder(params),
             prior_width_dex=self.prior_width_dex,
+            chol_data=_resolve_chol(self.chol_data, self.chol_key, data_args),
+            chol_offsets=self.chol_offsets,
         )
 
     def declared_parameters(self):
@@ -574,6 +579,9 @@ _MODEL_ELINE_MARGINALIZED_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
     "fnu_obs_key": content("data_args routing key changes which traced input is read"),
     "fnu_err_key": content("data_args routing key changes which traced input is read"),
     "data_slice": content("channel slice changes which part of the traced input is read"),
+    "chol_data": shape("banded factor bands; only their shape fixes the program"),
+    "chol_offsets": content("diagonal offsets of the factor are static program structure"),
+    "chol_key": content("data_args routing key changes which traced input is read"),
 }
 
 
@@ -622,6 +630,10 @@ class ELineFittedLikelihood:
     fnu_obs_key: str | None = None
     fnu_err_key: str | None = None
     data_slice: tuple[int, int] | None = None
+    cov_inv: jnp.ndarray | None = None
+    chol_data: jnp.ndarray | None = None
+    chol_offsets: tuple[int, ...] | None = None
+    chol_key: str | None = None
 
     def log_prob(
         self,
@@ -635,7 +647,14 @@ class ELineFittedLikelihood:
         fnu_obs = resolve_channel_data(self.fnu_obs, self.fnu_obs_key, self.data_slice, data_args)
         fnu_err = resolve_channel_data(self.fnu_err, self.fnu_err_key, self.data_slice, data_args)
         return eline_fitted_term(
-            prediction[self.channel], fnu_obs, fnu_err, design_matrix, amplitudes
+            prediction[self.channel],
+            fnu_obs,
+            fnu_err,
+            design_matrix,
+            amplitudes,
+            cov_inv=self.cov_inv,
+            chol_data=_resolve_chol(self.chol_data, self.chol_key, data_args),
+            chol_offsets=self.chol_offsets,
         )
 
     def declared_parameters(self):
@@ -665,6 +684,10 @@ _ELINE_FITTED_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
     "fnu_obs_key": content("data_args routing key changes which traced input is read"),
     "fnu_err_key": content("data_args routing key changes which traced input is read"),
     "data_slice": content("channel slice changes which part of the traced input is read"),
+    "cov_inv": content("the noise covariance basis; a per-model structural input"),
+    "chol_data": shape("banded factor bands; only their shape fixes the program"),
+    "chol_offsets": content("diagonal offsets of the factor are static program structure"),
+    "chol_key": content("data_args routing key changes which traced input is read"),
 }
 
 

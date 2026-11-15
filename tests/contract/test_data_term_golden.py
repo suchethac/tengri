@@ -1,11 +1,20 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""``DataTerm`` values are bit-identical to the pre-scorer implementation (#3505).
+"""``DataTerm`` values are pinned to golden values.
 
 ``data/data_term_golden.npy`` holds ``(log_prob, log_normalization)`` of every Fitter structure
-in :data:`tests.contract._channel_fixtures.KINDS`, evaluated at the prior's reference draw by
-the code of ``origin/main`` before the data term was re-expressed on
-:func:`tengri.inference.channels.score`. Regenerate it only from a build that is known to be
-right, with ``python -m tests.contract.test_data_term_golden OUT.npy``.
+in :data:`tests.contract._channel_fixtures.KINDS`, evaluated at the prior's reference draw.
+Fourteen rows are the values origin/main produced before the data term scored through
+:func:`tengri.inference.channels.score`, reproduced bit for bit. Three rows carry the corrected
+normalization of the marginalized terms and were re-derived against the independent dense
+Gaussian references of ``test_channel_engine_sweep.py``:
+
+- ``spec_lines``: log_prob -120.78369111368295 -> 851.1300535022867
+- ``spec_cal_lines``: log_prob -131.6665620996181 -> 840.2471825163516
+- ``spec_lines_fitted``: log_normalization 0.0 -> 971.9137446159697
+
+Each of the three moved by the data-only Gaussian constant (971.9137446159697 on these data).
+Regenerate with ``python -m tests.contract.test_data_term_golden OUT.npy`` only from a build
+that is known to be right.
 """
 
 from __future__ import annotations

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Small Fitters, one per likelihood structure, for the channel contract tests (#3505).
+"""Small Fitters, one per likelihood structure, for the channel contract tests.
 
 Each builder returns a :class:`~tengri.Fitter` on the 8x15x200 synthetic SSP grid whose data
 sit within a few sigma of the model at the prior's reference draw, so every channel is scored
@@ -42,6 +42,18 @@ KINDS = (
     "spec_cal_lines",
     "joint",
     "joint_mask",
+)
+
+#: Structures with no golden values, checked against independent references instead.
+EXTRA_KINDS = (
+    "presence_student_t",
+    "presence_floor",
+    "mask_presence",
+    "spec_dense_cal",
+    "spec_banded_cal",
+    "spec_dense_lines",
+    "spec_dense_lines_fitted",
+    "spec_student_t_cal",
 )
 
 
@@ -87,6 +99,11 @@ def _photometry_fitter(noise=None, *, mask=None, presence=None) -> Fitter:
     model = _photometry_model(noise)
     pred = model.predict_photometry(_reference_free(model))
     data, err = _perturb(pred, 0.1)
+    if presence is not None:
+        # An absent band is stored with zero flux and zero noise.
+        absent = np.asarray(presence) == 0
+        data = jnp.where(absent, 0.0, data)
+        err = jnp.where(absent, 0.0, err)
     return Fitter(model, data, err, data_type="photometry", data_mask=mask, presence=presence)
 
 
@@ -142,6 +159,19 @@ def fitter_of(kind: str) -> Fitter:
         return _photometry_fitter("floor")
     if kind == "presence":
         return _photometry_fitter(presence=jnp.array([1.0, 0.0, 1.0]))
+    if kind in ("presence_student_t", "presence_floor"):
+        noise = kind.removeprefix("presence_")
+        return _photometry_fitter(noise, presence=jnp.array([1.0, 0.0, 1.0]))
+    if kind == "mask_presence":
+        return _photometry_fitter(mask=jnp.array([0, 1, -1]), presence=jnp.array([1.0, 1.0, 0.0]))
+    if kind in ("spec_dense_cal", "spec_banded_cal"):
+        return _spectroscopy_fitter(covariance=kind.split("_")[1], calibration_marginalize=True)
+    if kind == "spec_dense_lines":
+        return _spectroscopy_fitter(covariance="dense", eline="marginalized")
+    if kind == "spec_dense_lines_fitted":
+        return _spectroscopy_fitter(covariance="dense", eline="fitted")
+    if kind == "spec_student_t_cal":
+        return _spectroscopy_fitter("student_t", calibration_marginalize=True)
     if kind.startswith("mask"):
         noise = {"mask": None, "mask_student_t": "student_t", "mask_floor": "floor"}[kind]
         return _photometry_fitter(noise, mask=jnp.array([0, 1, -1]))

@@ -126,6 +126,16 @@ def build_base_likelihood(context: InferenceContext):
     # matches the legacy `variable_noise_hamiltonian` semantics.
     if has_noise_model(context.spec) or uses_student_t(context.spec):
         dof = get_noise_dof(context.spec) if uses_student_t(context.spec) else None
+        if context.has_spectroscopy and (
+            context.calibration_marginalize or context.eline_marginalize or context.eline_fitted
+        ):
+            raise NotImplementedError(
+                "A variable-noise (Student-t or calibration-floor) likelihood cannot be "
+                "combined with calibration marginalization or emission-line amplitudes: the "
+                "marginal has no closed form under heavy-tailed noise. Use Gaussian noise "
+                "(drop noise_dof and noise_frac_cal), or fit the coefficients explicitly "
+                "(calibration_order > 0, no marginalization)."
+            )
         if context.data_type == "photometry":
             return StudentTLikelihood(
                 obs=context.data,
@@ -182,12 +192,24 @@ def build_base_likelihood(context: InferenceContext):
             "chol_offsets": context.model.observation.spectroscopy.chol_offsets,
             "chol_key": "spec_chol_data",
         }
+    elif "spec_cov_chol_data" in context.data_args:
+        dense_factor = context.data_args["spec_cov_chol_data"]
+        chol_kw = {
+            "chol_data": dense_factor,
+            "chol_offsets": tuple(-k for k in range(dense_factor.shape[1])),
+            "chol_key": "spec_cov_chol_data",
+        }
     marginalizes = context.calibration_marginalize or context.eline_marginalize
-    if "spec_cov_inv" in context.data_args or (chol_kw and not marginalizes):
+    has_lines = marginalizes or context.eline_fitted
+    plain_covariance = "spec_cov_inv" in context.data_args or "spec_chol_data" in context.data_args
+    if plain_covariance and not has_lines:
         cov_inv = context.data_args.get("spec_cov_inv")
+        # The correlated Gaussian reads a banded factor or the dense inverse, never the
+        # dense factor the marginalized terms whiten with.
+        mvn_kw = chol_kw if "spec_chol_data" in context.data_args else {}
         if context.data_type == "spectroscopy":
             return MultivariateGaussianLikelihood(
-                obs=context.data, cov_inv=cov_inv, channel="spec_fnu", obs_key="data", **chol_kw
+                obs=context.data, cov_inv=cov_inv, channel="spec_fnu", obs_key="data", **mvn_kw
             )
         if context.data_type == "joint":
             n_phot = _n_phot_split(context)
@@ -203,7 +225,7 @@ def build_base_likelihood(context: InferenceContext):
                     channel="spec_fnu",
                     obs_key="data",
                     data_slice=(n_phot, len(context.data)),
-                    **chol_kw,
+                    **mvn_kw,
                 ),
             )
 
@@ -381,6 +403,8 @@ def build_base_likelihood(context: InferenceContext):
                 design_matrix_builder=builder,
                 amplitude_names=tuple(context.eline_amplitude_names),
                 channel="spec_fnu",
+                cov_inv=context.data_args.get("spec_cov_inv"),
+                **(chol_kw if "spec_chol_data" in context.data_args else {}),
             )
         elif context.eline_prior_type == "cloudy":
             _require_cloudy_prior_params(context)
@@ -419,6 +443,7 @@ def build_base_likelihood(context: InferenceContext):
                 line_wavelengths=context.eline_independent_wavelengths,
                 prior_width_dex=context.eline_prior_width_dex,
                 channel="spec_fnu",
+                **chol_kw,
             )
         else:
             eline_lk = ELineMarginalizedLikelihood(

@@ -1,10 +1,12 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Pure log-likelihood terms: arrays in, scalar out (#3505).
+"""Pure log-likelihood terms: arrays in, scalar out.
 
 Each function is one term of the per-galaxy likelihood. :mod:`tengri.inference.channels`
 selects and sums them; the adapters in this package call the same functions, so a term has
-one implementation. The diagonal and censored terms drop their Gaussian constants; the
-marginalized terms include theirs.
+one implementation. The diagonal, censored and correlated terms drop their Gaussian
+constants, which :mod:`tengri.inference.channels` returns separately as the normalization.
+Every marginalized term returns the full normalized log-likelihood: nothing outside the
+marginalization primitive adds or removes a constant.
 """
 
 from __future__ import annotations
@@ -43,8 +45,23 @@ __all__ = [
     "eline_fitted_term",
     "eline_flat_marginal_term",
     "eline_model_marginal_term",
+    "fitted_line_model",
+    "gaussian_constant",
     "student_t_term",
 ]
+
+
+def gaussian_constant(err, chol_data=None, pix_mask=None):
+    """The Gaussian normalization ``0.5 N ln 2pi + sum ln sigma`` [nats] of a pixel noise model.
+
+    ``sigma`` is the error, or the diagonal of the Cholesky factor of a correlated
+    covariance; ``N`` and the sum run over unmasked pixels. A normalized log-likelihood
+    carries ``-gaussian_constant``.
+    """
+    sigma = err if chol_data is None else chol_data[0]
+    if pix_mask is None:
+        return 0.5 * sigma.shape[0] * LOG_2PI + jnp.sum(jnp.log(sigma))
+    return 0.5 * jnp.sum(pix_mask) * LOG_2PI + jnp.sum(pix_mask * jnp.log(sigma))
 
 
 def student_t_term(predicted, obs, err, f_cal, dof):
@@ -156,7 +173,7 @@ def eline_flat_marginal_term(
         chol_data=chol_data,
         chol_offsets=chol_offsets,
     )
-    return ln_l_marg
+    return ln_l_marg - gaussian_constant(err, chol_data, pix_mask)
 
 
 def eline_cloudy_marginal_term(
@@ -201,6 +218,8 @@ def eline_model_marginal_term(
     line_wavelengths,
     prior_inputs,
     prior_width_dex,
+    chol_data=None,
+    chol_offsets=None,
 ):
     """Marginal log-likelihood with line amplitudes centered on the model's own lines."""
     redshift, dl_cm, aperture_frac, transmission = prior_inputs
@@ -215,23 +234,41 @@ def eline_model_marginal_term(
         prior_width_dex,
         transmission=transmission,
     )
-    unit = unit_model_line_prior(design, prior, noise=err)
+    noise = err if chol_data is None else chol_data[0]
+    whitening = (
+        {"sigma": err}
+        if chol_data is None
+        else {"chol_lower": BandedMatrix(np.asarray(chol_offsets, dtype=int), chol_data)}
+    )
+    unit = unit_model_line_prior(design, prior, noise=noise)
     result = marginalize_linear_nuisance(
         obs,
         model_flux,
         unit.design,
-        sigma=err,
+        **whitening,
         prior_mean=unit.prior_mean,
         prior_precision=unit.prior_precision,
         scale=unit.scale,
     )
-    n_pix = obs.shape[0]
-    return result.log_like + 0.5 * n_pix * LOG_2PI + jnp.sum(jnp.log(err))
+    return result.log_like
 
 
-def eline_fitted_term(model_flux, obs, err, design, amplitudes):
-    """Diagonal-Gaussian log-likelihood with explicit line amplitudes added to the model."""
-    return -0.5 * diag_gaussian_chi2(model_flux + design @ amplitudes, obs, err)
+def fitted_line_model(model_flux, design, amplitudes):
+    """The model spectrum with explicit line amplitudes added."""
+    return model_flux + design @ amplitudes
+
+
+def eline_fitted_term(
+    model_flux, obs, err, design, amplitudes, *, cov_inv=None, chol_data=None, chol_offsets=None
+):
+    """Gaussian log-likelihood with explicit line amplitudes added to the model.
+
+    Diagonal in ``err`` by default, or correlated through ``cov_inv`` or the banded factor.
+    """
+    total = fitted_line_model(model_flux, design, amplitudes)
+    if cov_inv is None and chol_data is None:
+        return -0.5 * diag_gaussian_chi2(total, obs, err)
+    return correlated_term(total, obs, cov_inv, chol_data, chol_offsets)
 
 
 def _calibration_line_prior(
@@ -281,10 +318,28 @@ def calibration_eline_marginal_term(
     if n_segments > 0 or cal_prior != "gaussian" or has_q:
         err_f = jnp.maximum(err, _representable_floor(_ERR_FLOOR))
         noise = err_f if chol_data is None else chol_data[0]
-        line_mean, line_width = _calibration_line_prior(
-            prior_type, params, design, line_prior_sigma, line_wavelengths, prior_width_dex
-        )
-        line = unit_line_prior(design, line_width, noise=noise, prior_mean=line_mean)
+        if prior_type == "model":
+            redshift, dl_cm, aperture_frac, transmission = prior_inputs
+            line = unit_model_line_prior(
+                design,
+                model_line_prior(
+                    log_line_lums,
+                    match_index,
+                    matched,
+                    line_wavelengths,
+                    redshift,
+                    dl_cm,
+                    aperture_frac,
+                    prior_width_dex,
+                    transmission=transmission,
+                ),
+                noise=noise,
+            )
+        else:
+            line_mean, line_width = _calibration_line_prior(
+                prior_type, params, design, line_prior_sigma, line_wavelengths, prior_width_dex
+            )
+            line = unit_line_prior(design, line_width, noise=noise, prior_mean=line_mean)
         marginal = marginalize_calibration_segments(
             model_flux,
             obs,
@@ -302,7 +357,7 @@ def calibration_eline_marginal_term(
             chol_data=chol_data,
             chol_offsets=chol_offsets,
         )[0]
-        return marginal + 0.5 * obs.shape[0] * LOG_2PI + jnp.sum(jnp.log(noise))
+        return marginal
     basis = calibration_basis(wavelength, wavelength.min(), wavelength.max(), n_poly)
     if chol_data is None:
         sigma = jnp.maximum(err, _representable_floor(_ERR_FLOOR))
@@ -332,4 +387,4 @@ def calibration_eline_marginal_term(
     result = joint_calibration_line_marginal(
         obs, model_flux, basis, line, prior_sigma, whitening=whitening
     )
-    return result.log_like + 0.5 * obs.shape[0] * LOG_2PI + jnp.sum(jnp.log(sigma))
+    return result.log_like
