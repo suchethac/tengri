@@ -17,7 +17,9 @@ fit to a NIRSpec prism spectrum stopped at 0 MAP iterations.
 
 The fixture is a prism resolution curve and a library curve that is coarser than
 the prism below 3000 A rest, so some pixels are clamped and some are not. The
-reference for the gradient is a central finite difference of the same function.
+reference for each gradient is a finite difference of the same function: central,
+and one-sided at ``sigma_v = 0``, where a clamped pixel's width is ``sigma_v``
+itself and the loss is first order in it.
 """
 
 from __future__ import annotations
@@ -70,14 +72,31 @@ def test_redshift_gradient_is_finite_and_matches_finite_difference():
     grad = float(jax.grad(_loss, argnums=0)(_Z, 0.0))
     step = 1e-4
     reference = float((_loss(_Z + step, 0.0) - _loss(_Z - step, 0.0)) / (2.0 * step))
-    assert np.isfinite(grad)
+    assert np.isfinite(grad), "NaN here is the sqrt of a zero kernel variance (#3546)"
+    assert grad != 0.0, "the library width moves with redshift, so the spectrum must too"
     # Measured: grad and the finite difference agree to 9e-9 relative at step 1e-4.
     np.testing.assert_allclose(grad, reference, rtol=1e-6)
 
 
-def test_sigma_v_gradient_is_finite_at_zero():
+def test_sigma_v_gradient_at_zero_is_the_one_sided_derivative():
+    """Clamped pixels have width sigma_v, so the loss is first order in sigma_v at 0."""
     grad = float(jax.grad(_loss, argnums=1)(_Z, 0.0))
-    assert np.isfinite(grad)
+    step = 1e-4
+    reference = float((_loss(_Z, step) - _loss(_Z, 0.0)) / step)
+    assert np.isfinite(grad), "NaN here is the sqrt of a zero kernel variance (#3546)"
+    assert grad != 0.0, "a zero would hide the broadening of the clamped pixels"
+    # Measured: -3.07267e-06 against the one-sided difference -3.07296e-06 (9e-5 relative).
+    np.testing.assert_allclose(grad, reference, rtol=1e-3)
+
+
+def test_sigma_v_gradient_matches_finite_difference_away_from_zero():
+    sigma_v = 50.0
+    grad = float(jax.grad(_loss, argnums=1)(_Z, sigma_v))
+    step = 1e-3
+    reference = float((_loss(_Z, sigma_v + step) - _loss(_Z, sigma_v - step)) / (2.0 * step))
+    assert np.isfinite(grad), "a finite kernel width has a finite derivative"
+    assert grad != 0.0, "50 km/s broadens the unclamped and the clamped pixels alike"
+    np.testing.assert_allclose(grad, reference, rtol=1e-5)
 
 
 def test_zero_width_pixels_leave_the_value_unchanged():

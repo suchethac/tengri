@@ -1038,7 +1038,10 @@ def apply_lsf(
     # for callers that pass sigma_v_kms in via the params dict, the prior
     # guards against negatives, so this is purely defensive).
     sigma_bound = _lsf_sigma_bound_kms(resolution, sigma_v_kms)
-    sigma_v_kms = jnp.maximum(jnp.asarray(sigma_v_kms), 0.0)
+    # ``where`` rather than ``maximum``: at sigma_v = 0 it passes the full
+    # derivative, where ``maximum`` passes half of it.
+    sigma_v_kms = jnp.asarray(sigma_v_kms)
+    sigma_v_kms = jnp.where(sigma_v_kms >= 0.0, sigma_v_kms, 0.0)
 
     resolution = jnp.asarray(resolution)
     sigma_lib_kms = jnp.asarray(sigma_lib_kms)
@@ -1056,13 +1059,15 @@ def apply_lsf(
 
     # Compute the effective broadening kernel, clamping to zero when
     # the library resolution exceeds the instrument resolution at some pixels.
-    # Where the variance is exactly zero the square root has an infinite
-    # derivative, which reverse mode multiplies by the clamp's zero. The width
-    # there is zero with zero gradient, so the root is taken on a stand-in.
+    # Where the library is at least as coarse as the instrument the width is
+    # sigma_v itself. Taking it directly, instead of as sqrt(0 + sigma_v**2),
+    # keeps the derivative finite at sigma_v = 0 (the root's is infinite there)
+    # and equal to the one-sided derivative with respect to sigma_v.
     deficit = sigma_inst_kms**2 - sigma_lib2
-    variance_eff = jnp.maximum(deficit, 0.0) + sigma_v2
-    has_width = variance_eff > 0.0
-    sigma_eff_kms = jnp.where(has_width, jnp.sqrt(jnp.where(has_width, variance_eff, 1.0)), 0.0)
+    resolved = deficit > 0.0
+    sigma_eff_kms = jnp.where(
+        resolved, jnp.sqrt(jnp.where(resolved, deficit, 1.0) + sigma_v2), sigma_v_kms
+    )
 
     # The single-FFT path reads one pixel scale, ``log(wave[1]/wave[0])``, which
     # describes the whole array only on a grid uniform in ln(lambda). On any other
