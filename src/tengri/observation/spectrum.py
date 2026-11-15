@@ -1056,8 +1056,13 @@ def apply_lsf(
 
     # Compute the effective broadening kernel, clamping to zero when
     # the library resolution exceeds the instrument resolution at some pixels.
+    # Where the variance is exactly zero the square root has an infinite
+    # derivative, which reverse mode multiplies by the clamp's zero. The width
+    # there is zero with zero gradient, so the root is taken on a stand-in.
     deficit = sigma_inst_kms**2 - sigma_lib2
-    sigma_eff_kms = jnp.sqrt(jnp.maximum(deficit, 0.0) + sigma_v2)
+    variance_eff = jnp.maximum(deficit, 0.0) + sigma_v2
+    has_width = variance_eff > 0.0
+    sigma_eff_kms = jnp.where(has_width, jnp.sqrt(jnp.where(has_width, variance_eff, 1.0)), 0.0)
 
     # The single-FFT path reads one pixel scale, ``log(wave[1]/wave[0])``, which
     # describes the whole array only on a grid uniform in ln(lambda). On any other
