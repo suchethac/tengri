@@ -604,8 +604,11 @@ def beagle_lines(run, windows, kind="_lum_em"):
     return np.stack(cols, axis=1) * beagle_driver.L_SUN_BEAGLE
 
 
-def neb_model(z_abs, *, continuum="analytic"):
-    """tengri build at one absolute Z: stellar and gas metallicity equal, logU and xi_d free per prediction."""
+def neb_model(z_abs, *, continuum="analytic", onset_gyr=1.0):
+    """tengri build at one absolute Z: stellar and gas metallicity equal, logU and xi_d free per prediction.
+
+    The constant history runs from lookback ``onset_gyr`` [Gyr] to the present.
+    """
     lz = float(np.log10(z_abs / Z_SOLAR_TENGRI))
     return SEDModel.build(
         ssp_data=ssp,
@@ -613,7 +616,7 @@ def neb_model(z_abs, *, continuum="analytic"):
         sfh={
             "type": "const",
             "log_total_mass": Fixed(LOG_MASS),
-            "start_gyr": Fixed(1.0),  # onset at lookback 1 Gyr
+            "start_gyr": Fixed(onset_gyr),  # onset at lookback onset_gyr
             "end_gyr": Fixed(1e-4),  # cessation at lookback 0.1 Myr, so the rate runs to the present
             "other_params": Fixed(DEFAULT),
         },
@@ -657,9 +660,9 @@ NEB_MODELS = {z: neb_model(z) for z in NEB_Z}
 CURVES = {z: tengri_curves(model) for z, model in NEB_MODELS.items()}
 
 
-def tengri_at(z, u, x):
-    """tengri lines [erg/s], log Q_H and SFR_10 at one row, read from the curve grid."""
-    lines, log_qh, sfr10 = CURVES[z]
+def tengri_at(z, u, x, *, curves=None):
+    """tengri lines [erg/s], log Q_H and SFR_10 at one row, read from the curve grid (default: the 1 Gyr history)."""
+    lines, log_qh, sfr10 = (CURVES if curves is None else curves)[z]
     i_x, i_u = NEB_XI.index(x), int(np.argmin(np.abs(NEB_CURVE_LOG_U - u)))
     return lines[i_x, i_u], log_qh[i_x, i_u], sfr10[i_x, i_u]
 
@@ -1182,6 +1185,163 @@ plt.show()
 # The difference is which ages' ionizing photons are reprocessed: a convention. At f_esc 0.1, 0.3 and 0.6 the
 # escaping continuum ratio tengri/BEAGLE is 0.585, 0.612 and 0.619, close to the 0.72 line ratio of §8e and
 # the 0.73 per-SFR ratio of §8c; the ionizing-output class, not isolated.
+
+# %% [markdown]
+# ### §8h Constant 100 Myr: the origin of the UV-line gaps
+#
+# The `s8e_const100` run holds a constant star formation rate for exactly 100 Myr, with no current episode, at
+# the 48 nodes of §8a. The raw table column is the one §8a uses. tengri's history is the same constant rate from
+# lookback 0.1 Gyr to the present, with the gutkin16 gas metallicity set equal to the stellar one. The first table
+# gives, for each line, the median and the maximum of |log10| between the sources, in the §8a format. The second sets
+# the four lines of the §8a gaps beside the same numbers for the 1 Gyr history.
+
+# %%
+H8_ONSET_GYR = 0.1  # constant history from lookback 0.1 Gyr to the present: BEAGLE max_stellar_age 8 (log yr)
+H8_LINES = ("[OIII]5007", "HeII1640", "SiIII]1888", "CIII]1908")
+r_c100 = beagle("s8e_const100")
+tab_c100 = by_section("s8e_const100")[0].input_table()
+np.testing.assert_allclose(np.asarray(tab_c100["nebular_logU"], float), [u for u, _, _ in NEB_ROWS])
+np.testing.assert_allclose(np.asarray(tab_c100["nebular_xi"], float), [x for _, _, x in NEB_ROWS])
+np.testing.assert_allclose(
+    np.asarray(tab_c100["nebular_Z"], float), np.log10([z / beagle_driver.Z_SUN_BEAGLE for _, z, _ in NEB_ROWS])
+)
+CURVES_C100 = {z: tengri_curves(neb_model(z, onset_gyr=H8_ONSET_GYR)) for z in NEB_Z}
+T100_LINES = np.array([tengri_at(z, u, x, curves=CURVES_C100)[0] for u, z, x in NEB_ROWS])
+B100_LINES = beagle_lines(r_c100, LINE_WINDOWS_AA)
+RB100, RT100 = (a / a[:, [HB]] for a in (B100_LINES, T100_LINES))
+
+print("§8h constant 100 Myr: median and max |dlog10| of line / H-beta between sources, 48 rows")
+print(f"  {'line':>12s} {'BEAGLE/tengri':>15s} {'max':>7s} {'raw/tengri':>12s} {'max':>7s} {'BEAGLE/raw':>12s} {'max':>7s}")
+for j, lab in enumerate(GK_LABELS):
+    if j == HB:
+        continue
+    d_bt = np.abs(np.log10(RB100[:, j] / RT100[:, j]))
+    d_rt = np.abs(np.log10(RR[:, j] / RT100[:, j]))
+    d_br = np.abs(np.log10(RB100[:, j] / RR[:, j]))
+    print(f"  {lab:>12s} {np.median(d_bt):15.3f} {d_bt.max():7.3f} {np.median(d_rt):12.2e} {d_rt.max():7.1e} "
+          f"{np.median(d_br):12.3f} {d_br.max():7.3f}")
+
+print("§8h beside §8a (1 Gyr history), median / max |dlog10| over 48 rows")
+print(f"  {'line':>12s} {'B/T 8a med':>11s} {'8h med':>8s} {'8a max':>8s} {'8h max':>8s} "
+      f"{'B/raw 8a med':>13s} {'8h med':>8s} {'8a max':>8s} {'8h max':>8s}")
+for lab in H8_LINES:
+    j = GK_LABELS.index(lab)
+    a_bt = np.abs(np.log10(RB[:, j] / RT[:, j]))
+    h_bt = np.abs(np.log10(RB100[:, j] / RT100[:, j]))
+    a_br = np.abs(np.log10(RB[:, j] / RR[:, j]))
+    h_br = np.abs(np.log10(RB100[:, j] / RR[:, j]))
+    print(f"  {lab:>12s} {np.median(a_bt):11.3f} {np.median(h_bt):8.3f} {a_bt.max():8.3f} {h_bt.max():8.3f} "
+          f"{np.median(a_br):13.3f} {np.median(h_br):8.3f} {a_br.max():8.3f} {h_br.max():8.3f}")
+
+PAIRS_H8 = (
+    ("BEAGLE / tengri", (RB, RT), (RB100, RT100)),
+    ("BEAGLE / raw table", (RB, RR), (RB100, RR)),
+)
+fig, axes = plt.subplots(1, 2, figsize=(9.5, 3.6), sharey=True)
+xs = np.arange(len(H8_LINES))
+for ax, (title, pair_1g, pair_100) in zip(axes, PAIRS_H8):
+    for (num, den), off, col, lab in ((pair_1g, -0.15, "0.6", "1 Gyr, §8a"), (pair_100, 0.15, "C0", "100 Myr, §8h")):
+        for k, name in enumerate(H8_LINES):
+            j = GK_LABELS.index(name)
+            vals = np.log10(num[:, j] / den[:, j])
+            ax.plot(np.full(len(vals), xs[k] + off), vals, ls="none", marker="o", ms=3.0, color=col, alpha=0.7,
+                    label=lab if k == 0 else None)
+    ax.axhline(0.0, color="0.6", lw=0.8)
+    ax.set_xticks(xs, H8_LINES, rotation=30, fontsize=7)
+    ax.set_title(title, fontsize=9)
+axes[0].set_ylabel(r"$\log_{10}$ source ratio of line / H$\beta$", fontsize=8)
+axes[0].legend(fontsize=7, frameon=False, loc="upper right")
+fig.tight_layout()
+save_fig("beagle_08h_const100.png")
+plt.show()
+
+# %% [markdown]
+# The gaps persist at 100 Myr. The He II 1640 and Si III] 1888 medians are 0.490 and 0.355 dex, the same as on the
+# 1 Gyr history to 0.001 dex, and the C III] 1908 maximum is 0.537 dex on both. The tengri ratios at 100 Myr equal the
+# raw table to 7.4e-15 dex at most, so tengri's gutkin16 line ratios do not depend on the constant history, and the
+# comparison reduces to BEAGLE's 100 Myr spectrum against the table. BEAGLE's four-line medians and maxima change by
+# 0.001 dex or less between 100 Myr and 1 Gyr, so the maximum age of a constant history is not the origin of the
+# He II 1640, Si III] 1888 or C III] 1908 gaps. Verdict: the gaps persist. The remaining difference is on BEAGLE's
+# side, its nebular template set against the public table, which this notebook does not isolate. The [O III] 5007
+# residual, 0.021 dex in the median, is in the same class.
+
+# %% [markdown]
+# ### §8i Line evolution with age
+#
+# The `s8f_age` run holds a constant rate with no current episode and sets the maximum stellar age to 10^6.5,
+# 10^7, 10^7.5, 10^8 and 10^9 yr, at logU -2.5, Z 0.014 and xi_d 0.3. tengri runs the same constant history at each
+# age, from lookback 10^(log age - 9) Gyr to the present. The public table is time-integrated, so it has no age
+# axis and §8i compares the two codes only with each other. The figure shows the two line ratios and the
+# H-alpha equivalent width against age, and the table gives the values.
+
+# %%
+AGE_LOG_I = (6.5, 7.0, 7.5, 8.0, 9.0)  # BEAGLE max_stellar_age [log yr]
+HE_I = GK_LABELS.index("HeII1640")
+r_age = beagle("s8f_age")
+tab_age = by_section("s8f_age")[0].input_table()
+np.testing.assert_allclose(np.asarray(tab_age["max_stellar_age"], float), AGE_LOG_I)
+np.testing.assert_allclose(np.asarray(tab_age["nebular_logU"], float), -2.5)
+np.testing.assert_allclose(np.asarray(tab_age["nebular_xi"], float), 0.3)
+B_AGE = beagle_lines(r_age, LINE_WINDOWS_AA)
+W_AGE_B = np.asarray(r_age.wl_rest_aa, float)
+T_AGE = []
+for lg in AGE_LOG_I:
+    pred = neb_model(0.014, onset_gyr=10.0 ** (lg - 9.0)).predict({"neb_logU": -2.5, "neb_xi_d": 0.3})
+    T_AGE.append((np.asarray(pred.wave_rest, float), np.asarray(pred.rest_sed(), float), tengri_gk_lines(pred)))
+
+EW_AGE_B = np.array([
+    B_AGE[i, HA_I] / continuum_lambda_ha(W_AGE_B, np.asarray(r_age.continuum_sed[i], float))
+    for i in range(len(AGE_LOG_I))
+])
+EW_AGE_T = np.array([lines[HA_I] / continuum_lambda_ha(w, l) for w, l, lines in T_AGE])
+O3_AGE_B = B_AGE[:, O3_I] / B_AGE[:, HB_I]
+O3_AGE_T = np.array([lines[O3_I] / lines[HB_I] for _, _, lines in T_AGE])
+HE_AGE_B = B_AGE[:, HE_I] / B_AGE[:, HB_I]
+HE_AGE_T = np.array([lines[HE_I] / lines[HB_I] for _, _, lines in T_AGE])
+
+print("§8i constant history at logU -2.5, Z 0.014, xi_d 0.3: line ratios and H-alpha EW, BEAGLE / tengri")
+print(f"  {'log age':>7s} {'age [Myr]':>10s} {'O3/Hb B':>8s} {'O3/Hb T':>8s} {'He2/Hb B':>9s} {'He2/Hb T':>9s} "
+      f"{'EW B':>8s} {'EW T':>8s} {'T/B EW':>7s}")
+for i, lg in enumerate(AGE_LOG_I):
+    print(f"  {lg:7.1f} {10.0 ** (lg - 6.0):10.2f} {O3_AGE_B[i]:8.3f} {O3_AGE_T[i]:8.3f} {HE_AGE_B[i]:9.5f} "
+          f"{HE_AGE_T[i]:9.5f} {EW_AGE_B[i]:8.1f} {EW_AGE_T[i]:8.1f} {EW_AGE_T[i] / EW_AGE_B[i]:7.3f}")
+
+fig, (ax_r, ax_e) = plt.subplots(1, 2, figsize=(9.5, 3.6))
+ax_r.plot(AGE_LOG_I, O3_AGE_B, "o", color="C0", ms=4, label=r"BEAGLE [O III]/H$\beta$")
+ax_r.plot(AGE_LOG_I, O3_AGE_T, "s-", color="C1", ms=4, lw=1.0, label=r"tengri [O III]/H$\beta$")
+ax_r.plot(AGE_LOG_I, HE_AGE_B, "^", color="C0", ms=4, mfc="none", label=r"BEAGLE He II 1640/H$\beta$")
+ax_r.plot(AGE_LOG_I, HE_AGE_T, "v--", color="C1", ms=4, mfc="none", lw=1.0, label=r"tengri He II 1640/H$\beta$")
+ax_r.set_yscale("log")
+ax_r.set_ylabel("line ratio", fontsize=8)
+ax_r.legend(fontsize=6, frameon=False)
+ax_e.plot(AGE_LOG_I, EW_AGE_B, "o", color="C0", ms=4, label="BEAGLE")
+ax_e.plot(AGE_LOG_I, EW_AGE_T, "s-", color="C1", ms=4, lw=1.0, label="tengri")
+ax_e.set_yscale("log")
+ax_e.set_ylabel(r"H$\alpha$ EW [Å]", fontsize=8)
+ax_e.legend(fontsize=7, frameon=False)
+for ax in (ax_r, ax_e):
+    ax.set_xlabel(r"maximum stellar age, $\log_{10}$ [yr]", fontsize=8)
+fig.tight_layout()
+save_fig("beagle_08i_age.png")
+plt.show()
+
+# %% [markdown]
+# BEAGLE's [O III]/H-beta is 3.400 at 3.2 Myr, 3.651 at 10 Myr and 3.649 from 32 Myr on, and its He II 1640/H-beta
+# is 0.00052, 0.00966 and 0.00966 on the same ages. tengri gives 3.327 and 0.00107 at every age, because its gutkin16
+# ratios are the time-integrated table at the same logU, Z and xi_d, and do not change with the age of a constant
+# history. The age dependence below 10 Myr is therefore model physics: BEAGLE's nebular templates are resolved in age
+# and the public table is not, so tengri has no age dependence at all. At the saturated ages the He II 1640/H-beta
+# ratio differs by 0.96 dex (a factor of 9) and the [O III]/H-beta ratio by 0.04 dex. The He II value lies inside the
+# §8a He II 1640 spread (median 0.49 dex, maximum 1.03 dex) and is classed the same way, as model physics on BEAGLE's
+# side, not isolated; the [O III] value is in the §8a class, not classified beyond that. The H-alpha EW ratio
+# tengri/BEAGLE is 0.95 at 3.2 Myr, 0.79 at 10 Myr and 0.69 at 1 Gyr. From 10 Myr on it sits near the ionizing-output
+# bracket of §8c (0.73 per SFR), a library bracket; its drift from 0.79 to 0.69 with age is not isolated here. At
+# 3.2 Myr the EW gap of 5 per cent is not classified further.
+
+# %% [markdown]
+# ### §8j Density, C/O and upper mass
+#
+# (written in the next pass)
 
 # %% [markdown]
 # ## 9. AGN narrow-line region
