@@ -30,10 +30,21 @@ isa = sorted(f for f in flags if f.startswith(("avx", "amx", "fma", "f16c")))
 with jax.enable_x64(False):
     m = t._build(load_ssp_data(t._SSP))
     tr = {
-        k: jnp.asarray(v, dtype=jnp.float32)
-        for k, v in t._TRUE.items()
-        if k in m.spec.free_params
+        k: jnp.asarray(v, dtype=jnp.float32) for k, v in t._TRUE.items() if k in m.spec.free_params
     }
     s = np.asarray(m.predict_observables(tr).spec_fnu)
 digest = hashlib.sha256(np.ascontiguousarray(s).tobytes()).hexdigest()
-print("PROBE", digest[:8], "|", model, "|", " ".join(isa), "|", jax.__version__, platform.machine())
+cache_dir = jax.config.jax_compilation_cache_dir or "off"
+print(
+    "PROBE",
+    digest[:8],
+    "| cache",
+    cache_dir,
+    "|",
+    model,
+    "|",
+    " ".join(isa),
+    "|",
+    jax.__version__,
+    platform.machine(),
+)
