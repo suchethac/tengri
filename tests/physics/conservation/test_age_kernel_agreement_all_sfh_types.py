@@ -182,6 +182,27 @@ def _build4(ssp4, obs, kernel, z, sfh, alpha, **kw):
     )
 
 
+def _pchip_each_ssp_fold(ssp4, lgmet, met_z, age_marginal, alpha):
+    """Stellar SED reference: SciPy PCHIP per (alpha, age) SSP over Z, alpha, then age.
+
+    Each SSP column is read across its metallicity nodes at ``met_z`` by
+    :class:`scipy.interpolate.PchipInterpolator`, then the two alpha nodes that bracket
+    ``alpha`` are mixed linearly and the age marginal is contracted (#3434, owner ruling
+    "PCHIP each SSP").
+    """
+    from scipy.interpolate import PchipInterpolator
+
+    from tengri.components.stellar.sps.dsps_wrapper import alpha_bracket
+
+    x = np.asarray(lgmet, dtype=float)
+    table = np.asarray(ssp4.ssp_flux, dtype=float)  # (n_met, n_alpha, n_age, n_wave)
+    per_node = PchipInterpolator(x, table, axis=0, extrapolate=False)(float(met_z))
+    ia, fa = alpha_bracket(ssp4.ssp_alpha_fe, jnp.asarray(alpha))
+    ia, fa = int(ia), float(fa)
+    at_alpha = (1.0 - fa) * per_node[ia] + fa * per_node[ia + 1]  # (n_age, n_wave)
+    return np.einsum("a,aw->w", np.asarray(age_marginal, dtype=float), at_alpha)
+
+
 @pytest.mark.parametrize("alpha", [0.0, 0.3])
 @pytest.mark.parametrize("z", ZS)
 @pytest.mark.parametrize("name", _SFH_4D_NAMES)
@@ -244,7 +265,11 @@ def test_4d_apply_matches_fast_path_on_the_collapsed_cube(ssp4, obs, kernel):
     params["met_alpha_fe"] = jnp.asarray(0.0)
     jw_fast, _, _ = stellar.compute_joint_weights(params, ssp_data=flat)
     np.testing.assert_array_equal(np.asarray(jw_4d), np.asarray(jw_fast))
-    folded = np.einsum("ma,maw->w", np.asarray(jw_fast), np.asarray(flat.ssp_flux))
+    # Exact operands (#3434): PCHIP per SSP over Z at the galaxy's met_z, then the alpha
+    # bracket, then the exact age marginal. The linear surrogate is not the read between
+    # nodes, so it is not the reference.
+    _, _, _, met_joint, met_z, lgmet = stellar.compute_joint_weights_exact(params, ssp_data=ssp4)
+    folded = _pchip_each_ssp_fold(ssp4, lgmet, met_z, np.asarray(met_joint)[0], 0.3)
     ok = folded > 0
     ratio = sed_apply[ok] / folded[ok]
     assert ratio.max() / ratio.min() - 1.0 <= 1e-8, (

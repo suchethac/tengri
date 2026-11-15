@@ -59,7 +59,7 @@ def _script_certify(monkeypatch, stats, points):
         # fails on its assertion instead of on StopIteration.
         return seq.pop(0) if len(seq) > 1 else seq[0]
 
-    def _fake_stationarity(loss, x):
+    def _fake_stationarity(loss, x, data=None):
         return _next(stat_seq)
 
     def _fake_lbfgs(flat_loss, x, *, n_steps, gtol):

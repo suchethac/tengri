@@ -343,6 +343,18 @@ class Catalog:
     missing : {"error", "mask"}, default "error"
         Policy for NaN flux values. ``"error"`` raises with guidance on
         ``missing="mask"``; ``"mask"`` sets presence to False for that cell.
+    default_relative_error : float, optional
+        Relative error [dimensionless] that fills the error of any band whose
+        error column is absent, as CIGALE's ``defaulterror``. See
+        :func:`~tengri.inference.catalog_ingest.ingest_catalog`.
+    lim_flag : {"none", "noscaling", "full"}, optional
+        CIGALE's ``lim_flag`` convention for limits and invalid bands in the
+        error column. See :func:`~tengri.inference.catalog_ingest.ingest_catalog`.
+    observed_relative_error : float, optional
+        Relative model error [dimensionless] added in quadrature, scaled by the
+        observed flux, to every detected band, as CIGALE's ``additionalerror``.
+        ``None`` adds nothing. See
+        :func:`~tengri.inference.catalog_ingest.ingest_catalog`.
 
     Raises
     ------
@@ -376,6 +388,9 @@ class Catalog:
         line_err_cols=None,
         line_censor_cols=None,
         missing="error",
+        default_relative_error=None,
+        lim_flag=None,
+        observed_relative_error=None,
     ):
         """Initialize a Catalog with eager ingestion and validation.
 
@@ -399,6 +414,9 @@ class Catalog:
                 line_err_cols=line_err_cols,
                 line_censor_cols=line_censor_cols,
                 missing=missing,
+                default_relative_error=default_relative_error,
+                lim_flag=lim_flag,
+                observed_relative_error=observed_relative_error,
             )
             self._catalog_arrays = ca
 

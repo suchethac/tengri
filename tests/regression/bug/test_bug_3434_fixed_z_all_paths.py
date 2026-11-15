@@ -19,11 +19,11 @@ from tengri import load_ssp
 from tengri._data_setup import find_data
 from tengri.components.stellar.component import (
     _delta_met_weights,
-    _lgmet_hermite_weights,
     _lgmet_weights,
     tabulated_history_weights,
 )
 from tengri.components.stellar.sps import dsps_wrapper as dw
+from tengri.components.stellar.sps.met_pchip import met_weights, read_met, read_met_per_age
 
 pytestmark = pytest.mark.regression_bug
 
@@ -132,28 +132,6 @@ def test_undeclared_paths_one_hot_at_every_node(name):
 
 
 @pytest.mark.parametrize("name", GRID_NAMES)
-def test_undeclared_paths_sum_to_one_between_nodes(name):
-    grid = _axis(name)
-    for path_name, path in _paths(grid).items():
-        for z in _query_scan(grid, 37):
-            w = path(float(z), UNDECLARED)
-            assert np.isfinite(w).all(), path_name
-            assert abs(w.sum() - 1.0) < 1e-10, path_name
-
-
-@pytest.mark.parametrize("name", GRID_NAMES)
-def test_undeclared_paths_agree_with_component_node_exact_read(name):
-    grid = _axis(name)
-    g = jnp.asarray(grid)
-    for z in _query_scan(grid, 97):
-        ref = np.asarray(_lgmet_hermite_weights(jnp.asarray(float(z)), g))
-        for path_name, path in _paths(grid).items():
-            np.testing.assert_allclose(
-                path(float(z), UNDECLARED), ref, rtol=0.0, atol=1e-10, err_msg=path_name
-            )
-
-
-@pytest.mark.parametrize("name", GRID_NAMES)
 def test_declared_kernel_nonnegative_and_normalized_600_points(name):
     grid = _axis(name)
     for path_name, path in _paths(grid).items():
@@ -199,16 +177,105 @@ def test_dsps_wrapper_uses_dsps_bin_edges_not_a_local_copy():
     assert edges[-1] == LGMET_HI
 
 
-def test_default_scatter_is_undeclared_on_every_helper():
-    # A function default is not a declaration (#3434): with no scatter argument
-    # every helper reads the grid node-exactly, as an explicit zero does.
-    grid = np.array([-4.348, -3.0, -2.0, -1.0, -0.5, 0.0])
+def _monotone_table(grid, n_age=2, n_w=3):
+    """A table that rises monotonically with metallicity in every (age, wave) column."""
+    base = np.linspace(0.0, 1.0, grid.size) ** 3
+    return (
+        base[:, None, None]
+        * (1.0 + np.arange(n_age))[None, :, None]
+        * (1.0 + 0.1 * np.arange(n_w))[None, None, :]
+    )
+
+
+def _exact_reads(grid, tab, z):
+    """Every undeclared table-read path at one log Z, with its exact reference."""
     g = jnp.asarray(grid)
-    flux = jnp.eye(grid.size)[:, None, :]
-    for z in _query_scan(grid, 41):
-        ref = np.asarray(_lgmet_hermite_weights(jnp.asarray(float(z)), g))
+    t = jnp.asarray(tab)
+    zj = jnp.asarray(float(z))
+    n_age = tab.shape[1]
+    return {
+        "dsps_interpolate_metallicity_smooth": (
+            dw.interpolate_metallicity_smooth(t, g, zj),
+            read_met(t, g, zj),
+        ),
+        "dsps_interpolate_metallicity_smooth_evolving": (
+            dw.interpolate_metallicity_smooth_evolving(t, g, jnp.full((n_age,), zj)),
+            read_met_per_age(t, g, jnp.full((n_age,), zj)),
+        ),
+        "dsps_interpolate_mass_remaining_smooth": (
+            dw.interpolate_mass_remaining_smooth(t[..., 0], g, zj),
+            read_met(t[..., 0], g, zj),
+        ),
+    }
+
+
+@pytest.mark.parametrize("name", GRID_NAMES)
+def test_exact_reads_agree_with_component_read_between_nodes(name):
+    # Owner ruling 2026-11-15: an undeclared table is read by monotone PCHIP in log Z,
+    # column by column, and every path must agree with that read between nodes.
+    grid = _axis(name)
+    tab = _monotone_table(grid)
+    for z in _query_scan(grid, 53):
+        for path_name, (got, ref) in _exact_reads(grid, tab, z).items():
+            np.testing.assert_allclose(
+                np.asarray(got), np.asarray(ref), rtol=1e-12, atol=1e-14, err_msg=path_name
+            )
+
+
+@pytest.mark.parametrize("name", GRID_NAMES)
+def test_exact_reads_are_node_exact(name):
+    grid = _axis(name)
+    tab = _monotone_table(grid)
+    for k in range(grid.size):
+        for path_name, (got, _) in _exact_reads(grid, tab, grid[k]).items():
+            ref_k = tab[k] if got.ndim == 2 else tab[k, :, 0]
+            np.testing.assert_array_equal(np.asarray(got), ref_k, err_msg=path_name)
+
+
+@pytest.mark.parametrize("name", GRID_NAMES)
+def test_exact_reads_monotone_no_overshoot(name):
+    # A monotone column stays inside its bracketing node values and never decreases.
+    grid = _axis(name)
+    tab = _monotone_table(grid)
+    lo, hi = tab[0], tab[-1]
+    prev = None
+    for z in _query_scan(grid, 97):
+        got = np.asarray(_exact_reads(grid, tab, z)["dsps_interpolate_metallicity_smooth"][0])
+        assert np.all(got >= lo - 1e-12) and np.all(got <= hi + 1e-12), float(z)
+        if prev is not None:
+            assert np.all(got >= prev - 1e-12), float(z)
+        prev = got
+
+
+@pytest.mark.parametrize("name", GRID_NAMES)
+def test_undeclared_weight_paths_are_the_linear_surrogate(name):
+    # compute_lgmet_weights and _delta_met_weights return weight vectors for bookkeeping
+    # only (no physical consumer reads them): they equal the linear surrogate, not the
+    # exact read, so they are checked against met_weights and nothing else.
+    grid = _axis(name)
+    g = jnp.asarray(grid)
+    for z in _query_scan(grid, 53):
+        ref = np.asarray(met_weights(jnp.asarray(float(z)), g))
         np.testing.assert_allclose(
-            np.asarray(dw.compute_lgmet_weights(jnp.asarray(float(z)), g)), ref, atol=1e-10
+            np.asarray(dw.compute_lgmet_weights(jnp.asarray(float(z)), g)), ref, atol=1e-12
         )
-        row = np.asarray(dw.interpolate_metallicity_smooth(flux, g, jnp.asarray(float(z))))[0]
-        np.testing.assert_allclose(row, ref, atol=1e-10)
+        np.testing.assert_allclose(
+            np.asarray(_delta_met_weights(jnp.asarray(float(z)), 0.0, g, declared=False)),
+            ref,
+            atol=1e-12,
+        )
+
+
+@pytest.mark.parametrize("name", GRID_NAMES)
+def test_default_scatter_is_undeclared_on_every_exact_path(name):
+    # A function default is not a declaration (#3434): the default reads the same
+    # exact PCHIP values as an explicit zero.
+    grid = _axis(name)
+    g = jnp.asarray(grid)
+    tab = jnp.asarray(_monotone_table(grid))
+    for z in _query_scan(grid, 17):
+        zj = jnp.asarray(float(z))
+        np.testing.assert_array_equal(
+            np.asarray(dw.interpolate_metallicity_smooth(tab, g, zj)),
+            np.asarray(dw.interpolate_metallicity_smooth(tab, g, zj, 0.0)),
+        )
