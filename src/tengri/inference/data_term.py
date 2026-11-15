@@ -440,15 +440,19 @@ def _dense_cholesky_bands(cov_inv):
 
     The marginalized terms whiten with a lower factor ``L`` of the pixel covariance, stored
     as ``data[k, i] = L[i, i - k]`` for every lag ``k``. A dense covariance is factored once
-    here, on the host, so no evaluation inverts a matrix.
+    here, on the host, so no evaluation inverts a matrix. Only the lower triangle of the
+    inverse is read and the factor overwrites it, so the peak is two ``N x N`` float64
+    arrays (the factor and its bands); a banded covariance never reaches this function.
     """
-    inverse = np.asarray(cov_inv, dtype=np.float64)
-    covariance = np.linalg.inv(inverse)
-    lower = np.linalg.cholesky(0.5 * (covariance + covariance.T))
+    import scipy.linalg
+
+    covariance = np.linalg.inv(np.asarray(cov_inv, dtype=np.float64))
+    lower = scipy.linalg.cholesky(covariance, lower=True, overwrite_a=True, check_finite=False)
     n = lower.shape[0]
     bands = np.zeros((n, n))
     for lag in range(n):
         bands[lag, lag:] = np.diagonal(lower, -lag)
+    del lower, covariance
     return jnp.asarray(bands)
 
 
