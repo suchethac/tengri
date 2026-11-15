@@ -321,14 +321,27 @@ LOWER_LIMIT = -1
 # ── Censored likelihood for upper/lower limits ────────────────────
 
 
-def _value_with_safe_derivative(value, safe):
-    """``value`` bit for bit, differentiated through ``safe`` (the same quantity).
+def _closed_form_with_safe_jvp(value_fn, safe_fn):
+    """``value_fn`` as the value, ``safe_fn`` (the same quantity) as the derivative.
 
-    ``safe`` and ``value`` are algebraically identical; ``safe`` is the spelling whose
-    first and second derivatives stay representable in float32. The sum adds an exact
-    zero (``safe - stop_gradient(safe)``) to the stop-gradient value.
+    ``value_fn(*args)`` is the closed form and is what every call returns, bit for bit.
+    ``safe_fn(*args)`` is algebraically identical but divides only by data and keeps the
+    model-dependent noise floor as an O(1) ratio, so its first and second derivatives
+    stay representable in float32 (the closed form's carry ``1 / sigma^2``, 1e60 at a
+    flux uncertainty). The tangent rule differentiates ``safe_fn`` and never evaluates
+    it for the value, so a ``safe_fn`` that overflows (a zero uncertainty, say) shows up
+    as a non-finite derivative beside the finite value, never as a changed value.
     """
-    return jax.lax.stop_gradient(value) + (safe - jax.lax.stop_gradient(safe))
+
+    @jax.custom_jvp
+    def energy(*args):
+        return value_fn(*args)
+
+    @energy.defjvp
+    def energy_jvp(primals, tangents):
+        return energy(*primals), jax.jvp(safe_fn, primals, tangents)[1]
+
+    return energy
 
 
 def censored_neg_log_likelihood(
@@ -431,66 +444,56 @@ def censored_neg_log_likelihood(
        Code Investigating GALaxy Emission. arXiv:1811.03094.
        https://doi.org/10.1051/0004-6361/201834156
     """
-    # Each band energy is carried twice. The value is the closed form below, evaluated
-    # under ``stop_gradient``; the derivatives come from an algebraically identical form
-    # whose divisions are all by ``noise_obs`` alone (data), with the model-proportional
-    # floor as the O(1) ratio q = floor / sigma_obs. That form never carries
-    # 1 / sigma^2 (1e60 at a flux uncertainty, inf in float32; the gradient and Hessian of
-    # ``(d - m) / hypot(sigma, f |m|)`` and ``log hypot`` are NaN there, #3505).
-    model_term = jnp.abs(predicted)
-    if model_sigma_frac is None:
-        sigma_eff = compute_effective_noise(noise_obs, predicted, f_cal)
-        sigma_lim = noise_obs
-        floor_eff = f_cal * model_term
-        floor_lim = jnp.zeros_like(model_term)
-    else:
-        # hypot of the two flux-proportional terms first, then with sigma_obs:
-        # the same underflow guard as compute_effective_noise. The model term
-        # is a function of the traced prediction, so its ln is kept below.
-        sigma_model = hypot(f_cal * model_term, model_sigma_frac * model_term)
-        sigma_eff = hypot(noise_obs, sigma_model)
-        sigma_lim = hypot(noise_obs, model_sigma_frac * model_term)
-        floor_eff = sigma_model
-        floor_lim = model_sigma_frac * model_term
-    shrink_eff = jnp.sqrt(1.0 + whiten(floor_eff, noise_obs) ** 2)
-    shrink_lim = jnp.sqrt(1.0 + whiten(floor_lim, noise_obs) ** 2)
-    log_sigma_safe = jnp.log(noise_obs) + 0.5 * jnp.log1p(whiten(floor_eff, noise_obs) ** 2)
-    residual = whiten(data - predicted, noise_obs)
+    has_msf = model_sigma_frac is not None
 
-    # --- Detected band energy ---
-    r = (data - predicted) / sigma_eff
-    r_safe = residual / shrink_eff
-    if dof is not None:
-        e_detected = _value_with_safe_derivative(
-            0.5 * (dof + 1.0) * jnp.log(1.0 + r**2 / dof) + jnp.log(sigma_eff),
-            0.5 * (dof + 1.0) * jnp.log(1.0 + r_safe**2 / dof) + log_sigma_safe,
+    def band_energy(data, noise_obs, predicted, mask, f_cal, msf, *, safe):
+        model_term = jnp.abs(predicted)
+        if safe:
+            # Every division is by ``noise_obs`` (data), with the model-proportional
+            # floor as the O(1) ratio q = floor / sigma_obs and sigma_eff = sigma_obs *
+            # hypot(1, q): no derivative carries 1 / sigma^2.
+            floor_eff = (
+                f_cal * model_term if not has_msf else hypot(f_cal * model_term, msf * model_term)
+            )
+            floor_lim = jnp.zeros_like(model_term) if not has_msf else msf * model_term
+            shrink_eff = hypot(1.0, floor_eff / noise_obs)
+            shrink_lim = hypot(1.0, floor_lim / noise_obs)
+            residual = (data - predicted) / noise_obs
+            r = residual / shrink_eff
+            log_sigma_eff = jnp.log(noise_obs) + jnp.log(shrink_eff)
+            z_upper, z_lower = residual / shrink_lim, -residual / shrink_lim
+        else:
+            if not has_msf:
+                sigma_eff = compute_effective_noise(noise_obs, predicted, f_cal)
+                sigma_lim = noise_obs
+            else:
+                # hypot of the two flux-proportional terms first, then with sigma_obs:
+                # the same underflow guard as compute_effective_noise.
+                sigma_model = hypot(f_cal * model_term, msf * model_term)
+                sigma_eff = hypot(noise_obs, sigma_model)
+                sigma_lim = hypot(noise_obs, msf * model_term)
+            r = (data - predicted) / sigma_eff
+            log_sigma_eff = jnp.log(sigma_eff)
+            z_upper = (data - predicted) / sigma_lim
+            z_lower = (predicted - data) / sigma_lim
+        if dof is not None:
+            e_detected = 0.5 * (dof + 1.0) * jnp.log(1.0 + r**2 / dof) + log_sigma_eff
+        else:
+            e_detected = 0.5 * r**2 + log_sigma_eff
+        e_upper = -jax.scipy.stats.norm.logcdf(z_upper)
+        e_lower = -jax.scipy.stats.norm.logcdf(z_lower)
+        # Apply the noise model band by band
+        return jnp.sum(
+            jnp.where(
+                mask == UPPER_LIMIT, e_upper, jnp.where(mask == LOWER_LIMIT, e_lower, e_detected)
+            )
         )
-    else:
-        e_detected = _value_with_safe_derivative(
-            0.5 * r**2 + jnp.log(sigma_eff), 0.5 * r_safe**2 + log_sigma_safe
-        )
 
-    # --- Upper limit: ln L = ln Phi((f_upper - m) / sigma_lim) ---
-    z_upper = (data - predicted) / sigma_lim
-    e_upper = _value_with_safe_derivative(
-        -jax.scipy.stats.norm.logcdf(z_upper),
-        -jax.scipy.stats.norm.logcdf(residual / shrink_lim),
+    msf = jnp.zeros(()) if not has_msf else model_sigma_frac
+    energy = _closed_form_with_safe_jvp(
+        lambda *a: band_energy(*a, safe=False), lambda *a: band_energy(*a, safe=True)
     )
-
-    # --- Lower limit: ln L = ln Phi((m - f_lower) / sigma_lim) ---
-    z_lower = (predicted - data) / sigma_lim
-    e_lower = _value_with_safe_derivative(
-        -jax.scipy.stats.norm.logcdf(z_lower),
-        -jax.scipy.stats.norm.logcdf(-residual / shrink_lim),
-    )
-
-    # Apply the noise model band by band
-    e_per_band = jnp.where(
-        mask == UPPER_LIMIT,
-        e_upper,
-        jnp.where(mask == LOWER_LIMIT, e_lower, e_detected),
-    )
-    return jnp.sum(e_per_band)
+    return energy(data, noise_obs, predicted, mask, f_cal, msf)
 
 
 # ── Energy and metric for JIT EVI engine ──────────────────────────
@@ -563,31 +566,35 @@ def variable_noise_hamiltonian(
     >>> round(float(e), 2)
     -4.8
     """
-    sigma_eff = compute_effective_noise(noise_obs, predicted, f_cal)
-    q2 = whiten(f_cal * jnp.abs(predicted), noise_obs) ** 2
-    r = (data - predicted) / sigma_eff
-    r_safe = whiten(data - predicted, noise_obs) / jnp.sqrt(1.0 + q2)
-    # Value from the closed form, derivatives from the same quantity divided by the data
-    # noise alone (no 1 / sigma^2, which is inf in float32; #3505).
-    logdet = jnp.sum(
-        _value_with_safe_derivative(jnp.log(sigma_eff), jnp.log(noise_obs) + 0.5 * jnp.log1p(q2))
-    )
-    r = _value_with_safe_derivative(r, r_safe)
 
-    if dof is not None:
-        # Student-t: (ν+1)/2 · Σ log(1 + r²/ν) + Σ log(σ_eff)
-        #            - n [lgamma((ν+1)/2) - lgamma(ν/2) - ½log(ν/2)]
-        energy = 0.5 * (dof + 1.0) * jnp.sum(jnp.log(1.0 + r**2 / dof)) + logdet
-        n_data = data.shape[0]
-        norm_term = (
-            jax.scipy.special.gammaln((dof + 1.0) / 2.0)
-            - jax.scipy.special.gammaln(dof / 2.0)
-            - 0.5 * jnp.log(dof / 2.0)
-        )
-        return energy - n_data * norm_term
-    else:
+    def hamiltonian(data, noise_obs, predicted, f_cal, *, safe):
+        if safe:
+            # Divide by the data noise alone: sigma_eff = sigma_obs hypot(1, q) with q =
+            # f_cal |m| / sigma_obs, so no derivative carries 1 / sigma^2 (#3505).
+            shrink = hypot(1.0, f_cal * jnp.abs(predicted) / noise_obs)
+            r = ((data - predicted) / noise_obs) / shrink
+            logdet = jnp.sum(jnp.log(noise_obs) + jnp.log(shrink))
+        else:
+            sigma_eff = compute_effective_noise(noise_obs, predicted, f_cal)
+            r = (data - predicted) / sigma_eff
+            logdet = jnp.sum(jnp.log(sigma_eff))
+        if dof is not None:
+            # Student-t: (ν+1)/2 · Σ log(1 + r²/ν) + Σ log(σ_eff)
+            #            - n [lgamma((ν+1)/2) - lgamma(ν/2) - ½log(ν/2)]
+            energy = 0.5 * (dof + 1.0) * jnp.sum(jnp.log(1.0 + r**2 / dof)) + logdet
+            n_data = data.shape[0]
+            norm_term = (
+                jax.scipy.special.gammaln((dof + 1.0) / 2.0)
+                - jax.scipy.special.gammaln(dof / 2.0)
+                - 0.5 * jnp.log(dof / 2.0)
+            )
+            return energy - n_data * norm_term
         # Gaussian: ½ Σ r² + Σ log(σ_eff)
         return 0.5 * jnp.sum(r**2) + logdet
+
+    return _closed_form_with_safe_jvp(
+        lambda *a: hamiltonian(*a, safe=False), lambda *a: hamiltonian(*a, safe=True)
+    )(data, noise_obs, predicted, f_cal)
 
 
 def variable_noise_metric_vec(
