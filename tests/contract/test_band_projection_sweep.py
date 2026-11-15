@@ -112,9 +112,12 @@ EMITTERS: dict[str, dict] = {
 SKIPS: dict[tuple[str, str], str] = {}
 
 
-def _ssp(kind, request):
+def _ssp(kind, request, physical=False):
     if kind == "wide":
-        return request.getfixturevalue("synthetic_ssp_wide")
+        # The float32 arm needs a physically normalized grid (the plain one is not).
+        return request.getfixturevalue(
+            "synthetic_ssp_wide_physical" if physical else "synthetic_ssp_wide"
+        )
     if kind == "fsps":
         return request.getfixturevalue("ssp_data_fsps")
     from tests._cloudy_grid import synthetic_ionizing_ssp
@@ -122,7 +125,7 @@ def _ssp(kind, request):
     return synthetic_ionizing_ssp()
 
 
-def _build(request, name, convention, z_name, approx):
+def _build(request, name, convention, z_name, approx, physical=False):
     """Build one cell; the caller owns the warning filter."""
     cfg = EMITTERS[name]
     bands = cfg.get("bands") or _DEFAULT_BANDS
@@ -137,7 +140,7 @@ def _build(request, name, convention, z_name, approx):
     groups.setdefault("neb", {"type": "none"})
     groups.setdefault("dust_attenuation", {"type": "none"})
     return SEDModel.build(
-        ssp_data=_ssp(cfg["ssp"], request),
+        ssp_data=_ssp(cfg["ssp"], request, physical),
         observation=obs,
         sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
         redshift=REDSHIFTS[z_name],
@@ -336,3 +339,40 @@ def _defaulted_convention_parameters():
 def test_no_function_defaults_its_filter_convention():
     found = _defaulted_convention_parameters()
     assert not found, "convention must be required, never defaulted:\n" + "\n".join(found)
+
+
+# ------------------------------------------------------------------------------- float32
+
+
+#: Emitters whose float32 table build fails on origin/main too, measured by running these cells
+#: against its sources (the Bessell cells fail identically there): a band table or its
+#: input overflows the float32 range ("overflow encountered in cast", or a non-finite CLOUDY
+#: band). Strict xfail, so the cell flips to a failure when the defect is fixed.
+_F32_ON_MAIN = {
+    "radio": "float32 overflow while casting the radio band table (also on origin/main)",
+    "dust_emission": "float32 overflow casting the dust-emission table (also on origin/main)",
+    "cloudy_grid": "non-finite float32 CLOUDY band table (also on origin/main)",
+}
+
+
+@pytest.mark.parametrize("z_name", list(REDSHIFTS))
+@pytest.mark.parametrize("convention", CONVENTIONS, ids=lambda c: c.value)
+@pytest.mark.parametrize("name", list(EMITTERS))
+def test_float32_waveprecomp_matches_the_float64_exact_path(request, name, convention, z_name):
+    """The LUT built and evaluated in pure float32 stays finite and within the LUT bound.
+
+    The float32 arm is built in its own mode (``jax.enable_x64(False)``), as the precision
+    tests do; the reference is the float64 exact path of the same cell. The bound is the LUT's
+    own (6e-3) plus float32 rounding.
+    """
+    if name in _F32_ON_MAIN:
+        request.applymarker(pytest.mark.xfail(strict=True, reason=_F32_ON_MAIN[name]))
+    approx = EMITTERS[name].get("approx", WavePrecomp())
+    with warnings.catch_warnings():
+        _fallbacks_are_errors()
+        exact = _phot(_build(request, name, convention, z_name, None, True), z_name)
+        with jax.enable_x64(False):
+            lut32 = _phot(_build(request, name, convention, z_name, approx, True), z_name)
+    assert np.all(np.isfinite(lut32)), f"{name}: non-finite float32 photometry {lut32}"
+    rel = np.abs(lut32 / np.where(exact == 0.0, 1.0, exact) - 1.0)
+    assert np.all(rel < LUT_RTOL + 1e-3), f"{name}/{convention.value}/{z_name}: per-band {rel}"
