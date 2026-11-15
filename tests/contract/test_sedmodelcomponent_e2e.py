@@ -616,10 +616,11 @@ def test_catalog_z_range_end_to_end(real_ssp_only, ssp, obs):
         "catalog_z_range should make compile_signature invariant under Fixed(z)"
     )
 
-    # Per-row photometry varies smoothly with z
-    phot_lo = m_lo.predict_photometry({})
-    phot_mid = m_mid.predict_photometry({})
-    phot_hi = m_hi.predict_photometry({})
+    # Per-row photometry varies smoothly with z. The catalog model reads redshift at
+    # call time (#3505), so each row is evaluated at its own z.
+    phot_lo = m_lo.predict_photometry({"redshift": 0.05})
+    phot_mid = m_mid.predict_photometry({"redshift": 0.5})
+    phot_hi = m_hi.predict_photometry({"redshift": 1.2})
     for phot in (phot_lo, phot_mid, phot_hi):
         _assert_phot_ok(phot)
     # All distinct — higher z is much dimmer in observed-frame F_nu.

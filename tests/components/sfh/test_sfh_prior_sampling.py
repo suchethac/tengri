@@ -76,9 +76,20 @@ def test_composed_tsnorm_burst() -> None:
     chex.assert_tree_all_finite(curves)
 
 
-def test_field_modulator_rejected() -> None:
-    with pytest.raises(NotImplementedError, match="field"):
-        sample_sfh_prior(["tsnorm", "field"], jax.random.PRNGKey(0))
+def test_field_modulator_is_served() -> None:
+    """The GP field is served: each draw carries its own latent field (#3505).
+
+    The prior fan is finite and non-negative, and two draws differ in shape, which
+    is what the modulation exists to do. The per-draw value check against the
+    registry SFR is the class sweep in ``test_sfh_single_evaluation``.
+    """
+    age, curves = sample_sfh_prior(["tsnorm", "field"], jax.random.PRNGKey(0), n=2)
+    chex.assert_shape(curves, (2, age.shape[0]))
+    chex.assert_tree_all_finite(curves)
+    assert bool(jnp.all(curves >= 0.0))
+    shape_0 = curves[0] / jnp.max(curves[0])
+    shape_1 = curves[1] / jnp.max(curves[1])
+    assert float(jnp.max(jnp.abs(shape_0 - shape_1))) > 1e-3
 
 
 def test_unknown_family_raises_keyerror() -> None:
