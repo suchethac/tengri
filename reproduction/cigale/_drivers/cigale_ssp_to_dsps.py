@@ -125,42 +125,6 @@ def convert_flux_cigale_to_dsps(
 
 
 BC03_METALLICITIES = (0.0001, 0.0004, 0.004, 0.008, 0.02, 0.05)
-M2005_METALLICITIES = (0.001, 0.01, 0.02, 0.04)
-
-
-def load_m2005_pickle(metallicity: float, imf: str = "salp") -> dict:
-    """Load a Maraston 2005 pickle from the installed pcigale's ``data/m2005``.
-
-    Parameters
-    ----------
-    metallicity : float
-        Metallicity value (one of 0.001, 0.01, 0.02, 0.04).
-    imf : str, optional
-        IMF identifier: ``"salp"`` (Salpeter) or ``"krou"`` (Kroupa). Default ``"salp"``.
-
-    Returns
-    -------
-    dict
-        Keys: 'wl' (nm), 'spec' (W/nm/Msun, shape (n_wave, n_age)), 't' (Myr),
-        'm_star' (total stellar mass per Msun formed, the pcigale ``info[0]`` row), 'imf'.
-    """
-    import pcigale.data
-
-    root = Path(pcigale.data.__file__).parent / "m2005"
-    filename = root / f"Z={metallicity}_imf={imf}.pickle"
-    if not filename.exists():
-        raise FileNotFoundError(f"M2005 pickle not found: {filename}")
-
-    with open(filename, "rb") as f:
-        ssp = pickle.load(f)
-
-    return {
-        "wl": ssp.wl,
-        "spec": ssp.spec,
-        "t": ssp.t,
-        "m_star": ssp.info[0, :],
-        "imf": ssp.imf,
-    }
 
 
 def _write_ssp_grid(
@@ -266,42 +230,6 @@ def repackage_bc03(
         source=f"CIGALE BC03 {source_label} (repackaged)",
         imf_name=imf_name,
         dtype=dtype,
-    )
-
-
-def repackage_m2005(
-    out_path: str | Path,
-    *,
-    imf: str,
-    metallicities: tuple[float, ...] = M2005_METALLICITIES,
-) -> None:
-    """
-    Repackage CIGALE Maraston 2005 SSPs for one IMF as DSPS-shaped HDF5 (float64).
-
-    Maraston 2005 (MNRAS 362, 799), Table 1: Z = 0.02 is the solar metallicity
-    ([Z/H] = +0.00), so ``log10(Z)`` nodes are absolute as for every grid here.
-
-    Parameters
-    ----------
-    out_path : str or Path
-        Output HDF5 file path.
-    imf : str
-        CIGALE IMF tag: ``"salp"`` (Salpeter) or ``"krou"`` (Kroupa).
-    metallicities : tuple of float, optional
-        Subset of ``M2005_METALLICITIES`` to write. Default: all four.
-    """
-    imf_names = {"salp": "salpeter", "krou": "kroupa"}
-    if imf not in imf_names:
-        raise ValueError(f"M2005 IMF must be 'salp' or 'krou', got {imf!r}")
-    print(f"Loading M2005 {imf_names[imf]} templates from CIGALE...")
-    data_by_z = {z: load_m2005_pickle(z, imf=imf) for z in metallicities}
-    _write_ssp_grid(
-        Path(out_path),
-        data_by_z,
-        metallicities=metallicities,
-        source=f"CIGALE M2005 {imf_names[imf].capitalize()} (repackaged)",
-        imf_name=imf_names[imf],
-        dtype=np.float64,
     )
 
 

@@ -71,6 +71,12 @@ It reads all six metallicities from the installed pcigale's
 `_drivers/data/bc03_salpeter_from_cigale.h5` (Salpeter, float64, with an
 `imf="salpeter"` attribute). Re-run it after any change to the unit conversion.
 
+CIGALE's Maraston (2005) module (`m2005`) is not repackaged here. Use the
+`m05_rhb_kroupa.h5` and `m05_rhb_salpeter.h5` grids from the ssp-spectra
+collection instead, A. Benson's HDF5 repackaging of the Maraston (2005) models
+(Zenodo, doi:10.5281/zenodo.6338464, CC BY 4.0), which load directly in DSPS
+and tengri.
+
 The output HDF5 has the DSPS-compatible shape:
 
 | key | shape | meaning |
