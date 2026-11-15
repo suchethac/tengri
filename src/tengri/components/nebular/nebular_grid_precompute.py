@@ -466,9 +466,11 @@ def _ssp_met_nodes(model):
 def _snap_axis_to_nodes(lo, hi, n, nodes):
     """Ascending grid on ``[lo, hi]``: the uniform axis **plus** every interior node.
 
-    ``met_logzsol`` reaches the forward through a linear interpolation over the SSP
-    metallicity axis, whose derivative jumps at each SSP node. The exact per-Q_H
-    emissivity is therefore piecewise-smooth with C0 kinks at *known* locations. A
+    ``met_logzsol`` reaches the forward through an interpolation over the SSP
+    metallicity axis that is node-exact but not smooth across the nodes: linear before
+    #3434, node-exact cubic Hermite since (#3462), which also curves inside each cell, so
+    a linear table now carries a ~1 % [OIII] floor in the widest near-solar cell. The exact
+    per-Q_H emissivity is piecewise-smooth with kinks at *known* locations. A
     PCHIP interpolant is node-exact, so a knot placed on a kink reproduces it exactly
     instead of smearing it across a cell -- an O(h) error becomes O(h^2).
 

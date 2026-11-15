@@ -264,13 +264,37 @@ def _get_or_build_map_fns(model, loss_fn, optimizer, learning_rate):
 # ── scipy quasi-Newton path (single-galaxy, no JAX compilation for optimizer)
 
 
-def _flat_map_loss(loss_fn, data_args, unravel_fn):
-    """Return ``flat_loss(vec)``, the negative log-posterior of a flat standardized vector."""
+def _flat_map_loss(loss_fn, unravel_fn):
+    """Return ``flat_loss(vec, data)``, the negative log-posterior of a flat standardized vector.
 
-    def flat_loss(vec):
+    The data is an argument, not a closure, so the compiled certificate is reused for
+    every dataset of the same shape (#3530).
+    """
+
+    def flat_loss(vec, data_args):
         return loss_fn(unravel_fn(vec), data_args)
 
     return flat_loss
+
+
+def _certificate_loss(model, loss_fn, init_params):
+    """The certificate's flat objective, built once per model, loss and parameter structure.
+
+    A fresh closure per call would miss the compiled-derivative cache, so every warm MAP
+    run re-traced and reloaded its executable from the persistent compile cache (#3530).
+    The entry lives in the model's cache beside ``loss_fn``, which it holds.
+    """
+    _, unravel_fn = ravel_pytree(init_params)
+    leaves = jax.tree_util.tree_leaves(init_params)
+    structure = (
+        jax.tree_util.tree_structure(init_params),
+        tuple((jnp.shape(leaf), str(jnp.result_type(leaf))) for leaf in leaves),
+    )
+    memo = _model_cache_owner.get_or_compile_model(model).setdefault("map_certificate_loss", {})
+    key = (id(loss_fn), structure)
+    if key not in memo:
+        memo[key] = _flat_map_loss(loss_fn, unravel_fn)
+    return memo[key]
 
 
 def _run_map_scipy(
@@ -286,7 +310,6 @@ def _run_map_scipy(
     verbose,
     verbose_steps=False,
     print_every=50,
-    certify_loss=None,
 ):
     """MAP optimization via scipy quasi-Newton solvers.
 
@@ -390,16 +413,27 @@ def _run_map_scipy(
 
     _reject_nonfinite_map(unravel_fn(jnp.asarray(result.x)))
 
-    if certify_loss is None:
-        certify_loss = _flat_map_loss(loss_fn, data_args, unravel_fn)
-
-    x_final, final_loss, grad_norm, decrement, converged, attempts, reason = _certify_map_point(
-        certify_loss,
-        jnp.asarray(result.x),
-        scipy_success=bool(result.success),
-        n_steps=n_steps,
-        gtol=tol,
+    certify_loss = _certificate_loss(context.model, loss_fn, init_params)
+    # A converged stop needs no certificate: scipy's point is the answer (#3530). The
+    # certificate is called only when this gate says its check is needed.
+    x_scipy = jnp.asarray(result.x)
+    accepted = _scipy_stop_accepted(
+        certify_loss, x_scipy, scipy_success=bool(result.success), gtol=tol, data=data_args
     )
+    if accepted is not None:
+        final_loss, grad_norm = accepted
+        x_final, decrement, converged, attempts, reason = x_scipy, None, True, 1, None
+    else:
+        x_final, final_loss, grad_norm, decrement, converged, attempts, reason = (
+            _certify_map_point(
+                certify_loss,
+                x_scipy,
+                scipy_success=bool(result.success),
+                n_steps=n_steps,
+                gtol=tol,
+                data=data_args,
+            )
+        )
     if reason == "hessian_not_finite":
         warn_measured(
             f"MAP point not certified: the Hessian at the returned point has non-finite "
@@ -519,13 +553,36 @@ def _accept_round(candidate, best, bar: float) -> bool:
     return candidate.stationary and candidate.nlp - best.nlp <= bar
 
 
-def _certify_map_point(flat_loss, x, *, scipy_success, n_steps, gtol):
+def _bind_data(flat_loss, data):
+    """``vec -> flat_loss(vec, data)``, or ``flat_loss`` itself when there is no data."""
+    if data is None:
+        return flat_loss
+    return lambda vec: flat_loss(vec, data)
+
+
+def _scipy_stop_accepted(flat_loss, x, *, scipy_success, gtol, data=None):
+    """``(nlp, grad_norm)`` at scipy's stop when it is accepted without a certificate.
+
+    Accepted when scipy reported success and max |grad| at ``x`` is below ``gtol``;
+    ``None`` otherwise, meaning the Newton-decrement certificate must decide.
+    """
+    value_and_grad, _ = compiled_derivatives(flat_loss)
+    value, grad = value_and_grad(x, data)
+    if scipy_success and float(jnp.max(jnp.abs(grad))) < gtol:
+        return float(value), float(jnp.linalg.norm(grad))
+    return None
+
+
+def _certify_map_point(flat_loss, x, *, scipy_success, n_steps, gtol, data=None):
     """Return the point to report after scipy's stop, continuing with the shared driver if needed.
 
     Parameters
     ----------
     flat_loss : callable
-        ``flat_loss(vec) -> scalar``, the negative log-posterior of a flat standardized vector.
+        ``flat_loss(vec) -> scalar``, the negative log-posterior of a flat standardized vector,
+        or ``flat_loss(vec, data)`` when ``data`` is given.
+    data : pytree, optional
+        The dataset, passed to ``flat_loss`` as a traced argument.
     x : jax.Array, shape (D,)
         scipy's stopping point.
     scipy_success : bool
@@ -574,11 +631,13 @@ def _certify_map_point(flat_loss, x, *, scipy_success, n_steps, gtol):
     is returned, converged when it is genuinely stationary, otherwise with
     ``reason="precision_limit"``. Float64 keeps its continuation rounds.
     """
-    value_and_grad, _ = compiled_derivatives(flat_loss)
-    value, grad = value_and_grad(x)
-    if scipy_success and float(jnp.max(jnp.abs(grad))) < gtol:
-        return x, float(value), float(jnp.linalg.norm(grad)), None, True, 1, None
-    stat = stationarity(flat_loss, x)
+    accepted = _scipy_stop_accepted(
+        flat_loss, x, scipy_success=scipy_success, gtol=gtol, data=data
+    )
+    if accepted is not None:
+        nlp, grad_norm = accepted
+        return x, nlp, grad_norm, None, True, 1, None
+    stat = stationarity(flat_loss, x, data)
     attempts = 1
     if scipy_success and stat.stationary:
         return x, stat.nlp, stat.grad_norm, stat.decrement, True, attempts, None
@@ -606,9 +665,9 @@ def _certify_map_point(flat_loss, x, *, scipy_success, n_steps, gtol):
     for _ in range(_MAP_CONTINUATION_ROUNDS):
         if not best.hessian_finite:
             break
-        x, _, _ = lbfgs_to_gtol(flat_loss, best_x, n_steps=n_steps, gtol=gtol)
+        x, _, _ = lbfgs_to_gtol(_bind_data(flat_loss, data), best_x, n_steps=n_steps, gtol=gtol)
         attempts += 1
-        stat = stationarity(flat_loss, x)
+        stat = stationarity(flat_loss, x, data)
         if not _accept_round(stat, best, _round_off_bar(best.nlp, dtype)):
             # The next round would start from the same best point, and lbfgs_to_gtol is
             # deterministic (bytes identical, float32 and float64), so it would replay this one.
@@ -804,14 +863,9 @@ def _run_map_multistart_scipy(
 
     keys = jax.random.split(key, n_restarts)
     results = []
-    certify_loss = None
     t0 = time.time()
     for k in keys:
         init_params = context.initial_params(k, init_from=None)
-        if certify_loss is None:
-            # One objective for every restart: the restarts share a pytree structure, so
-            # the first restart's unravel serves all, and the certificate compiles once.
-            certify_loss = _flat_map_loss(loss_fn, data_args, ravel_pytree(init_params)[1])
         results.append(
             _run_map_scipy(
                 context,
@@ -823,7 +877,6 @@ def _run_map_multistart_scipy(
                 n_steps=n_steps,
                 tol=tol,
                 verbose=False,
-                certify_loss=certify_loss,
             )
         )
     final_losses = jnp.asarray([float(r.diagnostics["final_loss"]) for r in results])

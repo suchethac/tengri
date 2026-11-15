@@ -53,11 +53,17 @@ BASE = {
 }
 #: log F_r at three generic edge positions, measured with main's source (the
 #: construction changes nothing away from a knot).
+# Re-pinned 2026-11-15 after #3434 (in #3462): an undeclared metallicity scatter is now a node-
+# exact cubic-Hermite read of the SSP; log F_r moves by +0.0042 to +0.0052 (0.43 to 0.52 % in
+# flux). 8aff37cb3 reproduces the previous values exactly.
 LOG_FR_AWAY = {
-    "tflex_frac": ((1.5, 1.77, 2.2), (-59.86834783997114, -59.8749645822331, -59.885871746508094)),
+    "tflex_frac": (
+        (1.5, 1.77, 2.2),
+        (-59.863622400839155, -59.87025197724868, -59.881193155604585),
+    ),
     "tlast_frac": (
         (0.33, 0.57, 0.81),
-        (-59.762773461102135, -59.926139655984436, -60.06583485572039),
+        (-59.7575751450012, -59.92157078070381, -60.06157907064469),
     ),
 }
 #: Swept edge range [Gyr], keyed by the timing parameter it sweeps.

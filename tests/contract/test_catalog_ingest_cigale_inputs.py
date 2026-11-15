@@ -332,3 +332,25 @@ def test_read_catalog_unregistered_filter_column_skipped(tmp_path):
     cat = read_catalog(path, default_relative_error=0.1)
     assert "unknown_filter" not in cat.filter_names
     assert cat.filter_names == ("sdss_g",)
+
+
+def test_read_catalog_warns_when_a_registered_filter_column_is_dropped(tmp_path):
+    """A registered filter column with no ``_err`` partner is dropped, and the drop is named.
+
+    pcigale's ``_check_errors`` refuses such a band unless ``defaulterror`` is set. The
+    tengri default skips it, so the skip must not be silent.
+    """
+    path = _write_csv(tmp_path / "c.csv", _CSV_ROWS)
+    with pytest.warns(UserWarning, match=r"sdss_i.*no 'sdss_i_err'.*dropped"):
+        cat = read_catalog(path)
+    assert cat.filter_names == ("sdss_g", "sdss_r")
+
+
+def test_read_catalog_does_not_warn_for_a_non_filter_column(tmp_path):
+    """A non-filter column without ``_err`` (a comment, a flag) is not a dropped band."""
+    path = tmp_path / "c.csv"
+    path.write_text("id,redshift,sdss_g,sdss_g_err,comment\na,0.1,1.0,0.1,ok\n")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        cat = read_catalog(path)
+    assert cat.filter_names == ("sdss_g",)

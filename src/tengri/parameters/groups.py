@@ -3055,9 +3055,37 @@ def _all_law_shape_params() -> frozenset[str]:
     return frozenset().union(*(_law_shape_params(name) for name in DUST_LAWS), frozenset())
 
 
+#: Shape parameters a law reads but that an ``all_params`` wildcard must not free.
+#: The power law's UV bump is opt-in: a wildcard keeps the bare Charlot & Fall
+#: curve, and the bump is freed only when named explicitly. Laws that read the
+#: bump by default (noll09, ...) are not listed here and keep the wildcard freeing it.
+_WILDCARD_EXCLUDED_LAW_PARAMS: dict[str, frozenset[str]] = {
+    "power_law": frozenset({"dust_bump_strength", "dust_bump_x0", "dust_bump_gamma"}),
+}
+
 #: Law slots a two-component/single-component dust model can select. Each is an
 #: independent choice, so a shape parameter is live if *any* slot's law reads it.
 _DUST_LAW_SLOTS: tuple[str, ...] = ("dust_law_bc", "dust_law_diff", "dust_law_neb")
+
+
+def _selected_dust_laws(structural_params: Parameters) -> list[str]:
+    """Attenuation law names the structural spec selects, one per filled slot.
+
+    Parameters
+    ----------
+    structural_params : Parameters
+        Structural-only spec; the law slots are read off it.
+
+    Returns
+    -------
+    list of str
+        Law names in slot order, with unfilled slots omitted.
+    """
+    return [
+        law
+        for law in (getattr(structural_params, slot, None) for slot in _DUST_LAW_SLOTS)
+        if law is not None
+    ]
 
 
 def _agn_ir_frac_explicit_and_active(agn_dict: object) -> bool:
@@ -3201,9 +3229,8 @@ def _dust_wildcard_scopes(
         # inverted.
         active_shape = frozenset().union(
             *(
-                _law_shape_params(law)
-                for law in (getattr(structural_params, slot, None) for slot in _DUST_LAW_SLOTS)
-                if law is not None
+                _law_shape_params(law) - _WILDCARD_EXCLUDED_LAW_PARAMS.get(law, frozenset())
+                for law in _selected_dust_laws(structural_params)
             ),
             frozenset(),
         )
@@ -6750,6 +6777,13 @@ def _variant_scoped_param_names(
             return law is not None and short_to_full(stem) in _law_shape_params(law)
 
         shared = {name for name in shared if name not in per_screen or _screen_law_reads(name)}
+        # Naming a flat parameter explicitly is accepted whenever a selected law reads it,
+        # including the opt-in bump that the wildcard scope leaves out.
+        explicit_reads = frozenset().union(
+            *(_law_shape_params(law) for law in _selected_dust_laws(structural_params)),
+            frozenset(),
+        )
+        shared = shared | (owned & explicit_reads)
 
     return frozenset(set(scope) | shared)
 
@@ -9690,7 +9724,45 @@ def parameters_to_groups(spec: Parameters) -> dict:
         # Only include if non-default
         result["n_grid"] = spec.n_grid
 
-    return result
+    return _without_undeclared_met_scatter(result, spec)
+
+
+def _without_undeclared_met_scatter(result: dict, spec: Parameters) -> dict:
+    """Withhold an undeclared metallicity scatter from the emitted groups.
+
+    The scatter decides how a metallicity is read from the SSP grid: an undeclared
+    scatter is read node-exactly, a declared one through the lognormal kernel
+    (``_met_scatter_declared``). A flat spec lists every parameter explicitly, so
+    the untouched default would be emitted as a user ``Fixed`` and read back as a
+    declaration, which changes the photometry of the round-tripped model. The key
+    is withheld unless the spec declares it; the grammar then fills in the same
+    registry default the original carried.
+
+    Parameters
+    ----------
+    result : dict
+        Nested-dict output of :func:`parameters_to_groups`.
+    spec : Parameters
+        The spec the output was emitted from.
+
+    Returns
+    -------
+    dict
+        ``result`` with the ``logzsol_scatter`` key removed from its groups when
+        the scatter is undeclared, otherwise ``result`` unchanged.
+    """
+    from tengri.forward.sed_model import _met_scatter_declared
+
+    if _met_scatter_declared(spec):
+        return result
+    return {
+        key: (
+            {k: v for k, v in value.items() if k != "logzsol_scatter"}
+            if isinstance(value, dict)
+            else value
+        )
+        for key, value in result.items()
+    }
 
 
 @cache
