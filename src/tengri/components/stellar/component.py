@@ -1445,6 +1445,33 @@ def _native_met_slopes(ssp_data):
     return pchip_node_slopes(ssp_data.ssp_flux, ssp_data.ssp_lgmet)
 
 
+def _lut_array_fields(lut) -> dict:
+    """The array fields of a stellar LUT, with its native-slope sibling nested (#2812, #3541).
+
+    The sibling is itself a LUT of the same type, so its arrays are collected the same way
+    and nested under ``"slopes"``. Python scalars and ``None`` fields stay on the closure.
+    """
+    fields = lut._asdict()
+    arrays = {
+        name: value
+        for name, value in fields.items()
+        if name != "slopes" and isinstance(value, (np.ndarray, jax.Array))
+    }
+    if fields.get("slopes") is not None:
+        arrays["slopes"] = _lut_array_fields(fields["slopes"])
+    return arrays
+
+
+def _lut_with_array_fields(lut, threaded: dict):
+    """``lut`` with its array fields, and its slope sibling's, taken from ``threaded``."""
+    updates = {name: value for name, value in threaded.items() if name != "slopes"}
+    new = lut._replace(**updates)
+    sibling = threaded.get("slopes")
+    if sibling is not None and new.slopes is not None:
+        new = new._replace(slopes=_lut_with_array_fields(new.slopes, sibling))
+    return new
+
+
 def _read_pair(table, slope):
     """``(values, native slopes)`` for a Hermite metallicity read (#3541).
 
@@ -3279,12 +3306,7 @@ class StellarSEDComponent:
             lut = getattr(self._state, name)
             if lut is None:
                 continue
-            arrays = {
-                field_name: value
-                for field_name, value in lut._asdict().items()
-                if isinstance(value, (np.ndarray, jax.Array))
-            }
-            out[name] = arrays
+            out[name] = _lut_array_fields(lut)
         return out or None
 
     def _threaded_lut(self, template_data, name: str):
@@ -3292,13 +3314,16 @@ class StellarSEDComponent:
 
         ``template_data["stellar"][name]`` (#2812) overrides the closure's array
         fields via ``_replace``; with no threaded entry the closure LUT is
-        returned unchanged.
+        returned unchanged. The native-slope sibling (#3541) is threaded the same
+        way, nested under ``"slopes"``: a sibling left on the closure would come
+        from whichever model compiled the shared kernel, and with a different
+        sub-band count it fails to broadcast against the threaded values.
         """
         lut = getattr(self._state, name)
         if isinstance(template_data, dict):
             stellar = template_data.get("stellar")
             if isinstance(stellar, dict) and name in stellar:
-                return lut._replace(**stellar[name])
+                return _lut_with_array_fields(lut, stellar[name])
         return lut
 
     def apply(
