@@ -188,7 +188,8 @@ def _nebular_physics_sections() -> tuple[MockRun, ...]:
     )
     const100 = MockRun(
         section="s8e_const100",
-        rows=_nebular_rows(),
+        # No current episode: a pure constant 100 Myr history is the public table's population.
+        rows=tuple({k: v for k, v in r.items() if k != "sfr"} for r in _nebular_rows()),
         templates="ineb_june16",
         nebular=True,
         igm=None,
@@ -199,7 +200,11 @@ def _nebular_physics_sections() -> tuple[MockRun, ...]:
     )
     age = MockRun(
         section="s8f_age",
-        rows=tuple(_fid_row(max_stellar_age=age) for age in (6.5, 7.0, 7.5, 8.0, 9.0)),
+        # No current episode, so the lines follow the age of the constant history alone.
+        rows=tuple(
+            {k: v for k, v in _fid_row(max_stellar_age=age).items() if k != "sfr"}
+            for age in (6.5, 7.0, 7.5, 8.0, 9.0)
+        ),
         templates="ineb_june16",
         nebular=True,
         igm=None,

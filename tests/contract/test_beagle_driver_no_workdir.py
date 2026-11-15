@@ -448,8 +448,16 @@ def test_episode_section_varies_the_current_timescale_per_row() -> None:
 
 def test_const100_uses_the_s8_node_grid() -> None:
     const = M.by_section("s8e_const100")[0]
-    assert const.rows == M.by_section("s8_nebular")[0].rows
+    nodes = [{k: v for k, v in r.items() if k != "sfr"} for r in M.by_section("s8_nebular")[0].rows]
+    assert list(const.rows) == nodes
+    assert all("sfr" not in r for r in const.rows)  # pure constant history, no current episode
     assert "max_stellar_age mock:type:fixed value:8.0" in const.param_text()
+
+
+def test_age_section_has_no_current_episode() -> None:
+    age = M.by_section("s8f_age")[0]
+    assert [r["max_stellar_age"] for r in age.rows] == [6.5, 7.0, 7.5, 8.0, 9.0]
+    assert all("sfr" not in r for r in age.rows)
 
 
 @pytest.mark.parametrize(
