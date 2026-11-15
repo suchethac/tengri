@@ -68,6 +68,7 @@ import jax.numpy as jnp
 from jax.flatten_util import ravel_pytree
 
 from tengri.inference.backends.evidence import _require_converged_evidence
+from tengri.inference.curvature import curvature
 from tengri.inference.likelihoods.gaussian import inv_noise_std
 from tengri.inference.newton import newton_polish
 from tengri.utils.transforms import to_bounded, to_unbounded
@@ -1425,7 +1426,7 @@ def run_flat_sampler(
         # reference D=516 this is ~D gradient-equivalents, comparable to one
         # more MAP ascent. cov = (-H)^{-1} sampled via -H = L L^T,
         # draw = mode + solve(L^T, eps) so cov(draw) = (L L^T)^{-1} exactly.
-        neg_hess = -jax.hessian(prob.log_prob)(mode)
+        neg_hess = -curvature(prob.log_prob, mode, want=("hess",)).hess
         chol = jnp.linalg.cholesky(neg_hess)
         _require_psd_curvature(chol, method)
         eps = jax.random.normal(key_run, (n_samples, prob.n_dim))

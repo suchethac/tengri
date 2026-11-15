@@ -1669,18 +1669,10 @@ and a `(n_draws, n_pixels)` memory spike on spectroscopy models
 
 - the parameter spec exposes `_distributions` (a plain `Parameters` instance, not a subclass
   or wrapper that lacks this interface);
-- float64 **only for `laplace`** — the sole member of `HESSIAN_BACKEND_SET`, which is the
-  set this guard matches on. (Preconditioning also differentiates the objective twice, via
-  `negative_hessian_metric`, but `precondition=` is not part of the match; see #2378.) Profiling is
-  **available in float32 on every gradient-only sampler**: `mcmc_nuts`, `mcmc_hmc`,
-  `mcmc_mclmc`, `mcmc_barker`, `mcmc_mala`, `mcmc_smc` and the rest of
-  `PROFILE_MASS_BACKENDS`. Two things this bullet used to get wrong, both worth stating
-  because they pointed a float32 user away from a path that works:
-  - The NaN is **not** the marginal's. It is the SED model's photometry Hessian under
-    `jax.hessian` — a forward-over-reverse seam that **reproduces with
-    `profile_mass=False`** on the same fixture (measured 2026-09-11,
-    `bench/reports/2026-09-11_profile_mass_20s.md` Finding 8). The refusal names which
-    objective is being differentiated twice, not which fitting path asked for it.
+- profiling is available in float32 and float64 on every backend in `PROFILE_MASS_BACKENDS`,
+  `laplace` included: the Hessian of the profiled and the unprofiled objective is finite in
+  both dtypes and `profile_mass="auto"` resolves the same way in each (#3505). Every
+  second derivative of the objective goes through `tengri.inference.curvature.curvature`.
   - The quadratic itself is *built* for float32 rather than hindered by it. `_profile_stats`
     whitens by the per-entry errors before squaring (`snr_pred = whiten(pred, noise)`), so
     no erg/s-scale intermediate is ever formed: raw `sum f**2` on a photometry vector would

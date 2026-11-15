@@ -15,6 +15,8 @@ from dataclasses import dataclass
 import jax
 import jax.numpy as jnp
 
+from tengri.inference.curvature import curvature
+
 #: Newton-decrement bar [nats] below which a MAP point counts as stationary (#3205).
 MAP_DECREMENT_BAR = 1e-8
 
@@ -37,7 +39,8 @@ def compiled_derivatives(loss: Callable[[jax.Array], jax.Array]):
     value_and_grad : callable
         ``value_and_grad(x) -> (value, grad)``, jitted.
     hessian : callable
-        ``hessian(x) -> ndarray, shape (D, D)``, jitted.
+        ``hessian(x) -> Curvature`` with ``hess`` of shape ``(D, D)`` and the ``finite``
+        flag, jitted.
 
     Notes
     -----
@@ -54,7 +57,10 @@ def compiled_derivatives(loss: Callable[[jax.Array], jax.Array]):
                 raise RuntimeError("the loss was collected while its derivatives were in use")
             return f(vec)
 
-        pair = (jax.jit(jax.value_and_grad(live)), jax.jit(jax.hessian(live)))
+        pair = (
+            jax.jit(jax.value_and_grad(live)),
+            jax.jit(lambda vec: curvature(live, vec, want=("hess",))),
+        )
         _DERIVATIVES[loss] = pair
     return pair
 
@@ -123,9 +129,10 @@ def stationarity(loss: Callable[[jax.Array], jax.Array], x: jax.Array) -> Statio
     x = jnp.asarray(x)
     value_and_grad, hessian_fn = compiled_derivatives(loss)
     value, grad = value_and_grad(x)
-    hessian = hessian_fn(x)
+    curv = hessian_fn(x)
+    hessian = curv.hess
     grad_norm = float(jnp.linalg.norm(grad))
-    if not bool(jnp.all(jnp.isfinite(hessian))):
+    if not bool(curv.finite):
         return Stationarity(
             nlp=float(value),
             grad_norm=grad_norm,

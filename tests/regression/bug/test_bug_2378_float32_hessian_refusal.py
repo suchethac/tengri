@@ -1,40 +1,30 @@
 # SPDX-License-Identifier: BSD-3-Clause
-r"""Bug #2378: float32 Hessian refusal names the dtype in both routes.
+r"""Bug #2378 / #3505: float32 Laplace is served and agrees with float64.
 
-## Mechanism
+The fitter used to refuse ``fitter.run("laplace")`` in float32 on the claim that the
+photometry Hessian is all-NaN there. That was measured on one narrow fixture and does
+not hold: the Hessian of the standardized log posterior at the MAP is finite in float32
+and agrees with float64 (#3505, ``test_dtype_curvature_sweep.py``).
 
-The float32 refusal on ``HESSIAN_BACKEND_SET`` backends claims to cover two Hessian
-routes: ``jax.hessian`` (laplace) and preconditioning's ``negative_hessian_metric``
-(optional metric whitening for NUTS). Only laplace is guarded. Preconditioning under
-float32 fails with a misleading diagnostic that names "a diverged MAP" as the cause
-when the cause is the dtype. The SED model's photometry Hessian is all-NaN in float32
-(a JAX forward-over-reverse seam), not specific to profiling.
+Assertions
 
-## Reviewer scenario
+(a) Under float32, ``fitter.run("laplace")`` runs with ``profile_mass="auto"``.
 
-The disable-then-raise pattern at ``mass_profile.py:719-720`` mutates a ``Fitter``
-unconditionally but then raises. A caller catching that ``ValueError`` and reusing the
-Fitter (the warm-start MAP→NUTS pattern) gets a Fitter in an inconsistent state: the
-profiled loss function caches are keyed on the original free-parameter set, which no
-longer matches ``fitter._free_names``.
+(b) The float32 posterior mean is within 0.1 sigma of the float64 one and the covariance
+    within 5 %. Both runs draw 20000 samples from the same key, so the Monte Carlo
+    noise is about 0.007 sigma on the mean and about 1 % on the covariance.
 
-## Assertions
+(c) ``profile_mass="auto"`` engages identically in both dtypes.
 
-(a) Under float32, ``fitter.run("laplace")`` or direct resolver call raises ``ValueError``
-    whose message contains "float32", and afterwards ``fitter._profile_mass`` and the
-    free-parameter count are unchanged from before the call (invariant: reuse-after-failure
-    is safe).
-
-(b) Under float32, preconditioning's non-finite-metric error message names "float32"
-    as a candidate cause.
-
-(c) Under float64, the preconditioning message does not mention float32.
+(d) A non-finite preconditioning input is reported as an upstream failure in both dtypes,
+    with no dtype named as the cause.
 """
 
 from __future__ import annotations
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 from tengri import ForwardModel, SEDModel, generate_mock, recipes
@@ -44,101 +34,84 @@ from tengri.observation import Observation, Photometry
 
 pytestmark = pytest.mark.regression_bug
 
+N_SAMPLES = 20000
+MEAN_TOL_SIGMA = 0.1
+COV_TOL = 0.05
 
-class TestFloat32HessianRefusal:
-    """Float32 refusal names the dtype in both laplace and preconditioning routes."""
 
-    @pytest.fixture
-    def ssp_bare(self):
-        from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
+def _ssp():
+    from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 
-        return load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
+    return load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
 
-    @pytest.fixture
-    def minimal_model(self, ssp_bare):
-        """Minimal stellar model for fast Fitter construction."""
+
+def _build_fit(ssp, flux, noise):
+    obs = Observation(photometry=Photometry.from_names(["sdss_r"]))
+    model = SEDModel.build(ssp_data=ssp, observation=obs, **recipes.mock_recovery_minimal())
+    fitter = Fitter(
+        ForwardModel.build(sed=model),
+        data=jnp.asarray(flux),
+        noise=jnp.asarray(noise),
+        profile_mass="auto",
+    )
+    return model, fitter
+
+
+@pytest.fixture(scope="module")
+def mock():
+    ssp = _ssp()
+    with jax.enable_x64(True):
         obs = Observation(photometry=Photometry.from_names(["sdss_r"]))
-        return SEDModel.build(
-            ssp_data=ssp_bare,
-            observation=obs,
-            **recipes.mock_recovery_minimal(),
-        )
-
-    @pytest.fixture
-    def fitter_f32(self, minimal_model):
-        """Fitter under float32, with profiling enabled."""
-        forward = ForwardModel.build(sed=minimal_model)
+        model = SEDModel.build(ssp_data=ssp, observation=obs, **recipes.mock_recovery_minimal())
         key_truth, key_mock = jax.random.split(jax.random.PRNGKey(0))
-        truth = minimal_model.spec.sample(key_truth)
-        mock = generate_mock(minimal_model, truth, key=key_mock, snr=30.0)
-        flux = jnp.asarray(mock["flux_obs"])
-        noise = jnp.asarray(mock["noise"])
-        return Fitter(
-            forward,
-            data=flux,
-            noise=noise,
-            profile_mass="auto",
-        )
+        truth = model.spec.sample(key_truth)
+        data = generate_mock(model, truth, key=key_mock, snr=30.0)
+        return ssp, np.asarray(data["flux_obs"]), np.asarray(data["noise"])
 
-    def test_laplace_under_float32_raises_with_dtype_in_message(self, fitter_f32):
-        """Laplace refusal under float32 names the dtype in its error."""
-        with jax.enable_x64(False):
-            assert jnp.result_type(float) == jnp.float32
-            # Record state before the call
-            profile_mass_before = fitter_f32._profile_mass
-            free_names_before = tuple(fitter_f32._free_names)
 
-            with pytest.raises(ValueError) as excinfo:
-                fitter_f32.run("laplace")
+def _run(mock, x64):
+    ssp, flux, noise = mock
+    with jax.enable_x64(x64):
+        assert jnp.result_type(float) == (jnp.float64 if x64 else jnp.float32)
+        _, fitter = _build_fit(ssp, flux, noise)
+        post = fitter.run("laplace", key=jax.random.PRNGKey(2), n_samples=N_SAMPLES)
+        names = sorted(post.samples)
+        draws = np.stack([np.asarray(post.samples[n], dtype=np.float64) for n in names], 1)
+        return names, draws, bool(fitter._profile_mass)
 
-            msg = str(excinfo.value)
-            assert "float32" in msg.lower(), (
-                f"float32 refusal message should name the dtype: {msg}"
-            )
 
-            # Invariant: reuse-after-failure is safe
-            assert fitter_f32._profile_mass == profile_mass_before, (
-                "disable-then-raise mutated _profile_mass even though it raises"
-            )
-            assert tuple(fitter_f32._free_names) == free_names_before, (
-                "free-parameter count changed after exception (reuse-after-failure breaks)"
-            )
+@pytest.fixture(scope="module")
+def laplace_f64(mock):
+    return _run(mock, True)
 
-    def test_preconditioning_under_float32_names_dtype(self):
-        """Preconditioning non-finite-metric error names float32 as a candidate cause."""
 
-        def quartic(xi):
-            return -0.5 * jnp.sum(xi**4)
+@pytest.fixture(scope="module")
+def laplace_f32(mock):
+    return _run(mock, False)
 
-        # NaN at one coordinate triggers non-finite metric
-        bad_init = jnp.asarray([0.0, jnp.nan, 0.0, 0.0])
 
-        with jax.enable_x64(False):
-            assert jnp.result_type(float) == jnp.float32
-            with pytest.raises(ValueError) as excinfo:
-                prepare_preconditioning(quartic, bad_init, 0.0, precondition=True)
+def test_laplace_runs_in_float32_and_matches_float64(laplace_f32, laplace_f64):
+    names32, d32, _ = laplace_f32
+    names64, d64, _ = laplace_f64
+    assert names32 == names64
+    assert np.all(np.isfinite(d32))
+    mean_gap = np.max(np.abs(d32.mean(0) - d64.mean(0)) / d64.std(0))
+    assert mean_gap <= MEAN_TOL_SIGMA, f"mean gap {mean_gap:.3f} sigma"
+    c32, c64 = np.cov(d32, rowvar=False), np.cov(d64, rowvar=False)
+    cov_gap = np.max(np.abs(c32 - c64)) / np.max(np.abs(c64))
+    assert cov_gap <= COV_TOL, f"covariance relative gap {cov_gap:.3f}"
 
-            msg = str(excinfo.value)
-            assert "float32" in msg.lower(), (
-                f"preconditioning error under float32 should name the dtype: {msg}"
-            )
 
-    def test_preconditioning_under_float64_does_not_name_dtype(self):
-        """Preconditioning non-finite-metric error under float64 should not name float32."""
+def test_profile_auto_resolves_identically_in_both_dtypes(laplace_f32, laplace_f64):
+    assert laplace_f32[2] == laplace_f64[2]
 
-        def quartic(xi):
-            return -0.5 * jnp.sum(xi**4)
 
-        # NaN at one coordinate triggers non-finite metric
-        bad_init = jnp.asarray([0.0, jnp.nan, 0.0, 0.0])
+@pytest.mark.parametrize("x64", [True, False], ids=["float64", "float32"])
+def test_non_finite_preconditioning_input_blames_no_dtype(x64):
+    def quartic(xi):
+        return -0.5 * jnp.sum(xi**4)
 
-        with jax.enable_x64(True):
-            assert jnp.result_type(float) == jnp.float64
-            with pytest.raises(ValueError) as excinfo:
-                prepare_preconditioning(quartic, bad_init, 0.0, precondition=True)
-
-            msg = str(excinfo.value)
-            # Under float64 the NaN is a true divergence, not a dtype artifact
-            assert "float32" not in msg.lower(), (
-                f"preconditioning error under float64 should not blame float32: {msg}"
-            )
+    bad_init = jnp.asarray([0.0, jnp.nan, 0.0, 0.0])
+    with jax.enable_x64(x64), pytest.raises(ValueError) as excinfo:
+        prepare_preconditioning(quartic, bad_init, 0.0, precondition=True)
+    assert "float32" not in str(excinfo.value).lower()

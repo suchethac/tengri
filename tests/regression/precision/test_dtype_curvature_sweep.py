@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: BSD-3-Clause
 r"""Every curvature path works in float32 and float64, on every configuration class.
 
-Owner ruling: every setting works with every mode. The float32 Laplace refusal
-(``HESSIAN_BACKEND_SET`` in :mod:`tengri.inference.mass_profile`) claimed the
-photometry Hessian is all-NaN in float32, but it was only checked on one narrow
-fixture. This sweep measures the four curvature consumers on each configuration
-class, in both dtypes:
+Every setting works with every mode. A float32 Laplace refusal once claimed the
+photometry Hessian is all-NaN in float32, on the evidence of one narrow fixture. This
+sweep measures the curvature consumers (#3505) on each configuration class, in both
+dtypes:
 
-- the Hessian of the fitter's flat log posterior at its MAP (the f64 MAP, cast);
+- :func:`tengri.inference.curvature.curvature` on the fitter's flat log posterior at its
+  MAP (the float64 MAP, cast);
 - ``Fitter.run("laplace")`` (mean and covariance);
 - the preconditioning metric (:func:`negative_hessian_metric`);
 - the damped Newton polish (:func:`newton_polish`).
@@ -33,11 +33,12 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import DEFAULT, FREE, Fixed, ForwardModel, SEDModel, generate_mock, recipes
+from tengri import DEFAULT, Fixed, ForwardModel, SEDModel, generate_mock, recipes
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.inference.backends.map_dispatch import run_map
 from tengri.inference.backends.mcmc._shared import _get_flat_logdensity
 from tengri.inference.context import InferenceContext
+from tengri.inference.curvature import curvature
 from tengri.inference.fitter import Fitter
 from tengri.inference.newton import newton_polish
 from tengri.inference.preconditioning import negative_hessian_metric
@@ -84,7 +85,7 @@ def _build_model(config: str):
     return SEDModel.build(ssp_data=load_ssp_data(_SSP), observation=obs, **_recipe(config))
 
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def _mock(config: str) -> dict:
     """Float64 mock data for ``config``, shared by both dtypes."""
     with jax.enable_x64(True):
@@ -126,7 +127,7 @@ def _attempt(fn):
     """Run one measurement; return ``("ok", value)`` or ``("error", message)``."""
     try:
         return ("ok", fn())
-    except Exception as exc:  # noqa: BLE001 - the cell reports the failure, not a skip
+    except Exception as exc:
         return ("error", f"{type(exc).__name__}: {exc}")
 
 
@@ -151,14 +152,14 @@ def _measure(config: str, profile: bool, dtype: str, ref: dict | None) -> dict:
             "dtype": str(jnp.result_type(x)),
             "profile_engaged": bool(getattr(fitter, "_profile_mass", False)),
         }
-        out["hess"] = _attempt(lambda: np.asarray(jax.jit(jax.hessian(logd))(x, data_args)))
-        out["metric"] = _attempt(
-            lambda: np.asarray(negative_hessian_metric(logd, x, data_args))
-        )
-        out["newton"] = _attempt(
+        out["hess"] = _attempt(
             lambda: np.asarray(
-                newton_polish(x, logd, data_args, max_steps=5, tol=1e-3)[0]
+                jax.jit(lambda v, d: curvature(logd, v, d, want=("hess",)).hess)(x, data_args)
             )
+        )
+        out["metric"] = _attempt(lambda: np.asarray(negative_hessian_metric(logd, x, data_args)))
+        out["newton"] = _attempt(
+            lambda: np.asarray(newton_polish(x, logd, data_args, max_steps=5, tol=1e-3)[0])
         )
         out["laplace"] = _attempt(lambda: _laplace_moments(fitter))
     return out
@@ -176,7 +177,7 @@ def _laplace_moments(fitter: Fitter) -> dict:
     }
 
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def _cell(config: str, profile: bool) -> dict:
     """Both dtypes for one (config, profile): ``{"float64": ..., "float32": ...}``."""
     m64 = _measure(config, profile, "float64", ref=None)
@@ -211,7 +212,9 @@ def _rel_max(a: np.ndarray, b: np.ndarray) -> float:
 def test_hessian_is_finite_in_both_dtypes(config, profile, dtype):
     """The flat log-posterior Hessian at the MAP is finite."""
     hess = _value(_cell(config, profile), dtype, "hess")
-    assert np.all(np.isfinite(hess)), f"{dtype} Hessian has {np.sum(~np.isfinite(hess))} non-finite"
+    assert np.all(np.isfinite(hess)), (
+        f"{dtype} Hessian has {np.sum(~np.isfinite(hess))} non-finite"
+    )
 
 
 @pytest.mark.parametrize("config,profile", _cases(), ids=_CASE_IDS)

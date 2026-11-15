@@ -109,7 +109,6 @@ import jax
 import jax.numpy as jnp
 from jax.scipy.special import logsumexp
 
-from tengri.inference.preconditioning import FLOAT32_HESSIAN_NAN_NOTE
 from tengri.parameters.priors import Fixed, Uniform
 from tengri.utils.scale import pow10, present_noise, representable_denominator, whiten
 
@@ -1031,18 +1030,6 @@ PROFILE_MASS_BACKENDS = frozenset(
     }
 )
 
-#: Backends that take a Hessian of the objective function and therefore trigger
-#: the known float32 NaN failure in the SED model's photometry Hessian
-#: (bench/reports/2026-09-11_profile_mass_20s.md, Finding 8). Currently laplace only.
-#: Preconditioning's ``negative_hessian_metric`` (optional metric whitening for
-#: Hamiltonian samplers) takes a Hessian under float32 but is caught downstream by
-#: the metric's non-finiteness check (see ``preconditioning.py``'s
-#: ``FLOAT32_METRIC_CLAUSE``), with the dtype named in the error message. The float32
-#: NaN is **not** specific to ``profile_mass`` — it reproduces on the plain objective
-#: with ``profile_mass=False`` — so float32 refusal names which objective this is, not
-#: which fitting path triggered it.
-HESSIAN_BACKEND_SET = frozenset({"laplace"})
-
 
 def disable_profile_mass(fitter: Fitter, reason: str) -> None:
     """Undo the working-spec rewrite so the fitter samples the mass again.
@@ -1073,28 +1060,7 @@ def resolve_profile_mass_for_method(fitter: Fitter, method: str, requested) -> N
     is the constructor's ``profile_mass`` argument: an explicit ``True`` on an
     unsupported backend is an error, ``"auto"`` steps aside with a logged
     reason, ``False`` was never engaged.
-
-    Also enforces float32 refusal on backends that take a Hessian of the
-    objective, where the SED model's photometry Hessian evaluates to all-NaN
-    at the converged MAP in float32 due to a JAX forward-over-reverse seam
-    in the model's differentiable code (bench/reports/2026-09-11_profile_mass_20s.md,
-    Finding 8). The failure is not specific to profiling — it reproduces with
-    ``profile_mass=False`` — so this guard names which objective (not which
-    fitting path) blocks float32.
     """
-    # Check float32 refusal for Hessian-taking backends.
-    # Raise before any Fitter state mutation to keep reuse-after-exception safe.
-    if method in HESSIAN_BACKEND_SET:
-        dtype = jnp.result_type(float)
-        if dtype == jnp.float32:
-            reason = (
-                f"{FLOAT32_HESSIAN_NAN_NOTE}, "
-                "not specific to profiling (reproduces with profile_mass=False)."
-            )
-            if requested is True and getattr(fitter, "_profile_mass", False):
-                raise ValueError(f"profile_mass=True but {reason}")
-            raise ValueError(f"method={method!r}: {reason}")
-
     if not getattr(fitter, "_profile_mass", False) or method in PROFILE_MASS_BACKENDS:
         return
     reason = (

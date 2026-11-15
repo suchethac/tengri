@@ -12,6 +12,8 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
+from tengri.inference.curvature import curvature
+
 
 def loss_derivatives(logdensity_fn, position, data_args):
     """Gradient and symmetric Hessian of the loss ``-logdensity`` at a point.
@@ -36,10 +38,9 @@ def loss_derivatives(logdensity_fn, position, data_args):
     -----
     JIT/vmap-safe.
     """
-    grad = jax.grad(logdensity_fn)(position, data_args)
-    hessian = jax.hessian(logdensity_fn)(position, data_args)
-    hessian = 0.5 * (hessian + hessian.T)
-    return -grad, -hessian
+    curv = curvature(logdensity_fn, position, data_args)
+    hessian = 0.5 * (curv.hess + curv.hess.T)
+    return -curv.grad, -hessian
 
 
 def newton_trial_steps(grad, hessian, *, n_trials=8, damping_growth=10.0):
