@@ -19,13 +19,20 @@ against central finite differences of the float64 log density, at a point displa
 the MAP (where the gradient is not ~0). One compiled program serves every call of the
 curvature helper on one function: the sweep counts backend compiles on a repeat call.
 
-Assertions per cell: the Hessian is finite in both dtypes; the float32 Hessian
-agrees with the float64 one to ``max|dH| / max|H| <= 1e-3`` at the same point;
-the Laplace float32 mean is within 0.1 sigma of float64 and its covariance within
-5 % relative. The Laplace comparison carries Monte Carlo noise: both runs draw
-``n_samples=20000`` from the same key, so the sample-mean error is about
-``sigma / sqrt(20000)`` (0.007 sigma) and the covariance error about 1 %. The 5 %
-bar sits well above that.
+Assertions per cell, and the bars (measured on the cells below, in a run of the sweep):
+
+* the Hessian is finite in both dtypes, and the float32 Hessian agrees with the float64
+  one to ``max|dH| / max|H| <= 1e-3`` at the same point. Measured ``eps_H``: 1.3e-6 to
+  1.6e-5 here, 5.9e-4 on another one-band mock whose MAP is differently conditioned
+  (``test_bug_2378_float32_hessian_refusal.py``), so 1e-3 is the range over fixtures, not
+  slack on one;
+* the float32 gradient and Hessian-vector product agree with float64 and with central
+  differences to ``2e-4`` of their largest entry (measured 5e-5 and 3e-5);
+* the Laplace float32 mean is within 0.05 sigma of float64 and its covariance within 2 %
+  (measured 0.026 sigma and 1.0 %: twice the largest). Both runs draw ``n_samples=20000``
+  from one key, so the sampling noise (0.007 sigma, ~1 %) cancels between dtypes; what
+  remains is the float32 Hessian error times the condition number plus the displacement of
+  the float32 mode. The derivation is in ``test_bug_2378_float32_hessian_refusal.py``.
 
 Float32 is selected inside the test with ``jax.enable_x64(False)``, as in the other
 precision tests; the module never sets ``JAX_ENABLE_X64``.
@@ -70,8 +77,9 @@ PROFILE_CROSS = ("photometry_1band", "multiband")
 DTYPES = ("float64", "float32")
 
 HESSIAN_REL_TOL = 1e-3
-LAPLACE_MEAN_TOL_SIGMA = 0.1
-LAPLACE_COV_TOL = 0.05
+LAPLACE_MEAN_TOL_SIGMA = 0.05
+LAPLACE_COV_TOL = 0.02
+DERIVATIVE_REL_TOL = 2e-4
 LAPLACE_SAMPLES = 20000
 MAP_STEPS = 1000
 
@@ -408,13 +416,15 @@ def test_float32_derivatives_match_float64_and_finite_differences(config, profil
         assert np.all(np.isfinite(d32[mode])), f"float32 {mode} is not finite"
         live = np.abs(d64[mode]) > 1e-9 * np.max(np.abs(d64[mode]))
         assert np.all(d32[mode][live] != 0.0), f"float32 {mode} is exactly 0 where float64 is not"
-        assert _scaled_gap(d32[mode], d64[mode]) <= HESSIAN_REL_TOL, f"{mode} vs float64"
-        assert _scaled_gap(d32[mode], d64["fd_grad"]) <= HESSIAN_REL_TOL, f"{mode} vs differences"
+        assert _scaled_gap(d32[mode], d64[mode]) <= DERIVATIVE_REL_TOL, f"{mode} vs float64"
+        assert _scaled_gap(d32[mode], d64["fd_grad"]) <= DERIVATIVE_REL_TOL, (
+            f"{mode} vs differences"
+        )
     assert _scaled_gap(d64["grad_rev"], d64["fd_grad"]) <= 1e-6, "float64 gradient vs differences"
     assert _scaled_gap(d64["grad_fwd"], d64["grad_rev"]) <= 1e-9, "float64 forward vs reverse"
     assert np.all(np.isfinite(d32["hvp"]))
-    assert _scaled_gap(d32["hvp"], d64["hvp"]) <= HESSIAN_REL_TOL
-    assert _scaled_gap(d32["hvp"], d64["fd_hvp"]) <= HESSIAN_REL_TOL
+    assert _scaled_gap(d32["hvp"], d64["hvp"]) <= DERIVATIVE_REL_TOL
+    assert _scaled_gap(d32["hvp"], d64["fd_hvp"]) <= DERIVATIVE_REL_TOL
     assert _scaled_gap(d64["hvp"], d64["fd_hvp"]) <= 1e-5, "float64 Hv vs differences"
 
 
