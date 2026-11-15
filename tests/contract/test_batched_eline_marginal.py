@@ -714,3 +714,59 @@ def test_joint_calibration_line_helper_is_the_block_prior_marginal():
         prior_precision=precision,
     )
     np.testing.assert_allclose(float(got.log_like), float(want.log_like), rtol=1e-10)
+
+
+def test_calibration_alone_equals_calibration_with_zero_line_columns_per_galaxy():
+    """The normalization is one constant: an unused line column changes no evidence."""
+    from tengri.inference.likelihoods.marginalized import (
+        CalibrationELineMarginalizedLikelihood,
+        CalibrationMarginalizedLikelihood,
+    )
+
+    wave = np.linspace(4500.0, 6700.0, 30)
+    rng = np.random.default_rng(5)
+    model = 1.0 + 0.2 * np.linspace(0.0, 1.0, wave.size)
+    obs = model * (1.0 + 0.05 * rng.standard_normal(wave.size))
+    err = np.full(wave.size, 0.1)
+    common = dict(
+        fnu_obs=jnp.asarray(obs),
+        fnu_err=jnp.asarray(err),
+        wavelength=jnp.asarray(wave),
+        n_poly=2,
+        prior_sigma=0.5,
+    )
+    alone = CalibrationMarginalizedLikelihood(**common)
+    joint = CalibrationELineMarginalizedLikelihood(
+        design_matrix_builder=lambda _params: jnp.zeros((wave.size, 2)),
+        eline_prior_sigma=2.0,
+        **common,
+    )
+    prediction = {"spec_fnu": jnp.asarray(model)}
+    np.testing.assert_allclose(
+        float(joint.log_prob(prediction, params={})), float(alone.log_prob(prediction)), rtol=1e-12
+    )
+
+
+def test_calibration_alone_equals_calibration_with_every_line_masked_batched(synthetic_ssp):
+    """Batched twin of the per-galaxy pin: masked lines change nothing under calibration."""
+    from tengri.inference.batched_spectro import batched_log_likelihood
+    from tengri.observation.batched import build_spectro_batches
+
+    z = 0.145
+    on = _marg_template(synthetic_ssp, lines=("Halpha",))
+    off = _marg_template(synthetic_ssp, eline_mode="off", lines=("Halpha",))
+    spec_on, batch_on, _ = build_spectro_batches([_marg_galaxy(z)], model=on)[0]
+    spec_off, batch_off, _ = build_spectro_batches([_marg_galaxy(z)], model=off)[0]
+    assert np.all(np.asarray(batch_on.line_mask) == 0.0)
+    params = {"sfh_dpl_log_total_mass": 10.0}
+    got = float(
+        batched_log_likelihood(on, spec_on, calibration_marginalize=True)(
+            params, batch_on.galaxy(0)
+        )
+    )
+    ref = float(
+        batched_log_likelihood(off, spec_off, calibration_marginalize=True)(
+            params, batch_off.galaxy(0)
+        )
+    )
+    np.testing.assert_allclose(got, ref, rtol=1e-10)
