@@ -3530,7 +3530,7 @@ class SEDModel:
         ):
             from tengri.components.stellar.agb_dust_shell import bake_agb_dust_shell
 
-            _agb_dust_w = self._fixed_values().get("agb_dust_weight", 1.0)
+            _agb_dust_w = self.spec.get_fixed_values().get("agb_dust_weight", 1.0)
             self.ssp_data = bake_agb_dust_shell(self.ssp_data, float(_agb_dust_w))
         self._forward_dtype = jnp.dtype(forward_dtype)
         if self._forward_dtype != jnp.dtype("float64"):
@@ -4085,16 +4085,9 @@ class SEDModel:
         hi = getattr(d, "hi", None)
         return float(hi) if hi is not None else 1.0
 
-    def _fixed_values(self) -> dict:
-        """The spec's Fixed values minus the runtime-read keys (#3505).
-
-        A runtime redshift's Fixed value is a placeholder; leaving it in the dict the
-        forward receives would make it the silent redshift of a call that omitted z.
-        """
-        fixed = dict(self.spec.get_fixed_values())
-        for key in self._runtime_keys:
-            fixed.pop(key, None)
-        return fixed
+    def _passed_runtime(self, params) -> tuple[str, ...]:
+        """The runtime keys the caller supplied in ``params`` (#3505)."""
+        return tuple(k for k in self._runtime_keys if k in params)
 
     @property
     def _runtime_keys(self) -> tuple[str, ...]:
@@ -5422,7 +5415,7 @@ class SEDModel:
         # measurement this build-time check exists to make.
         params_lo = {**params, "agn_log_lbol": lo, "agn_ir_frac": frac_mid}
         params_hi = {**params, "agn_log_lbol": hi, "agn_ir_frac": frac_mid}
-        fixed_values = dict(self._fixed_values())
+        fixed_values = dict(self.spec.get_fixed_values())
 
         # Evaluate the rest-frame SED at both bounds. Per #2069 brief: "if the
         # forward cannot be evaluated at build, raise -- do not fall back".
@@ -6249,7 +6242,12 @@ class SEDModel:
 
         merged = merge_fixed_params(self.spec, params, self._runtime_keys)
         if fixed_values is not None:
-            merged = {**merged, **fixed_values}
+            # A runtime key the caller passed in params is the caller's value, not the
+            # declared default that ``fixed_values`` carries (#3505).
+            merged = {
+                **merged,
+                **{k: v for k, v in fixed_values.items() if k not in self._passed_runtime(params)},
+            }
         # A sampled ``*_frac`` timing replaces its Gyr twin; an unsampled one
         # is dropped so the Gyr value stands (#2748).
         return route_timing_fracs(merged, params)
@@ -7878,9 +7876,9 @@ class SEDModel:
         kernel = self._get_or_build_predict_spectrum_on_grid_jit(conserving, wave_obs)
         traced_grid = isinstance(wave_obs, jax.core.Tracer)
         args = (
-            (params, self._fixed_values(), jnp.asarray(wave_obs))
+            (params, self.spec.get_fixed_values(), jnp.asarray(wave_obs))
             if traced_grid
-            else (params, self._fixed_values())
+            else (params, self.spec.get_fixed_values())
         )
         return kernel(*args, *self._resolve_threaded_data(None, None, None))
 
@@ -8176,7 +8174,7 @@ class SEDModel:
         stellar = next(c for c in chain if c.name == "stellar")
         # A caller may hand free-only or already-merged params; fill the Fixed
         # values in underneath either (the stellar methods read redshift, Z, ...).
-        full = {**dict(self._fixed_values()), **dict(params)}
+        full = {**dict(self.spec.get_fixed_values()), **dict(params)}
         return ionizing_interval_weights(
             interval_fractions(stellar.compute_age_boundary_fractions(full)),
             stellar.compute_log_L_lyc_age(full),
@@ -11147,7 +11145,7 @@ class SEDModel:
             ``igm_*``, ``redshift``).
         fixed_values : Mapping | None, optional
             Fixed parameter values. When provided, overrides
-            ``self._fixed_values()``. Used by :meth:`predict_observables_jit`
+            ``self.spec.get_fixed_values()``. Used by :meth:`predict_observables_jit`
             to thread per-galaxy fixed values as JIT runtime inputs.
         ssp_data : Any | None, optional
             SSP grid. When provided, passed to components that need it as a
@@ -11256,7 +11254,7 @@ class SEDModel:
         #
         # ``fixed_values`` is an optional override. When provided
         # (typically from ``predict_observables_jit`` threading it as a
-        # JIT runtime input), use it instead of ``self._fixed_values()``.
+        # JIT runtime input), use it instead of ``self.spec.get_fixed_values()``.
         # That decouples per-galaxy fixed values from the closure so two
         # SEDModels with the same structure but different fixed values
         # share one compiled function.
@@ -11273,7 +11271,7 @@ class SEDModel:
             # in the caller that built ``fixed_values``. ``predict_observables``
             # / ``predict_observables_jit`` both call
             # ``refuse_fixed_overrides(self.spec, params, self._runtime_keys)`` before threading
-            # ``self._fixed_values()`` in unmodified as a JIT runtime
+            # ``self.spec.get_fixed_values()`` in unmodified as a JIT runtime
             # input (#2296) -- re-checking here would be redundant, not wrong.
             #
             # (b) An internal, build-time probe that deliberately overrides a
@@ -11283,7 +11281,7 @@ class SEDModel:
             # ``_check_agn_lbol_flat_direction`` (this file) sweeps
             # ``agn_log_lbol``/``agn_ir_frac`` across their declared range to
             # measure whether the AGN luminosity direction is flat, passing
-            # ``fixed_values=dict(self._fixed_values())``; and
+            # ``fixed_values=dict(self.spec.get_fixed_values())``; and
             # ``nebular_grid_precompute._row_traced`` forces
             # ``neb_dig_frac=0.0`` while sweeping the per-Q_H grid, passing
             # ``fixed_values={}`` because its ``params`` is already fully
@@ -11387,7 +11385,7 @@ class SEDModel:
             )
 
         # Refuse any Fixed key in params before it reaches the cached ``_impl``
-        # closure, which threads ``self._fixed_values()`` in as
+        # closure, which threads ``self.spec.get_fixed_values()`` in as
         # ``fixed_values`` and so takes ``predict_state``'s no-refusal branch
         # (#2296). A static, pre-trace key-set check: safe and cheap here.
         refuse_fixed_overrides(self.spec, params, self._runtime_keys)
@@ -11408,7 +11406,7 @@ class SEDModel:
         impl = cache["predict_observables_impl"]
         return impl(
             params,
-            self._fixed_values(),
+            self.spec.get_fixed_values(),
             *self._resolve_threaded_data(ssp_data, template_data, ztable_data),
         )
 
@@ -11437,7 +11435,7 @@ class SEDModel:
         -----
         **JIT-compatible**: yes, this method IS the JIT entry point.
 
-        2026-05-20: ``self._fixed_values()`` is now
+        2026-05-20: ``self.spec.get_fixed_values()`` is now
         passed as a JIT runtime input rather than closure-captured. Two
         SEDModels with the same structural config but different per-galaxy
         fixed values (e.g., ``redshift=Fixed(0.1)`` vs ``redshift=Fixed(0.5)``)
@@ -11473,13 +11471,13 @@ class SEDModel:
         # a bare KeyError deep inside a component.
         check_missing_free_params(params, self.spec, self._param_map)
         # Refuse any Fixed key in params before it reaches the jitted closure,
-        # which threads ``self._fixed_values()`` in as ``fixed_values``
+        # which threads ``self.spec.get_fixed_values()`` in as ``fixed_values``
         # and so takes ``predict_state``'s no-refusal branch (#2296). A static
         # key-set check on the un-traced dict, safe and free under jit.
         refuse_fixed_overrides(self.spec, params, self._runtime_keys)
         return self._get_or_build_predict_observables_jit()(
             params,
-            self._fixed_values(),
+            self.spec.get_fixed_values(),
             *self._resolve_threaded_data(ssp_data, template_data, ztable_data),
         )
 
@@ -12364,7 +12362,7 @@ class SEDModel:
             and not unsafe_free
             and self.ssp_data is not None
         ):
-            fixed = self._fixed_values()
+            fixed = self.spec.get_fixed_values()
             # Same narrowing as the component's own apply() (#1833), read off
             # the component that is actually in the chain, so the LUT cannot
             # bake a different curve from the one the direct path evaluates.
@@ -12881,7 +12879,7 @@ class SEDModel:
         free = set(self.spec.free_params)
         if "neb_fdust_frac" in free:
             return True
-        fixed = self._fixed_values()
+        fixed = self.spec.get_fixed_values()
         return float(fixed.get("neb_fdust_frac", 0.0)) != 0.0
 
     def _requested_dust_log_L_ir(self) -> bool:
@@ -13167,7 +13165,7 @@ class SEDModel:
             if "neb_fesc" in free_names:
                 lyc_mask_live = True
             else:
-                fesc_fixed = float(self._fixed_values().get("neb_fesc", 0.0))
+                fesc_fixed = float(self.spec.get_fixed_values().get("neb_fesc", 0.0))
                 lyc_mask_live = abs(fesc_fixed - 1.0) > 1e-12
 
         # Precompute-config state: extracted once, reused for all components

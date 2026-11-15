@@ -157,9 +157,9 @@ def refuse_fixed_overrides(spec, params, runtime_keys=()):
 def merge_fixed_params(spec, params, runtime_keys=()):
     r"""Refuse Fixed key overrides, then merge Fixed values into params.
 
-    A ``runtime_keys`` name is read from ``params`` at call time, so it is never
-    filled from its Fixed placeholder: an omitted one stays absent and the forward
-    raises on it rather than silently using the placeholder (#3505).
+    A ``runtime_keys`` name (#3505) may be passed in ``params`` at call time, and
+    is otherwise filled from its Fixed value, which is its default: an omitted z
+    takes the model's declared redshift.
 
     This is the one seam through which every caller's params dict meets the
     spec's fixed values. It refuses any Fixed key present (#2296), then fills in
@@ -200,7 +200,7 @@ def merge_fixed_params(spec, params, runtime_keys=()):
 
     merged = dict(params)
     for name in spec.fixed_params:
-        if name in merged or name in runtime_keys:
+        if name in merged:
             continue
         value = spec.fixed_value(name)
         if value is None or isinstance(value, (str, bool)):

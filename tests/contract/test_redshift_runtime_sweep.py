@@ -174,11 +174,11 @@ def test_tabulated_override_spans_its_z():
     np.testing.assert_allclose(got, _reference("wp", "plain", 0.3), rtol=RTOL["wp"])
 
 
-def test_runtime_z_is_required_not_silently_placeholder():
-    """A runtime model with no z in params raises rather than using the placeholder."""
+def test_runtime_z_defaults_to_declared_redshift():
+    """A runtime model with no z in params uses its declared redshift (#3505 default)."""
     promoted = _build("exact", "plain", Fixed(Z_PLACEHOLDER)).with_runtime_redshift()
-    with pytest.raises(KeyError):
-        promoted.predict_photometry({})
+    got = np.asarray(promoted.predict_photometry({}))
+    np.testing.assert_allclose(got, _reference("exact", "plain", Z_PLACEHOLDER), rtol=RTOL["exact"])
 
 
 def test_non_runtime_fixed_model_still_refuses_call_time_override():
