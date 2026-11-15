@@ -542,28 +542,46 @@ def _forget_memoized_approx_clone(model, cfg) -> None:
         bucket.pop(_approx_clone_key(cfg), None)
 
 
-# Redshift-override clones, memoized per (source model, override z).
-#
-# ``params_override={"redshift": z}`` on a model without ``catalog_z_range`` is
-# evaluated on a model rebuilt at ``z`` (see ``_model_at_override_redshift``).
-# Same rationale as ``_APPROX_CLONE_CACHE``: the compile caches key on model
-# identity, so the same (source, z) must return the same object or every fit at
-# that z recompiles. Distinct z values get distinct models, hence distinct
-# programs; a program compiled against another z's tables can never be reused.
-_REDSHIFT_CLONE_CACHE: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+# Runtime-redshift promotions, per source model and table span (#3505). A
+# ``params_override`` redshift on a fixed-z model evaluates the source promoted by
+# ``with_runtime_redshift``, with z passed as data, so every redshift reuses one
+# compiled program. Keyed by the source's identity (the compile caches key on model
+# identity, so the same source must return the same promoted object) and by the
+# table span: an exact model has one span (None), a tabulated one a span per z.
+_RUNTIME_REDSHIFT_PROMOTIONS: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+
+# Half-width of the table span a tabulated fixed-z model is promoted over, as a
+# fraction of ``1 + z``. The span only has to bracket the override redshift.
+_OVERRIDE_Z_PAD = 0.01
+
+
+def _is_runtime_redshift(model) -> bool:
+    """Whether ``model`` already reads redshift at call time (#3505)."""
+    return _model_catalog_z_range(model) is not None or bool(getattr(model, "_z_runtime", False))
+
+
+def _override_span(model, z: float):
+    """The redshift table span a promotion of ``model`` needs for ``z``, or None.
+
+    An exact model has no table (None). A tabulated one must bracket ``z``; the
+    span is a small pad around it, so a table is built per distinct override z.
+    """
+    if not model._approx["wave_precomp"]:
+        return None
+    pad = _OVERRIDE_Z_PAD * (1.0 + z)
+    return (max(0.0, z - pad), z + pad)
 
 
 def _model_at_override_redshift(model, params_override):
     """The model to evaluate under a ``params_override`` redshift.
 
-    On a model without ``catalog_z_range`` the redshift is a compile constant,
-    and so is every table built from it at construction (fixed-z stellar LUT,
-    IGM band factors, nebular grid reference, dust-IR band response,
-    energy-balance LUT, radio/X-ray term responses, ``_dl_cm_fixed``,
-    ``_z_fixed``, line-catalog snapping). Merging the override into the loss's
-    fixed values alone leaves all of them at the model's own redshift. The
-    override is therefore made exactly equivalent to building the model at that
-    redshift: the model is rebuilt there once per (source, z) and reused.
+    On a fixed-z model the redshift is a compile constant, and so is every table
+    built from it at construction (stellar LUT, IGM band factors, nebular grid
+    reference, dust-IR band response, energy-balance LUT, radio/X-ray term
+    responses, ``_dl_cm_fixed``, line-catalog snapping). The source is therefore
+    promoted once with :meth:`SEDModel.with_runtime_redshift`: the promoted model
+    takes redshift as a runtime input, and the fit passes the override as data
+    (``_runtime_redshift``). One promotion per source serves every override z.
 
     Parameters
     ----------
@@ -575,31 +593,29 @@ def _model_at_override_redshift(model, params_override):
     Returns
     -------
     SEDModel or ForwardModel
-        ``model`` itself when there is nothing to rebuild (no redshift
-        override, a ``catalog_z_range`` model whose redshift is a runtime
-        input, a free redshift which the Fitter refuses, an override equal to
-        the model's own redshift, or a model type without the rebuild seam);
-        otherwise the model built at the override redshift.
+        ``model`` itself when there is nothing to promote (no redshift override,
+        a model already reading redshift at runtime, a free redshift, or a model
+        type without the promotion seam); otherwise the promoted source.
     """
     if not params_override or "redshift" not in params_override:
         return model
-    if _model_catalog_z_range(model) is not None:
+    if _is_runtime_redshift(model):
         return model
-    rebuild = getattr(model, "with_fixed_redshift", None)
+    promote = getattr(model, "with_runtime_redshift", None)
     spec = getattr(model, "spec", None)
-    if not callable(rebuild) or spec is None or not spec.is_fixed("redshift"):
+    if not callable(promote) or spec is None or not spec.is_fixed("redshift"):
         return model
     z = float(params_override["redshift"])
+    span = _override_span(model, z)
     try:
-        bucket = _REDSHIFT_CLONE_CACHE.setdefault(model, {})
+        bucket = _RUNTIME_REDSHIFT_PROMOTIONS.setdefault(model, {})
     except TypeError:
-        return rebuild(z)
-    key = round(z, 12)
-    clone = bucket.get(key)
-    if clone is None:
-        clone = rebuild(z)
-        bucket[key] = clone
-    return clone
+        return promote(span)
+    promoted = bucket.get(span)
+    if promoted is None:
+        promoted = promote(span)
+        bucket[span] = promoted
+    return promoted
 
 
 def _component_chains(model) -> tuple:
@@ -2148,7 +2164,7 @@ class Fitter:
         if (
             self._params_override is not None
             and "redshift" in self._params_override
-            and _model_catalog_z_range(model) is not None
+            and _is_runtime_redshift(self.model)
         ):
             self._runtime_redshift = float(self._params_override["redshift"])
 
