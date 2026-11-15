@@ -54,6 +54,7 @@ from dataclasses import dataclass
 import jax
 import jax.numpy as jnp
 from jax.core import Tracer
+from jax.custom_derivatives import SymbolicZero
 
 from tengri.utils.scale import hypot, whiten
 
@@ -337,10 +338,30 @@ def _closed_form_with_safe_jvp(value_fn, safe_fn):
     def energy(*args):
         return value_fn(*args)
 
-    @energy.defjvp
     def energy_jvp(primals, tangents):
-        return energy(*primals), jax.jvp(safe_fn, primals, tangents)[1]
+        # Differentiate only with respect to the arguments that carry a tangent. An
+        # argument with a zero tangent (the data noise, the mask) is closed over: handing
+        # ``jax.jvp`` an instantiated zero tangent for sigma multiplies the quotient
+        # rule's 1 / sigma^2 (inf in float32) by 0, which is NaN in forward mode.
+        live = [i for i, t in enumerate(tangents) if not isinstance(t, SymbolicZero)]
 
+        def partial(*diff):
+            args = list(primals)
+            for slot, value in zip(live, diff, strict=True):
+                args[slot] = value
+            return safe_fn(*args)
+
+        value = energy(*primals)
+        if not live:
+            return value, jnp.zeros_like(value)
+        _, tangent = jax.jvp(
+            partial,
+            tuple(primals[i] for i in live),
+            tuple(tangents[i] for i in live),
+        )
+        return value, tangent
+
+    energy.defjvp(energy_jvp, symbolic_zeros=True)
     return energy
 
 

@@ -175,3 +175,22 @@ def test_float32_gradient_is_finite_when_the_noise_is_a_compile_time_constant(ma
 
         theta = jnp.asarray([1.05, 0.97, 1.0, 1.02], jnp.float32)
         assert np.all(np.isfinite(np.asarray(grad_of(theta))))
+
+
+@pytest.mark.parametrize("mask", [[0, 0, 0, 0], [1, 0, -1, 0]])
+@pytest.mark.parametrize("f_cal", [0.0, 0.02])
+def test_forward_mode_gradient_matches_reverse_in_float32(mask, f_cal):
+    """Forward mode used to hand the noise an instantiated zero tangent: inf * 0 = NaN."""
+    with jax.enable_x64(False):
+        data = jnp.asarray([1.0, 2.0, 3.0, 4.0], jnp.float32) * 1e-26
+        noise = data * 0.03
+        mask_arr = jnp.asarray(mask, jnp.int32)
+
+        def energy(theta):
+            return censored_neg_log_likelihood(data, noise, data * theta, mask_arr, f_cal)
+
+        theta = jnp.asarray([1.05, 0.97, 1.0, 1.02], jnp.float32)
+        forward = np.asarray(jax.jacfwd(energy)(theta))
+        reverse = np.asarray(jax.grad(energy)(theta))
+        assert np.all(np.isfinite(forward))
+        np.testing.assert_allclose(forward, reverse, rtol=1e-4)
