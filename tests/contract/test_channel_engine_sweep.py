@@ -1200,3 +1200,83 @@ def test_every_noise_family_covariance_and_nuisance_has_a_term_or_a_named_error(
     assert [name for name, _ in used] == [_expected_term(family, covariance, nuisance)]
     if marginalized:
         assert used[0][1] == (covariance != "diagonal")
+
+
+# ── Presence on joint and spectroscopic data ──────────────────────────────────────────
+
+
+def _joint_cell(family, with_mask):
+    rng = np.random.default_rng(2)
+    bands = rng.uniform(1.0, 2.0, N_BAND)
+    pixels = rng.uniform(1.0, 2.0, N_PIX)
+    obs = np.concatenate([bands, pixels]) * (1 + 0.1 * rng.standard_normal(N_BAND + N_PIX))
+    err = np.concatenate([rng.uniform(0.05, 0.15, N_BAND), rng.uniform(0.05, 0.15, N_PIX)])
+    obs[:N_BAND] = np.where(PRESENCE > 0, obs[:N_BAND], 0.0)
+    err[:N_BAND] = np.where(PRESENCE > 0, err[:N_BAND], 0.0)
+    data = {"data": obs, "noise": err, "presence": PRESENCE}
+    kw = {"data_type": "joint", "n_phot": N_BAND}
+    if family != "gaussian":
+        kw.update(
+            student_t=True,
+            dof=DOF if family == "student_t" else None,
+            f_cal_param="noise_frac_cal",
+        )
+    if with_mask:
+        mask = np.zeros(N_BAND + N_PIX, dtype=int)
+        mask[:N_BAND] = [0, 1, -1, 0, 1]
+        mask[N_BAND + 3] = 1
+        data["data_mask"] = mask
+    preds = Predictions(phot_fnu=bands, spec_fnu=pixels, params={"noise_frac_cal": F_CAL})
+    return preds, data, NoiseSpec(**kw)
+
+
+@pytest.mark.parametrize("family", FAMILIES)
+def test_presence_masks_the_photometric_block_of_joint_data(family):
+    preds, data, noise = _joint_cell(family, with_mask=False)
+    expected = reference_density("photometry", preds, data, noise) + reference_density(
+        "spectrum", preds, data, noise
+    )
+    actual = float(score(preds, data, noise) + log_normalization(data, noise))
+    np.testing.assert_allclose(actual, expected, rtol=1e-9)
+    shifted = np.asarray(preds.phot_fnu).copy()
+    shifted[PRESENCE == 0] += 2.0
+    moved = Predictions(**{**preds.__dict__, "phot_fnu": shifted})
+    assert float(score(moved, data, noise)) == float(score(preds, data, noise))
+    grads = jax.grad(
+        lambda p: score(Predictions(**{**preds.__dict__, "phot_fnu": p}), data, noise)
+    )(np.asarray(preds.phot_fnu))
+    assert np.all(np.asarray(grads)[PRESENCE == 0] == 0.0)
+
+
+@pytest.mark.parametrize("family", FAMILIES)
+def test_presence_masks_the_photometric_block_of_censored_joint_data(family):
+    preds, data, noise = _joint_cell(family, with_mask=True)
+    keep = np.concatenate([PRESENCE > 0, np.ones(N_PIX, dtype=bool)])
+    model = np.concatenate([np.asarray(preds.phot_fnu), np.asarray(preds.spec_fnu)])
+    expected = _ref_censored(
+        model,
+        np.asarray(data["data"]),
+        np.asarray(data["noise"]),
+        np.asarray(data["data_mask"]),
+        noise,
+        preds,
+        keep=keep,
+    )
+    actual = float(score(preds, data, noise) + log_normalization(data, noise))
+    np.testing.assert_allclose(actual, expected, rtol=1e-9)
+
+
+def test_presence_on_spectroscopy_is_rejected_by_name():
+    preds, data, noise = _synthetic("spectrum", "gaussian")
+    with_presence = {**data, "presence": np.ones(N_PIX)}
+    with pytest.raises(ValueError, match="presence"):
+        score(preds, with_presence, noise)
+    with pytest.raises(ValueError, match="presence"):
+        channels.validate(noise, with_presence.keys())
+
+
+def test_a_presence_entry_of_the_wrong_length_is_rejected():
+    preds, data, noise = _joint_cell("gaussian", with_mask=False)
+    bad = {**data, "presence": np.ones(N_BAND + 1)}
+    with pytest.raises(ValueError, match="presence has"):
+        score(preds, bad, noise)

@@ -322,10 +322,37 @@ def _photometry_applies(data, noise):
 
 
 def _present(data, noise):
-    """Boolean band presence, or ``None`` when every band is present."""
-    if noise.data_type == "photometry" and "presence" in data:
+    """Boolean presence of the photometric bands, or ``None`` when every band is present."""
+    if "presence" in data:
         return data["presence"] > 0
     return None
+
+
+def _present_over_data(data, noise):
+    """Presence over the whole data vector: spectrum pixels of a joint vector are present."""
+    present = _present(data, noise)
+    if present is None or noise.data_type != "joint":
+        return present
+    n_spec = jnp.shape(data["data"])[0] - noise.n_phot
+    return jnp.concatenate([present, jnp.ones(n_spec, dtype=bool)])
+
+
+def _check_presence(data, noise):
+    """Refuse a ``presence`` entry that no photometric block can apply."""
+    if "presence" not in data:
+        return
+    if not _is_phot(noise):
+        raise ValueError(
+            "a presence entry masks photometric bands, and this data has none "
+            f"(data_type={noise.data_type!r}). The data term has no per-pixel mask for a "
+            "spectrum; drop the pixels, or mask them in the batched path with pix_mask."
+        )
+    n_bands = jnp.shape(data["data"])[0] if noise.data_type == "photometry" else noise.n_phot
+    if jnp.shape(data["presence"])[0] != n_bands:
+        raise ValueError(
+            f"presence has {jnp.shape(data['presence'])[0]} entries; the photometric block "
+            f"has {n_bands} bands"
+        )
 
 
 def _phot_inputs(preds, data, noise):
@@ -395,7 +422,7 @@ def _censored_prediction(preds, noise):
 def _censoring_loglik(preds, data, noise):
     pred, obs, err = _censored_prediction(preds, noise), data["data"], data["noise"]
     mask = data["data_mask"]
-    present = _present(data, noise)
+    present = _present_over_data(data, noise)
     if present is not None:
         pred = jnp.where(present, pred, 0.0)
         obs = jnp.where(present, obs, 0.0)
@@ -406,7 +433,7 @@ def _censoring_loglik(preds, data, noise):
 
 def _censoring_norm(data, noise):
     detected = data["data_mask"] == 0
-    present = _present(data, noise)
+    present = _present_over_data(data, noise)
     if present is not None:
         detected = jnp.logical_and(detected, present)
     n_detected = jnp.sum(detected)
@@ -850,6 +877,8 @@ def validate(noise: NoiseSpec, data_keys_present) -> None:
     if unknown:
         raise ValueError(f"data keys read by no channel: {sorted(unknown)}")
     _refuse_unscorable(noise)
+    if "presence" in present and not _is_phot(noise):
+        _check_presence({"presence": np.zeros(1)}, noise)
     if noise.covariance == "banded" and noise.chol_offsets is None:
         raise ValueError("a banded covariance needs chol_offsets")
     if noise.covariance == "dense" and "spec_cov_inv" not in present:
@@ -911,6 +940,7 @@ def score(preds: Predictions, data: Mapping, noise: NoiseSpec):
     **JIT-compatible**: pure in ``(preds, data)``; ``noise`` is static structure.
     """
     _refuse_unscorable(noise)
+    _check_presence(data, noise)
     total = jnp.asarray(0.0)
     for channel in selected_channels(data, noise):
         total = total + channel.loglik(preds, data, noise)
