@@ -34,7 +34,11 @@ ROUND_OFF = 1e-10
 
 def _grid(ssp, factor):
     flux4 = ssp.ssp_flux[:, None, :, :] * factor[:, :, None, None]
-    return ssp._replace(ssp_flux=flux4, ssp_alpha_fe=ALPHA_NODES)
+    return ssp._replace(
+        ssp_flux=flux4,
+        ssp_alpha_fe=ALPHA_NODES,
+        source=f"{ssp.source}_alpha_synthetic",
+    )
 
 
 @pytest.fixture(scope="module")
@@ -258,3 +262,55 @@ def test_free_z_photometry_reads_metallicity_before_alpha(request, obs, grid):
     ref = np.asarray(fixed.predict_state({}).derived["stellar_phot_lnu_precomp"])
     rel = float(np.max(np.abs(got - ref) / np.abs(ref)))
     assert rel <= 1e-12, f"{grid}: free-z vs fixed-z at a node, max rel {rel:.3e}"
+
+
+# ── (4) energy balance: metallicity read before the alpha bracket (#3541, item 4) ──
+
+
+def _emitter_contribution(ssp4, approx):
+    """The dust emitter's on-minus-off contribution to two WISE bands, at a 4D grid."""
+    obs = tengri.Observation(
+        photometry=tengri.Photometry.from_names(["wise_w3", "wise_w4"], convention="bessell")
+    )
+
+    def model(emitter):
+        return SEDModel.build(
+            ssp_data=ssp4,
+            observation=obs,
+            approx=approx,
+            redshift=Fixed(0.0),
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={
+                "type": "two_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+            },
+            neb={"type": "none"},
+            met={"type": "delta", "alpha_fe": Fixed(0.3), "all_params": Fixed(DEFAULT)},
+            dust_emission=(
+                {"type": "dale2014", "all_params": Fixed(DEFAULT)}
+                if emitter
+                else {"type": "none"}
+            ),
+        )
+
+    on = np.asarray(model(True).predict_photometry({}), dtype=np.float64)
+    off = np.asarray(model(False).predict_photometry({}), dtype=np.float64)
+    return on - off
+
+
+@pytest.mark.parametrize("grid", ["control_multiplicative", "non_multiplicative"])
+def test_energy_balance_lut_reads_each_ssp_before_alpha(request, grid):
+    """The absorbed-energy LUT reads each SSP across Z, then mixes alpha (#3434).
+
+    The emitter's contribution from the LUT must equal the exact path's, which reads
+    metallicity per SSP before the [alpha/Fe] bracket. On a non-multiplicative grid the
+    alpha-first order differs.
+    """
+    ssp4 = request.getfixturevalue(
+        "ssp_multiplicative" if grid == "control_multiplicative" else "ssp_non_multiplicative"
+    )
+    exact = _emitter_contribution(ssp4, None)
+    lut = _emitter_contribution(ssp4, WavePrecomp())
+    rel = float(np.max(np.abs(lut / exact - 1.0)))
+    assert rel <= 1e-7, f"{grid}: energy-balance LUT vs exact, max rel {rel:.3e}"
