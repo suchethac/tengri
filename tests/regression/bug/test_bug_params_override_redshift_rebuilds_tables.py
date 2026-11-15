@@ -221,6 +221,42 @@ def test_cue_nebular_override_matches_direct_build(synthetic_ssp_wide):
     np.testing.assert_allclose(np.asarray(grid_o.wavelengths), np.asarray(grid_d.wavelengths))
 
 
+def test_cue_override_tabulation_is_exact_to_the_bound_and_deterministic(synthetic_ssp_wide):
+    """The Cue override vs the EXACT Fixed-z build, and two tabulations of one span.
+
+    The test above compares two tabulations on different nodes and so needs the tabulated
+    bound. These checks keep the z-table honest. The wave table alone is held against the
+    exact build at the tabulated bound (the coarse four-node nebular grid of the test above
+    carries its own error of several percent in a Fixed-z build too, so it is not the
+    reference for the z-table), and independent builds of the grid model's table agree to
+    round-off.
+    """
+    from tengri.inference.fitter import promote_to_runtime_redshift
+
+    obs = Observation(photometry=Photometry.from_names(OPT_BANDS))
+    exact = _cue_dust_free(synthetic_ssp_wide, obs, Z_OVERRIDE, None)
+    params = _params_for(exact)
+    expected = np.asarray(exact.predict_photometry(params))
+
+    wave_only = promote_to_runtime_redshift(
+        _cue_dust_free(synthetic_ssp_wide, obs, Z_BASE, WavePrecomp()), [Z_OVERRIDE]
+    )
+    got = np.asarray(wave_only.predict_photometry({**params, "redshift": Z_OVERRIDE}))
+    np.testing.assert_allclose(got, expected, rtol=TABULATED_RTOL, atol=0.0)
+
+    grid = (WavePrecomp(), FeaturePrecomp(n_grid=4))
+    first, second = (
+        promote_to_runtime_redshift(
+            _cue_dust_free(synthetic_ssp_wide, obs, Z_BASE, grid), [Z_OVERRIDE]
+        )
+        for _ in range(2)
+    )
+    assert first is not second, "the check needs two independent tabulations"
+    a = np.asarray(first.predict_photometry({**params, "redshift": Z_OVERRIDE}))
+    b = np.asarray(second.predict_photometry({**params, "redshift": Z_OVERRIDE}))
+    np.testing.assert_allclose(a, b, rtol=1e-10, atol=0.0)
+
+
 def test_dust_emission_band_response_override_matches_direct_build(synthetic_ssp_wide):
     """T3: the dust-IR band response R and energy-balance LUT are built at the override z."""
     f_over, _ = _assert_matches_direct(_dust_emission, synthetic_ssp_wide, IR_BANDS, WavePrecomp())
