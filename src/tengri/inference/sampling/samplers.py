@@ -237,17 +237,20 @@ def _mclmc_runner(adjusted: bool):
         import blackjax
 
         label = "adjusted_mclmc" if adjusted else "mclmc"
+        bound = _bound(target)
+        # One kernel object for every chain: it is a static argument of the sampling scan.
+        family = blackjax.mcmc.adjusted_mclmc if adjusted else blackjax.mcmc.mclmc
+        kernel = family.build_kernel(integrator=blackjax.mcmc.integrators.isokinetic_mclachlan)
 
         def single(tgt, k):
-            ld = _bound(tgt)
+            # The target of every chain shares its density and data, so one bound function is
+            # one static jit key: the sampling scan compiles once, not once per chain.
+            ld = bound
             # No burn-in phase: the (L, step size) tuning consumes the transient, so the
             # chain is n_samples long and n_burnin is ignored.
             tune_key, init_key, ckey = jax.random.split(k, 3)
             chain_keys = jax.random.split(ckey, cfg["n_samples"])
             if not adjusted:
-                kernel = blackjax.mcmc.mclmc.build_kernel(
-                    integrator=blackjax.mcmc.integrators.isokinetic_mclachlan
-                )
                 state = blackjax.mcmc.mclmc.init(tgt.init, ld, init_key)
                 state, params, _ = blackjax.mclmc_find_L_and_step_size(
                     mclmc_kernel=kernel,
@@ -269,9 +272,6 @@ def _mclmc_runner(adjusted: bool):
                 )
                 extra = {"L": float(params.L), "step_size": float(params.step_size)}
                 return SamplerResult(chain[None], None, {**extra, "n_warmup": cfg["n_warmup"]})
-            kernel = blackjax.mcmc.adjusted_mclmc.build_kernel(
-                integrator=blackjax.mcmc.integrators.isokinetic_mclachlan
-            )
             state = blackjax.mcmc.adjusted_mclmc.init(tgt.init, ld)
             state, params, _ = blackjax.adjusted_mclmc_find_L_and_step_size(
                 mclmc_kernel=kernel,
