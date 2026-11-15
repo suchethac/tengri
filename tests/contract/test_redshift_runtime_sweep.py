@@ -970,6 +970,26 @@ def test_catalog_nuts_masses_at_per_galaxy_redshifts_match_the_fixed_z_fits(repr
     np.testing.assert_allclose(
         got, ref, atol=SAMPLER_LOGM_ATOL, err_msg=f"{representation}: catalog NUTS at {SAMPLER_ZS}"
     )
+    # Derived properties and posterior photometry of the same posteriors are evaluated at
+    # each galaxy's own redshift: an extensive one (SFR) and an intensive one (the
+    # mass-weighted age, capped by the age of the Universe at z), then the exact band
+    # photometry against the noiseless mock it was fit to.
+    for z, post, (flux, _noise) in zip(SAMPLER_ZS, fit.posteriors, fluxes):
+        for name in PROPERTY_NAMES_FIT:
+            value = float(np.median(np.asarray(post.properties[name])))
+            np.testing.assert_allclose(
+                value,
+                _fixed_z_map(z)[1][name],
+                rtol=PROPERTY_RTOL_SAMPLED,
+                err_msg=f"{representation} z={z}: catalog NUTS {name}",
+            )
+        bands = np.median(np.asarray(post.observables(n_draws=32)), axis=0)
+        np.testing.assert_allclose(
+            bands,
+            flux,
+            rtol=PROPERTY_RTOL_SAMPLED,
+            err_msg=f"{representation} z={z}: catalog NUTS posterior photometry",
+        )
 
 
 # ── Derived properties and the remaining fit routes ────────────────────────────
