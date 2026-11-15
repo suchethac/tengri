@@ -2076,7 +2076,7 @@ class _CatalogFitterOriginal:
             chain_jitter=chain_jitter,
             max_leapfrog_steps=max_leapfrog_steps,
             precondition=precondition,
-            chees_dense=chees_dense,
+            metric="dense" if chees_dense else "diag",
             mass_matrix_estimation=mass_matrix_estimation,
         )
 

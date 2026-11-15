@@ -31,7 +31,7 @@ _COV = np.linalg.inv(_PREC)
 _SD = np.sqrt(np.diag(_COV))
 _Y = np.stack([_A @ np.array([0.4, -0.3, 0.2]), _A @ np.array([-0.5, 0.6, 0.1])])
 
-_N_WARMUP, _N_BURNIN, _N_SAMPLES = 300, 50, 1000
+_N_WARMUP, _N_BURNIN, _N_SAMPLES = 300, 50, 2000
 _IGNORED = ("ignored", "not supported", "unsupported", "not available")
 
 
@@ -56,9 +56,9 @@ def _split_rhat(chains):
 
 
 def _catalog_samplers():
-    from tengri.inference.catalog_fitter import _CatalogFitterOriginal as C
+    from tengri.inference.sampling.driver import get_sampler, sampler_names
 
-    return sorted(set(C._MCMC_SAMPLER_TAG.values()))
+    return sorted(n for n in sampler_names() if get_sampler(n).vmappable)
 
 
 def _driver_samplers():

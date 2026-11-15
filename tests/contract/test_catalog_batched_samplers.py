@@ -93,10 +93,10 @@ class TestWhichSamplersReachTheBatchedPath:
         assert set(C._MCMC_VMAPPABLE) == set(C._MCMC_SAMPLER_TAG)
 
     def test_the_engine_agrees_about_which_samplers_exist(self):
-        from tengri.inference.backends.mcmc.catalog import _SAMPLERS
         from tengri.inference.catalog_fitter import _CatalogFitterOriginal as C
+        from tengri.inference.sampling.driver import get_sampler
 
-        assert set(C._MCMC_SAMPLER_TAG.values()) <= set(_SAMPLERS)
+        assert all(get_sampler(tag).vmappable for tag in C._MCMC_SAMPLER_TAG.values())
 
 
 # --------------------------------------------------------------------------
