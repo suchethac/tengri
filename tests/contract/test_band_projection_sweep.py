@@ -384,13 +384,13 @@ _F32_ON_MAIN = {
     "dust_emission": "float32 overflow casting the dust-emission table (also on origin/main)",
     "cloudy_grid": "non-finite float32 CLOUDY band table (also on origin/main)",
     "dust_two_component": (
-        "the float32 wavelength-table path drifts past the bar after the metallicity read "
-        "changed on main: 2mass_ks is off by 1.1e-2 against 7e-3 in both conventions, while "
+        "the float32 wavelength-table path of this dust model drifts past the bar on main: "
+        "2mass_ks is off by 1.1e-2 against 7e-3 in both conventions, while "
         "the float64 table agrees with the exact path to 1.4e-4 (also on origin/main)"
     ),
     "dust_single_screen": (
-        "the float32 wavelength-table path drifts past the bar after the metallicity read "
-        "changed on main: 2mass_ks is off by 8.0e-3 against 7e-3 in both conventions, while "
+        "the float32 wavelength-table path of this dust model drifts past the bar on main: "
+        "2mass_ks is off by 8.0e-3 against 7e-3 in both conventions, while "
         "the float64 table agrees with the exact path to 1.4e-4 (also on origin/main)"
     ),
 }
