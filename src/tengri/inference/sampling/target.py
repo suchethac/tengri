@@ -304,6 +304,10 @@ class FlatTarget:
     prior_is_standard : bool
         True when the prior is exactly iid N(0, 1) in ``x``. False after whitening, and for
         a partially centered field prior.
+    prior : tuple or None
+        ``(mean, precision_factor)`` of a Gaussian prior ``N(mean, (P^T P)^-1)`` that is not
+        the standard one, as left by :meth:`whiten`; None for the standard prior and for a
+        prior that is not Gaussian.
     """
 
     logdensity: Callable[[Any, Any], Any]
@@ -312,6 +316,7 @@ class FlatTarget:
     item_args: Any = None
     log_likelihood: Callable | None = None
     prior_is_standard: bool = True
+    prior: tuple | None = None
     extras: dict = field(default_factory=dict, compare=False)
 
     @property
@@ -326,6 +331,21 @@ class FlatTarget:
         if not self.prior_is_standard:
             raise ValueError("a target with a non-standard prior needs an explicit log_likelihood")
         return _derived_likelihood(self.logdensity)
+
+    def gaussian_prior(self):
+        """Return ``(mean, precision_factor)`` of the target's Gaussian prior.
+
+        Raises
+        ------
+        ValueError
+            If the prior is neither the standard one nor a known Gaussian.
+        """
+        if self.prior_is_standard:
+            eye = jnp.eye(self.n_dim, dtype=self.init.dtype)
+            return jnp.zeros(self.n_dim, dtype=self.init.dtype), eye
+        if self.prior is None:
+            raise ValueError("this target's prior is not a known Gaussian")
+        return self.prior
 
     def whiten(self, mu, factor):
         """Return the target reparametrized by ``x = mu + L z`` and the back transform.
@@ -345,12 +365,25 @@ class FlatTarget:
             ``back(z_draws) -> x_draws``, rows mapped by ``mu + L z``.
         """
         z0 = jax.scipy.linalg.solve_triangular(factor, self.init - mu, lower=True)
+        # x = mu + L z: a prior |P (x - m)|^2 becomes |P L (z - L^-1 (m - mu))|^2.
+        known = self.prior_is_standard or self.prior is not None
+        if known:
+            mean, precision = self.gaussian_prior()
+            prior = (
+                jax.scipy.linalg.solve_triangular(factor, mean - mu, lower=True),
+                precision @ factor,
+            )
+        else:
+            prior = None
+        has_likelihood = self.log_likelihood is not None or self.prior_is_standard
         whitened = FlatTarget(
             logdensity=whiten_logdensity(self.logdensity),
             layout=self.layout,
             init=z0,
             item_args=(mu, factor, self.item_args),
+            log_likelihood=(whiten_logdensity(self.likelihood()) if has_likelihood else None),
             prior_is_standard=False,
+            prior=prior,
             extras=dict(self.extras),
         )
 

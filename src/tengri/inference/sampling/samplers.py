@@ -12,6 +12,7 @@ VI), and importance-sampled HMC over the target.
 
 from __future__ import annotations
 
+import functools
 import warnings
 
 import jax
@@ -44,9 +45,31 @@ def _bound(target: FlatTarget):
     return lambda x: ld(x, args)
 
 
-def _std_logprior(x, _args):
-    """Unnormalized iid N(0, 1) log prior."""
-    return -0.5 * jnp.sum(x**2)
+def _gaussian_logprior(x, args):
+    """Unnormalized Gaussian log prior; ``args = (item_args, (mean, precision_factor))``."""
+    mean, precision = args[1]
+    return -0.5 * jnp.sum((precision @ (x - mean)) ** 2)
+
+
+@functools.cache
+def _likelihood_of_pair(log_likelihood):
+    """Return the likelihood reading the item arguments out of ``(item_args, prior)``."""
+
+    def likelihood(x, args):
+        return log_likelihood(x, args[0])
+
+    return likelihood
+
+
+def _gaussian_prior_or_refuse(target: FlatTarget, label: str):
+    """Return ``(mean, precision_factor)`` of the target's Gaussian prior or refuse by name."""
+    if target.prior_is_standard or target.prior is not None:
+        return target.gaussian_prior()
+    raise ValueError(
+        f"{label}: this sampler draws from the target's Gaussian prior, which is not this "
+        "target's (a partially centered GP-field prior, sfh={'field_centering': a < 1}). "
+        "Use mcmc_nuts, mcmc_hmc or map there, or set field_centering=1."
+    )
 
 
 def _independent(single, target: FlatTarget, key, n_chains: int, cfg: dict) -> SamplerResult:
@@ -79,6 +102,7 @@ def _fields(target: FlatTarget) -> dict:
         "item_args": target.item_args,
         "log_likelihood": target.log_likelihood,
         "prior_is_standard": target.prior_is_standard,
+        "prior": target.prior,
         "extras": target.extras,
     }
 
@@ -151,8 +175,14 @@ def _run_ess(target, key, n_chains, metric, cfg):
         n_chain = cfg["n_burnin"] + cfg["n_samples"]
         # The flat prior is exactly the iid N(0, 1) the ESS ellipse assumes, so the
         # sampler's one structural requirement holds by construction.
+        mean, precision = _gaussian_prior_or_refuse(tgt, "mcmc_ess")
         positions, subiters = _ess_full_scan(
-            tgt.init, jax.random.split(k, n_chain), tgt.likelihood(), tgt.item_args
+            tgt.init,
+            jax.random.split(k, n_chain),
+            tgt.likelihood(),
+            tgt.item_args,
+            mean,
+            jnp.linalg.inv(precision.T @ precision),
         )
         return SamplerResult(
             positions[None, cfg["n_burnin"] :],
@@ -264,23 +294,16 @@ def _run_nss(target, key, n_chains, metric, cfg):
         sample as ns_sample,
     )
 
-    if not target.prior_is_standard:
-        raise ValueError(
-            "nss: the nested sampler draws its live points from the iid N(0,1) prior, which "
-            "is not this target's prior (a partially centered GP-field prior, "
-            "sfh={'field_centering': a < 1}). Use mcmc_nuts, mcmc_hmc or map there, or set "
-            "field_centering=1."
-        )
-
     def single(tgt, k):
         guards._require_nondegenerate_live_set(cfg["nss_n_live"], tgt.n_dim, "nss")
         num_inner = tgt.n_dim if cfg["nss_num_inner_steps"] is None else cfg["nss_num_inner_steps"]
         loglik = tgt.likelihood()
+        mean, precision = _gaussian_prior_or_refuse(tgt, "nss")
         # NSS's native compile-once mode: a 2-arg likelihood plus data_args carried in the
         # sampler state, so the data stays a traced value. max_shrinkage=20 keeps the
         # compiled vmap(while_loop) graph bounded (100 compiled a 20+ GB graph).
         algo = as_top_level_api(
-            lambda x: -0.5 * jnp.sum(x**2),
+            lambda x: -0.5 * jnp.sum((precision @ (x - mean)) ** 2),
             loglik,
             num_inner,
             num_delete=cfg["nss_num_delete"],
@@ -289,9 +312,10 @@ def _run_nss(target, key, n_chains, metric, cfg):
             data_args=tgt.item_args,
         )
         init_key, loop_key = jax.random.split(k)
-        live = algo.init(
-            jax.random.normal(init_key, (cfg["nss_n_live"], tgt.n_dim)), data_args=tgt.item_args
-        )
+        eps = jax.random.normal(init_key, (cfg["nss_n_live"], tgt.n_dim))
+        # A draw from the prior: mean + P^-1 eps, row-wise.
+        draws = mean + jax.scipy.linalg.solve(precision, eps.T).T
+        live = algo.init(draws, data_args=tgt.item_args)
         step = jax.jit(algo.step)
         dead, n_iter = [], 0
         while True:
@@ -394,8 +418,6 @@ def _vi_runner(family: str):
 
         if family == "fullrank":
             _warn_footprint("vi_fullrank", _BYTES * target.n_dim * (target.n_dim + 1), cfg)
-        else:
-            warnings.warn(MEANFIELD_WARNING, UserWarning, stacklevel=2)
 
         def single(tgt, k):
             samples, info = fit_gaussian_vi(
@@ -483,17 +505,16 @@ def _run_smc(target, key, n_chains, metric, cfg):
     )
     from tengri.inference.backends.mcmc.smc import SMC_TARGET_ACCEPT_RATE
 
-    if not target.prior_is_standard:
-        raise ValueError("mcmc_smc anneals from the iid N(0,1) prior, which is not this target's")
+    mean, precision = _gaussian_prior_or_refuse(target, "mcmc_smc")
     n_particles = cfg["smc_n_particles"]
     _warn_footprint("smc", n_chains * n_particles * target.n_dim * _BYTES * 8, cfg)
     run_keys = jax.random.split(key, n_chains)
     particles, log_z, n_temp, ladder, _step, _n_div, _accept, min_ess = _smc_scan(
-        jnp.eye(target.n_dim, dtype=target.init.dtype),
+        jnp.linalg.inv(precision),
         run_keys,
-        target.item_args,
-        _std_logprior,
-        target.likelihood(),
+        (target.item_args, (mean, precision)),
+        _gaussian_logprior,
+        _likelihood_of_pair(target.likelihood()),
         n_particles,
         int(cfg["smc_n_mcmc_steps"]),
         int(cfg["n_leapfrog"]) * 2,
@@ -503,6 +524,7 @@ def _run_smc(target, key, n_chains, metric, cfg):
         float(SMC_TARGET_ACCEPT_RATE),
         int(cfg["smc_max_temperatures"]),
         None,
+        mean,
     )
     reached = all(float(v) >= 1.0 for v in np.asarray(ladder).reshape(-1))
     return SamplerResult(
@@ -651,28 +673,24 @@ for _name, _methods, _family, _dense in (
             "chain",
             _methods,
             _chain_runner(_family, force_dense=_dense),
-            native_dense=_family in DENSE_FAMILIES,
+            metric_mode="native" if _family in DENSE_FAMILIES else "layer",
             vmappable=_name in ("nuts", "hmc", "dynamic_hmc", "ghmc", "barker", "mala"),
         )
     )
 
 register_sampler(Sampler("chees", "ensemble", ("mcmc_chees",), _run_chees, vmappable=True))
-register_sampler(Sampler("smc", "ensemble", ("mcmc_smc",), _run_smc, uses_metric=False))
-register_sampler(Sampler("ess", "chain", ("mcmc_ess",), _run_ess, uses_metric=False))
+register_sampler(Sampler("smc", "ensemble", ("mcmc_smc",), _run_smc))
+register_sampler(Sampler("ess", "chain", ("mcmc_ess",), _run_ess))
 register_sampler(Sampler("mclmc", "chain", ("mcmc_mclmc",), _mclmc_runner(False)))
 register_sampler(Sampler("adjusted_mclmc", "chain", ("mcmc_adjusted_mclmc",), _mclmc_runner(True)))
+register_sampler(Sampler("hmc_lowrank", "chain", ("mcmc_hmc_lowrank",), _run_lowrank))
+register_sampler(Sampler("hmc_is", "chain", ("hmc_is",), _run_hmc_is, metric_mode="internal"))
+register_sampler(Sampler("nss", "nested", ("nss",), _run_nss))
 register_sampler(
-    Sampler("hmc_lowrank", "chain", ("mcmc_hmc_lowrank",), _run_lowrank, uses_metric=False)
+    Sampler("map", "point", ("map",), _run_map, fidelity="point", metric_mode="invariant")
 )
-register_sampler(Sampler("hmc_is", "chain", ("hmc_is",), _run_hmc_is, uses_metric=False))
-register_sampler(Sampler("nss", "nested", ("nss",), _run_nss, uses_metric=False))
-register_sampler(Sampler("map", "point", ("map",), _run_map, fidelity="point", uses_metric=False))
-register_sampler(Sampler("laplace", "point", ("laplace",), _run_laplace, uses_metric=False))
-register_sampler(
-    Sampler(
-        "vi_fullrank", "variational", ("vi_fullrank",), _vi_runner("fullrank"), uses_metric=False
-    )
-)
+register_sampler(Sampler("laplace", "point", ("laplace",), _run_laplace, metric_mode="invariant"))
+register_sampler(Sampler("vi_fullrank", "variational", ("vi_fullrank",), _vi_runner("fullrank")))
 register_sampler(
     Sampler(
         "vi_meanfield",
@@ -680,6 +698,6 @@ register_sampler(
         ("vi_meanfield",),
         _vi_runner("meanfield"),
         fidelity="mean_only",
-        uses_metric=False,
+        advisory=MEANFIELD_WARNING,
     )
 )

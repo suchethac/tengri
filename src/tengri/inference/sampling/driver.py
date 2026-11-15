@@ -8,10 +8,11 @@ settings are generic layers rather than per-sampler code:
   (:mod:`tengri.inference.backends.mcmc.chain_program`); every other sampler runs
   independent chains from overdispersed starts.
 * ``metric="dense"``: families with a dense adaptation of their own use it; every other
-  chain or ensemble sampler runs on a target whitened by a pilot run's covariance
-  (:meth:`~.target.FlatTarget.whiten`). Samplers that carry no metric (a point estimate, a
-  fitted Gaussian, nested sampling, elliptical slice, tempered SMC) record
-  ``metric_applied="none"`` in their diagnostics.
+  sampler runs on a target whitened by a pilot run's covariance
+  (:meth:`~.target.FlatTarget.whiten`), a reparametrization of the target that applies to
+  any sampler, with the draws mapped back. Where whitening cannot change the result (a MAP
+  point, a Laplace Gaussian: both affine-equivariant) the sampler is marked ``invariant`` and
+  runs as it is, recorded as such in its diagnostics.
 
 The sampler implementations live in :mod:`tengri.inference.sampling.samplers` and register
 here, so adding a sampler is one registration and every engine reaches it.
@@ -20,6 +21,7 @@ here, so adding a sampler is one registration and every engine reaches it.
 from __future__ import annotations
 
 import dataclasses
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -69,6 +71,7 @@ DEFAULTS: dict[str, Any] = {
 
 KINDS = ("chain", "ensemble", "variational", "nested", "point")
 FIDELITIES = ("exact", "mean_only", "point")
+METRIC_MODES = ("layer", "native", "internal", "invariant")
 
 
 @dataclass(frozen=True)
@@ -107,10 +110,13 @@ class Sampler:
     fidelity : {"exact", "mean_only", "point"}
         What its draws promise on a Gaussian posterior: the whole posterior, only its mean
         (mean-field), or a point estimate.
-    native_dense : bool
-        True when ``metric="dense"`` is served by the family's own dense adaptation.
-    uses_metric : bool
-        False for samplers that carry no metric, which record the request as not applied.
+    metric_mode : {"layer", "native", "internal", "invariant"}
+        How ``metric="dense"`` is served: by the pilot-whitening layer, by the family's own
+        dense adaptation, by the runner itself (it delegates to another sampler), or not at
+        all because the result is invariant under the whitening.
+    advisory : str or None
+        A warning emitted once per :func:`run_sampler` call, however many internal passes
+        (a pilot, then the final run) the layers make.
     vmappable : bool
         True when :func:`run_chain_family`-style traced use under ``vmap`` is supported.
     """
@@ -120,13 +126,15 @@ class Sampler:
     methods: tuple[str, ...]
     run: Callable
     fidelity: str = "exact"
-    native_dense: bool = False
-    uses_metric: bool = True
+    metric_mode: str = "layer"
+    advisory: str | None = None
     vmappable: bool = False
 
     def __post_init__(self):
         if self.kind not in KINDS:
             raise ValueError(f"sampler {self.name!r}: kind {self.kind!r} not in {KINDS}")
+        if self.metric_mode not in METRIC_MODES:
+            raise ValueError(f"sampler {self.name!r}: metric_mode {self.metric_mode!r}")
         if self.fidelity not in FIDELITIES:
             raise ValueError(
                 f"sampler {self.name!r}: fidelity {self.fidelity!r} not in {FIDELITIES}"
@@ -250,10 +258,11 @@ def run_sampler(
         raise ValueError("vmap_items needs a FlatTarget")
     sampler = get_sampler(name)
     full = resolve_cfg(cfg)
-    layered = metric == "dense" and sampler.uses_metric and not sampler.native_dense
-    if not layered:
+    if sampler.advisory:
+        warnings.warn(sampler.advisory, UserWarning, stacklevel=2)
+    if metric == "diag" or sampler.metric_mode != "layer":
         result = sampler.run(target, key, n_chains, metric, full)
-        applied = "diag" if metric == "diag" else ("native" if sampler.uses_metric else "none")
+        applied = "diag" if metric == "diag" else sampler.metric_mode
         return _tagged(result, metric, applied, False)
     pilot_key, final_key = jax.random.split(key)
     pilot = sampler.run(target, pilot_key, 1, "diag", full)
