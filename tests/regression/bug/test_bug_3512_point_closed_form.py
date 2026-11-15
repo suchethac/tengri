@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Closed-form Gaussian point readout in ln lambda (#3512, #3436).
 
 The point readout of the sigma_v correction is the exact segment integral of B(lambda F)/lambda
@@ -14,14 +15,16 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 from tengri.components.lyc import LYMAN_LIMIT_AA, edge_interp
 from tengri.observation.spectrum import point_readout_gaussian_ln
+from tengri.utils.physics_constants import C_KM_S
 from tests._lsf_reference import convolve_piecewise_linear
 
 jax.config.update("jax_enable_x64", True)
 
-_C_KMS = 299792.458
+pytestmark = pytest.mark.regression_bug
 
 
 def _random_case(seed: int, n_pix: int = 30):
@@ -30,7 +33,7 @@ def _random_case(seed: int, n_pix: int = 30):
     fn = rng.uniform(0.1, 5.0, wn.size)
     z = float(rng.uniform(0.0, 0.5))
     wobs = np.sort(rng.uniform(wn[0] * (1 + z) * 1.02, wn[-1] * (1 + z) * 0.98, n_pix))
-    sig_ln = rng.uniform(10.0, 2000.0, n_pix) / _C_KMS
+    sig_ln = rng.uniform(10.0, 2000.0, n_pix) / C_KM_S
     return wn, fn, z, wobs, sig_ln
 
 
@@ -54,7 +57,7 @@ def test_closed_form_matches_quadrature_across_lyman_step():
     fn = np.array([3.0, 1.5, 2.0, 0.5, 1.0, 0.8, 0.3])
     z = 0.0
     wobs = np.linspace(760.0, 4500.0, 25)
-    s = np.full(wobs.shape, 300.0 / _C_KMS)
+    s = np.full(wobs.shape, 300.0 / C_KM_S)
     got = np.asarray(
         point_readout_gaussian_ln(
             jnp.asarray(fn),
