@@ -2591,7 +2591,9 @@ def _exact_fold_blocker(igm_comp, stellar_state):
     return None
 
 
-def _resolve_igm_fold(igm_fold, igm_comp, stellar_state, ssp_data=None, filters=None) -> str:
+def _resolve_igm_fold(
+    igm_fold, igm_comp, stellar_state, ssp_data=None, filters=None, on_decline=None
+) -> str:
     """Resolve ``"auto"`` to the fold that can actually be built here.
 
     ``"exact"`` cannot be the default: it raises for a transmission carrying
@@ -2616,6 +2618,8 @@ def _resolve_igm_fold(igm_fold, igm_comp, stellar_state, ssp_data=None, filters=
         without it.
     filters : sequence, optional
         Filter curves, on the same footing as ``ssp_data``.
+    on_decline : callable, optional
+        Called with the reason whenever ``"auto"`` falls back to ``"node"``.
 
     Returns
     -------
@@ -2635,9 +2639,19 @@ def _resolve_igm_fold(igm_fold, igm_comp, stellar_state, ssp_data=None, filters=
         return igm_fold
 
     if ssp_data is None or not filters:
+        if on_decline is not None:
+            on_decline(
+                "auto fell back to the node fold: the exact fold needs the SSP "
+                "templates and the filter curves at build time, and one was not passed"
+            )
         return "node"
 
-    return "node" if _exact_fold_blocker(igm_comp, stellar_state) is not None else "exact"
+    blocker = _exact_fold_blocker(igm_comp, stellar_state)
+    if blocker is not None:
+        if on_decline is not None:
+            on_decline(f"auto fell back to the node fold: {blocker}")
+        return "node"
+    return "exact"
 
 
 def _fold_igm_into_subbands(
@@ -2650,6 +2664,7 @@ def _fold_igm_into_subbands(
     *,
     lyc_gate=False,
     convention=FilterConvention.BESSELL,
+    on_decline=None,
 ):
     r"""Fold the IGM transmission into the stellar sub-band quadrature weights.
 
@@ -2691,6 +2706,9 @@ def _fold_igm_into_subbands(
     lyc_gate, convention : optional
         The sub-band partition the tensors were built with; passed to the exact
         fold (see :func:`_fold_igm_exact_into_subbands`).
+    on_decline : callable, optional
+        Called with the reason at every point the fold is not built at build
+        time. The caller records it on the model (``record_decline``).
 
     Returns
     -------
@@ -2709,10 +2727,15 @@ def _fold_igm_into_subbands(
     """
     from dataclasses import replace as _replace
 
+    note = on_decline if on_decline is not None else (lambda reason: None)
+
     if stellar_state is None:
+        note("there is no stellar state to fold the IGM transmission into")
         return stellar_state
 
-    igm_fold = _resolve_igm_fold(igm_fold, igm_comp, stellar_state, ssp_data, filters)
+    igm_fold = _resolve_igm_fold(
+        igm_fold, igm_comp, stellar_state, ssp_data, filters, on_decline=note
+    )
 
     # Dispatch to node or exact fold
     if igm_fold == "exact":
@@ -2726,15 +2749,25 @@ def _fold_igm_into_subbands(
             convention=convention,
         )
         built = result is not stellar_state
+        if not built:
+            note(
+                "the exact fold built no table: it needs SSP templates, filter "
+                "curves and a sub-band photometry tensor, and one of these is absent"
+            )
         return _replace(result, igm_fold_resolved=igm_fold if built else None)
 
     # Default: node fold (fast, exact for smooth transmission)
+    patchy_reason = (
+        "patchy reionization or a DLA makes the transmission a free function, so no "
+        "mean-IGM sub-band table is folded at build time; the node fold runs live per call"
+    )
     lut = getattr(stellar_state, "ssp_phot_lut", None)
     if lut is not None and lut.ssp_subband_phot is not None:
         trans = igm_comp.subband_node_transmission(lut.ssp_subband_waves_rest, [lut.redshift])
         if trans is None:
             # Patchy / DLA: nothing to fold at build time; the node fold runs
             # live on the sub-band nodes at every call (#1149).
+            note(patchy_reason)
             return _replace(stellar_state, igm_fold_resolved=igm_fold)
         return _replace(
             stellar_state,
@@ -2748,6 +2781,7 @@ def _fold_igm_into_subbands(
         if trans is None:
             # Patchy / DLA: nothing to fold at build time; the node fold runs
             # live on the sub-band nodes at every call (#1149).
+            note(patchy_reason)
             return _replace(stellar_state, igm_fold_resolved=igm_fold)
         return _replace(
             stellar_state,
@@ -2757,6 +2791,7 @@ def _fold_igm_into_subbands(
             igm_fold_resolved=igm_fold,
         )
 
+    note("the stellar state has no sub-band photometry LUT or z-table to fold into")
     return _replace(stellar_state, igm_fold_resolved=None)
 
 
@@ -13290,6 +13325,9 @@ class SEDModel:
                                     self.observation.photometry,
                                     "convention",
                                     FilterConvention.BESSELL,
+                                ),
+                                on_decline=lambda reason: self.record_decline(
+                                    "igm", "fold", reason
                                 ),
                             ),
                         )
