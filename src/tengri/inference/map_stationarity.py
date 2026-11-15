@@ -24,39 +24,47 @@ MAP_DECREMENT_BAR = 1e-8
 _DERIVATIVES: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 
 
-def compiled_derivatives(loss: Callable[[jax.Array], jax.Array]):
+def compiled_derivatives(loss: Callable):
     """Return the jitted ``(value_and_grad, hessian)`` pair of ``loss``, built once.
 
     Parameters
     ----------
     loss : callable
-        ``loss(vec) -> scalar``, the negative log-posterior of a flat standardized vector.
+        ``loss(vec) -> scalar``, or ``loss(vec, data) -> scalar`` when the data is passed
+        to the returned callables.
 
     Returns
     -------
     value_and_grad : callable
-        ``value_and_grad(x) -> (value, grad)``, jitted.
+        ``value_and_grad(x, data=None) -> (value, grad)``, jitted.
     hessian : callable
-        ``hessian(x) -> ndarray, shape (D, D)``, jitted.
+        ``hessian(x, data=None) -> ndarray, shape (D, D)``, jitted.
 
     Notes
     -----
     Keyed on the identity of ``loss``: pass the same object to reuse the compiled
     programs, a new object compiles afresh. The entry is dropped with ``loss``.
+
+    ``data`` is a traced argument, not a closure constant, so one compile serves every
+    dataset of the same shape (#3530). ``data=None`` calls ``loss(vec)``.
     """
     pair = _DERIVATIVES.get(loss)
     if pair is None:
         loss_ref = weakref.ref(loss)
 
-        def live(vec):
+        def live(vec, data):
             f = loss_ref()
             if f is None:
                 raise RuntimeError("the loss was collected while its derivatives were in use")
-            return f(vec)
+            return f(vec) if data is None else f(vec, data)
 
         pair = (jax.jit(jax.value_and_grad(live)), jax.jit(jax.hessian(live)))
         _DERIVATIVES[loss] = pair
-    return pair
+    value_and_grad, hessian = pair
+    return (
+        lambda x, data=None: value_and_grad(x, data),
+        lambda x, data=None: hessian(x, data),
+    )
 
 
 @dataclass(frozen=True)
@@ -94,17 +102,19 @@ class Stationarity:
         )
 
 
-def stationarity(loss: Callable[[jax.Array], jax.Array], x: jax.Array) -> Stationarity:
+def stationarity(loss: Callable, x: jax.Array, data=None) -> Stationarity:
     """Measure the stationarity of ``loss`` at the flat standardized point ``x``.
 
     Parameters
     ----------
     loss : callable
         ``loss(vec) -> scalar``, the negative log-posterior of a flat standardized
-        vector, ``vec`` of shape ``(D,)``.
+        vector, ``vec`` of shape ``(D,)``; or ``loss(vec, data)`` when ``data`` is given.
     x : array_like, shape (D,)
         Standardized point at which to measure. Values are O(1) by construction, so
         float32 runs represent the gradient and Hessian without scale issues.
+    data : pytree, optional
+        Passed to ``loss`` as a traced argument (see :func:`compiled_derivatives`).
 
     Returns
     -------
@@ -122,8 +132,8 @@ def stationarity(loss: Callable[[jax.Array], jax.Array], x: jax.Array) -> Statio
     """
     x = jnp.asarray(x)
     value_and_grad, hessian_fn = compiled_derivatives(loss)
-    value, grad = value_and_grad(x)
-    hessian = hessian_fn(x)
+    value, grad = value_and_grad(x, data)
+    hessian = hessian_fn(x, data)
     grad_norm = float(jnp.linalg.norm(grad))
     if not bool(jnp.all(jnp.isfinite(hessian))):
         return Stationarity(
