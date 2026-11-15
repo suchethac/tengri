@@ -694,3 +694,40 @@ def test_unscored_noise_settings_are_refused_by_name():
         spec = NoiseSpec(**{**noise.__dict__, **override})
         with pytest.raises(NotImplementedError):
             channels.validate(spec, data.keys())
+
+
+def test_the_scored_error_is_the_one_a_noisy_mock_draws_from():
+    """``effective_sigma`` is the error the floored likelihood scores with.
+
+    The floored Gaussian density rebuilt from ``effective_sigma`` equals ``score`` plus its
+    normalization; the control rebuilds it from the bare measurement error and must miss by
+    many nats, so the comparison can fail.
+    """
+    preds, data, noise = _synthetic("photometry", "cal_floor")
+    obs, err = np.asarray(data["data"]), np.asarray(data["noise"])
+    pred = np.asarray(preds.phot_fnu)
+    sigma = np.asarray(channels.effective_sigma(err, pred, F_CAL))
+    np.testing.assert_allclose(sigma, np.hypot(err, F_CAL * np.abs(pred)), rtol=1e-14)
+
+    def gaussian(s):
+        return float(np.sum(scipy.stats.norm.logpdf(obs, loc=pred, scale=s)))
+
+    total = _full_density(preds, data, noise, "photometry")
+    np.testing.assert_allclose(total, gaussian(sigma), rtol=1e-9)
+    control_miss = abs(total - gaussian(err))
+    assert control_miss > 1.0, f"control differs by only {control_miss:.3g} nats"
+
+
+def test_a_traced_extra_error_term_is_refused_until_it_is_scored():
+    _, data, noise = _synthetic("photometry", "gaussian")
+    spec = NoiseSpec(**{**noise.__dict__, "extra_sigma": lambda preds, data: 0.0})
+    with pytest.raises(NotImplementedError, match="extra error"):
+        channels.validate(spec, data.keys())
+
+
+def test_diagonal_and_banded_marginal_arms_share_one_scorer():
+    """One ``score`` call evaluates a diagonal and a banded-covariance spectrum."""
+    for label in ("cal_marg", "cal_marg_banded"):
+        preds, data, noise = _synthetic("calibration", label)
+        assert [c.name for c in selected_channels(data, noise)] == ["calibration"]
+        assert np.isfinite(float(score(preds, data, noise)))

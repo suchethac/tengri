@@ -52,6 +52,7 @@ from tengri.inference.likelihoods.terms import (
 __all__ = [
     "BOOKKEEPING_KEYS",
     "CHANNELS",
+    "ENGINES_ON_SCORER",
     "CalibrationSpec",
     "Channel",
     "LineSpec",
@@ -59,6 +60,7 @@ __all__ = [
     "Predictions",
     "channel_keys",
     "data_keys",
+    "effective_sigma",
     "log_normalization",
     "score",
     "selected_channels",
@@ -233,6 +235,11 @@ class NoiseSpec:
     observed_floor : float, optional
         Fractional error floor scaled by the observed flux, added in quadrature. Zero is
         the only value scored today; :func:`validate` refuses any other.
+    extra_sigma : callable or None, optional
+        ``extra_sigma(preds, data)``: an error term added in quadrature that depends on
+        traced inputs (for instance a template error that varies with redshift). It is
+        evaluated inside the scorer, never frozen at build. Not scored yet;
+        :func:`validate` refuses it.
     nonpositive_error : {"refuse"}, optional
         Policy for a data error at or below zero. A fit refuses it, the one value scored
         today; :func:`validate` refuses any other.
@@ -253,6 +260,7 @@ class NoiseSpec:
     lines: LineSpec | None = None
     observed_floor: float = 0.0
     nonpositive_error: str = "refuse"
+    extra_sigma: Callable | None = None
 
 
 # ── Channels ──────────────────────────────────────────────────────────────────────────
@@ -793,6 +801,8 @@ def validate(noise: NoiseSpec, data_keys_present) -> None:
             "the standard Prospector-style configuration, or disable "
             "calibration_marginalize."
         )
+    if noise.extra_sigma is not None:
+        raise NotImplementedError("a traced extra error term is not scored yet")
     if noise.observed_floor != 0.0:
         raise NotImplementedError("an observed-scaled error floor is not scored yet")
     if noise.nonpositive_error != "refuse":
@@ -806,6 +816,34 @@ def validate(noise: NoiseSpec, data_keys_present) -> None:
         raise ValueError("a dense covariance needs the spec_cov_inv data key")
     if noise.covariance == "banded" and "spec_chol_data" not in present:
         raise ValueError("a banded covariance needs the spec_chol_data data key")
+
+
+def effective_sigma(err, predicted, f_cal=0.0):
+    """The 1-sigma error a noise model scores a band or pixel with.
+
+    Parameters
+    ----------
+    err : array_like
+        Measurement uncertainty [flux units].
+    predicted : array_like
+        Model prediction the calibration floor scales with [flux units].
+    f_cal : float or array_like, optional
+        Fractional calibration floor [dimensionless].
+
+    Returns
+    -------
+    ndarray
+        ``hypot(err, f_cal |predicted|)`` [flux units]. The variable-noise and censored
+        terms evaluate this same function, so a noisy mock drawn with it is scored by the
+        likelihood that scores real data.
+
+    Notes
+    -----
+    **JIT-compatible**: yes; every argument may be traced.
+    """
+    from tengri.observation.noise import compute_effective_noise
+
+    return compute_effective_noise(err, predicted, f_cal)
 
 
 def score(preds: Predictions, data: Mapping, noise: NoiseSpec):
