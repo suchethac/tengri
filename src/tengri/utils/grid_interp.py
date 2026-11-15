@@ -2077,11 +2077,13 @@ def _window_eval_axis0(st: _AxisStencil, ys: jnp.ndarray, kind: str) -> jnp.ndar
         t = (st.xq - x0) / jnp.where(h > 0.0, h, 1.0)
         return (1.0 - t) * y0 + t * y1
     # The cubic is positively homogeneous in the node values, so it is formed on each
-    # column divided by its own window maximum and scaled back, as in
-    # :func:`pchip_interp_local`: the harmonic-mean test multiplies two secants, and a
-    # table of ~1e19 per-Lsun values squares past float32's range (#3505).
-    scale = jax.lax.stop_gradient(jnp.max(jnp.abs(ys), axis=0, keepdims=True))
-    scale = jnp.where(scale > 0.0, scale, 1.0)
+    # column divided by a power of two near its window maximum and scaled back: the
+    # harmonic-mean test multiplies two secants, and a table of ~1e19 per-Lsun values
+    # squares past float32's range (#3505). A power of two is exact in binary floating
+    # point, so a table that did not overflow is read bit for bit as before.
+    peak = jax.lax.stop_gradient(jnp.max(jnp.abs(ys), axis=0, keepdims=True))
+    _, exponent = jnp.frexp(jnp.where(peak > 0.0, peak, 1.0))
+    scale = jnp.ldexp(jnp.ones_like(peak), exponent)
     yn = ys / scale
     y0 = jax.lax.dynamic_index_in_dim(yn, st.cell, axis=0, keepdims=False)
     y1 = jax.lax.dynamic_index_in_dim(yn, st.cell + 1, axis=0, keepdims=False)
