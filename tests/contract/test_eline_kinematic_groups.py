@@ -389,13 +389,38 @@ def test_fitted_mode_reads_the_group_kinematics(mock, synthetic_ssp_module):
 
 
 def test_automatic_precompute_builds_without_a_nebular_backend(mock):
-    """#3374: nuisance line amplitudes on a model with no nebular backend fit under 'auto'."""
+    """#3374: nuisance line amplitudes on a model with no nebular backend fit under 'auto'.
+
+    The automatic policy must not attach a line table with nothing to tabulate. It may
+    attach the spectrum table, whose agreement with the exact path is a separate claim
+    (#3541), so the comparison here is with the same table requested explicitly.
+    """
+    from tengri import FeaturePrecomp, SpectrumPrecomp
+
     model, flux, noise = mock
-    exact = _loglik(model, flux, noise)
     auto = Fitter(model, jnp.asarray(flux), jnp.asarray(noise), data_type="spectroscopy")
-    fn = build_loglikelihood_fn(auto)
+    state = auto.model.approx
+    assert not state.feature_precomp
+    explicit = Fitter(
+        model,
+        jnp.asarray(flux),
+        jnp.asarray(noise),
+        data_type="spectroscopy",
+        approx=SpectrumPrecomp() if state.spectrum_precomp else None,
+    )
     truth = _truth_params()
-    assert float(fn(truth, auto._data_args)) == pytest.approx(float(exact(truth)), rel=1e-9)
+    got = float(build_loglikelihood_fn(auto)(truth, auto._data_args))
+    ref = float(build_loglikelihood_fn(explicit)(truth, explicit._data_args))
+    assert np.isfinite(got)
+    assert got == pytest.approx(ref, rel=1e-12)
+    with pytest.raises(ValueError, match="no emission lines to tabulate"):
+        Fitter(
+            model,
+            jnp.asarray(flux),
+            jnp.asarray(noise),
+            data_type="spectroscopy",
+            approx=FeaturePrecomp(),
+        )
 
 
 def test_kinematic_priors_survive_a_round_trip(synthetic_ssp_module):
