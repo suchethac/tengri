@@ -15,9 +15,14 @@ from tengri.inference.context import InferenceContext
 
 
 class _FakeContext:
-    """Minimal stand-in exposing the one method run_laplace calls on the init point."""
+    """Minimal stand-in for what run_laplace reads off the context.
+
+    ``log_evidence_normalization`` is the Gaussian-likelihood constant added to the
+    published evidence since #3427; 0.0 keeps this guard test about ``init_from`` only.
+    """
 
     neg_log_posterior_fn = None
+    log_evidence_normalization = 0.0
     data_args = None
     grad_fn = None
     model = None

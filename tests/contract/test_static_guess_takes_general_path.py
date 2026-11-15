@@ -133,6 +133,11 @@ ALLOWLIST: dict[str, str] = {
         "is static and the eager call on the same model runs the check"
     ),
     "forward/sed_model.py::redshift_is_runtime": "unknown distribution -> runtime (#2858)",
+    "forward/sed_model.py::_alpha_fe_redshift_ends": (
+        "catalog model -> both ends of the catalog z range, never the placeholder; free "
+        "redshift -> both ends of its prior; only a non-catalog Fixed redshift gives its "
+        "one value (#3487 warning)"
+    ),
     "observation/spectroscopy.py::Spectroscopy.resolve_conserving": (
         "traced grid -> resample mode resolved on the configured grid (see gap below)"
     ),
@@ -164,6 +169,11 @@ ALLOWLIST: dict[str, str] = {
     ),
     "analysis/simulate.py::_host_scalar": (
         "traced value is returned unchanged; only a concrete value becomes a Python float"
+    ),
+    "analysis/simulate.py::_check_metallicity_on_grid": (
+        "a traced history or metallicity skips only the off-grid refusal/warning, which needs "
+        "values to compare with the grid; the SED itself is computed by the same "
+        "tabulated_history_weights call as a concrete input (#3467, #3462)"
     ),
     "analysis/simulate.py::_select_dust": (
         "traced gate takes jax.lax.cond over the same attenuation (general path); a concrete "

@@ -147,11 +147,20 @@ def test_there_is_exactly_one_spelling_left():
     """
     assert "stellar" not in _GROUP_STRUCTURAL_KEYS
     assert _GROUP_STRUCTURAL_KEYS["met"] == frozenset(
-        {"type", "*", "all_params", "other_params", "met_bin_edges_log_yr"}
+        {
+            "type",
+            "*",
+            "all_params",
+            "other_params",
+            "met_bin_edges_log_yr",
+            "alpha_fe_evolving",
+        }
     ), (
         "the met group selects with 'type', takes the wildcard, and has "
         "'all_params' and its exact synonym 'other_params', both normalized "
-        "to the internal '*', plus 'met_bin_edges_log_yr' the bin-ladder key (#2433)"
+        "to the internal '*', plus 'met_bin_edges_log_yr' the bin-ladder key (#2433) "
+        "and 'alpha_fe_evolving', the flag that swaps the scalar met_alpha_fe for the "
+        "per-age ramp (#2250, #3497)"
     )
 
 
