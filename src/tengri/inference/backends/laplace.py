@@ -490,7 +490,7 @@ def run_laplace(
 
     # Symmetrize covariance (numerical safety)
     cov = 0.5 * (cov + cov.T)
-    if not isinstance(cov, jax.core.Tracer) and not bool(jnp.all(jnp.isfinite(cov))):
+    if not bool(jnp.all(jnp.isfinite(cov))):
         raise NonFiniteCurvatureError(
             f"laplace: the covariance H^-1 is non-finite although the Hessian is finite "
             f"(max |H| = {float(jnp.max(jnp.abs(hessian))):.3g}, dtype {hessian.dtype}): "

@@ -205,6 +205,12 @@ ALLOWLIST: dict[str, str] = {
         "GAP: traced value skips the off-grid check; the builder's declared bounds refuse "
         "traced values at build (documented)"
     ),
+    "inference/curvature.py::require_finite": (
+        "GAP (by design): a traced value skips the eager finiteness check, so a non-finite "
+        "traced Hessian is not named here; the same quantity is returned with its "
+        "``Curvature.finite`` flag, which the traced consumer reads (the per-lane "
+        "preconditioner substitutes the identity and reports it)"
+    ),
     "observation/noise.py::apply_zp_floor": (
         "GAP: a traced floor skips the sign/validity check, so a negative traced floor is not "
         "refused; it is applied by the same arithmetic (hypot of noise and floor*|flux|)"

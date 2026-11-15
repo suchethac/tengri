@@ -111,6 +111,7 @@ def negative_hessian_metric(
     *,
     floor: float = PRIOR_METRIC_FLOOR,
     names=None,
+    check_finite: bool = True,
 ) -> jnp.ndarray:
     """Metric of a log-density at a point: :math:`-\\nabla^2 \\log p`, floored.
 
@@ -129,6 +130,9 @@ def negative_hessian_metric(
 
     names : sequence of str, optional
         Coordinate names, used only to name the rows of a non-finite Hessian.
+    check_finite : bool, optional
+        Raise on a non-finite Hessian (default). The traced per-lane preconditioner passes
+        False: it substitutes the identity for that lane and reports it through ``ok``.
 
     Returns
     -------
@@ -169,7 +173,9 @@ def negative_hessian_metric(
        arXiv:1406.2572.
     """
     hess = curvature(logdensity_fn, jnp.asarray(position), data_args, want=("hess",))
-    hess = hess.require_finite(names=names, where="preconditioning metric").hess
+    if check_finite:
+        hess = hess.require_finite(names=names, where="preconditioning metric")
+    hess = hess.hess
     metric = -0.5 * (hess + hess.T)
     eigenvalues, eigenvectors = jnp.linalg.eigh(metric)
     scale = jnp.maximum(jnp.abs(eigenvalues), floor)
@@ -536,7 +542,9 @@ def _traced_metric_pair(logdensity_fn, position, data_args, *, strength, floor, 
     """Metric at ``position`` and its tempered form, identity where non-finite."""
     position = jnp.asarray(position)
     identity = jnp.eye(position.shape[0], dtype=position.dtype)
-    metric = negative_hessian_metric(logdensity_fn, position, data_args, floor=floor)
+    metric = negative_hessian_metric(
+        logdensity_fn, position, data_args, floor=floor, check_finite=False
+    )
     finite = jnp.all(jnp.isfinite(metric)) & jnp.all(jnp.isfinite(position))
     # Sanitize before the eigendecomposition rather than after. ``eigh`` on a NaN
     # matrix is unspecified across backends -- cuSOLVER has been observed to
