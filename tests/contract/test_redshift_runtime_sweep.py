@@ -697,3 +697,64 @@ def test_wide_span_tabulation_at_break_crossings(span_name, reference, request):
         np.testing.assert_allclose(
             got, ref, rtol=RTOL["wp"], atol=0.0, err_msg=f"{span_name} span, z={z}"
         )
+
+
+# ── Band tables that bake the build redshift ───────────────────────────────────
+#
+# The CLOUDY and MAPPINGS band tables are built at one redshift, so a runtime-redshift
+# model refuses them and takes the per-call path (same values, slower). The refusal is
+# reported once per model; the engaged cells are strict xfails that track the debt.
+
+_BAKED_TABLE_CASES = {
+    "cloudy": ("nebular", "build_cloudy_nebular"),
+    "shock": ("shock", "build_shock"),
+}
+
+
+def _engaged_after_a_call(case, *, runtime):
+    from tests.contract import _band_table_cases as cases
+
+    _, builder = _BAKED_TABLE_CASES[case]
+    model = getattr(cases, builder)()
+    if runtime:
+        model = model.with_runtime_redshift(Z_RANGE)
+    params = dict(model.spec.sample(jax.random.PRNGKey(0)))
+    if runtime:
+        params["redshift"] = ZS[1]
+    model.predict_photometry(params)
+    return model, model.band_table(_BAKED_TABLE_CASES[case][0], "band_table") is not None
+
+
+@pytest.mark.parametrize("case", sorted(_BAKED_TABLE_CASES))
+def test_baked_band_table_engages_at_a_fixed_redshift(case):
+    """The table is engaged on the Fixed-z build, so the runtime cell below is not vacuous."""
+    assert _engaged_after_a_call(case, runtime=False)[1]
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="band table bakes the build redshift; "
+    "needs a redshift axis (#3505 table-axes mechanism)",
+)
+@pytest.mark.parametrize("case", sorted(_BAKED_TABLE_CASES))
+def test_baked_band_table_engages_under_runtime_z(case):
+    """Under a runtime redshift the table should still be engaged (tracked debt)."""
+    assert _engaged_after_a_call(case, runtime=True)[1]
+
+
+@pytest.mark.parametrize("case", sorted(_BAKED_TABLE_CASES))
+def test_a_declined_band_table_is_reported_once(case, caplog):
+    """The refusal of a band table is logged once per model and slot, with its reason."""
+    import logging
+
+    with caplog.at_level(logging.INFO, logger="tengri.forward.sed_model"):
+        model, _ = _engaged_after_a_call(case, runtime=True)
+        model.predict_photometry(
+            {**dict(model.spec.sample(jax.random.PRNGKey(1))), "redshift": ZS[2]}
+        )
+    name = _BAKED_TABLE_CASES[case][0]
+    msgs = [
+        r.getMessage() for r in caplog.records if f"band table {name}/band_table" in r.getMessage()
+    ]
+    assert len(msgs) == 1, msgs
+    assert "redshift is a runtime input" in msgs[0]

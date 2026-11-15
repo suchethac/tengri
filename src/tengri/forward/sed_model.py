@@ -12680,6 +12680,17 @@ class SEDModel:
             return memo
         entry = self._provided_band_table(name, slot)
         self._band_tables.setdefault(name, {})[slot] = entry
+        if isinstance(entry, Decline) and entry.reason is not None:
+            # Every refusal is recorded here, once per model and slot: the per-call path
+            # gives the same values more slowly, so a silent decline hides a cost.
+            import logging
+
+            logging.getLogger(__name__).info(
+                "band table %s/%s declined, the per-call path is used: %s",
+                name,
+                slot,
+                entry.reason,
+            )
         return entry
 
     def band_table(self, name: str, slot: str) -> BandTable | None:
