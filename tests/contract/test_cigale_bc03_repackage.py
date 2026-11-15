@@ -22,15 +22,13 @@ from pathlib import Path
 import h5py
 import numpy as np
 import pytest
-import scipy.constants
+
+from tengri.utils.physics_constants import C_AA, L_SUN
 
 pytestmark = pytest.mark.contract
 
 _RTOL_SALPETER = 1e-10
 _RTOL_CHABRIER_DEFAULT = 1e-12
-# Solar luminosity in erg/s (IAU 2015), the value tengri uses in utils/physics_constants.
-_L_SUN_ERG_PER_S = 3.828e33
-_C_ANGSTROM_PER_S = scipy.constants.c * 1e10
 _W_NM_TO_ERG_S_ANGSTROM = 1e6
 _SALPETER_Z = (0.0001, 0.02, 0.05)
 _NODES = ((0, 0), (1, 99), (2, 13699))  # (metallicity index, age index) into _SALPETER_Z
@@ -72,9 +70,7 @@ def _reference_lnu(entry, age_idx: int) -> np.ndarray:
     """pcigale spectrum at one age, converted to Lsun/Hz/Msun with lambda^2 / c."""
     wl_angstrom = np.asarray(entry.wl, dtype=np.float64) * 10.0
     spec_w_nm = np.asarray(entry.spec[:, age_idx], dtype=np.float64)
-    return (
-        spec_w_nm * _W_NM_TO_ERG_S_ANGSTROM * wl_angstrom**2 / _C_ANGSTROM_PER_S / _L_SUN_ERG_PER_S
-    )
+    return spec_w_nm * _W_NM_TO_ERG_S_ANGSTROM * wl_angstrom**2 / C_AA / L_SUN
 
 
 def test_salpeter_nodes_match_pcigale_pickle(driver, pcigale_bc03, tmp_path):
