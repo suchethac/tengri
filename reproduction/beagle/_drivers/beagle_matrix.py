@@ -155,6 +155,9 @@ def _episode_sections() -> tuple[MockRun, ...]:
         templates="ineb_june16",
         nebular=True,
         igm=None,
+        # BEAGLE 0.29.2 aborts (array index out of range) when a per-row current_sfr_timescale is
+        # combined with PRINT SF AND ChE HISTORIES; the section needs no printed history.
+        print_sfh=False,
         params=(_DELAYED, mock_fixed("tau", value=9.0), mock_fixed("max_stellar_age", value=9.0)),
     )
     hii = tuple(
