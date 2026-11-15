@@ -100,8 +100,14 @@ def test_override_is_still_reported(ztable_model, mock_data):
     assert abs(float(post.fixed_values["redshift"]) - 0.7) < 1e-12
 
 
-def test_no_ztable_model_keeps_the_bake(synthetic_ssp_wide, synthetic_tophat_obs):
-    """Without a catalog_z_range the z override IS a compile constant — keys differ."""
+def test_no_ztable_model_shares_one_program_across_redshifts(
+    synthetic_ssp_wide, synthetic_tophat_obs
+):
+    """Without a catalog_z_range an exact model takes the override z as data (#3505).
+
+    A fixed-z exact model is promoted once to a runtime-redshift model, so distinct
+    override redshifts share one signature and one compile; the value rides data_args.
+    """
     model = _build(synthetic_ssp_wide, synthetic_tophat_obs, None)
     params = model.spec.sample(jax.random.PRNGKey(0))
     flux = np.asarray(model.predict_photometry(params))
@@ -110,10 +116,9 @@ def test_no_ztable_model_keeps_the_bake(synthetic_ssp_wide, synthetic_tophat_obs
     f1 = Fitter(model, flux, err, data_type="photometry", params_override={"redshift": 0.2})
     f2 = Fitter(model, flux, err, data_type="photometry", params_override={"redshift": 0.7})
 
-    assert f1._engine_cache_key() != f2._engine_cache_key(), (
-        "no ztable: distinct baked redshifts must keep distinct signatures (#1331)"
-    )
-    assert "redshift" not in f1._data_args
+    assert f1._engine_cache_key() == f2._engine_cache_key()
+    assert float(f1._data_args["redshift"]) == 0.2
+    assert float(f2._data_args["redshift"]) == 0.7
 
 
 def test_non_redshift_overrides_still_bake(ztable_model, mock_data):
