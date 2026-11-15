@@ -24,6 +24,7 @@ from scipy.interpolate import RegularGridInterpolator
 
 from tengri.components.nebular import mappings_photo as mp, mappings_photo_precompute as mpp
 from tengri.components.nebular._constants import _LOG10_ZSUN, _LSUN_ERG
+from tengri.utils.filter_convention import FilterConvention
 
 pytestmark = pytest.mark.regression_bug
 
@@ -74,6 +75,7 @@ def test_precompute_on_the_real_grid_matches_exact_lines():
         0.0,
         None,
         grid_path=_REAL_GRID,
+        convention=FilterConvention.BESSELL,
     )
     lookup = mpp.build_lookup(preint)
     log_qh = 50.0
@@ -142,6 +144,7 @@ def test_precompute_on_a_synthetic_grid_matches_exact_lines(tmp_path):
         0.0,
         None,
         grid_path=path,
+        convention=FilterConvention.BESSELL,
     )
     lookup = mpp.build_lookup(preint)
 

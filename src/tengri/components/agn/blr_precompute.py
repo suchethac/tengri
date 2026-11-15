@@ -45,6 +45,8 @@ from tengri.components.agn.blr import (
     _BLR_LINE_STRENGTHS,
     _BLR_LINE_WAVELENGTHS,
 )
+from tengri.utils.band_projection import delta_line_matrix
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.host_array import device_table, host_array
 
 # The Fe II pseudo-continuum used to be a small set of discrete Gaussian
@@ -65,6 +67,8 @@ def precompute(
     filter_trans: list,
     redshift: float,
     parameters: Any,
+    *,
+    convention: FilterConvention,
     **kwargs: Any,
 ) -> dict:
     """Build preintegrated BLR line filter projection matrix.
@@ -124,9 +128,9 @@ def precompute(
         - Line ratios (relative strengths per AGN type / continuum)
 
     """
-    n_lines = len(_BLR_LINE_WAVELENGTHS)
-    n_feii = len(_FE2_GROUPS)
-    n_filt = len(filter_waves)
+    len(_BLR_LINE_WAVELENGTHS)
+    len(_FE2_GROUPS)
+    len(filter_waves)
 
     # Redshift rest-frame line wavelengths to observed frame
     line_wavelengths_obs = np.asarray(_BLR_LINE_WAVELENGTHS) * (1.0 + redshift)
@@ -139,28 +143,14 @@ def precompute(
     # Redshift Fe II centers
     feii_centers_obs = feii_centers_rest * (1.0 + redshift)
 
-    # Build filter projection matrix: (n_lines + n_feii, n_filt)
-    # Delta function at each center: interpolate filter transmission
-    n_total = n_lines + n_feii
-    line_weight_matrix = np.zeros((n_total, n_filt), dtype=np.float64)
-
-    # Emission lines (first n_lines rows)
-    for i_line, line_wave_obs in enumerate(line_wavelengths_obs):
-        for i_filt, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
-            fw = np.asarray(fw)
-            ft = np.asarray(ft)
-            line_weight_matrix[i_line, i_filt] = np.interp(
-                line_wave_obs, fw, ft, left=0.0, right=0.0
-            )
-
-    # Fe II groups (next n_feii rows)
-    for i_feii, feii_wave_obs in enumerate(feii_centers_obs):
-        for i_filt, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
-            fw = np.asarray(fw)
-            ft = np.asarray(ft)
-            line_weight_matrix[n_lines + i_feii, i_filt] = np.interp(
-                feii_wave_obs, fw, ft, left=0.0, right=0.0
-            )
+    # Band response of each unit-luminosity line and Fe II group centre.
+    line_weight_matrix = delta_line_matrix(
+        np.concatenate([np.asarray(_BLR_LINE_WAVELENGTHS), feii_centers_rest]),
+        filter_waves,
+        filter_trans,
+        redshift,
+        convention,
+    )
 
     return {
         "line_wavelengths_obs": jnp.asarray(line_wavelengths_obs),

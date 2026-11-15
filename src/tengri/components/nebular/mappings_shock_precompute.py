@@ -39,6 +39,7 @@ from tengri.components.nebular.shock import (
     _load_mappings_grids,
     _resolve_abundance,
 )
+from tengri.utils.band_projection import delta_line_matrix
 from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid_interp import (
     library_lookup,
@@ -62,6 +63,7 @@ def precompute(
     *,
     shock_abundance: str = "solar",
     shock_component: str = "combined",
+    convention: FilterConvention,
 ) -> dict:
     """Build preintegrated MAPPINGS shock grid, auto-collapsing Fixed axes.
 
@@ -134,22 +136,12 @@ def precompute(
     # Shape: (N_abund, N_n, N_v, N_B, N_lines)
 
     # Build the (n_lines, n_filt) filter projection matrix
-    n_lines = len(g["line_names"])
-    n_filt = len(filter_waves)
-    line_weight_matrix = np.zeros((n_lines, n_filt), dtype=np.float64)
-
+    len(g["line_names"])
+    len(filter_waves)
     line_waves = np.asarray(g["line_wavelengths_aa"])
-    for i_line, line_wave_aa in enumerate(line_waves):
-        # Redshift line wavelength to observed frame
-        line_wave_obs = line_wave_aa * (1.0 + redshift)
-
-        # Integrate line (delta function) through each filter
-        for i_filt, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
-            fw = np.asarray(fw)
-            ft = np.asarray(ft)
-            line_weight_matrix[i_line, i_filt] = np.interp(
-                line_wave_obs, fw, ft, left=0.0, right=0.0
-            )
+    line_weight_matrix = delta_line_matrix(
+        line_waves, filter_waves, filter_trans, redshift, convention
+    )
 
     # Grid axes: (velocity, B-field, log_density) from shock grid
     v_grid = np.asarray(g["velocities_kms"])
