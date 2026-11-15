@@ -84,9 +84,9 @@ def test_converging_galaxy_skips_the_hessian_certificate(synthetic_ssp, mock, mo
     calls = []
     real = map_dispatch.stationarity
 
-    def counted(loss, x):
+    def counted(loss, x, data=None):
         calls.append(1)
-        return real(loss, x)
+        return real(loss, x, data)
 
     monkeypatch.setattr(map_dispatch, "stationarity", counted)
     g = mock[0]
