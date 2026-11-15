@@ -57,7 +57,10 @@ def element_names(layout) -> list[str]:
 
 
 def chain_diagnostics(draws, names, *, exchangeable: bool = False) -> tuple[dict, list[str]]:
-    """Return the R-hat, ESS and move fraction of ``draws`` and the problems they show.
+    """Return the R-hat, ESS and move fractions of ``draws`` and the problems they show.
+
+    A non-finite draw, R-hat or ESS is a named problem, never a skipped column: a chain that
+    turns to NaN has not converged, and a NaN step is not a move.
 
     Parameters
     ----------
@@ -72,27 +75,37 @@ def chain_diagnostics(draws, names, *, exchangeable: bool = False) -> tuple[dict
     Returns
     -------
     record : dict
-        ``rhat_max``, ``rhat_max_param``, ``ess_bulk_min``, ``ess_bulk_min_param`` and
-        ``acceptance_rate`` (the fraction of steps that moved the position); absent keys
-        mean the quantity could not be computed.
+        ``rhat_max``, ``rhat_max_param``, ``ess_bulk_min`` and ``ess_bulk_min_param`` (the
+        ESS is the sum of the per-chain ESS), ``acceptance_rate`` (the fraction of steps that
+        moved the position, pooled) and ``acceptance_rate_min`` (the worst single chain);
+        absent keys mean the quantity could not be computed.
     problems : list of str
         One phrase per failure found.
     """
     draws = np.asarray(draws)
-    n_chains, n, dim = draws.shape
+    n_chains, n, _dim = draws.shape
     record: dict = {}
     problems: list[str] = []
     if n < 8:
         return record, problems
-    moving = [j for j in range(dim) if np.ptp(draws[..., j]) > 0]
+    finite_columns = np.all(np.isfinite(draws), axis=(0, 1))
+    for j in np.flatnonzero(~finite_columns)[:3]:
+        bad = int(np.sum(~np.isfinite(draws[..., j])))
+        problems.append(f"non-finite draws in '{names[j]}' ({bad} of {n_chains * n})")
+    if int(np.sum(~finite_columns)) > 3:
+        problems.append(f"non-finite draws in {int(np.sum(~finite_columns)) - 3} further columns")
+    usable = np.flatnonzero(finite_columns)
     if n > 1 and not exchangeable:
-        moved = np.any(np.diff(draws, axis=1) != 0, axis=-1)
+        both = np.isfinite(draws[:, 1:]) & np.isfinite(draws[:, :-1])
+        moved = np.any((np.diff(draws, axis=1) != 0) & both, axis=-1)
         record["acceptance_rate"] = float(moved.mean())
-        if record["acceptance_rate"] < COLLAPSED_MOVE_FRACTION:
+        record["acceptance_rate_min"] = float(moved.mean(axis=1).min())
+        if record["acceptance_rate_min"] < COLLAPSED_MOVE_FRACTION:
             problems.append(
-                f"the position moved on {record['acceptance_rate']:.1%} of steps "
-                f"(below {COLLAPSED_MOVE_FRACTION:.0%}): the chain has collapsed"
+                f"a chain moved on {record['acceptance_rate_min']:.1%} of steps "
+                f"(below {COLLAPSED_MOVE_FRACTION:.0%}): it has collapsed"
             )
+    moving = [j for j in usable if np.ptp(draws[..., j]) > 0]
     if not moving:
         return record, problems
 
@@ -108,7 +121,9 @@ def chain_diagnostics(draws, names, *, exchangeable: bool = False) -> tuple[dict
             value = split_rhat(np.concatenate([column[:, :half], column[:, half : 2 * half]]))
         else:
             value = split_rhat(column[0])
-        if np.isfinite(value) and (worst is None or value > worst[0]):
+        if not np.isfinite(value):
+            problems.append(f"R-hat is not finite for '{names[j]}'")
+        elif worst is None or value > worst[0]:
             worst = (float(value), names[j])
     if worst is not None:
         record["rhat_max"], record["rhat_max_param"] = worst
@@ -116,20 +131,22 @@ def chain_diagnostics(draws, names, *, exchangeable: bool = False) -> tuple[dict
             problems.append(f"R-hat {worst[0]:.3f} for '{worst[1]}' (above {RHAT_WARN})")
 
     if not exchangeable:
-        subset = moving[:_MAX_ESS_COLUMNS]
-        flat = {names[j]: draws[..., j].reshape(-1) for j in subset}
-        info = effective_sample_size(flat, exclude_prefixes=())
         low = None
-        for name, entry in info.items():
-            value = float(entry["ess"])
-            if np.isfinite(value) and (low is None or value < low[0]):
-                low = (value, name)
+        for j in moving[:_MAX_ESS_COLUMNS]:
+            total = 0.0
+            for chain in draws[..., j]:
+                entry = effective_sample_size({names[j]: chain}, exclude_prefixes=())
+                total += float(entry[names[j]]["ess"]) if names[j] in entry else 0.0
+            if not np.isfinite(total):
+                problems.append(f"ESS is not finite for '{names[j]}'")
+            elif low is None or total < low[0]:
+                low = (total, names[j])
         if low is not None:
             record["ess_bulk_min"], record["ess_bulk_min_param"] = low
-            total = n_chains * n
-            if low[0] < ESS_FRACTION_WARN * total:
+            total_draws = n_chains * n
+            if low[0] < ESS_FRACTION_WARN * total_draws:
                 problems.append(
-                    f"ESS {low[0]:.1f} for '{low[1]}' of {total} draws "
+                    f"ESS {low[0]:.1f} for '{low[1]}' of {total_draws} draws "
                     f"(below {ESS_FRACTION_WARN:.0%})"
                 )
     return record, problems

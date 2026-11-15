@@ -120,3 +120,57 @@ def test_element_names_follow_the_ravel_order():
     assert len(names) == layout.n_dim
     assert names[0] == "gal/log_total_mass[0]"
     assert "psd_sigma_u" in names and "gal_xi[1,2]" in names
+
+
+def test_a_chain_that_turns_to_nan_is_named_not_read_as_healthy():
+    draws = np.random.default_rng(0).normal(size=(1, 300, 2))
+    draws[0, 100:, 0] = np.nan
+    _, problems = chain_diagnostics(draws, ["a", "b"])
+    assert any("non-finite draws in 'a'" in p for p in problems), problems
+    assert not any("'b'" in p and "non-finite" in p for p in problems)
+    only_a, _ = chain_diagnostics(draws[..., :1], ["a"])
+    assert only_a["acceptance_rate"] < 0.5  # moves only on the 99 finite steps of 299
+
+
+def test_one_nan_column_among_finite_ones_is_named():
+    draws = np.random.default_rng(1).normal(size=(2, 200, 3))
+    draws[1, 50, 2] = np.inf
+    _, problems = chain_diagnostics(draws, ["a", "b", "c"])
+    assert any("non-finite draws in 'c'" in p for p in problems), problems
+    assert not any(
+        "non-finite draws in 'a'" in p or "non-finite draws in 'b'" in p for p in problems
+    )
+
+
+def test_a_constant_chain_is_collapsed_not_silent():
+    record, problems = chain_diagnostics(np.ones((2, 100, 2)), ["a", "b"])
+    assert record["acceptance_rate"] == 0.0
+    assert any("collapsed" in p for p in problems), problems
+
+
+def test_a_nan_step_does_not_count_as_a_move():
+    draws = np.full((1, 100, 1), np.nan)
+    record, problems = chain_diagnostics(draws, ["a"])
+    assert record["acceptance_rate"] == 0.0
+    assert any("non-finite draws in 'a'" in p for p in problems)
+
+
+def test_one_stuck_chain_is_visible_through_the_per_chain_move_fraction():
+    rng = np.random.default_rng(2)
+    draws = np.stack([rng.normal(size=(300, 1)), np.full((300, 1), 0.5)])
+    record, problems = chain_diagnostics(draws, ["a"])
+    assert record["acceptance_rate"] > 0.4  # the pooled mean hides it
+    assert record["acceptance_rate_min"] == 0.0
+    assert any("collapsed" in p for p in problems), problems
+
+
+def test_ess_is_the_sum_of_the_per_chain_ess():
+    rng = np.random.default_rng(3)
+    draws = rng.normal(size=(4, 500, 1))
+    record, _ = chain_diagnostics(draws, ["a"])
+    # The repo's Sokal estimator is conservative on iid draws (about 0.55 of n), per chain.
+    assert 0.4 * 2000 < record["ess_bulk_min"] <= 1.3 * 2000
+    # Chains with different centres: the flattened series would read one long slow chain.
+    shifted = draws + np.array([0.0, 5.0, 0.0, 5.0])[:, None, None]
+    shifted_record, _ = chain_diagnostics(shifted, ["a"])
+    np.testing.assert_allclose(shifted_record["ess_bulk_min"], record["ess_bulk_min"], rtol=1e-6)
