@@ -47,8 +47,14 @@ def _reference(wave, cont, bcnorm, tbc, taube, wavbe):
 
     cont3000 = np.interp(np.log10(3000.0), np.log10(wave), cont)
     scale = bcnorm * cont3000 / shape(3000.0)
-    sigmoid = 1.0 / (1.0 + np.exp(50.0 * (np.log10(wave) - np.log10(wavbe))))
-    return scale * shape(wave) * sigmoid
+    # Edge: the analytic step at wavbe convolved with a Gaussian of velocity FWHM
+    # 5000 km/s, as upstream qsogen does (#3408 replaced the earlier logistic sigmoid,
+    # whose 2e-10 tail below the edge this comparison would otherwise see).
+    from scipy.special import erfc
+
+    sigma_lam = wavbe * (5000.0 / 2.35) / 299792.458
+    edge = 0.5 * erfc((wave - wavbe) / (np.sqrt(2.0) * sigma_lam))
+    return scale * shape(wave) * edge
 
 
 def test_optical_depth_increases_toward_the_balmer_edge():
@@ -78,7 +84,9 @@ def test_balmer_continuum_matches_direct_grandi_evaluation(bcnorm, tbc, taube):
         _balmer_continuum(jnp.asarray(wave), jnp.asarray(cont), bcnorm, tbc, taube, WAV_BE)
     )
     ref = _reference(wave, cont, bcnorm, tbc, taube, WAV_BE)
-    np.testing.assert_allclose(got, ref, rtol=1e-10, atol=0.0)
+    # atol = smallest normal float64: far above the edge the erfc tail is subnormal
+    # (~1e-309), which XLA flushes to zero; the curve itself is ~1e-5.
+    np.testing.assert_allclose(got, ref, rtol=1e-10, atol=np.finfo(np.float64).tiny)
 
 
 def test_no_balmer_continuum_at_default_zero_bcnorm():
