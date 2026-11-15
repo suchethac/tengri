@@ -72,3 +72,11 @@ def test_an_explicit_geometry_returns_exactly_n_chains():
         jnp.zeros(_DIM), jax.random.PRNGKey(0), jnp.ones(_DIM), *([None] * 6)
     )
     assert positions.shape == (16 * 7, _DIM)
+
+
+def test_the_live_chains_follow_the_true_sampled_dimension():
+    """``spec.n_latent`` (vector latents included), not ``n_free``, sizes the MEADS ensemble."""
+    small = _catalog_live_chains("ghmc", n_chains=1, n_ensemble="auto", n_dim=3)
+    wide = _catalog_live_chains("ghmc", n_chains=1, n_ensemble="auto", n_dim=3 + 256)
+    assert wide > small
+    assert wide == ghmc_ensemble_size(3 + 256, 1)

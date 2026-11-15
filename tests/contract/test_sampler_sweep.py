@@ -217,7 +217,16 @@ def _cells(engine, names):
 
 def _marks(engine, cell=None):
     if engine in ("single", "batched"):
-        return [pytest.mark.xfail(strict=True, reason="stage S-D/S-E", raises=NotImplementedError)]
+        return [
+            pytest.mark.xfail(
+                strict=True,
+                reason=(
+                    "single-galaxy and batched-spectroscopy engines not yet on the shared "
+                    "driver (#3505)"
+                ),
+                raises=NotImplementedError,
+            )
+        ]
     return [pytest.mark.slow]
 
 

@@ -1994,7 +1994,7 @@ class _CatalogFitterOriginal:
                 sampler,
                 n_chains=n_chains,
                 n_ensemble=n_ensemble,
-                n_dim=getattr(getattr(self.model, "spec", None), "n_free", None),
+                n_dim=getattr(getattr(self.model, "spec", None), "n_latent", None),
             ),
         )
         dev_list = self._resolve_devices(devices)
