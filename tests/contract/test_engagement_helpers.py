@@ -245,3 +245,23 @@ def test_unknown_regime_value_is_refused(ssp_data_wne, synthetic_tophat_obs):
 def test_unknown_target_type_is_a_type_error():
     with pytest.raises(TypeError, match="object"):
         engagement_reports(object())
+
+
+# ── every recorded decline is readable, with no per-gate field ──────────────
+
+
+def test_any_recorded_decline_is_readable_as_name_dot_slot(ssp_data_wne, synthetic_tophat_obs):
+    model = _eb_model(ssp_data_wne, synthetic_tophat_obs, approx=None)
+    model.record_decline("igm", "fold", "patchy IGM has no exact fold")
+    report = engagement_reports(model)[0]
+    assert report.state_of("igm.fold") == PrecomputeState(
+        state="declined", reason="patchy IGM has no exact fold"
+    )
+    assert_declined(model, "igm.fold", "patchy")
+
+
+def test_unknown_key_message_lists_the_recorded_declines_too(ssp_data_wne, synthetic_tophat_obs):
+    model = _eb_model(ssp_data_wne, synthetic_tophat_obs, approx=None)
+    model.record_decline("igm", "fold", "why")
+    with pytest.raises(KeyError, match=r"igm\.fold"):
+        engagement_reports(model)[0].state_of("no_such_mechanism")

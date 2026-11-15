@@ -51,6 +51,9 @@ class PrecomputeEngagementReport(NamedTuple):
     feature_precomp : PrecomputeState
         The ``FeaturePrecomp`` top-up of ``approx='auto'``: engaged when live on the model,
         declined with the recorded reason when its table refused.
+    declines : tuple[tuple[str, str], ...]
+        Every ``Decline`` the model recorded, as ``("<name>.<slot>", reason)`` pairs in key order,
+        so a gate that records through ``record_decline`` is readable without a field of its own.
     """
 
     energy_balance_lut: "PrecomputeState"
@@ -58,6 +61,7 @@ class PrecomputeEngagementReport(NamedTuple):
     emitter_term_responses: dict[str, "PrecomputeState"]
     observed_facts: dict[str, Any]
     feature_precomp: "PrecomputeState" = PrecomputeState(state="never_attempted")
+    declines: tuple[tuple[str, str], ...] = ()
 
     def summary_text(self) -> str:
         """Human-readable summary of engagement.
@@ -139,10 +143,12 @@ class PrecomputeEngagementReport(NamedTuple):
             return self.emitter_term_responses[what]
         if what == "feature_precomp":
             return self.feature_precomp
+        recorded = dict(self.declines)
+        if what in recorded:
+            return PrecomputeState(state="declined", reason=recorded[what])
         known = ["dust_band_response", "dust_emission", "energy_balance_lut", "feature_precomp"]
-        raise KeyError(
-            f"unknown precompute mechanism {what!r}; known: {known + sorted(self.emitter_term_responses)}"
-        )
+        known += sorted(self.emitter_term_responses) + sorted(recorded)
+        raise KeyError(f"unknown precompute mechanism {what!r}; known: {known}")
 
 
 def precompute_engagement_report(model: Any) -> PrecomputeEngagementReport:
@@ -222,12 +228,24 @@ def precompute_engagement_report(model: Any) -> PrecomputeEngagementReport:
         emitter_term_responses=emitter_caches,
         observed_facts=observed_facts,
         feature_precomp=feature_state_obj,
+        declines=_recorded_declines(model),
     )
 
 
 def _memo_entry(model: Any, name: str, slot: str) -> Any:
     """Return the band-table memo entry of one component slot, or None when absent."""
     return getattr(model, "_band_tables", {}).get(name, {}).get(slot)
+
+
+def _recorded_declines(model: Any) -> tuple[tuple[str, str], ...]:
+    """Return every ``Decline`` in the model's memo as ``("<name>.<slot>", reason)`` pairs."""
+    memo = getattr(model, "_band_tables", {})
+    return tuple(
+        (f"{name}.{slot}", entry.reason)
+        for name in sorted(memo)
+        for slot, entry in sorted(memo[name].items())
+        if isinstance(entry, Decline)
+    )
 
 
 def _recorded_reason(model: Any, name: str, slot: str) -> str | None:
