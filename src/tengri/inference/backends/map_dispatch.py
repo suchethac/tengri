@@ -18,7 +18,7 @@ import numpy as np
 from jax.flatten_util import ravel_pytree
 from jax.scipy.optimize import minimize as _jax_minimize
 
-from tengri.config.exceptions import warn_measured
+from tengri.config.exceptions import NonFiniteGradientError, warn_measured
 from tengri.inference._model_cache import _default_owner as _model_cache_owner
 from tengri.inference.context import InferenceContext
 from tengri.inference.lbfgs_driver import BoundLoss, lbfgs_to_gtol
@@ -26,6 +26,7 @@ from tengri.inference.likelihoods.gaussian import inv_noise_std
 from tengri.inference.map_stationarity import (
     MAP_DECREMENT_BAR,
     compiled_derivatives,
+    nonfinite_parameter_names,
     stationarity,
 )
 
@@ -134,6 +135,46 @@ def _reject_nonfinite_map(params: dict) -> None:
         f"an initialization gives a posterior of NaN with NaN R-hat, which raises "
         f"nothing and silently disarms any convergence check. Inspect data scaling "
         f"and prior bounds, or pass an explicit finite `init_from`."
+    )
+
+
+def _reject_nonfinite_map_gradient(grad_flat, unravel_fn, *, n_iterations, loss, message) -> None:
+    """Refuse a MAP stop where the objective's gradient is non-finite (#3546).
+
+    scipy's L-BFGS-B abandons its line search on a NaN gradient and hands back the
+    point it holds, after 0 iterations when the start is already affected. That
+    point is the start, not an optimum, and the Hessian there is NaN, so every
+    consumer of the MAP point (Laplace, sampler initialization) inherits it.
+
+    Parameters
+    ----------
+    grad_flat : array_like, shape (D,)
+        Gradient of the objective at scipy's stopping point, in the flat coordinates.
+    unravel_fn : callable
+        Maps a flat ``(D,)`` vector to the parameter dict.
+    n_iterations : int
+        Iterations scipy completed.
+    loss : float
+        Objective at the stopping point [nats].
+    message : str
+        scipy's termination message.
+
+    Raises
+    ------
+    NonFiniteGradientError
+        If any gradient coordinate is NaN or infinite, naming the parameters.
+    """
+    nonfinite = ~np.isfinite(np.asarray(grad_flat, dtype=float))
+    if not nonfinite.any():
+        return
+    names = nonfinite_parameter_names(nonfinite, unravel_fn)
+    raise NonFiniteGradientError(
+        f"MAP cannot be optimized: the gradient of the objective with respect to "
+        f"{', '.join(repr(name) for name in names)} is non-finite at the point where "
+        f"L-BFGS stopped after {n_iterations} iteration(s) (objective {loss:.6g}, scipy "
+        f"reported {message!r}). That point is not an optimum. Fix the named "
+        f"parameter(s), or use a gradient-free method such as method='nss'.",
+        parameters=names,
     )
 
 
@@ -412,6 +453,14 @@ def _run_map_scipy(
     wall_time = time.time() - t0
 
     _reject_nonfinite_map(unravel_fn(jnp.asarray(result.x)))
+    loss_stop, grad_stop = grad_fn(unravel_fn(jnp.asarray(result.x)), data_args)
+    _reject_nonfinite_map_gradient(
+        ravel_pytree(grad_stop)[0],
+        unravel_fn,
+        n_iterations=int(result.nit),
+        loss=float(loss_stop),
+        message=str(result.message),
+    )
 
     certify_loss = _certificate_loss(context.model, loss_fn, init_params)
     # A converged stop needs no certificate: scipy's point is the answer (#3530). The
@@ -865,22 +914,29 @@ def _run_map_multistart_scipy(
 
     keys = jax.random.split(key, n_restarts)
     results = []
+    refusals: list[NonFiniteGradientError] = []
     t0 = time.time()
     for k in keys:
         init_params = context.initial_params(k, init_from=None)
-        results.append(
-            _run_map_scipy(
-                context,
-                init_params=init_params,
-                grad_fn=context.grad_fn,
-                loss_fn=loss_fn,
-                data_args=data_args,
-                optimizer=optimizer,
-                n_steps=n_steps,
-                tol=tol,
-                verbose=False,
+        try:
+            results.append(
+                _run_map_scipy(
+                    context,
+                    init_params=init_params,
+                    grad_fn=context.grad_fn,
+                    loss_fn=loss_fn,
+                    data_args=data_args,
+                    optimizer=optimizer,
+                    n_steps=n_steps,
+                    tol=tol,
+                    verbose=False,
+                )
             )
-        )
+        except NonFiniteGradientError as error:
+            # One start with a non-finite gradient is a diverged restart; the others decide.
+            refusals.append(error)
+    if not results:
+        raise refusals[-1]
     final_losses = jnp.asarray([float(r.diagnostics["final_loss"]) for r in results])
     best = int(_best_finite_restart(final_losses))
     winner = results[best]
