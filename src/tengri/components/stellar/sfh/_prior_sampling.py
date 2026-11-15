@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Prior-sampling helper for parametric SFH families.
+"""Prior-sampling helper for SFH families, with or without the GP field.
 
 Lets a user draw a fan of SFH realizations from a registered model's default
 priors with one call::
@@ -10,6 +10,10 @@ priors with one call::
     age_grid, curves = sample_sfh_prior("dpl", jax.random.PRNGKey(0), n=20)
     # age_grid: (n_age,) lookback time [yr]
     # curves:   (n, n_age) SFR(t_lookback) [Msun/yr]
+
+The draws are public-name parameter dicts, evaluated by the same
+:func:`~tengri.components.stellar.component.evaluate_sfh` the forward model uses,
+so a prior fan and an exact forward cannot read a family differently (#3505).
 
 Designed for didactic notebooks (plot-the-prior cells) and quick visual
 sanity checks. Inference pipelines should keep using ``Parameters`` +
@@ -23,9 +27,8 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.stellar.sfh.nonparametric import DEFAULT_N_BINS, make_agebins_from_zred
-from tengri.components.stellar.sfh.registry import SFH_REGISTRY, resolve_sfh
+from tengri.components.stellar.sfh.registry import SFH_REGISTRY
 from tengri.parameters.priors import Distribution
-from tengri.parameters.timing import resolve_timing_fracs
 from tengri.utils.grid import DEFAULT_LOG_AGE_MAX, DEFAULT_LOG_AGE_MIN, DEFAULT_N_GRID
 from tengri.utils.host_array import host_array
 
@@ -39,6 +42,9 @@ __all__ = ["DEFAULT_AGE_GRID_YR", "sample_sfh_prior"]
 DEFAULT_AGE_GRID_YR: np.ndarray = host_array(
     10.0 ** np.linspace(DEFAULT_LOG_AGE_MIN, DEFAULT_LOG_AGE_MAX, DEFAULT_N_GRID)
 )
+
+#: The GP-field modulator's registry key: a modulator, not a family.
+_FIELD = "field"
 
 
 def _spec_for(name: str):
@@ -67,58 +73,59 @@ def _bin_edges_for(family: str | list[str], redshift: float | None):
     return make_agebins_from_zred(zred=redshift, n_bins=DEFAULT_N_BINS)
 
 
-def _draw_internal_kwargs(
-    family: str | list[str],
+def _draw_publics(
+    names: list[str],
+    key: jax.Array,
+    n: int,
+    overrides: dict[str, Distribution],
+) -> tuple[jax.Array, dict[str, jnp.ndarray]]:
+    """Draw ``n`` values of every declared parameter of ``names``, keyed by public name.
+
+    The key sequence is the one the helper has always used, so the draws of an
+    existing family are unchanged.
+    """
+    publics: dict[str, jnp.ndarray] = {}
+    for name in names:
+        for public_name, paramdef in _spec_for(name).params.items():
+            dist = overrides.get(public_name, paramdef.default)
+            keys = jax.random.split(key, n + 1)
+            key = keys[0]
+            publics[public_name] = jnp.stack([dist.sample(k) for k in keys[1:]])
+    return key, publics
+
+
+def _prior_draws(
+    family_list: list[str],
     key: jax.Array,
     n: int,
     overrides: dict[str, Distribution],
     *,
-    redshift: float | None = None,
-) -> tuple[list[str], dict[str, jnp.ndarray]]:
-    """Draw `n` samples for every fittable param of `family`, return internal kwargs.
+    n_grid: int,
+) -> dict[str, jnp.ndarray]:
+    """Public-name parameter dict with a leading ``n`` axis, from the priors.
 
-    A ``*_frac`` timing that is overridden is converted to its Gyr twin at
-    ``redshift``; an unoverridden one is dropped so the Gyr default stands (#2748).
-
-    Returns
-    -------
-    family_list : list[str]
-        Normalized list of model names (input as list, even if scalar str).
-    internal_kwargs : dict[str, ndarray of shape (n,)]
-        Dict keyed by the *internal* parameter name expected by the SFH closure.
+    A field family adds the modulator's PSD parameters and the latent
+    ``sfh_field_xi ~ N(0, 1)`` of shape ``(n, n_grid)``.
     """
-    family_list = [family] if isinstance(family, str) else list(family)
-
-    if any(name in ("field",) for name in family_list):
-        # Field modulator depends on a latent xi vector + GP machinery; not in v1 scope.
-        raise NotImplementedError(
-            "sample_sfh_prior does not yet support the 'field' (GP) modulator. "
-            "Use a smooth family (e.g. 'tsnorm', 'dpl') for the prior fan; the "
-            "stochastic-field demo lives in notebooks/02_sed_anatomy.py."
-        )
-
-    internal_kwargs: dict[str, jnp.ndarray] = {}
-    param_map: dict[str, tuple[str, float, float]] = {}
-    sampled_fracs: dict[str, jnp.ndarray] = {}
-
-    for fname in family_list:
-        spec = _spec_for(fname)
-        for public_name, paramdef in spec.params.items():
-            dist = overrides.get(public_name, paramdef.default)
-            keys = jax.random.split(key, n + 1)
-            key = keys[0]
-            draws = jnp.stack([dist.sample(k) for k in keys[1:]])
-            param_map[public_name] = spec.internal_param_map[public_name]
-            internal_name, scale, offset = param_map[public_name]
-            internal_kwargs[internal_name] = draws * scale + offset
-            if paramdef.gyr_twin is not None and paramdef.gyr_twin not in overrides:
-                sampled_fracs[public_name] = draws
-
-    # Without a redshift the fractions convert at z = 0: the shape-only callers
-    # of a family that is not age-anchored never reach an age(z) (#2748).
-    conversion_z = 0.0 if redshift is None else redshift
-    resolve_timing_fracs(internal_kwargs, sampled_fracs, param_map, redshift=conversion_z)
-    return family_list, internal_kwargs
+    families = [f for f in family_list if f != _FIELD]
+    key, publics = _draw_publics(families, key, n, overrides)
+    # A timing is either its Gyr value or its *_frac, never both (the resolver
+    # refuses both). A frac is converted unless its Gyr twin is overridden; when
+    # it is converted the frac wins, as the Gyr twin's draw was always overwritten.
+    for name in families:
+        for public_name, paramdef in _spec_for(name).params.items():
+            if paramdef.gyr_twin is None:
+                continue
+            if paramdef.gyr_twin in overrides:
+                publics.pop(public_name, None)
+            else:
+                publics.pop(paramdef.gyr_twin, None)
+    if _FIELD in family_list:
+        key, field_publics = _draw_publics([_FIELD], key, n, overrides)
+        publics.update(field_publics)
+        key, xi_key = jax.random.split(key)
+        publics["sfh_field_xi"] = jax.random.normal(xi_key, (n, n_grid))
+    return publics
 
 
 def sample_sfh_prior(
@@ -136,8 +143,9 @@ def sample_sfh_prior(
     ----------
     family : str or list[str]
         Registered SFH model name (e.g. ``"tsnorm"``, ``"dpl"``) or a
-        composed list (e.g. ``["tsnorm", "burst"]``). The ``"field"``
-        modulator is intentionally not supported here: see notes.
+        composed list (e.g. ``["tsnorm", "burst"]``). Add ``"field"`` to the
+        list for the GP modulator: each draw then carries its own latent field
+        ``sfh_field_xi ~ N(0, 1)`` and the PSD priors of the modulator.
     key : jax.Array
         JAX PRNG key.
     n : int, optional
@@ -164,21 +172,22 @@ def sample_sfh_prior(
     age_grid_yr : ndarray, shape (n_age,)
         Lookback time grid [yr].
     sfr_curves : ndarray, shape (n, n_age)
-        SFR(t_lookback) [Msun/yr] for each prior draw.
+        SFR(t_lookback) [Msun/yr] for each prior draw. With the field, the
+        modulated history: the field is defined on its own log grid, so keep the
+        default grid for an exact evaluation (another grid is interpolated).
 
     Raises
     ------
     KeyError
         If `family` is not a registered SFH model.
     ValueError
-        If `family` is age-anchored and `redshift` is not given.
-    NotImplementedError
-        If `family` includes the ``"field"`` GP modulator.
+        If `family` is age-anchored and `redshift` is not given, or if it names
+        only the ``"field"`` modulator with no SFH to modulate.
 
     Notes
     -----
-    **JIT-compatible**: yes for the inner evaluation; the outer Python loop
-    over draws is intentional (one-shot helper, not a hot path).
+    **JIT-compatible**: yes for the inner evaluation; the outer draws are a
+    one-shot helper, not a hot path.
 
     For an age-anchored family the age of the universe at `redshift` comes
     from :func:`~tengri.components.stellar.component.age_universe_kwargs`, the
@@ -187,9 +196,9 @@ def sample_sfh_prior(
     ``dense_basis`` and ``dense_basis_pure`` (no star formation before the
     Big Bang). For ``psb`` the age parameter is drawn from its prior
     independently of the redshift, so a draw can place star formation at
-    lookback times beyond age(z). This helper evaluates the bare SFH function
-    and does not apply the age-of-universe truncation that the stellar
-    component applies to the model's history.
+    lookback times beyond age(z). This helper evaluates the SFH without the
+    age-of-universe truncation that the stellar component applies to the
+    model's history.
 
     The returned curves are not mass-normalized: they are raw SFR(t) at the
     sampled parameter point. Use :math:`\\int \\mathrm{SFR}\\,\\mathrm{d}t`
@@ -215,39 +224,44 @@ def sample_sfh_prior(
 
     See Also
     --------
-    tengri.components.stellar.sfh.registry.resolve_sfh : the underlying
-        model resolver used by the fitter.
+    tengri.components.stellar.component.evaluate_sfh : the one SFH evaluation the
+        draws go through.
     """
+    from tengri.components.stellar.component import (
+        StellarSEDComponentConfig,
+        age_universe_kwargs,
+        evaluate_sfh,
+    )
+
     if age_grid_yr is None:
         age_grid_yr = DEFAULT_AGE_GRID_YR
+    family_list = [family] if isinstance(family, str) else list(family)
+    families = [f for f in family_list if f != _FIELD]
+    if not families:
+        raise ValueError("sample_sfh_prior needs an SFH family besides the 'field' modulator.")
+    for name in family_list:
+        _spec_for(name)
 
-    composed_fn, _, _, settings = resolve_sfh(
-        family, bin_edges_gyr=_bin_edges_for(family, redshift)
+    if redshift is None and any(age_universe_kwargs(f, 0.0) for f in families):
+        raise ValueError(
+            f"sample_sfh_prior({family!r}) needs redshift=: the family's time axis is "
+            "anchored to the age of the universe at the galaxy's redshift."
+        )
+    z = 0.0 if redshift is None else float(redshift)
+
+    n_grid = DEFAULT_N_GRID
+    config = StellarSEDComponentConfig(
+        sfh_model=families[0] if len(families) == 1 else families,
+        field=_FIELD in family_list,
+        n_grid=n_grid,
+        sfh_bin_edges_gyr=_bin_edges_for(families, redshift),
     )
+    publics = _prior_draws(family_list, key, n, prior_overrides, n_grid=n_grid)
+    redshift_value = jnp.asarray(z)
 
-    family_list, internal_kwargs = _draw_internal_kwargs(
-        family, key, n, prior_overrides, redshift=redshift
-    )
-    # `settings` carries non-fittable knobs (e.g. sfh_field_ngrid). For the
-    # families we currently support, it is empty and can be ignored.
-    del family_list, settings
+    def _one(params_i: dict) -> jnp.ndarray:
+        params_i = {**params_i, "redshift": redshift_value}
+        return evaluate_sfh(config, params_i, jnp.asarray(age_grid_yr), n_grid).sfr_on_ssp
 
-    from tengri.components.stellar.component import age_universe_kwargs
-
-    if redshift is None:
-        if age_universe_kwargs(family, 0.0):
-            raise ValueError(
-                f"sample_sfh_prior({family!r}) needs redshift=: the family's time axis is "
-                "anchored to the age of the universe at the galaxy's redshift."
-            )
-        age_kwargs = {}
-    else:
-        age_kwargs = age_universe_kwargs(family, redshift)
-
-    def _one(kw_i: dict) -> jnp.ndarray:
-        return composed_fn(age_grid_yr, **kw_i, **age_kwargs)
-
-    # vmap over the leading "draws" axis of every internal kwarg.
-    sfr_curves = jax.vmap(_one)(internal_kwargs)
-
+    sfr_curves = jax.vmap(_one)(publics)
     return age_grid_yr, sfr_curves

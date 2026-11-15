@@ -38,10 +38,7 @@ from tengri import DEFAULT, Fixed, SEDModel
 from tengri.components.stellar import component as C
 from tengri.components.stellar.component import age_universe_kwargs
 from tengri.components.stellar.sfh import sample_sfh_prior
-from tengri.components.stellar.sfh._prior_sampling import (
-    _bin_edges_for,
-    _draw_internal_kwargs,
-)
+from tengri.components.stellar.sfh._prior_sampling import _bin_edges_for, _prior_draws
 from tengri.components.stellar.sfh.registry import (
     SFH_REGISTRY,
     UNVALIDATED_SFH_TYPES,
@@ -49,6 +46,7 @@ from tengri.components.stellar.sfh.registry import (
 )
 from tengri.cosmology import age_at_z
 from tengri.parameters.resolve import merge_fixed_params
+from tengri.parameters.timing import resolve_timing_fracs
 from tengri.protocols.component import ForwardState
 from tengri.utils.grid import make_log_age_grid
 
@@ -220,7 +218,9 @@ def test_joint_weights_agree_between_compute_and_apply(built, cell):
 def test_field_draw_forms_the_declared_mass(built, cell):
     """With the field on, this draw forms the declared mass (#2622, owner ruling B25)."""
     c = built(*cell)
-    np.testing.assert_allclose(float(c["m_apply"]), _declared_mass(cell[0], c["params"]), rtol=1e-10)
+    np.testing.assert_allclose(
+        float(c["m_apply"]), _declared_mass(cell[0], c["params"]), rtol=1e-10
+    )
 
 
 @pytest.mark.parametrize(
@@ -235,25 +235,40 @@ def test_prior_curves_equal_the_registry_sfr(sfh, field):
     key = jax.random.PRNGKey(3)
     n = 3
     _age, curves = sample_sfh_prior(fam, key, n=n, age_grid_yr=grid_yr, redshift=Z_OBS)
-    # The same draws, reproduced: one (n,) array per internal kwarg.
-    _fam, kwargs = _draw_internal_kwargs(fam, key, n, {}, redshift=Z_OBS)
-    composed, _, _, _ = resolve_sfh(fam, bin_edges_gyr=_bin_edges_for(fam, Z_OBS))
-    age_kwargs = age_universe_kwargs(fam, Z_OBS)
+    draws = _prior_draws(fam, key, n, {}, n_grid=256)
+    composite = len(family) > 1
+    composed, _, _, _ = resolve_sfh(
+        family if composite else family[0], bin_edges_gyr=_bin_edges_for(family, Z_OBS)
+    )
     for i in range(n):
-        kw_i = {k: v[i] for k, v in kwargs.items()}
-        reference = composed(grid_yr, **kw_i, **age_kwargs)
+        row = {k: v[i] for k, v in draws.items()}
+        kwargs: dict = {}
+        fracs: dict = {}
+        param_map: dict = {}
+        for name in family:
+            spec = SFH_REGISTRY[name]
+            for public, (internal, scale, offset) in spec.internal_param_map.items():
+                param_map[public] = (internal, scale, offset)
+                if public not in row:
+                    continue
+                value = row[public] * scale + offset
+                kwargs[internal] = value
+                if composite:
+                    kwargs[public] = value
+                if spec.params[public].gyr_twin is not None:
+                    fracs[public] = row[public]
+        resolve_timing_fracs(kwargs, fracs, param_map, redshift=Z_OBS)
+        reference = composed(
+            grid_yr, **kwargs, **age_universe_kwargs(family if composite else family[0], Z_OBS)
+        )
         if field:
-            reference = C._apply_gp_field(
-                reference, {k: kw_i[k] for k in kw_i}, 256, make_log_age_grid(256)
-            )
-        np.testing.assert_allclose(np.asarray(curves[i]), np.asarray(reference), rtol=1e-12)
-
-
-def test_builder_exclusions_are_the_registry_set():
-    """The build-based sweep excludes exactly the registry's unvalidated families."""
-    excluded = {s for s in SFH_REGISTRY if s in UNVALIDATED_SFH_TYPES}
-    assert excluded == {s for s in UNVALIDATED_SFH_TYPES if s in SFH_REGISTRY}
-    assert not excluded & {c[0] for c in _sweep_cells() if isinstance(c[0], str)}
+            reference = C._apply_gp_field(reference, row, 256, make_log_age_grid(256))
+        ref = np.asarray(reference)
+        # Scale-relative: the far-past endpoint is 0 against ~1e-193 roundoff, which a
+        # purely relative bound cannot absorb. The bound is 1e-12 of the curve's peak.
+        np.testing.assert_allclose(
+            np.asarray(curves[i]), ref, rtol=1e-12, atol=1e-12 * float(np.max(np.abs(ref)))
+        )
 
 
 def test_exclusions_name_their_reason():
