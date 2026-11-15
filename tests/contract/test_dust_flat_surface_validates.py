@@ -30,15 +30,25 @@ class TestFlatDustShapeValidation:
                 redshift=Fixed(0.5),
             )
 
-    def test_power_law_rejects_dust_bump_strength(self):
-        """power_law does not read dust_bump_strength; explicitly passing it should raise."""
+    def test_smc_rejects_dust_bump_strength(self):
+        """smc does not read dust_bump_strength; explicitly passing it should raise."""
         with pytest.raises(ParameterError, match="dust_bump_strength"):
             Parameters(
                 dust_model="two_component",
-                dust_law_bc="power_law",
+                dust_law_bc="smc",
                 dust_bump_strength=Fixed(1.0),
                 redshift=Fixed(0.5),
             )
+
+    def test_power_law_accepts_dust_bump_strength(self):
+        """power_law reads dust_bump_strength (its Drude UV bump); this should build."""
+        spec = Parameters(
+            dust_model="two_component",
+            dust_law_bc="power_law",
+            dust_bump_strength=Fixed(1.0),
+            redshift=Fixed(0.5),
+        )
+        assert spec.dust_law_bc == "power_law"
 
     def test_kriek_conroy_accepts_dust_delta(self):
         """kriek_conroy reads dust_delta; this should build successfully."""
