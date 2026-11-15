@@ -38,7 +38,7 @@ def _random_case(seed: int, n_pix: int = 30):
 
 
 def test_closed_form_matches_reference_identity_to_1e8():
-    """Exact on both sides: the closed form equals the reference at the shifted centre."""
+    """Exact on both sides: the closed form equals the reference at the shifted center."""
     for seed in range(8):
         wn, fn, z, wobs, s = _random_case(seed)
         got = np.asarray(

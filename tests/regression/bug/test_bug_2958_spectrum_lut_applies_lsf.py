@@ -289,7 +289,7 @@ def _igm_case_reference(exact_model, sigma_v_kms):
 
     The stellar light of this case is all of ``state.sed_intrinsic`` (no nebular or
     instrument-only group), so the reference is T * B(S) on the rest grid, read at the
-    observed pixel centres, scaled per pixel to the model's sigma_v = 0 output.
+    observed pixel centers, scaled per pixel to the model's sigma_v = 0 output.
     """
     state = exact_model.predict_state({"sigma_v_kms": 0.0})
     wave_rest = np.asarray(state.wave)
@@ -309,7 +309,7 @@ def test_d_sigma_v_exact_path_matches_brute_force_without_resolution(ssp_data_wn
     """#3436: the exact path with IGM and no resolution broadens at library resolution.
 
     Resample mode: point (``_spec`` uses ``resample="point"``). Reference: the brute-force
-    ln-lambda broadening of the stellar light, times the IGM, at the pixel centres (1e-3).
+    ln-lambda broadening of the stellar light, times the IGM, at the pixel centers (1e-3).
     The point readout is the closed-form Gaussian of #3512 (measured 7.2e-5 of peak).
     """
     exact = _build(

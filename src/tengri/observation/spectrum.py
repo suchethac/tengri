@@ -1100,7 +1100,7 @@ def lattice_span(wave_obs, z_lo: float, z_hi: float) -> tuple[float, int]:
     Parameters
     ----------
     wave_obs : array_like, shape (n_pix,)
-        Observed-frame pixel centres [Angstrom], strictly increasing.
+        Observed-frame pixel centers [Angstrom], strictly increasing.
     z_lo, z_hi : float
         Redshift range the lattice must cover [dimensionless].
 
@@ -1137,7 +1137,7 @@ def lattice_window(lo: float, hi: float) -> tuple[float, int]:
 
 
 def _pixel_edges(wave_query):
-    """Bin edges of pixel centres: midpoints between neighbours, half a pixel at each end."""
+    """Bin edges of pixel centers: midpoints between neighbors, half a pixel at each end."""
     mid = 0.5 * (wave_query[1:] + wave_query[:-1])
     lo = wave_query[:1] - 0.5 * (wave_query[1:2] - wave_query[:1])
     hi = wave_query[-1:] + 0.5 * (wave_query[-1:] - wave_query[-2:-1])
@@ -1194,7 +1194,7 @@ def _lattice_edge_readout(g, origin, n_cells, edges):
 
     The cumulative integral is exact at the lattice nodes (the cell means are its
     differences) and cubic Hermite between them, with the node slopes taken from the
-    neighbouring cell means. ``origin`` may be traced.
+    neighboring cell means. ``origin`` may be traced.
     """
     h = _LATTICE_DLNLAMBDA
     le = jnp.log(edges)
@@ -1215,7 +1215,7 @@ def _lattice_edge_readout(g, origin, n_cells, edges):
 
 
 def _point_samples(sed_rest, wave_rest, lam_c, edge_aa):
-    """The SED's linear interpolant at the lattice cell centres, zero outside the grid.
+    """The SED's linear interpolant at the lattice cell centers, zero outside the grid.
 
     The same function the point-sampled baseline reads (:func:`compute_spectrum`), so the
     point correction has no cell-averaging bias at a sharp feature.
@@ -1244,7 +1244,7 @@ def _ndtr_diff(upper, lower):
 def _kernel_moments(s_lo, s_hi, sigma):
     r"""Moments :math:`M_1, M_2` of :math:`e^{ks}` over ``[s_lo, s_hi]`` (#3512).
 
-    With :math:`s = \ln\lambda - \mu` and a unit Gaussian of width ``sigma`` centred at zero,
+    With :math:`s = \ln\lambda - \mu` and a unit Gaussian of width ``sigma`` centered at zero,
     :math:`M_k = \int e^{ks}\,\mathcal{N}(s;0,\sigma)\,ds
     = e^{k^2\sigma^2/2}\,[\Phi((s_1-k\sigma^2)/\sigma)-\Phi((s_0-k\sigma^2)/\sigma)]`.
     """
@@ -1336,7 +1336,7 @@ def point_readout_gaussian_ln(
     wave_rest : ndarray, shape (n_wave,)
         Rest-frame grid, ascending [Angstrom].
     wave_obs : ndarray, shape (n_pix,)
-        Observed pixel centres [Angstrom]; read at ``wave_obs / (1 + redshift)``.
+        Observed pixel centers [Angstrom]; read at ``wave_obs / (1 + redshift)``.
     redshift : float or tracer
         Source redshift.
     sigma_ln : ndarray, shape (n_pix,) or scalar
@@ -1390,7 +1390,7 @@ def sigma_v_lattice_correction(
     r"""Broadening correction on the ln-lambda lattice: sigma_v on the stellar group (#3436).
 
     The exact unbroadened projection carries the baseline. This function returns only the
-    difference the velocity dispersion makes, with the same discretisation on both terms:
+    difference the velocity dispersion makes, with the same discretization on both terms:
 
     .. math::
 
@@ -1409,7 +1409,7 @@ def sigma_v_lattice_correction(
     igm_rest : ndarray, shape (n_wave,) or None
         IGM transmission on the rest grid, or ``None`` for unity.
     wave_rest, wave_obs : ndarray
-        Rest-frame model grid and observed pixel centres [Angstrom].
+        Rest-frame model grid and observed pixel centers [Angstrom].
     redshift, dl_cm : float
         Source redshift and luminosity distance [cm]; ``redshift`` may be traced.
     sigma_v_kms : float or ndarray
@@ -1417,7 +1417,7 @@ def sigma_v_lattice_correction(
     span : tuple of (float, int)
         Static lattice from :func:`lattice_span`, covering the redshift range.
     conserving : bool
-        Pixel means (``True``) or lattice values at the pixel centres (``False``).
+        Pixel means (``True``) or lattice values at the pixel centers (``False``).
     has_lyc_edge : bool, optional
         The SED is a step at the Lyman edge (the lattice load uses the step interpolant).
 
@@ -1446,7 +1446,7 @@ def sigma_v_lattice_correction(
             lnu_to_fnu(pixel_sed * scale_out, dl_cm, redshift), sigma_v_kms
         )
     # Point: the closed-form Gaussian readout at each pixel (#3512), so the point value has no
-    # lattice discretisation. The difference from the unbroadened sample vanishes at sigma = 0.
+    # lattice discretization. The difference from the unbroadened sample vanishes at sigma = 0.
     stellar_in = stellar_rest * scale_in
     sigma_ln = jnp.broadcast_to(jnp.asarray(sigma_v_kms) / _C_KM_S, wave_q.shape)
     closed = point_readout_gaussian_ln(

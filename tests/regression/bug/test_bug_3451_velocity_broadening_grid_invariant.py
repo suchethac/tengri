@@ -69,7 +69,7 @@ def test_line_flux_inside_window_is_conserved_exactly():
     wave = np.geomspace(1000.0, 2.0e4, 6000)
     lam0 = 6000.0 / (1.0 + _Z)
     line = 1e-27 * np.exp(-0.5 * ((wave - lam0) / 3.0) ** 2)
-    centres = 0.5 * (_OBS[1:] + _OBS[:-1])
+    centers = 0.5 * (_OBS[1:] + _OBS[:-1])
     widths = np.diff(_OBS)
 
     def total(sigma):
@@ -77,7 +77,7 @@ def test_line_flux_inside_window_is_conserved_exactly():
             project_spectrum(
                 jnp.asarray(line),
                 jnp.asarray(wave),
-                jnp.asarray(centres),
+                jnp.asarray(centers),
                 _Z,
                 _DL,
                 sigma_v_kms=sigma,
