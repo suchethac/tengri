@@ -178,7 +178,9 @@ def test_runtime_z_defaults_to_declared_redshift():
     """A runtime model with no z in params uses its declared redshift (#3505 default)."""
     promoted = _build("exact", "plain", Fixed(Z_PLACEHOLDER)).with_runtime_redshift()
     got = np.asarray(promoted.predict_photometry({}))
-    np.testing.assert_allclose(got, _reference("exact", "plain", Z_PLACEHOLDER), rtol=RTOL["exact"])
+    np.testing.assert_allclose(
+        got, _reference("exact", "plain", Z_PLACEHOLDER), rtol=RTOL["exact"]
+    )
 
 
 def test_non_runtime_fixed_model_still_refuses_call_time_override():
@@ -232,3 +234,229 @@ def test_fixed_unpromoted_model_is_bit_identical_to_main(representation, structu
     got = np.asarray(_build(representation, structure, Fixed(z)).predict_photometry({}))
     expected = np.array([float.fromhex(v) for v in _PIN[(representation, structure, z)]])
     np.testing.assert_array_equal(got, expected)
+
+
+# ── Component cells: every table a component bakes follows the runtime z ────────
+#
+# Each cell builds one model with a single redshift-dependent component, with every
+# other parameter Fixed, so its output at z is fully determined by z. The runtime
+# model (promoted from a Fixed placeholder) evaluated at three redshifts under ONE
+# jit trace must equal a model built Fixed at each z, in both representations.
+
+from pathlib import Path
+
+from tengri import LineList
+
+_FSPS_PATH = Path(__file__).resolve().parents[2] / "data" / "fsps_prsc_miles_chabrier.h5"
+_Z_HIGH = (3.2, 3.8, 4.5)
+_Z_RANGE_HIGH = (3.0, 5.0)
+_LINE_NAMES = ("Hbeta", "OIII_5007", "Halpha")
+_BANDS_OPT = ["sdss_g", "sdss_r", "sdss_i"]
+_BANDS_IR = ["sdss_r", "wise_w1", "wise_w3", "wise_w4"]
+_BANDS_RADIO = ["sdss_r", "wise_w3", "wise_w4", "herschel_250"]
+_TAU = {"type": "single_component", "law": "calzetti", "tau_v": Fixed(0.3)}
+_AGN = {
+    "type": "composable",
+    "disc": {"type": "powerlaw", "all_params": Fixed(DEFAULT)},
+    "torus": {"type": "simple", "all_params": Fixed(DEFAULT)},
+    "blr": {"type": "none"},
+    "nlr": {"type": "none"},
+    "feii": {"type": "none"},
+    "atten": {"type": "none"},
+}
+#: cell -> (bands, build kwargs, redshifts, table range)
+_COMPONENT_CELLS = {
+    "nebular_cue": (
+        _BANDS_OPT,
+        {"neb": {"type": "cue", "all_params": Fixed(DEFAULT)}, "dust_attenuation": _TAU},
+        ZS,
+        Z_RANGE,
+    ),
+    "dust_emission": (
+        _BANDS_IR,
+        {
+            "dust_attenuation": {
+                "type": "two_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+            },
+            "dust_emission": {"type": "dale2014", "all_params": Fixed(DEFAULT)},
+        },
+        ZS,
+        Z_RANGE,
+    ),
+    "agn": (_BANDS_IR, {"agn": _AGN, "dust_attenuation": {"type": "none"}}, ZS, Z_RANGE),
+    "radio": (
+        _BANDS_RADIO,
+        {
+            "radio": {
+                "sf": {"type": "bell2003"},
+                "agn": {"type": "powerlaw"},
+                "all_params": Fixed(DEFAULT),
+            },
+            "dust_attenuation": _TAU,
+        },
+        ZS,
+        Z_RANGE,
+    ),
+    "xray": (
+        _BANDS_RADIO,
+        {"xray": {"type": "simple", "all_params": Fixed(DEFAULT)}, "dust_attenuation": _TAU},
+        ZS,
+        Z_RANGE,
+    ),
+    "shock_mappings": (
+        _BANDS_OPT,
+        {"shock": {"type": "mappings", "all_params": Fixed(DEFAULT)}, "dust_attenuation": _TAU},
+        ZS,
+        Z_RANGE,
+    ),
+    "igm_high_z": (
+        ["sdss_g", "sdss_r", "sdss_i", "sdss_z"],
+        {"igm": {"type": "inoue14"}, "dust_attenuation": {"type": "none"}},
+        _Z_HIGH,
+        _Z_RANGE_HIGH,
+    ),
+}
+_COMPONENT_CASES = [(cell, rep) for cell in _COMPONENT_CELLS for rep in REPRESENTATIONS]
+
+
+@cache
+def _fsps():
+    if not _FSPS_PATH.is_file():
+        pytest.skip(f"needs {_FSPS_PATH}")
+    return load_ssp_data(str(_FSPS_PATH))
+
+
+def _component_model(cell, representation, redshift, z_range=None):
+    bands, kw, _, _ = _COMPONENT_CELLS[cell]
+    approx = None if representation == "exact" else WavePrecomp()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        model = SEDModel.build(
+            ssp_data=_fsps(),
+            observation=Observation(photometry=Photometry.from_names(bands)),
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            redshift=Fixed(redshift),
+            approx=approx,
+            **kw,
+        )
+        return model if z_range is None else model.with_runtime_redshift(z_range)
+
+
+def _runtime_outputs(model, zs, observable):
+    traces = []
+
+    def program(z):
+        traces.append(1)
+        return observable(model, {"redshift": z})
+
+    jitted = jax.jit(program)
+    outs = [np.asarray(jitted(jnp.asarray(z))) for z in zs]
+    assert len(traces) == 1, f"{len(traces)} traces for {len(zs)} redshifts"
+    return outs
+
+
+def _photometry(model, params):
+    return model.predict_photometry(params)
+
+
+@pytest.mark.parametrize(("cell", "representation"), _COMPONENT_CASES)
+def test_component_photometry_follows_runtime_z(cell, representation):
+    """Runtime-z photometry of a component cell equals a Fixed-z build at each z."""
+    _, _, zs, z_range = _COMPONENT_CELLS[cell]
+    placeholder = zs[0]
+    model = _component_model(
+        cell, representation, placeholder, z_range if representation == "wp" else None
+    )
+    if representation == "exact":
+        model = model.with_runtime_redshift(None)
+    for z, got in zip(zs, _runtime_outputs(model, zs, _photometry), strict=True):
+        ref = np.asarray(_component_model(cell, representation, z).predict_photometry({}))
+        np.testing.assert_allclose(
+            got, ref, rtol=RTOL[representation], atol=0.0, err_msg=f"{cell}/{representation} z={z}"
+        )
+
+
+@cache
+def _line_waves():
+    cat = LineList.default_optical()
+    return jnp.asarray([float(w) for n, w in zip(cat.names, cat.wavelengths) if n in _LINE_NAMES])
+
+
+def _line_fluxes(model, params):
+    return model.predict_line_fluxes(params, target_wavelengths=_line_waves())
+
+
+@pytest.mark.parametrize("representation", REPRESENTATIONS)
+def test_nebular_line_fluxes_follow_runtime_z(representation):
+    """Cue line fluxes at a runtime z equal a Fixed-z build's, at three redshifts."""
+    cell = "nebular_cue"
+    placeholder = ZS[0]
+    _line_waves()  # built outside the jit trace
+    model = _component_model(
+        cell, representation, placeholder, Z_RANGE if representation == "wp" else None
+    )
+    if representation == "exact":
+        model = model.with_runtime_redshift(None)
+    for z, got in zip(ZS, _runtime_outputs(model, ZS, _line_fluxes), strict=True):
+        ref = np.asarray(_line_fluxes(_component_model(cell, representation, z), {}))
+        np.testing.assert_allclose(
+            got, ref, rtol=RTOL[representation], atol=0.0, err_msg=f"lines/{representation} z={z}"
+        )
+
+
+def _grid_model(redshift, z_range=None):
+    from tengri import FeaturePrecomp
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        model = SEDModel.build(
+            ssp_data=_fsps(),
+            observation=Observation(photometry=Photometry.from_names(_BANDS_OPT)),
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            met={"logzsol": Fixed(0.0)},
+            neb={
+                "type": "cue",
+                "all_params": Fixed(DEFAULT),
+                "logU": Uniform(-4.0, -1.0),
+                "logZ_gas": Uniform(-1.5, 0.3),
+            },
+            dust_attenuation={"type": "none"},
+            dust_emission={"type": "none"},
+            redshift=Fixed(redshift),
+            approx=(WavePrecomp(), FeaturePrecomp(n_grid=4)),
+        )
+        return model if z_range is None else model.with_runtime_redshift(z_range)
+
+
+def test_nebular_grid_photometry_follows_runtime_z():
+    """The per-Q_H nebular grid's band photometry follows a runtime z (tabulated bound)."""
+    free = {"neb_logU": -2.5, "neb_logZ_gas": 0.0}
+    model = _grid_model(ZS[0], Z_RANGE)
+    assert model._nebular_grid_table is not None, "no nebular grid: the cell tests nothing"
+    traces = []
+
+    def program(z):
+        traces.append(1)
+        return model.predict_photometry({**free, "redshift": z})
+
+    jitted = jax.jit(program)
+    for z in ZS:
+        got = np.asarray(jitted(jnp.asarray(z)))
+        ref = np.asarray(_grid_model(z).predict_photometry(free))
+        np.testing.assert_allclose(got, ref, rtol=RTOL["wp"], atol=0.0, err_msg=f"grid z={z}")
+    assert len(traces) == 1
+
+
+def test_nebular_grid_line_fluxes_follow_runtime_z():
+    """Line fluxes served from the per-Q_H grid follow a runtime z (tabulated bound)."""
+    free = {"neb_logU": -2.5, "neb_logZ_gas": 0.0}
+    _line_waves()
+    model = _grid_model(ZS[0], Z_RANGE)
+    outs = _runtime_outputs(model, ZS, lambda m, p: _line_fluxes(m, {**free, **p}))
+    for z, got in zip(ZS, outs, strict=True):
+        ref = np.asarray(_line_fluxes(_grid_model(z), free))
+        np.testing.assert_allclose(
+            got, ref, rtol=RTOL["wp"], atol=0.0, err_msg=f"grid lines z={z}"
+        )

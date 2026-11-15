@@ -7952,8 +7952,7 @@ class SEDModel:
         # Warm the component-chain cache OUTSIDE the JIT trace (see
         # _get_or_build_predict_observables_jit): precompute() runs numpy-level
         # routines that cannot be traced.
-        if getattr(self, "_cached_component_chain", None) is None:
-            self._cached_component_chain = self._build_component_chain()
+        self._warm_component_chain()
 
         def _impl(params, fixed_values, wave_obs, ssp_data, template_data, ztable_data):
             from tengri.cosmology import luminosity_distance
@@ -11541,8 +11540,7 @@ class SEDModel:
         # ``preintegrate_grid``, a numpy-level routine with Python
         # ``float()`` calls that can't be traced. After this warmup,
         # ``predict_state`` inside the JIT reuses the cached chain.
-        if getattr(self, "_cached_component_chain", None) is None:
-            self._cached_component_chain = self._build_component_chain()
+        self._warm_component_chain()
 
         def _forward(params, fixed_values, ssp_data, template_data, ztable_data):
             # The one caller that may take the publication shortcuts: this
@@ -11672,9 +11670,20 @@ class SEDModel:
         spectroscopic stack (#2845) through :class:`ForwardModel`, which delegates
         this method to its inner SED.
         """
-        if getattr(self, "_cached_component_chain", None) is None:
-            self._cached_component_chain = self._build_component_chain()
+        self._warm_component_chain()
         return self._resolve_threaded_data(None, None, None)
+
+    def _warm_component_chain(self) -> None:
+        """Build and cache the component chain on first use.
+
+        The first call can arrive inside a caller's jit or vmap trace (a traced
+        redshift always does). ``jax.ensure_compile_time_eval`` keeps the arrays the
+        chain's ``precompute`` builds concrete, so none of them is a tracer that
+        escapes into the cache and fails the next trace (#3505).
+        """
+        if getattr(self, "_cached_component_chain", None) is None:
+            with jax.ensure_compile_time_eval():
+                self._cached_component_chain = self._build_component_chain()
 
     def _resolve_threaded_data(self, ssp_data, template_data, ztable_data=None):
         """Resolve the JIT-threading channel: caller's arrays, else this model's own.
@@ -11708,11 +11717,16 @@ class SEDModel:
         tuple
             ``(ssp_data, template_data, ztable_data)`` ready to hand to the impl closure.
         """
-        return (
-            self.ssp_data if ssp_data is None else ssp_data,
-            self._template_data_for_jit() if template_data is None else template_data,
-            self._ztable_data_for_jit() if ztable_data is None else ztable_data,
-        )
+        # A caller may reach this first call from inside its own jit or vmap trace
+        # (a traced redshift always does). The lazy chain and band-table builds below
+        # read concrete values (``float()``, numpy tables), so they run at compile
+        # time rather than being staged into that caller's trace.
+        with jax.ensure_compile_time_eval():
+            return (
+                self.ssp_data if ssp_data is None else ssp_data,
+                self._template_data_for_jit() if template_data is None else template_data,
+                self._ztable_data_for_jit() if ztable_data is None else ztable_data,
+            )
 
     def _template_data_for_jit(self):
         """Collect template grids/weights for JIT threading (nebular + dust IR + AGN).
