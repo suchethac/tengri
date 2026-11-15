@@ -106,6 +106,12 @@ class DerivedState:
     # published so DustSEDComponent can evaluate L_ir from a precomputed
     # bolometric (tau_bc, tau_diff) LUT instead of the full stellar cube.
     joint_weights: jnp.ndarray | None = None
+    #: Metallicity-read joint for the exact contractions (#3434, phase 2): (n_met, n_age)
+    #: on a declared scatter, (1, n_age) age marginal when undeclared; with the galaxy's
+    #: log Z (scalar or per age) and the SSP metallicity nodes it is read over.
+    met_exact_joint: jnp.ndarray | None = None
+    met_exact_z: jnp.ndarray | None = None
+    met_exact_lgmet: jnp.ndarray | None = None
     #: log10(total_mass x L_sun) [dex]. The linear erg/s scale is ~1e43 for a
     #: 1e10 Msun galaxy and overflows float32 for any galaxy above ~9e4 Msun, so
     #: only the log form is published (#1206, #3149).

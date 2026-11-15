@@ -307,9 +307,10 @@ def read_catalog(
     - Detected (positive or zero error) → mask = 0, with signed flux preserved
       (negative flux with positive error represents a faint detection, not a limit)
 
-    Filter columns must have corresponding ``_err`` columns. Columns without
-    an ``_err`` counterpart are silently skipped, unless
-    ``default_relative_error`` is given.
+    Filter columns must have corresponding ``_err`` columns. A registered filter
+    column without an ``_err`` counterpart is skipped with one ``UserWarning``
+    naming it, unless ``default_relative_error`` is given. Non-filter columns
+    without an ``_err`` counterpart are skipped without a warning.
     """
     if default_relative_error is not None and not default_relative_error >= 0.0:
         raise ValueError(
@@ -351,6 +352,15 @@ def read_catalog(
                     stacklevel=2,
                 )
                 filter_cols.append((col, None, tengri_name))
+            elif tengri_name in FILTER_REGISTRY:
+                # A registered band with no error column is dropped. Name it, so the
+                # skip is never silent (pcigale refuses such a band outright).
+                warnings.warn(
+                    f"Column '{col}' has no '{err_col}' column and is dropped; pass "
+                    f"default_relative_error to keep it with a fractional error.",
+                    UserWarning,
+                    stacklevel=2,
+                )
             continue
 
         if tengri_name in FILTER_REGISTRY:
