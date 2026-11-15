@@ -494,7 +494,7 @@ def load_ssp(
     """
     from pathlib import Path
 
-    from tengri._data_setup import _HOSTED_SSPS, _KNOWN_SSPS, DEFAULT_SSP, catalog_short_name
+    from tengri._data_setup import _KNOWN_SSPS, DEFAULT_SSP, catalog_short_name
 
     if mass_remaining is None:
         mass_remaining = _default_mass_remaining(name)
@@ -514,10 +514,7 @@ def load_ssp(
         filename = _LOAD_SSP_PRESETS[name]
     elif name in _KNOWN_SSPS:
         catalog_key = name
-        filename = _KNOWN_SSPS[name]
-    elif name in _HOSTED_SSPS:
-        catalog_key = name
-        filename = _HOSTED_SSPS[name].filename
+        filename = _KNOWN_SSPS[name].filename
     else:
         # Accept an explicit absolute/relative path to an .h5 file directly
         # (closes #496: reproduction notebooks ship SSPs under

@@ -26,7 +26,7 @@ from typing import Any
 
 import numpy as np
 
-from tengri._data_setup import _BARE_TWIN_OF_WNE, _HOSTED_SSPS
+from tengri._data_setup import _BARE_TWIN_OF_WNE, _KNOWN_SSPS
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +41,8 @@ def _neb_type(neb: Any) -> str | None:
 
 
 def _wne_short_name(ssp_data) -> str | None:
-    """The hosted wNE short name ``ssp_data`` was loaded from, or ``None``."""
-    for short, entry in _HOSTED_SSPS.items():
+    """The registry short name ``ssp_data`` was loaded from, or ``None``."""
+    for short, entry in _KNOWN_SSPS.items():
         if Path(entry.filename).stem == ssp_data.source:
             return short
     return None

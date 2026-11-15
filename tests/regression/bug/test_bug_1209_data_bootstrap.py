@@ -29,7 +29,6 @@ import pytest
 from tengri._data_setup import (
     KNOWN_SSP_FILENAMES,
     TENGRI_DATA_ENV,
-    _hosted_entry,
     data_dirs,
     download_dir,
     find_ssp_files,
@@ -274,10 +273,10 @@ def test_download_and_load_share_one_default():
         f"ssp_lgmet shape {ssp_no_args.ssp_lgmet.shape} vs {ssp_explicit.ssp_lgmet.shape}. "
         f"The no-argument default is not DEFAULT_SSP."
     )
-    # The loaded SSP must match a fetchable catalog entry: the curated table or the
-    # hosted wNE grids (the default is hosted since #3465).
-    assert DEFAULT_SSP in _KNOWN_SSPS or _hosted_entry(DEFAULT_SSP) is not None, (
-        "the default must be fetchable by download_ssp()"
+    # The loaded SSP must be a registry entry download_ssp() can fetch, with its checksum
+    # (the default is hosted since #3465).
+    assert DEFAULT_SSP in _KNOWN_SSPS and _KNOWN_SSPS[DEFAULT_SSP].sha256 is not None, (
+        "the default must be fetchable by download_ssp(), with a checksum"
     )
 
 
@@ -289,11 +288,13 @@ def test_default_ssp_is_bare_stellar():
     its twin: the grid a Cue, CLOUDY or CB_19 model is built on. A wNE twin would
     double-count the nebular emission those backends add.
     """
-    from tengri._data_setup import _BARE_TWIN_OF_WNE, DEFAULT_SSP
+    from tengri._data_setup import _BARE_TWIN_OF_WNE, _KNOWN_SSPS, DEFAULT_SSP
 
     twin = _BARE_TWIN_OF_WNE[DEFAULT_SSP]
     assert "wNE" not in twin, "the bare twin of the default must not be nebular-baked"
-    assert _hosted_entry(twin) is not None, "the bare twin must be fetchable by download_ssp()"
+    assert twin in _KNOWN_SSPS and _KNOWN_SSPS[twin].sha256 is not None, (
+        "the bare twin must be fetchable by download_ssp(), with a checksum"
+    )
 
 
 @pytest.mark.parametrize(

@@ -227,7 +227,9 @@ def is_hosted_grid(stem: str) -> bool:
     Parameters
     ----------
     stem : str
-        File stem of the grid; a ``_wNE...`` nebular suffix is ignored.
+        Registry short name or file stem of the grid; a ``_wNE...`` nebular suffix is
+        ignored after the name, but a short name that carries ``_wNE`` (a hosted
+        nebular-baked grid) is matched as given.
 
     Returns
     -------
@@ -236,7 +238,7 @@ def is_hosted_grid(stem: str) -> bool:
     """
     from tengri._data_setup import _KNOWN_SSPS
 
-    return stem.split("_wNE")[0] in _KNOWN_SSPS
+    return stem in _KNOWN_SSPS or stem.split("_wNE")[0] in _KNOWN_SSPS
 
 
 def canonical_grid_name(stem: str) -> str:
