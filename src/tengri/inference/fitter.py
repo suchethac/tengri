@@ -1418,7 +1418,10 @@ def _resolve_batch_fit_approx(model, approx, data_type):
                     return _memoized_approx_clone(model, (*existing, *extra))
                 except NebularShapeDriftError as exc:
                     _warn_shape_fallback(exc, stacklevel=4)
-                except Exception:  # #1596: a backend with nothing to tabulate keeps the wave LUT
+                except (ValueError, NotImplementedError):
+                    # #1596: a backend with nothing to tabulate refuses with one of these
+                    # (FeaturePrecomp's own refusals are ValueError / NotImplementedError);
+                    # the wave LUT is kept. Anything else is a bug and propagates.
                     pass
             if has_wave:
                 return model
@@ -2679,7 +2682,9 @@ class Fitter:
                     # #3526: a drifting table is not attached; the exact line path
                     # is kept, announced, and photometry keeps the WavePrecomp table.
                     _warn_shape_fallback(exc, stacklevel=4)
-                except Exception:  # #1596: nothing to tabulate keeps the wave LUT
+                except (ValueError, NotImplementedError):
+                    # #1596: nothing to tabulate refuses with one of these; the wave LUT
+                    # is kept. Anything else is a bug and propagates.
                     pass
             return _memoized_approx_clone(model, cfg)
 

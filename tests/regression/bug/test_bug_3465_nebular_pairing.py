@@ -13,12 +13,16 @@ prsc wNE grid run unchanged on main, so their failures there come from the asser
 
 import warnings
 
+import jax
+import jax.numpy as jnp
 import numpy as np
 import pytest
 
 import tengri
 from tengri import FREE, Fixed, Observation, Photometry, SEDModel, Uniform, WavePrecomp
 from tengri._data_setup import _BARE_TWIN_OF_WNE, DEFAULT_SSP
+from tengri.components.stellar.sps.dsps_wrapper import SSPData
+from tengri.components.stellar.sps.nebular_pairing import resolve_nebular_grid
 
 pytestmark = pytest.mark.regression_bug
 
@@ -121,3 +125,45 @@ def test_twin_axes_must_match_the_grid_they_replace():
     shifted = bare._replace(ssp_wave=bare.ssp_wave * 1.01)
     with pytest.raises(ValueError, match="does not share the axes"):
         _check_twin_matches(wne, shifted)
+
+
+def _synthetic_wne(source=""):
+    """An in-memory grid flagged nebular-included, with no hosted file behind it."""
+    return SSPData(
+        ssp_wave=jnp.linspace(100.0, 20000.0, 50),
+        ssp_flux=jnp.full((2, 4, 50), 1e-4),
+        ssp_lg_age_gyr=jnp.linspace(-3.0, 1.0, 4),
+        ssp_lgmet=jnp.array([-2.5, -1.8]),
+        nebular="included",
+        source=source,
+    )
+
+
+@pytest.mark.parametrize("neb", [{"type": "cue"}, {"type": "cb19"}, {"type": "cloudy"}])
+def test_synthetic_wne_flagged_grid_is_not_swapped(neb):
+    # Only the hosted file, matched by name, is swapped. A grid that carries the nebular
+    # flag but is not the hosted wNE file keeps the twinless behavior (the backend's own
+    # refusal), never the bare twin's axes.
+    grid = _synthetic_wne()
+    assert resolve_nebular_grid(grid, neb) is grid
+
+
+def test_synthetic_wne_flagged_grid_with_none_warns_and_keeps_its_grid():
+    grid = _synthetic_wne(source="ssp_mist_c3k_hr_chabrier_wNE_renamed")
+    with pytest.warns(UserWarning, match="does not remove the nebular emission"):
+        assert resolve_nebular_grid(grid, {"type": "none"}) is grid
+
+
+def test_synthetic_wne_flagged_grid_with_baked_in_is_not_swapped():
+    grid = _synthetic_wne(source=HR_WNE)
+    assert resolve_nebular_grid(grid, {"type": "ssp"}) is grid
+
+
+def test_hosted_wne_pairs_with_its_twin_under_float32():
+    # A float32 build loads the twin as float32 while the wNE grid stays float64. The axis
+    # check must accept the cast (test_chevallard13_plumbing::test_float32_matches_float64).
+    wne = tengri.load_ssp(HR_WNE)
+    with jax.enable_x64(False):
+        twin = resolve_nebular_grid(wne, {"type": "cue"})
+    assert twin.nebular == "bare"
+    assert twin.source == "ssp_mist_c3k_hr_chabrier_noNE"

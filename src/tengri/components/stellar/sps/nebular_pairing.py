@@ -48,15 +48,31 @@ def _wne_short_name(ssp_data) -> str | None:
     return None
 
 
+#: Relative tolerance of the axis check at float64.
+_AXIS_RTOL_F64 = 1e-12
+
+
+def _axis_rtol(*arrays) -> float:
+    """The axis tolerance: ``_AXIS_RTOL_F64``, or 16 ulp of the coarsest precision given.
+
+    A float32 build loads the bare twin as float32 while the wNE grid it replaces stays
+    float64. The cast moves the wavelengths by about 6e-8 relative, which the float64
+    tolerance refuses (#3465, test_chevallard13_plumbing::test_float32_matches_float64).
+    """
+    eps = max(float(np.finfo(np.asarray(a).dtype).eps) for a in arrays)
+    return max(_AXIS_RTOL_F64, 16.0 * eps)
+
+
 def _check_twin_matches(wne, bare) -> None:
     """Refuse a twin whose wavelength, metallicity or age axes differ from the grid it replaces."""
+    rtol = _axis_rtol(
+        wne.ssp_wave, bare.ssp_wave, wne.ssp_lgmet, bare.ssp_lgmet, wne.ssp_lg_age_gyr
+    )
     same = (
         np.shape(wne.ssp_flux) == np.shape(bare.ssp_flux)
-        and np.allclose(np.asarray(wne.ssp_wave), np.asarray(bare.ssp_wave), rtol=1e-12)
-        and np.allclose(np.asarray(wne.ssp_lgmet), np.asarray(bare.ssp_lgmet), rtol=1e-12)
-        and np.allclose(
-            np.asarray(wne.ssp_lg_age_gyr), np.asarray(bare.ssp_lg_age_gyr), rtol=1e-12
-        )
+        and np.allclose(np.asarray(wne.ssp_wave), np.asarray(bare.ssp_wave), rtol=rtol)
+        and np.allclose(np.asarray(wne.ssp_lgmet), np.asarray(bare.ssp_lgmet), rtol=rtol)
+        and np.allclose(np.asarray(wne.ssp_lg_age_gyr), np.asarray(bare.ssp_lg_age_gyr), rtol=rtol)
     )
     if not same:
         raise ValueError(
