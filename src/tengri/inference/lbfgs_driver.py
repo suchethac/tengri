@@ -8,6 +8,7 @@ The batched spectroscopy MAP vmaps this over galaxies, and the per-galaxy
 
 from __future__ import annotations
 
+import weakref
 from collections.abc import Callable
 from typing import Any
 
@@ -32,11 +33,41 @@ class BoundLoss:
         return self.loss(params) if self.data is None else self.loss(params, self.data)
 
     def tree_flatten(self):
-        return (self.data,), self.loss
+        return (self.data,), _LossKey(self.loss)
 
     @classmethod
-    def tree_unflatten(cls, loss, children):
-        return cls(loss, children[0])
+    def tree_unflatten(cls, key, children):
+        return cls(key.loss(), children[0])
+
+
+class _LossKey:
+    """The loss as a jit cache key that does not keep the loss alive.
+
+    Equal to another key only while both name the same live loss; a key of a dropped loss
+    never matches, so its compiled driver is simply not reused.
+    """
+
+    __slots__ = ("_id", "_ref")
+
+    def __init__(self, loss: Callable):
+        self._ref = weakref.ref(loss)
+        self._id = id(loss)
+
+    def loss(self) -> Callable:
+        """The loss this key names; it must be alive while the key is in use."""
+        target = self._ref()
+        if target is None:
+            raise RuntimeError("the loss of a compiled L-BFGS driver was collected while in use")
+        return target
+
+    def __hash__(self) -> int:
+        return self._id
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, _LossKey):
+            return NotImplemented
+        mine = self._ref()
+        return mine is not None and mine is other._ref()
 
 
 def max_abs_leaf(tree: Any) -> jax.Array:

@@ -13,11 +13,15 @@ per round on a warm quickstart fit). The contract pinned here:
 
 from __future__ import annotations
 
+import gc
+import weakref
+
 import jax
 import jax.numpy as jnp
 import pytest
 
 from tengri.inference.backends import map_dispatch
+from tengri.inference.lbfgs_driver import BoundLoss, lbfgs_to_gtol
 from tengri.inference.map_stationarity import stationarity
 
 pytestmark = pytest.mark.contract
@@ -104,3 +108,28 @@ def test_new_data_of_the_same_shape_reuses_the_continuation_programs(round_compi
     assert _compiles() - before == 0, "a new dataset of the same shape recompiled"
     np_expected = float(_quadratic_loss(jnp.asarray(x_b), data_b))
     assert nlp_b == pytest.approx(np_expected, rel=1e-10)
+
+
+def test_driver_cache_does_not_keep_a_dropped_loss_alive():
+    """The compiled driver keys on the loss weakly: a dropped loss and what it holds is freed."""
+
+    class _Model:
+        pass
+
+    def make_loss():
+        model = _Model()
+
+        def loss(vec, data):
+            return _quadratic_loss(vec, data) + 0.0 * id(model)
+
+        return loss, model
+
+    loss, model = make_loss()
+    loss_ref, model_ref = weakref.ref(loss), weakref.ref(model)
+    lbfgs_to_gtol(
+        BoundLoss(loss, jnp.ones(4, dtype=jnp.float64)), jnp.zeros(4), n_steps=3, gtol=1e-14
+    )
+    del loss, model
+    gc.collect()
+    assert loss_ref() is None, "the compiled driver keeps the dropped loss alive"
+    assert model_ref() is None, "the compiled driver keeps the loss's model alive"
