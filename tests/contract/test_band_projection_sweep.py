@@ -383,7 +383,20 @@ _F32_ON_MAIN = {
     "radio": "float32 overflow while casting the radio band table (also on origin/main)",
     "dust_emission": "float32 overflow casting the dust-emission table (also on origin/main)",
     "cloudy_grid": "non-finite float32 CLOUDY band table (also on origin/main)",
+    "dust_two_component": (
+        "the float32 wavelength-table path drifts past the bar after the metallicity read "
+        "changed on main: 2mass_ks is off by 1.1e-2 against 7e-3 in both conventions, while "
+        "the float64 table agrees with the exact path to 1.4e-4 (also on origin/main)"
+    ),
+    "dust_single_screen": (
+        "the float32 wavelength-table path drifts past the bar after the metallicity read "
+        "changed on main: 2mass_ks is off by 8.0e-3 against 7e-3 in both conventions, while "
+        "the float64 table agrees with the exact path to 1.4e-4 (also on origin/main)"
+    ),
 }
+
+
+_F32_DRIFT = frozenset({"dust_two_component", "dust_single_screen"})
 
 
 @pytest.mark.parametrize("z_name", list(REDSHIFTS))
@@ -397,7 +410,12 @@ def test_float32_waveprecomp_matches_the_float64_exact_path(request, name, conve
     own (6e-3) plus float32 rounding.
     """
     if name in _F32_ON_MAIN:
-        request.applymarker(pytest.mark.xfail(strict=True, reason=_F32_ON_MAIN[name]))
+        # The overflow cells fail with a warning raised as an error; the drift cells fail on
+        # the bound, and only that failure is the expected one.
+        raises = AssertionError if name in _F32_DRIFT else None
+        request.applymarker(
+            pytest.mark.xfail(strict=True, raises=raises, reason=_F32_ON_MAIN[name])
+        )
     approx = EMITTERS[name].get("approx", WavePrecomp())
     with warnings.catch_warnings():
         _fallbacks_are_errors()
