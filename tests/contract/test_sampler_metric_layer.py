@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""``metric="dense"`` reaches every sampler: applied, or invariant by mathematics (#3505, M5).
+"""``metric="dense"`` reaches every sampler: applied, or invariant by mathematics.
 
 A pilot-covariance whitening is a reparametrization of the target, so it applies to any
 sampler. The only samplers that skip it are those whose result is affine-equivariant
@@ -181,3 +181,31 @@ def test_the_pilot_is_sized_from_d(spy_sampler):
     )
     # The pilot asked for more than the 5 draws requested; the final run asked for 5.
     assert spy_sampler[0] == pilot_rows(3) and spy_sampler[1] == 5
+
+
+def test_a_point_estimate_pilots_with_the_curvature_not_a_sampler(monkeypatch):
+    """Whitening a MAP or a Laplace must not run a NUTS warmup just to learn a covariance."""
+    import dataclasses
+
+    from tengri.inference.sampling import driver
+
+    ran = []
+    nuts = driver._REGISTRY["nuts"]
+
+    def spy(*args, **kwargs):
+        ran.append("nuts")
+        return nuts.run(*args, **kwargs)
+
+    monkeypatch.setitem(driver._REGISTRY, "nuts", dataclasses.replace(nuts, run=spy))
+    target, _mean = _ill_conditioned_quadratic()
+    for name in ("map", "laplace"):
+        result = run_sampler(
+            name,
+            target,
+            key=jax.random.PRNGKey(2),
+            metric="dense",
+            n_samples=200,
+            health_warnings=False,
+        )
+        assert result.diagnostics["metric_fallback"] is False
+    assert ran == []

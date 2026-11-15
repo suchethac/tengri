@@ -381,6 +381,25 @@ def _run_nss(target, key, n_chains, metric, cfg):
 # --------------------------------------------------------------------------------------
 
 
+def _curvature_pilot(target, key, n_chains, metric, cfg):
+    """Pilot draws for a point estimate: Gaussian draws from the curvature at a diagonal MAP.
+
+    The diagonal MAP ascent is the sampler's own cheap pass; one dense Hessian at its end
+    (D forward-over-reverse passes) gives ``Sigma = (-H)^-1`` with the eigenvalues taken in
+    absolute value and floored at ``1e-6`` of the largest, so a point that is not quite a mode
+    still yields a positive definite covariance. About ``map_steps + D`` gradient evaluations,
+    against a NUTS pilot's warmup plus ``4 (D + 1)`` draws of tens of gradients each.
+    """
+    logp = _bound(target)
+    mode = guards.adam_map_ascent(logp, target.init, cfg["map_steps"], cfg["map_learning_rate"])
+    values, vectors = jnp.linalg.eigh(-jax.hessian(logp)(mode))
+    magnitude = jnp.abs(values)
+    magnitude = jnp.maximum(magnitude, 1e-6 * jnp.max(magnitude))
+    factor = vectors / jnp.sqrt(magnitude)
+    eps = jax.random.normal(key, (cfg["n_samples"], target.n_dim), dtype=mode.dtype)
+    return SamplerResult((mode[None, :] + eps @ factor.T)[None], None, {"pilot": "curvature"})
+
+
 def _run_map(target, key, n_chains, metric, cfg):
     def single(tgt, k):
         logp = _bound(tgt)
@@ -749,7 +768,9 @@ register_sampler(Sampler("adjusted_mclmc", "chain", ("mcmc_adjusted_mclmc",), _m
 register_sampler(Sampler("hmc_lowrank", "chain", ("mcmc_hmc_lowrank",), _run_lowrank))
 register_sampler(Sampler("hmc_is", "chain", ("hmc_is",), _run_hmc_is, metric_mode="internal"))
 register_sampler(Sampler("nss", "nested", ("nss",), _run_nss))
-register_sampler(Sampler("map", "point", ("map",), _run_map, fidelity="point", pilot="nuts"))
+register_sampler(
+    Sampler("map", "point", ("map",), _run_map, fidelity="point", pilot=_curvature_pilot)
+)
 register_sampler(Sampler("laplace", "point", ("laplace",), _run_laplace, metric_mode="invariant"))
 register_sampler(Sampler("vi_fullrank", "variational", ("vi_fullrank",), _vi_runner("fullrank")))
 register_sampler(
