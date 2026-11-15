@@ -34,6 +34,7 @@ precision tests; the module never sets ``JAX_ENABLE_X64``.
 from __future__ import annotations
 
 import functools
+import os
 
 import jax
 import jax.numpy as jnp
@@ -258,6 +259,8 @@ def _laplace_moments(fitter: Fitter) -> dict:
 @functools.cache
 def _cell(config: str, profile: bool) -> dict:
     """Both dtypes for one (config, profile): ``{"float64": ..., "float32": ...}``."""
+    if config == "agn" and not os.environ.get(FULL_AGN_ENV):
+        pytest.skip(FULL_AGN_REASON)
     m64 = _measure(config, profile, "float64", ref=None)
     m32 = _measure(config, profile, "float32", ref=m64)
     return {"float64": m64, "float32": m32}
@@ -273,6 +276,16 @@ def _case_id(config: str, profile) -> str:
 
 _CASE_IDS = [_case_id(c, p) for c, p in _cases()]
 
+
+#: The full composable AGN (disc, torus, lines, polar dust) holds a float64 and a float32
+#: model with the SKIRTOR band tables at once: measured peak RSS 9.0 GB for the Hessians
+#: alone, and the process was killed by the machine's out-of-memory guard on each run
+#: attempted (4 of 4, under load). The ``agn_disc`` configuration runs the same disc code
+#: path in 3.1 GB and is always on.
+FULL_AGN_ENV = "TENGRI_SWEEP_FULL_AGN"
+FULL_AGN_REASON = (
+    f"the full composable AGN cell needs ~9 GB for both dtypes; set {FULL_AGN_ENV}=1 to run it"
+)
 
 AGN_REVERSE_UNDERFLOW = (
     "the float32 reverse-mode gradient of the AGN disc is wrong when the incoming cotangent "
