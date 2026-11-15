@@ -90,12 +90,13 @@ def test_fixed_met_logzsol_and_neb_logU_reach_cloudy_marginal_prior(monkeypatch)
     lk = replace(lk, design_matrix_builder=lambda _params: jnp.eye(3, 2))
 
     seen = {}
+    real = eline_priors.cloudy_line_priors
 
-    def spy(*args, **kwargs):
+    def spy(**kwargs):
         seen.update(kwargs)
-        return jnp.asarray(0.0), jnp.zeros(2), jnp.zeros(2)
+        return real(**kwargs)
 
-    monkeypatch.setattr(eline_priors, "marginalize_emission_lines_cloudy", spy)
+    monkeypatch.setattr(eline_priors, "cloudy_line_priors", spy)
     # Params as the data term hands them over: free values plus the merged fixed values.
     lk.log_prob({"spec_fnu": jnp.asarray([1.0, 2.0, 3.0])}, dict(fixed))
 
