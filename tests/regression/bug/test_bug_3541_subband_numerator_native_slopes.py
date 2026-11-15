@@ -40,9 +40,11 @@ def _synthetic_ssp():
     rng = np.random.default_rng(3541)
     flux = np.abs(rng.normal(size=(3, 20, 100))) * 1e-3 + 1e-5
     # Shift the spectral shape with metallicity so the node moves across Z.
-    flux = flux * (1.0 + np.array([0.0, 0.4, 1.1]))[:, None, None] * np.linspace(
-        0.5, 2.0, 100
-    )[None, None, :] ** np.array([0.0, 0.3, 0.8])[:, None, None]
+    flux = (
+        flux
+        * (1.0 + np.array([0.0, 0.4, 1.1]))[:, None, None]
+        * np.linspace(0.5, 2.0, 100)[None, None, :] ** np.array([0.0, 0.3, 0.8])[:, None, None]
+    )
     return SSPData(
         ssp_wave=jnp.linspace(3000.0, 10000.0, 100),
         ssp_flux=jnp.asarray(flux),
@@ -69,7 +71,11 @@ def _build(ssp, *, redshift, approx):
         approx=approx,
         redshift=redshift,
         sfh=_sfh(),
-        met={"type": "delta", "met_logzsol": Fixed(_MET_LOGZSOL_OFF_NODE), "all_params": Fixed(DEFAULT)},
+        met={
+            "type": "delta",
+            "met_logzsol": Fixed(_MET_LOGZSOL_OFF_NODE),
+            "all_params": Fixed(DEFAULT),
+        },
         neb={"type": "none"},
         dust_attenuation={"type": "none"},
         dust_emission={"type": "none"},
@@ -133,7 +139,9 @@ def test_subband_node_matches_exact_at_off_node_z_free_z():
     ref = np.asarray(_exact_node(ssp, z_node).ssp_subband_waves_rest)[0]
     got, ref = _live_node_pair(derived, ref)
     rel = _max_rel(got, ref)
-    assert rel <= RTOL, f"free z at node {z_node:.5f}: sub-band node vs exact path, max rel {rel:.3e}"
+    assert rel <= RTOL, (
+        f"free z at node {z_node:.5f}: sub-band node vs exact path, max rel {rel:.3e}"
+    )
 
 
 def _stellar_state(model):
