@@ -269,6 +269,7 @@ def precompute(
     *,
     model: str = "xray_corona",
     axis_grids: tuple[np.ndarray, np.ndarray] | None = None,
+    convention: FilterConvention,
 ) -> dict:
     """Build preintegrated X-ray grid; auto-collapse Fixed-parameter axes.
 
@@ -285,6 +286,8 @@ def precompute(
     axis_grids : tuple[ndarray, ndarray], optional
         Custom 2D grid axes; defaults match the documented validity ranges
         of the underlying physics functions.
+    convention : FilterConvention, keyword-only
+        Bandpass weight, the observation's (``BandSpec.convention``).
 
     Returns
     -------
@@ -308,7 +311,7 @@ def precompute(
         a1 = literal1 if user1 is None else np.asarray(user1, dtype=np.float64)
     else:
         a1 = _axis(AXIS_PARAMS[model][1], user1, literal1, parameters)
-    preint = _BUILDERS[model](filter_waves, filter_trans, redshift, a0, a1)
+    preint = _BUILDERS[model](filter_waves, filter_trans, redshift, a0, a1, convention=convention)
     result = {
         "grid_phot": preint.phot,
         "axes": (jnp.asarray(a0), jnp.asarray(a1)),

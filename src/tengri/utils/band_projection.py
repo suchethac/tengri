@@ -113,13 +113,13 @@ class BandSpec:
         Returns
         -------
         fw_pad, ft_pad : ndarray, shape (n_filters, max_len)
-            Observed-frame wavelengths [Angstrom] and transmission.
+            Observed-frame wavelengths [Angstrom] and transmission, host arrays.
         """
         cached = self.__dict__.get("_padded")
         if cached is None:
-            from tengri.observation.photometry import pad_filters
+            from tengri.observation.photometry import pad_filters_host
 
-            fw, ft, _ = pad_filters(list(self.filters[0]), list(self.filters[1]))
+            fw, ft, _ = pad_filters_host(list(self.filters[0]), list(self.filters[1]))
             cached = (fw, ft)
             object.__setattr__(self, "_padded", cached)
         return cached

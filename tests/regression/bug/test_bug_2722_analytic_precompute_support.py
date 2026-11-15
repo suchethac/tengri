@@ -29,6 +29,7 @@ from tengri import Fixed, Gaussian, Parameters, Uniform
 from tengri.components.dust import dust_analytic_precompute as adapter
 from tengri.components.dust.emission import DUST_EMISSION_MODELS as M
 from tengri.config.exceptions import GridSupportWarning
+from tengri.utils.filter_convention import FilterConvention
 
 pytestmark = pytest.mark.regression_bug
 
@@ -67,7 +68,12 @@ def _built(model, name, bounds):
     """``(spec, lookup)`` for ``name`` ~ Uniform(*bounds), built through the public path."""
     spec = _spec(model, **{name: Uniform(*bounds)})
     result = adapter.precompute(
-        [f[0] for f in _FILTERS], [f[1] for f in _FILTERS], 0.0, spec, model=model
+        [f[0] for f in _FILTERS],
+        [f[1] for f in _FILTERS],
+        0.0,
+        spec,
+        model=model,
+        convention=FilterConvention.BESSELL,
     )
     return spec, adapter.build_lookup(result, model=model)
 
@@ -125,7 +131,12 @@ def test_fixed_value_outside_declared_range_equals_exact_closure(model, value):
     """``dust_T: Fixed(v)`` with v outside 20-80 K pins the exact closure at v, not the edge."""
     spec = _spec(model, dust_T=Fixed(value))
     result = adapter.precompute(
-        [f[0] for f in _FILTERS], [f[1] for f in _FILTERS], 0.0, spec, model=model
+        [f[0] for f in _FILTERS],
+        [f[1] for f in _FILTERS],
+        0.0,
+        spec,
+        model=model,
+        convention=FilterConvention.BESSELL,
     )
     got = np.asarray(result["grid_phot"]).ravel()
     query = _closure_query(spec, model, "dust_T", value)
@@ -150,6 +161,7 @@ def test_user_axis_not_covering_a_widened_prior_raises(model):
             spec,
             model=model,
             T_grid=np.geomspace(20.0, 80.0, 41),
+            convention=FilterConvention.BESSELL,
         )
 
 
@@ -163,6 +175,7 @@ def test_user_axis_not_containing_a_fixed_value_raises():
             spec,
             model="modified_blackbody",
             T_grid=np.geomspace(20.0, 80.0, 41),
+            convention=FilterConvention.BESSELL,
         )
 
 
@@ -176,6 +189,7 @@ def test_user_axis_covering_the_support_is_used_as_given():
         spec,
         model="modified_blackbody",
         T_grid=grid_t,
+        convention=FilterConvention.BESSELL,
     )
     assert np.array_equal(np.asarray(result["_preint"].axes[0]), jnp.asarray(grid_t))
 
@@ -211,7 +225,14 @@ def test_default_priors_build_the_declared_axes_bit_for_bit(model, name):
     assert np.array_equal(adapter._default_axis(name, n, inside), expected)
 
     spec = _spec(model, **_free_declared(model))
-    result = adapter.precompute([_FILTERS[1][0]], [_FILTERS[1][1]], 0.0, spec, model=model)
+    result = adapter.precompute(
+        [_FILTERS[1][0]],
+        [_FILTERS[1][1]],
+        0.0,
+        spec,
+        model=model,
+        convention=FilterConvention.BESSELL,
+    )
     index = adapter.AXIS_PARAMS[model].index(name)
     assert np.array_equal(np.asarray(result["axes"][index]), np.asarray(jnp.asarray(expected)))
 
@@ -223,7 +244,12 @@ def test_widened_temperature_axis_keeps_node_density_and_spans_the_prior():
         **{**_free_declared("modified_blackbody"), "dust_T": Uniform(10.0, 120.0)},
     )
     result = adapter.precompute(
-        [_FILTERS[1][0]], [_FILTERS[1][1]], 0.0, spec, model="modified_blackbody"
+        [_FILTERS[1][0]],
+        [_FILTERS[1][1]],
+        0.0,
+        spec,
+        model="modified_blackbody",
+        convention=FilterConvention.BESSELL,
     )
     axis = np.asarray(result["_preint"].axes[0], dtype=np.float64)
     assert axis.size == 88
@@ -266,7 +292,12 @@ def test_unbounded_prior_warns_once_and_the_lookup_holds_the_edge_value():
     spec = _spec("casey2012", dust_alpha_mir=Gaussian(2.0, 0.3))
     with pytest.warns(GridSupportWarning, match="dust_alpha_mir") as record:
         result = adapter.precompute(
-            [_FILTERS[1][0]], [_FILTERS[1][1]], 0.0, spec, model="casey2012"
+            [_FILTERS[1][0]],
+            [_FILTERS[1][1]],
+            0.0,
+            spec,
+            model="casey2012",
+            convention=FilterConvention.BESSELL,
         )
     advisories = [w for w in record if issubclass(w.category, GridSupportWarning)]
     assert len(advisories) == 1, [str(w.message) for w in record]
@@ -287,6 +318,7 @@ def test_user_axis_with_fewer_than_four_nodes_warns():
             None,
             model="modified_blackbody",
             T_grid=np.array([20.0, 40.0, 80.0]),
+            convention=FilterConvention.BESSELL,
         )
 
 
@@ -295,5 +327,10 @@ def test_no_warning_for_default_priors_or_bounded_widening():
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         adapter.precompute(
-            [_FILTERS[1][0]], [_FILTERS[1][1]], 0.0, spec, model="modified_blackbody"
+            [_FILTERS[1][0]],
+            [_FILTERS[1][1]],
+            0.0,
+            spec,
+            model="modified_blackbody",
+            convention=FilterConvention.BESSELL,
         )

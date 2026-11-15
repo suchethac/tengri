@@ -137,9 +137,20 @@ def test_compute_flux_density_unit_consistency_across_filters():
         ft = jnp.exp(-(((fw - center) / sigma) ** 2))
         return fw, ft
 
-    f_uv = compute_flux_density(sed, wave_rest, *gauss_filter(2000.0, 400.0), z, dl_cm)
-    f_optical = compute_flux_density(sed, wave_rest, *gauss_filter(5000.0, 500.0), z, dl_cm)
-    f_nir = compute_flux_density(sed, wave_rest, *gauss_filter(20000.0, 1000.0), z, dl_cm)
+    f_uv = compute_flux_density(
+        sed, wave_rest, *gauss_filter(2000.0, 400.0), z, dl_cm, convention=FilterConvention.BESSELL
+    )
+    f_optical = compute_flux_density(
+        sed, wave_rest, *gauss_filter(5000.0, 500.0), z, dl_cm, convention=FilterConvention.BESSELL
+    )
+    f_nir = compute_flux_density(
+        sed,
+        wave_rest,
+        *gauss_filter(20000.0, 1000.0),
+        z,
+        dl_cm,
+        convention=FilterConvention.BESSELL,
+    )
 
     fluxes = jnp.array([f_uv, f_optical, f_nir])
     assert bool(jnp.all(jnp.isfinite(fluxes))), "non-finite flux across canonical filters"

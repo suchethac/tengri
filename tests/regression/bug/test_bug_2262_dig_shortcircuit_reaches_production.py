@@ -63,8 +63,6 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from tengri.utils.filter_convention import FilterConvention
-
 jax.config.update("jax_platforms", "cpu")
 
 from tengri import (
@@ -256,7 +254,7 @@ def test_dig_shortcircuit_call_count_grid_path(
     (via ``predict_photometry``) and ``reconstruct_nebular_line_log_lums`` (via
     ``predict_line_fluxes``) follow the same 1/2/2 pattern as the exact path.
     """
-    model = _build_grid(neb_extra, convention=FilterConvention.BESSELL)
+    model = _build_grid(neb_extra)
     params = dict(model.spec.sample(jax.random.PRNGKey(0)))
     params.update(_params_for(neb_extra))
 

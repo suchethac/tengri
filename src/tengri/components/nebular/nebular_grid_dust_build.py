@@ -244,8 +244,6 @@ def _nebular_eb_channel(
     dust,
     ref_params: Mapping,
     eb_tau_grids: tuple[Sequence[float], Sequence[float]],
-    *,
-    convention: FilterConvention,
 ) -> np.ndarray:
     r"""LyC-masked absorbed nebular luminosity per unit Q_H on the tau grid.
 
@@ -311,9 +309,7 @@ def _nebular_eb_channel(
     for t_stack in t_stacks:
         results = np.stack(
             [
-                np.asarray(
-                    _node(jnp.asarray(row), t_stack, convention=convention), dtype=np.float64
-                )
+                np.asarray(_node(jnp.asarray(row), t_stack), dtype=np.float64)
                 for row in np.asarray(sed_nodes_rest)
             ]
         )  # (n_points, 2, n_a * n_b)
@@ -473,9 +469,7 @@ def _build_dust_channels(
             restband_subband_waves_rest=jnp.asarray(lam_r.reshape(*grid_shape, *lam_r.shape[1:])),
         )
     if dust_component is not None and eb_tau_grids is not None:
-        eb = _nebular_eb_channel(
-            sed, nlq, wave_rest, dust_component, ref_params, eb_tau_grids, convention=convention
-        )
+        eb = _nebular_eb_channel(sed, nlq, wave_rest, dust_component, ref_params, eb_tau_grids)
         out.update(
             eb_absorbed_per_qh=jnp.asarray(eb.reshape(*grid_shape, *eb.shape[1:])),
             eb_tau_a_grid=jnp.asarray(eb_tau_grids[0]),

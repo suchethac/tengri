@@ -239,7 +239,14 @@ def test_preintegrate_transposed_matches_preintegrate_grid(ssp_like, lyc_gate):
         (ssp_like["filter_wave"], ssp_like["filter_trans"]),
         (np.linspace(3000.0, 9000.0, 60), np.linspace(0.2, 0.9, 60)),
     ]
-    kwargs = dict(redshift=0.7, dl_cm=1.0, taylor=True, n_subbands=N_SUB, lyc_gate=lyc_gate)
+    kwargs = dict(
+        redshift=0.7,
+        dl_cm=1.0,
+        taylor=True,
+        n_subbands=N_SUB,
+        lyc_gate=lyc_gate,
+        convention=FilterConvention.BESSELL,
+    )
     ref = preintegrate_grid(tmpl, wave, [f[0] for f in filters], [f[1] for f in filters], **kwargs)
     got = preintegrate_transposed(
         transpose_templates(tmpl),

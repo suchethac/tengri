@@ -652,7 +652,9 @@ def precompute(
                 reach_axes.check_user_axis(name, axis, support)
                 axes.append(axis)
         axes = tuple(axes)
-        preint, ln_phot = _CONTINUUM_BUILDERS[model](filter_waves, filter_trans, redshift, *axes)
+        preint, ln_phot = _CONTINUUM_BUILDERS[model](
+            filter_waves, filter_trans, redshift, *axes, convention=convention
+        )
         result = {
             "grid_phot": preint.phot,
             "axes": tuple(jnp.asarray(ax) for ax in axes),

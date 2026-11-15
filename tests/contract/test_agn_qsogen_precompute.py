@@ -8,6 +8,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.utils.filter_convention import FilterConvention
 from tests._jit_parity import assert_jit_matches_eager
 
 pytestmark = pytest.mark.contract
@@ -31,7 +32,9 @@ def test_precompute_shape_finite(filter_set):
     from tengri.components.agn import qsogen_precompute
 
     waves, trans = filter_set
-    result = qsogen_precompute.precompute(waves, trans, redshift=1.0, parameters=None)
+    result = qsogen_precompute.precompute(
+        waves, trans, redshift=1.0, parameters=None, convention=FilterConvention.BESSELL
+    )
     phot = np.asarray(result["grid_phot"])
     assert phot.shape[-1] == len(waves)
     chex.assert_tree_all_finite(phot)
@@ -41,7 +44,9 @@ def test_lookup_jit(filter_set):
     from tengri.components.agn import qsogen_precompute
 
     waves, trans = filter_set
-    result = qsogen_precompute.precompute(waves, trans, redshift=1.0, parameters=None)
+    result = qsogen_precompute.precompute(
+        waves, trans, redshift=1.0, parameters=None, convention=FilterConvention.BESSELL
+    )
     lookup = qsogen_precompute.build_lookup(result)
     n_axes = len(qsogen_precompute.AXIS_PARAMS)
     args = (jnp.float64(1.0), *tuple(jnp.float64(0.0) for _ in range(n_axes)))

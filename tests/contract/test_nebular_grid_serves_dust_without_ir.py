@@ -34,7 +34,6 @@ import pytest
 
 from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel, Uniform
 from tengri.forward.sed_model import FeaturePrecomp, WavePrecomp
-from tengri.utils.filter_convention import FilterConvention
 
 pytestmark = pytest.mark.contract
 
@@ -185,10 +184,8 @@ def _grid_point(base, tau_bc, tau_diff, sfh_key, log_u, log_z):
 
 @pytest.mark.parametrize(("z", "point"), _GRID_ONLY_WORST)
 def test_grid_only_error_against_wavepre_alone_stays_within_bound(ssp_data_fsps, z, point):
-    pair = _build_grid(
-        ssp_data_fsps, z, (WavePrecomp(), FeaturePrecomp()), convention=FilterConvention.BESSELL
-    )
-    wave = _build_grid(ssp_data_fsps, z, WavePrecomp(), convention=FilterConvention.BESSELL)
+    pair = _build_grid(ssp_data_fsps, z, (WavePrecomp(), FeaturePrecomp()))
+    wave = _build_grid(ssp_data_fsps, z, WavePrecomp())
     assert pair.nebular_grid_can_serve_photometry()
     fp = jax.jit(pair.predict_photometry)
     fw = jax.jit(wave.predict_photometry)
@@ -203,10 +200,8 @@ def test_grid_only_error_against_wavepre_alone_stays_within_bound(ssp_data_fsps,
 
 
 def test_absorbed_energy_keys_are_bit_identical_to_exact_on_the_no_ir_pair(ssp_data_fsps):
-    pair = _build_grid(
-        ssp_data_fsps, 0.5, (WavePrecomp(), FeaturePrecomp()), convention=FilterConvention.BESSELL
-    )
-    exact = _build_grid(ssp_data_fsps, 0.5, None, convention=FilterConvention.BESSELL)
+    pair = _build_grid(ssp_data_fsps, 0.5, (WavePrecomp(), FeaturePrecomp()))
+    exact = _build_grid(ssp_data_fsps, 0.5, None)
     base = dict(pair.spec.sample(jax.random.PRNGKey(0)))
     for tau_bc, tau_diff, sfh_key in itertools.product((0.0, 2.0, 4.0), (0.0, 2.0, 4.0), _SFH):
         p = _grid_point(base, tau_bc, tau_diff, sfh_key, -2.25, -0.4)

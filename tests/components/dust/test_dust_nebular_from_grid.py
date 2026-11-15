@@ -34,7 +34,6 @@ from tengri.components.dust.energy_balance_precompute import (
 from tengri.components.dust.two_component import DustSEDComponent, DustSEDComponentConfig
 from tengri.forward.energy_balance import bolometric_absorbed_log10
 from tengri.protocols.component import ForwardState
-from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.physics_constants import C_AA
 from tengri.utils.scale import log10_add
 from tests._age_boundary import hand_age_derived
@@ -334,13 +333,7 @@ def test_flagged_energy_balance_equals_the_materialized_continuum(kind, with_lut
     sed = _nebular_sed(_WAVE)
     plain = _component(kind, flagged=False)
     slab = _nebular_eb_channel(
-        sed[None, :],
-        np.asarray([-_LOG_NION]),
-        _WAVE,
-        plain,
-        params,
-        (tau_a, _TAU_B_GRID),
-        convention=FilterConvention.BESSELL,
+        sed[None, :], np.asarray([-_LOG_NION]), _WAVE, plain, params, (tau_a, _TAU_B_GRID)
     )[0]
     stellar = {
         "joint_weights": jnp.asarray(np.random.default_rng(3).random((_N_MET, _N_AGE))),
@@ -388,7 +381,6 @@ def test_single_screen_full_integral_counts_the_nebular_once(flagged):
             plain,
             params,
             (np.zeros(1), _TAU_B_GRID),
-            convention=FilterConvention.BESSELL,
         )[0]
         state = _state(
             _WAVE,

@@ -623,7 +623,12 @@ def _precompute_grid_torus_photometry(
 ):
     """Filter-integrated photometry via the adapter's own Protocol entry points."""
     preint = precompute_mod.precompute(
-        list(waves), list(trans), 0.0, None, grid_path=str(grid_path)
+        list(waves),
+        list(trans),
+        0.0,
+        None,
+        grid_path=str(grid_path),
+        convention=FilterConvention.BESSELL,
     )
     lookup = precompute_mod.build_lookup(preint)
     kwargs = dict(zip(axis_kwargs, values, strict=True))
@@ -803,7 +808,12 @@ def test_skirtor_agnfitter_precompute_interpolates_inclination_in_degrees(
     precompute_mod = importlib.import_module(spec["precompute_mod"])
     waves, trans = grid_torus_filters
     preint = precompute_mod.precompute(
-        list(waves), list(trans), 0.0, None, grid_path=str(spec["grid_path"])
+        list(waves),
+        list(trans),
+        0.0,
+        None,
+        grid_path=str(spec["grid_path"]),
+        convention=FilterConvention.BESSELL,
     )
     lookup = precompute_mod.build_lookup(preint)
     axes = [np.asarray(a, dtype=float) for a in preint["axes"]]
@@ -860,7 +870,12 @@ def test_skirtor_agnfitter_fixed_cos_inc_collapses_at_its_degree_coordinate(
     cos_inc = float(np.cos(np.radians(55.0)))
     full = precompute_mod.build_lookup(
         precompute_mod.precompute(
-            list(waves), list(trans), 0.0, None, grid_path=str(spec["grid_path"])
+            list(waves),
+            list(trans),
+            0.0,
+            None,
+            grid_path=str(spec["grid_path"]),
+            convention=FilterConvention.BESSELL,
         )
     )
     collapsed_preint = precompute_mod.precompute(
@@ -869,6 +884,7 @@ def test_skirtor_agnfitter_fixed_cos_inc_collapses_at_its_degree_coordinate(
         0.0,
         _FixedInclination(cos_inc),
         grid_path=str(spec["grid_path"]),
+        convention=FilterConvention.BESSELL,
     )
     incl_axis = _SKIRTOR_DENSE[spec["name"]]
     assert collapsed_preint["_collapsed_axes"] == {incl_axis: pytest.approx(55.0, abs=1e-9)}
@@ -1104,7 +1120,12 @@ def _compare_over(spec, library, lookup_fn, exact_fn, label):
 def _full_lookup(spec, precompute_mod, waves, trans):
     lookup = precompute_mod.build_lookup(
         precompute_mod.precompute(
-            list(waves), list(trans), 0.0, None, grid_path=str(spec["grid_path"])
+            list(waves),
+            list(trans),
+            0.0,
+            None,
+            grid_path=str(spec["grid_path"]),
+            convention=FilterConvention.BESSELL,
         )
     )
     names = spec["axis_kwargs"]
@@ -1183,6 +1204,7 @@ def test_torus_table_fixed_axis_lookup_matches_exact(spec, fixed_axis, grid_toru
             0.0,
             _FixedAxes({names[fixed_axis]: fixed_param}),
             grid_path=str(spec["grid_path"]),
+            convention=FilterConvention.BESSELL,
         )
         assert set(preint["_collapsed_axes"]) == {fixed_axis}
         collapsed = precompute_mod.build_lookup(preint)
@@ -1232,7 +1254,12 @@ def test_torus_table_is_power_weighted(spec, grid_torus_filters):
     waves, trans = grid_torus_filters
     lookup = precompute_mod.build_lookup(
         precompute_mod.precompute(
-            list(waves), list(trans), 0.0, None, grid_path=str(spec["grid_path"])
+            list(waves),
+            list(trans),
+            0.0,
+            None,
+            grid_path=str(spec["grid_path"]),
+            convention=FilterConvention.BESSELL,
         )
     )
     axes = _library_axes(grid)
@@ -1338,7 +1365,12 @@ def test_torus_table_nodes_match_runtime(spec, redshift):
     )
     lookup = precompute_mod.build_lookup(
         precompute_mod.precompute(
-            list(waves), list(trans), redshift, None, grid_path=str(spec["grid_path"])
+            list(waves),
+            list(trans),
+            redshift,
+            None,
+            grid_path=str(spec["grid_path"]),
+            convention=FilterConvention.BESSELL,
         )
     )
 

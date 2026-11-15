@@ -12590,12 +12590,15 @@ class SEDModel:
         ctx = self._band_table_context(self._cached_component_chain)
         return provider.band_table(ctx, component=name, slot=slot)
 
-    def _band_spec(self) -> BandSpec:
+    def _band_spec(self) -> BandSpec | None:
         """The observation's band spec: filter curves, its convention, the sub-band count.
 
         ``lyc_gate`` is False here; a builder with a live Lyman-continuum mask states it with
-        :meth:`BandSpec.replace`.
+        :meth:`BandSpec.replace`. ``None`` for a model without photometry: it has no bands to
+        project, so no band table is built for it.
         """
+        if self._photometry_or_none() is None:
+            return None
         return BandSpec(
             filters=(self.filter_waves, self.filter_trans),
             convention=self.observation.photometry.convention,

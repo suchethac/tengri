@@ -32,6 +32,7 @@ import pytest
 
 from tengri.components.dust import dust_analytic_precompute as adapter
 from tengri.components.dust.emission import DUST_EMISSION_MODELS as M
+from tengri.utils.filter_convention import FilterConvention
 
 pytestmark = pytest.mark.regression_bug
 
@@ -159,7 +160,9 @@ def test_pah_drude_lookup_equals_exact_closure(z, band_um):
     from this adapter, so the builder has to integrate the filters at the rest wavelengths itself.
     """
     filt_wave, filt_trans = _tophat(*band_um)
-    result = adapter.precompute([filt_wave], [filt_trans], z, None, model="pah_drude")
+    result = adapter.precompute(
+        [filt_wave], [filt_trans], z, None, model="pah_drude", convention=FilterConvention.BESSELL
+    )
     value = float(np.asarray(adapter.build_lookup(result, model="pah_drude")(1.0)).ravel()[0])
     sed = np.asarray(M["pah_drude"](jnp.asarray(_WIDE_REST_AA), 1.0, redshift=z))
     exact = _band_average(_WIDE_REST_AA, sed, filt_wave, filt_trans, z)
@@ -181,7 +184,14 @@ def test_z0_grid_nodes_equal_exact_closure(model):
 def test_z0_pah_drude_equals_exact_closure():
     """At z = 0, ``pah_drude`` photometry equals the exact closure to rtol 1e-3."""
     filt_wave, filt_trans = _tophat(6.7, 9.3)
-    result = adapter.precompute([filt_wave], [filt_trans], 0.0, None, model="pah_drude")
+    result = adapter.precompute(
+        [filt_wave],
+        [filt_trans],
+        0.0,
+        None,
+        model="pah_drude",
+        convention=FilterConvention.BESSELL,
+    )
     value = float(np.asarray(result["grid_phot"]).ravel()[0])
     sed = np.asarray(M["pah_drude"](jnp.asarray(_WIDE_REST_AA), 1.0, redshift=0.0))
     exact = _band_average(_WIDE_REST_AA, sed, filt_wave, filt_trans, 0.0)

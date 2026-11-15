@@ -77,7 +77,9 @@ def _ss_parameters():
 def ss_disc_lookup():
     fw = [f[0] for f in _FILTERS]
     ft = [f[1] for f in _FILTERS]
-    result = adapter.precompute(fw, ft, 0.0, _ss_parameters(), model="ss_disc")
+    result = adapter.precompute(
+        fw, ft, 0.0, _ss_parameters(), model="ss_disc", convention=FilterConvention.BESSELL
+    )
     return adapter.build_lookup(result, model="ss_disc")
 
 

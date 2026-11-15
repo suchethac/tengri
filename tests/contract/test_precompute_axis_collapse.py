@@ -95,6 +95,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.utils.filter_convention import FilterConvention
 from tests._data_skip import requires_cb19
 
 pytestmark = pytest.mark.contract
@@ -283,7 +284,12 @@ def test_cb19_collapse_axis0(filter_set_radio, usable_cb19_grid_path):
 
     waves, trans = filter_set_radio
     full = adapter.precompute(
-        waves, trans, 0.5, parameters=None, filepath=str(usable_cb19_grid_path)
+        waves,
+        trans,
+        0.5,
+        parameters=None,
+        filepath=str(usable_cb19_grid_path),
+        convention=FilterConvention.BESSELL,
     )
     assert len(full["axes"]) == 6, f"CB19 should have 6 axes, got {len(full['axes'])}"
 
@@ -304,6 +310,7 @@ def test_cb19_collapse_axis0(filter_set_radio, usable_cb19_grid_path):
         0.5,
         parameters=_mock_params({adapter.AXIS_PARAMS[0]: midpoints[0]}),
         filepath=str(usable_cb19_grid_path),
+        convention=FilterConvention.BESSELL,
     )
     coll_lookup_dict = adapter.build_lookup(coll)
     coll_lookup = coll_lookup_dict["predict_lines"]
@@ -358,7 +365,13 @@ def test_cb19_hbfrac_parameter(filter_set_radio, tmp_path):
         "tengri.components.nebular.cb19_precompute.load_cb19_grid", wraps=adapter.load_cb19_grid
     ) as mock_loader:
         result_hb0 = adapter.precompute(
-            waves, trans, 0.5, parameters=None, filepath=str(grid_path), hbfrac=0.0
+            waves,
+            trans,
+            0.5,
+            parameters=None,
+            filepath=str(grid_path),
+            hbfrac=0.0,
+            convention=FilterConvention.BESSELL,
         )
 
         # The loader itself no longer takes hbfrac -- it always loads both nodes.
@@ -370,7 +383,13 @@ def test_cb19_hbfrac_parameter(filter_set_radio, tmp_path):
         )
 
     result_hb1 = adapter.precompute(
-        waves, trans, 0.5, parameters=None, filepath=str(grid_path), hbfrac=1.0
+        waves,
+        trans,
+        0.5,
+        parameters=None,
+        filepath=str(grid_path),
+        hbfrac=1.0,
+        convention=FilterConvention.BESSELL,
     )
 
     # Verify the results are valid

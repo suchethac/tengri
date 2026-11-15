@@ -220,6 +220,7 @@ def precompute(
     *,
     model: str = "radio_synchrotron",
     alpha_grid: np.ndarray | None = None,
+    convention: FilterConvention,
 ) -> dict:
     """Build preintegrated radio grid; auto-collapse Fixed-parameter axes.
 
@@ -240,6 +241,8 @@ def precompute(
     alpha_grid : ndarray, optional
         Custom spectral-index grid. Defaults: synchrotron [0.5, 1.0],
         free-free [-0.2, 0.0], AGN [0.4, 1.2].
+    convention : FilterConvention, keyword-only
+        Bandpass weight, the observation's (``BandSpec.convention``).
 
     Returns
     -------
@@ -261,7 +264,9 @@ def precompute(
     }
     alpha_grid = _axis(AXIS_PARAMS[model][0], alpha_grid, literal_grids[model], parameters)
 
-    preint = _BUILDERS[model](filter_waves, filter_trans, redshift, alpha_grid)
+    preint = _BUILDERS[model](
+        filter_waves, filter_trans, redshift, alpha_grid, convention=convention
+    )
     result = {
         "grid_phot": preint.phot,
         "axes": (jnp.asarray(alpha_grid),),
