@@ -238,7 +238,7 @@ def sed_from_sfh(
     # Grouped through _mass_scale_lnu: a standalone total_mass * L_sun reaches
     # 1.2e46, which is inf in float32.
     sed = _mass_scale_lnu(jnp.einsum("aw,aw->w", ssp_flux_at_age, dust_atten), total_mass)
-    weights = joint_weights.sum(axis=0) * total_mass
+    weights = _mj.sum(axis=0) * total_mass
 
     return {
         "wavelength": ssp_data.ssp_wave,

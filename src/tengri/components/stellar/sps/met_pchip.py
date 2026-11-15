@@ -120,6 +120,19 @@ def met_collapsed(table, ssp_lgmet, log_z, *, age_axis=1):
     return read_met_per_age(table, ssp_lgmet, log_z, age_axis=age_axis)[None]
 
 
+def exact_table(table, joint, lgmet, met_z, *, age_axis=1):
+    """The table to contract with ``joint``: exact at the galaxy's met_z (#3434, phase 2).
+
+    A joint with the full metallicity axis (``n_met`` rows, a declared scatter or
+    a single node) contracts the table as stored. A joint with one row is the
+    undeclared age marginal, and the table is PCHIP-read over metallicity at
+    ``met_z`` and collapsed to ``[1, ...]`` first. Static on the joint's shape.
+    """
+    if joint.shape[0] == lgmet.shape[0]:
+        return table
+    return met_collapsed(table, lgmet, met_z, age_axis=age_axis)
+
+
 def met_weights(log_z, ssp_lgmet):
     """Linear met-weight surrogate of the PCHIP read: ``W_m(z)`` with ``read = W @ table``.
 

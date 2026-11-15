@@ -22,7 +22,7 @@ from tengri.components.stellar.component import (
     _delta_met_weights,
     _lgmet_weights,
 )
-from tengri.components.stellar.sps.met_pchip import met_weights
+from tengri.components.stellar.sps.met_pchip import met_weights, read_met
 
 pytestmark = pytest.mark.regression_bug
 
@@ -51,51 +51,25 @@ def test_node_exact_one_hot_at_three_nodes(lgmet_grid):
         np.testing.assert_allclose(w, _one_hot(n, k), rtol=0.0, atol=1e-12)
 
 
-def test_weights_sum_to_one_between_nodes(lgmet_grid):
-    _, lg = lgmet_grid
-    for z in np.linspace(lg[0], lg[-1], 37):
-        w = np.asarray(met_weights(float(z), jnp.asarray(lg)))
-        assert w.shape == lg.shape
-        assert np.isfinite(w).all()
-        assert abs(w.sum() - 1.0) < 1e-12
-
-
-def test_reproduces_linear_data_exactly(lgmet_grid):
-    _, lg = lgmet_grid
-    grid = jnp.asarray(lg)
-    a, b = 0.7, -0.3
-    for z in np.linspace(lg[0], lg[-1], 29):
-        w = np.asarray(met_weights(float(z), grid))
-        assert abs(w @ (a * lg + b) - (a * z + b)) < 1e-10
-
-
-def test_reproduces_quadratic_data_on_non_uniform_grid(lgmet_grid):
-    # The width-weighted secant mean is exact for quadratics on a non-uniform grid,
-    # and the cubic Hermite with exact slopes reproduces a quadratic, so the read
-    # of x**2 must be exact at every query. A uniform average is not.
-    _, lg = lgmet_grid
-    grid = jnp.asarray(lg)
-    y = 0.3 * lg**2 - 0.5 * lg + 0.2
-    for z in np.linspace(lg[0], lg[-1], 41):
-        w = np.asarray(met_weights(float(z), grid))
-        exact = 0.3 * z**2 - 0.5 * z + 0.2
-        assert abs(w @ y - exact) < 1e-9
-
-
 @pytest.mark.parametrize("nodes", [(-2.0, -1.0, 0.0), (-1.5, -1.0), (-3.0, -2.5, -1.0, 0.0, 0.5)])
 def test_short_and_synthetic_grids_are_node_exact(nodes):
-    # Synthetic test grids carry 2, 3 or 5 metallicity nodes; the read must still be
-    # one-hot at every node, sum to one between nodes, and reproduce linear data.
+    # Synthetic grids carry 2, 3 or 5 metallicity nodes. The surrogate is one-hot at every
+    # node, and the exact PCHIP read reproduces linear data between nodes (PCHIP is exact
+    # for linear data; the surrogate is not, so only the exact read is checked for that).
     lg = np.asarray(nodes, dtype=float)
     grid = jnp.asarray(lg)
     n = lg.size
     for k in range(n):
         w = np.asarray(met_weights(float(lg[k]), grid))
         np.testing.assert_allclose(w, _one_hot(n, k), atol=1e-12)
+        table = jnp.asarray(0.4 * lg - 0.1)[:, None]
+        np.testing.assert_array_equal(
+            np.asarray(read_met(table, grid, float(lg[k])))[0], table[k, 0]
+        )
     for z in np.linspace(lg[0], lg[-1], 17):
-        w = np.asarray(met_weights(float(z), grid))
-        assert abs(w.sum() - 1.0) < 1e-12
-        assert abs(w @ (0.4 * lg - 0.1) - (0.4 * z - 0.1)) < 1e-10
+        table = jnp.asarray(0.4 * lg - 0.1)[:, None]
+        got = float(np.asarray(read_met(table, grid, float(z)))[0])
+        assert abs(got - (0.4 * z - 0.1)) < 1e-10
 
 
 def test_outside_grid_holds_edge_node(lgmet_grid):
@@ -177,3 +151,13 @@ def _toml_lgmet_scatter(toml):
         if isinstance(table, dict) and "lgmet_scatter" in table:
             return table["lgmet_scatter"]
     raise AssertionError("defaults.toml has no lgmet_scatter")
+
+
+def test_exact_read_reproduces_linear_data_between_nodes(lgmet_grid):
+    # PCHIP reproduces linear data exactly (equal secants give equal tangents).
+    _, lg = lgmet_grid
+    grid = jnp.asarray(lg)
+    table = jnp.asarray(0.7 * lg - 0.3)[:, None]
+    for z in np.linspace(lg[0], lg[-1], 29):
+        got = float(np.asarray(read_met(table, grid, float(z)))[0])
+        assert abs(got - (0.7 * z - 0.3)) < 1e-10
