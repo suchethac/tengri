@@ -24,6 +24,9 @@ SSP_NAME = "fsps_prsc_miles_chabrier.h5"
 FILTERS = ("sdss_g", "sdss_r", "galex_fuv", "2mass_ks")
 
 #: Top-hat bands for the AGN case, optical to far-IR.
+#: Filter convention every case observes through; the sweep sets it, the goldens use the default.
+CONVENTION = "bessell"
+
 AGN_BANDS_AA = (3000.0, 5500.0, 2.2e4, 1.2e5, 2.5e5, 8.0e5)
 
 
@@ -73,7 +76,9 @@ def _dpl_sfh():
 def _dust_case(*, approx):
     return SEDModel.build(
         ssp_data=_bare_ssp(),
-        observation=Observation(photometry=Photometry.from_names(list(FILTERS))),
+        observation=Observation(
+            photometry=Photometry.from_names(list(FILTERS), convention=CONVENTION)
+        ),
         approx=approx,
         redshift=Fixed(0.1),
         sfh=_dpl_sfh(),
@@ -96,7 +101,9 @@ def build_free_z_radio_xray():
     """Free redshift with the radio and X-ray additive terms, under WavePrecomp."""
     return SEDModel.build(
         ssp_data=_bare_ssp(),
-        observation=Observation(photometry=Photometry.from_names(list(FILTERS))),
+        observation=Observation(
+            photometry=Photometry.from_names(list(FILTERS), convention=CONVENTION)
+        ),
         approx=WavePrecomp(),
         redshift=Uniform(0.05, 0.3),
         sfh=_dpl_sfh(),
@@ -118,7 +125,7 @@ def build_composable_agn():
     bands = tuple(_tophat(c) for c in AGN_BANDS_AA)
     return SEDModel.build(
         ssp_data=_synthetic_agn_ssp(),
-        observation=Observation(photometry=Photometry(filters=bands)),
+        observation=Observation(photometry=Photometry(filters=bands, convention=CONVENTION)),
         approx=WavePrecomp(),
         redshift=Fixed(0.1),
         sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
@@ -157,7 +164,9 @@ def build_cloudy_nebular():
 
     return SEDModel.build(
         ssp_data=synthetic_ionizing_ssp(),
-        observation=Observation(photometry=Photometry.from_names(list(FILTERS))),
+        observation=Observation(
+            photometry=Photometry.from_names(list(FILTERS), convention=CONVENTION)
+        ),
         approx=WavePrecomp(),
         redshift=Fixed(0.1),
         sfh=_dpl_sfh(),
@@ -174,7 +183,9 @@ def build_shock():
     """MAPPINGS shock with its H-alpha luminosity set absolutely, under WavePrecomp."""
     return SEDModel.build(
         ssp_data=_bare_ssp(),
-        observation=Observation(photometry=Photometry.from_names(list(FILTERS))),
+        observation=Observation(
+            photometry=Photometry.from_names(list(FILTERS), convention=CONVENTION)
+        ),
         approx=WavePrecomp(),
         redshift=Fixed(0.1),
         sfh=_dpl_sfh(),
