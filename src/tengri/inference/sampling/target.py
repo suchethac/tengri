@@ -384,7 +384,7 @@ class FlatTarget:
             log_likelihood=(whiten_logdensity(self.likelihood()) if has_likelihood else None),
             prior_is_standard=False,
             prior=prior,
-            extras=dict(self.extras),
+            extras={**self.extras, "whitened": True},
         )
 
         def back(draws):

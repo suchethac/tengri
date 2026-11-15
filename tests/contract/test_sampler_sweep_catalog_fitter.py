@@ -22,6 +22,10 @@ pytestmark = pytest.mark.contract
 
 _MASSES = (9.5, 10.5)
 _N_SAMPLES = 40
+#: First-order proposals take small steps from starts dispersed at the prior's scale, so they
+#: need a longer adaptation than the gradient-trajectory samplers to reach the posterior.
+_FIRST_ORDER = ("mcmc_barker", "mcmc_mala")
+_FIRST_ORDER_WARMUP = 1000
 _IGNORED = ("ignored", "not supported", "unsupported", "not available")
 
 
@@ -78,8 +82,8 @@ def test_every_vmapped_sampler_runs_through_the_catalog_fitter(
         result = catalog.run(
             method,
             key=jax.random.PRNGKey(1),
-            n_warmup=60,
-            n_burnin=10,
+            n_warmup=_FIRST_ORDER_WARMUP if method in _FIRST_ORDER else 100,
+            n_burnin=80,
             n_samples=_N_SAMPLES,
             n_chains=n_chains,
             dense_mass_matrix=dense,

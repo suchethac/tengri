@@ -122,6 +122,14 @@ class Sampler:
     advisory : str or None
         A warning emitted once per :func:`run_sampler` call, however many internal passes
         (a pilot, then the final run) the layers make.
+    engine : str or None
+        The chain family the vmapped catalog engine runs for this sampler when it is a preset of
+        another (``nuts_fast`` is ``nuts`` with a dense metric); ``None`` is the sampler itself.
+    dense_default : bool
+        True when the sampler's preset asks for a dense metric unless the caller says otherwise.
+    not_vmappable : str or None
+        Why a chain or ensemble sampler has no vmapped catalog engine, stated where it is
+        registered.
     vmappable : bool
         True when :func:`run_chain_family`-style traced use under ``vmap`` is supported.
     """
@@ -134,6 +142,9 @@ class Sampler:
     metric_mode: str = "layer"
     pilot: str | None = None
     advisory: str | None = None
+    engine: str | None = None
+    dense_default: bool = False
+    not_vmappable: str | None = None
     vmappable: bool = False
 
     def __post_init__(self):

@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """The n_chains layer starts chains overdispersed, so R-hat can detect multimodality (#3505).
 
-The start covariance is ``OVERDISPERSION^2 Sigma_adapted + chain_jitter^2 I``: at least two
-adapted posterior standard deviations on every coordinate and at least the prior's scale.
+The start covariance is ``OVERDISPERSION^2 Sigma_adapted + diag(s^2)`` with ``s =
+min(prior scale, START_CAP sd)``: at least two adapted posterior standard deviations on every
+coordinate, and up to the prior's scale where the posterior is not much narrower.
 A start dispersion of 0.1 against a posterior sd of 0.43 (the fixture's) made a cross-chain
 R-hat a consistency check.
 """
@@ -32,23 +33,26 @@ def _gauss(x, args):
 
 
 def test_the_start_covariance_is_the_stated_rule():
-    inverse_mass = jnp.array([0.04, 0.25, 1.0])
+    inverse_mass = jnp.array([1e-6, 0.04, 1.0])
+    # Isotropic part: min(prior scale 1, START_CAP sd) = 0.01, 1, 1 per coordinate.
+    iso = jnp.array([0.01, 1.0, 1.0])
     scale = start_scale(inverse_mass, 1.0)
-    np.testing.assert_allclose(scale**2, OVERDISPERSION**2 * inverse_mass + 1.0)
+    np.testing.assert_allclose(scale**2, OVERDISPERSION**2 * inverse_mass + iso**2)
     dense = jnp.diag(inverse_mass)
     factor = start_scale(dense, 1.0)
-    np.testing.assert_allclose(factor @ factor.T, OVERDISPERSION**2 * dense + jnp.eye(3))
+    np.testing.assert_allclose(factor @ factor.T, OVERDISPERSION**2 * dense + jnp.diag(iso**2))
     assert start_scale(None, 0.7) == 0.7
 
 
 def test_the_starts_spread_matches_the_rule():
-    inverse_mass = jnp.array([0.04, 0.25, 1.0])
+    inverse_mass = jnp.array([1e-6, 0.04, 1.0])
+    iso = np.array([0.01, 1.0, 1.0])
     starts = jittered_starts(
         jnp.zeros(3), jax.random.PRNGKey(0), 20000, start_scale(inverse_mass, 1.0)
     )
     np.testing.assert_allclose(
         np.asarray(starts).std(0),
-        np.sqrt(OVERDISPERSION**2 * np.asarray(inverse_mass) + 1.0),
+        np.sqrt(OVERDISPERSION**2 * np.asarray(inverse_mass) + iso**2),
         rtol=0.03,
     )
 

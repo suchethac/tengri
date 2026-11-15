@@ -158,7 +158,7 @@ def run_chain_family(
         ``(step_size, inverse_mass_matrix)`` of the adaptation.
     """
     from tengri.inference.backends.mcmc.chain_program import run_chain
-    from tengri.inference.sampling.chains import PRIOR_SCALE
+    from tengri.inference.sampling.chains import PRIOR_SCALE, UNADAPTED_START_SCALE
 
     program, adaptation, statics = chain_statics(family, cfg, dense=dense)
     if n_chains == 1:
@@ -167,7 +167,8 @@ def run_chain_family(
     else:
         # Adaptation runs once; each chain gets its own key stream and its own start.
         chain_keys = jax.random.split(chain_key, n_chains * n_chain).reshape(n_chains, n_chain, 2)
-        jitter = float(PRIOR_SCALE if chain_jitter is None else chain_jitter)
+        default = UNADAPTED_START_SCALE if family in ("barker", "mala") else PRIOR_SCALE
+        jitter = float(default if chain_jitter is None else chain_jitter)
     init_key = None if program.starts_from_warmup else jax.random.fold_in(warmup_key, 1)
     return run_chain(
         program,

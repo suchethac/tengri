@@ -20,7 +20,12 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.inference.sampling import guards
-from tengri.inference.sampling.chains import PRIOR_SCALE, jittered_starts
+from tengri.inference.sampling.chains import (
+    OVERDISPERSION,
+    PRIOR_SCALE,
+    UNADAPTED_START_SCALE,
+    jittered_starts,
+)
 from tengri.inference.sampling.driver import (
     Sampler,
     SamplerResult,
@@ -33,20 +38,20 @@ from tengri.inference.sampling.target import FlatTarget
 _BYTES = 8
 
 
-def _jitter(cfg: dict, target: FlatTarget | None = None) -> float:
-    """Start dispersion of independent chains: the prior's scale unless ``chain_jitter`` says.
+def _jitter(cfg: dict, target: FlatTarget | None = None) -> float | None:
+    """Start dispersion of independent chains, or ``None`` for the family's own default.
 
-    The flat space has an iid N(0, 1) prior that the posterior only narrows, so a start
-    dispersed at the prior's scale is overdispersed. A reparametrized target carries its own
-    prior, whose mean marginal sd is used.
+    ``chain_jitter`` wins. Otherwise a reparametrized target (pilot-whitened, so the posterior
+    has unit scale) gets ``OVERDISPERSION``, a target with the standard prior gets the prior's
+    scale, which the posterior only narrows, and anything else the unadapted default.
     """
     if cfg["chain_jitter"] is not None:
         return float(cfg["chain_jitter"])
-    if target is not None and (target.prior_is_standard or target.prior is not None):
-        _mean, precision = target.gaussian_prior()
-        cov = jnp.linalg.inv(precision.T @ precision)
-        return float(jnp.sqrt(jnp.mean(jnp.diag(cov))))
-    return PRIOR_SCALE
+    if target is not None and target.extras.get("whitened"):
+        return OVERDISPERSION
+    if target is not None and target.prior_is_standard:
+        return PRIOR_SCALE
+    return None
 
 
 def _bound(target: FlatTarget):
@@ -91,7 +96,9 @@ def _independent(single, target: FlatTarget, key, n_chains: int, cfg: dict) -> S
     if n_chains == 1:
         return single(target, key)
     keys = jax.random.split(key, n_chains)
-    starts = jittered_starts(target.init, key, n_chains, _jitter(cfg, target))
+    starts = jittered_starts(
+        target.init, key, n_chains, _jitter(cfg, target) or UNADAPTED_START_SCALE
+    )
     runs = [
         single(FlatTarget(**{**_fields(target), "init": starts[c]}), keys[c])
         for c in range(n_chains)
@@ -155,7 +162,7 @@ def _chain_runner(family: str, *, force_dense: bool = False):
             n_warmup=cfg["n_warmup"],
             cfg=cfg,
             dense=dense,
-            chain_jitter=cfg["chain_jitter"],
+            chain_jitter=_jitter(cfg, target),
         )
         position, divergent = draws.position, draws.divergent
         if n_chains == 1:
@@ -582,7 +589,9 @@ def _run_lowrank(target, key, n_chains, metric, cfg):
     if n_chains == 1:
         starts = target.init[None, :]
     else:
-        starts = jittered_starts(target.init, wkey, n_chains, _jitter(cfg, target))
+        starts = jittered_starts(
+            target.init, wkey, n_chains, _jitter(cfg, target) or UNADAPTED_START_SCALE
+        )
     # One warmup shared by every chain, as run_hmc does.
     step_size, inv_mass, warm_div = _hmc_low_rank_warmup_only(
         starts[0],
@@ -687,6 +696,16 @@ def _run_hmc_is(target, key, n_chains, metric, cfg):
 # Registrations
 # --------------------------------------------------------------------------------------
 
+#: Chain families the vmapped catalog engine runs (``nuts_fast`` as dense ``nuts``).
+_VMAPPABLE = ("nuts", "hmc", "dynamic_hmc", "ghmc", "barker", "mala", "nuts_fast")
+
+#: Why the samplers below have no vmapped catalog engine.
+_PATHFINDER_NOT_VMAPPABLE = (
+    "its L-BFGS Gaussian warmup is registered tier='broken' (SIGKILL out of memory at "
+    "D=18 on a two-galaxy hierarchy), and no run has measured it under a galaxy vmap, where "
+    "K copies of its optimizer state would be live at once"
+)
+
 for _name, _methods, _family, _dense in (
     ("nuts", ("mcmc_nuts", "mcmc"), "nuts", False),
     ("nuts_pathfinder", ("pathfinder",), "nuts_pathfinder", False),
@@ -704,7 +723,11 @@ for _name, _methods, _family, _dense in (
             _methods,
             _chain_runner(_family, force_dense=_dense),
             metric_mode="native" if _family in DENSE_FAMILIES else "layer",
-            vmappable=_name in ("nuts", "hmc", "dynamic_hmc", "ghmc", "barker", "mala"),
+            vmappable=_name
+            in ("nuts", "hmc", "dynamic_hmc", "ghmc", "barker", "mala", "nuts_fast"),
+            engine="nuts" if _name == "nuts_fast" else None,
+            dense_default=_dense,
+            not_vmappable=_PATHFINDER_NOT_VMAPPABLE if _name == "nuts_pathfinder" else None,
         )
     )
 

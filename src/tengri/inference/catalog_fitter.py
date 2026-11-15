@@ -769,7 +769,7 @@ def _vmapped_mcmc_tags() -> dict[str, str]:
     from tengri.inference.sampling.driver import get_sampler, sampler_names
 
     return {
-        get_sampler(name).methods[0]: name
+        get_sampler(name).methods[0]: get_sampler(name).engine or name
         for name in sampler_names()
         if get_sampler(name).vmappable
     }
@@ -1960,6 +1960,8 @@ class _CatalogFitterOriginal:
         from tengri.inference.sampling.driver import get_sampler
 
         sampler = self._MCMC_SAMPLER_TAG[method_tag]
+        if dense_mass_matrix is None and get_sampler(method_tag).dense_default:
+            dense_mass_matrix = True
         is_chees = sampler == "chees"
         if target_accept_rate is AUTO:
             target_accept_rate = (

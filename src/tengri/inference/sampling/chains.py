@@ -16,6 +16,18 @@ OVERDISPERSION = 2.0
 #: flat space is built on (iid N(0, 1)), which the posterior only narrows.
 PRIOR_SCALE = 1.0
 
+#: Start dispersion of a family with no adapted metric (Barker, MALA) in the raw coordinates,
+#: where no posterior scale is known: a step takes it a few posterior widths at best, so a
+#: prior-scale start on a sharp posterior never arrives. In whitened coordinates (the dense
+#: metric layer) the posterior has unit scale and ``OVERDISPERSION`` applies instead.
+UNADAPTED_START_SCALE = 0.1
+
+#: Cap of the isotropic part of the start dispersion in adapted posterior standard
+#: deviations: a start farther than this from a sharp posterior (a prior-scale start of 250
+#: widths) is a transient no short chain recovers from, which R-hat then reports as
+#: non-convergence rather than as the multimodality it was meant to find.
+START_CAP = 10.0
+
 
 def jittered_starts(base, warmup_key, n_chains, chain_jitter):
     """Return ``n_chains`` independent overdispersed starts around ``base``.
@@ -50,10 +62,11 @@ def jittered_starts(base, warmup_key, n_chains, chain_jitter):
 def start_scale(inverse_mass_matrix, chain_jitter, factor=OVERDISPERSION):
     """Return the start dispersion of the extra chains.
 
-    The start covariance is ``factor^2 Sigma + chain_jitter^2 I``, ``Sigma`` the adaptation's
-    estimate of the posterior covariance: at least ``factor`` posterior standard deviations
-    on every coordinate, and at least ``chain_jitter`` (the prior's scale by default), so
-    that two modes a few posterior widths apart but inside the prior are both visited.
+    The start covariance is ``factor^2 Sigma + diag(s^2)`` with ``Sigma`` the adaptation's
+    estimate of the posterior covariance and ``s = min(chain_jitter, START_CAP sd)`` per
+    coordinate: at least ``factor`` posterior standard deviations everywhere, and up to the
+    prior's scale (``chain_jitter``) where the posterior is not much narrower, so that two
+    modes a few widths apart but inside the prior are both visited.
 
     Parameters
     ----------
@@ -73,9 +86,11 @@ def start_scale(inverse_mass_matrix, chain_jitter, factor=OVERDISPERSION):
     if inverse_mass_matrix is None or not hasattr(inverse_mass_matrix, "ndim"):
         return chain_jitter
     if inverse_mass_matrix.ndim == 1:
-        return jnp.sqrt(factor**2 * inverse_mass_matrix + chain_jitter**2)
-    eye = jnp.eye(inverse_mass_matrix.shape[0], dtype=inverse_mass_matrix.dtype)
-    return jnp.linalg.cholesky(factor**2 * inverse_mass_matrix + chain_jitter**2 * eye)
+        iso = jnp.minimum(chain_jitter, START_CAP * jnp.sqrt(inverse_mass_matrix))
+        return jnp.sqrt(factor**2 * inverse_mass_matrix + iso**2)
+    sd = jnp.sqrt(jnp.diag(inverse_mass_matrix))
+    iso = jnp.minimum(chain_jitter, START_CAP * sd)
+    return jnp.linalg.cholesky(factor**2 * inverse_mass_matrix + jnp.diag(iso**2))
 
 
 def run_jittered_chains(sample_body, init_state, starts, chain_keys):

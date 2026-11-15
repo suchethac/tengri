@@ -97,7 +97,9 @@ def _ess(chains):
 def _catalog_samplers():
     from tengri.inference.sampling.driver import get_sampler, sampler_names
 
-    return sorted(n for n in sampler_names() if get_sampler(n).vmappable)
+    return sorted(
+        {get_sampler(n).engine or n for n in sampler_names() if get_sampler(n).vmappable}
+    )
 
 
 def _driver_samplers():
