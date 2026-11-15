@@ -83,7 +83,7 @@ EXPECTED = {
         "prior": "Fixed(0.0)",
         "free_prior": "Uniform(0.0, 0.2)",
         "default": "Fixed(0.0)",
-        "bound_error": "noise_frac_cal bounds must have lo >= 0",
+        "bound_error": "calibration_floor (parameter noise_frac_cal) bounds must have lo >= 0",
         "probes": (True, False, True, True),
         "description": "Fractional calibration noise floor (added in quadrature with obs noise)",
     },

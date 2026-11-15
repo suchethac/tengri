@@ -496,7 +496,8 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
     if mask_stack is not None and has_noise_model(spec) and bool(jnp.any(mask_stack != 0)):
         raise ParameterError(
             "PopulationFitter(data_mask=...) flags upper or lower limits, and the hierarchical "
-            "flat seam cannot score them with a free noise model (noise_frac_cal / noise_dof): "
+            "flat seam cannot score them with a free noise model (NoiseModel "
+            "calibration_floor / student_t_dof, parameters noise_frac_cal / noise_dof): "
             "the band's sigma would depend on the parameters while the censored term assumes a "
             "fixed one. Fix the noise parameters, or drop the limits."
         )

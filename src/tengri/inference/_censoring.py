@@ -159,7 +159,8 @@ def refuse_unsupported_censoring(fitter, method):
     raise ParameterError(
         f"Fitter(data_mask=...) flags upper/lower limits, and method={method!r} "
         "cannot score them together with a free noise model "
-        "(noise_frac_cal / noise_dof): its variable-covariance metric has no "
+        "(NoiseModel calibration_floor / student_t_dof, parameters noise_frac_cal / "
+        "noise_dof): its variable-covariance metric has no "
         "censored form, so the limits would be fitted as detections. "
         f"data_mask is honored by {list(_METHODS_HONORING_ANY_NOISE_MODEL)} for "
         f"any noise model, and by {list(VI_METHODS_HONORING_DATA_MASK)} with a "

@@ -17,7 +17,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         Fixed(0.0),
         "Fractional calibration noise floor (added in quadrature with obs noise)",
         lambda lo, hi: lo >= 0,
-        "noise_frac_cal bounds must have lo >= 0",
+        "calibration_floor (parameter noise_frac_cal) bounds must have lo >= 0",
         # A fraction of the flux added in quadrature to the reported errors, scaled by
         # the model before any marginalized calibration or line term (N = diag(sigma^2 +
         # (f * m0)^2), m0 the model those terms multiply or add to), so
@@ -34,7 +34,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         Fixed(0.0),
         "Student-t degrees of freedom for outlier robustness (0=Gaussian)",
         lambda lo, hi: lo >= 0,
-        "noise_dof bounds must have lo >= 0",
+        "student_t_dof (parameter noise_dof) bounds must have lo >= 0",
         internal_name="noise_dof",
         # Deliberately NO free_prior. 0 is a sentinel, not a value: it selects
         # the Gaussian likelihood rather than naming zero degrees of freedom,
