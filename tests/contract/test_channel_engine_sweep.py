@@ -94,11 +94,11 @@ KNOWN_DISCREPANCIES: dict = {
     ("calibration_lines", "cal_marg_lines_banded"): JOINT_CONSTANT + "4.08",
     ("presence", "student_t"): (
         "Student-t photometry scores every band: an absent band (presence 0) enters the "
-        "density, where the independent reference drops it"
+        "density, where the independent reference drops it; measured relative difference 3.7e-2"
     ),
     ("presence", "cal_floor"): (
         "the calibration-floor photometry term scores every band: an absent band enters the "
-        "density, where the independent reference drops it"
+        "density, where the independent reference drops it; measured relative difference 7.2e-3"
     ),
 }
 

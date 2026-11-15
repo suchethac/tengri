@@ -51,11 +51,7 @@ from tengri.inference.likelihoods.gaussian import (
     diag_gaussian_log_prob,
     student_t_log_norm_per_point,
 )
-from tengri.observation.banded import BandedMatrix, banded_forward_substitution
-from tengri.observation.noise import (
-    censored_neg_log_likelihood as _censored_neg_log_lik,
-    variable_noise_hamiltonian as _student_t_neg_log_lik,
-)
+from tengri.inference.likelihoods.terms import censored_term, correlated_term, student_t_term
 
 __all__ = [
     "CensoredLikelihood",
@@ -310,12 +306,12 @@ class StudentTLikelihood:
             f_cal = params[self.f_cal_param]
         else:
             f_cal = self.f_cal
-        return -_student_t_neg_log_lik(
-            data=resolve_channel_data(self.obs, self.obs_key, self.data_slice, data_args),
-            noise_obs=resolve_channel_data(self.err, self.err_key, self.data_slice, data_args),
-            predicted=prediction[self.channel],
-            f_cal=f_cal,
-            dof=self.dof,
+        return student_t_term(
+            prediction[self.channel],
+            resolve_channel_data(self.obs, self.obs_key, self.data_slice, data_args),
+            resolve_channel_data(self.err, self.err_key, self.data_slice, data_args),
+            f_cal,
+            self.dof,
         )
 
     def declared_parameters(self):
@@ -416,14 +412,14 @@ class CensoredLikelihood:
             f_cal = params[self.f_cal_param]
         else:
             f_cal = self.f_cal
-        return -_censored_neg_log_lik(
-            data=resolve_channel_data(self.obs, self.obs_key, self.data_slice, data_args),
-            noise_obs=resolve_channel_data(self.err, self.err_key, self.data_slice, data_args),
-            predicted=prediction[self.channel],
-            mask=resolve_channel_data(self.mask, self.mask_key, self.data_slice, data_args),
-            f_cal=f_cal,
-            dof=self.dof,
-            model_sigma_frac=resolve_channel_data(
+        return censored_term(
+            prediction[self.channel],
+            resolve_channel_data(self.obs, self.obs_key, self.data_slice, data_args),
+            resolve_channel_data(self.err, self.err_key, self.data_slice, data_args),
+            resolve_channel_data(self.mask, self.mask_key, self.data_slice, data_args),
+            f_cal,
+            self.dof,
+            resolve_channel_data(
                 self.model_sigma_frac, self.model_sigma_frac_key, self.data_slice, data_args
             ),
         )
@@ -539,8 +535,7 @@ class MultivariateGaussianLikelihood:
         """
         del params
         obs = resolve_channel_data(self.obs, self.obs_key, self.data_slice, data_args)
-        diff = obs - prediction[self.channel]
-        # Presence zeroes absent pixels before whitening; with no key it is a no-op.
+        presence = None
         if (
             data_args is not None
             and self.presence_key is not None
@@ -549,15 +544,12 @@ class MultivariateGaussianLikelihood:
             presence = data_args[self.presence_key]
             if self.data_slice is not None:
                 presence = presence[self.data_slice[0] : self.data_slice[1]]
-            diff = jnp.where(presence > 0, diff, 0.0)
-        if self.chol_data is None:
-            return -0.5 * (diff @ self.cov_inv @ diff)
-        factor = BandedMatrix(
-            offsets=np.asarray(self.chol_offsets, dtype=int),
-            data=resolve_channel_data(self.chol_data, self.chol_key, None, data_args),
+        chol = None
+        if self.chol_data is not None:
+            chol = resolve_channel_data(self.chol_data, self.chol_key, None, data_args)
+        return correlated_term(
+            prediction[self.channel], obs, self.cov_inv, chol, self.chol_offsets, presence
         )
-        whitened = banded_forward_substitution(factor, diff)
-        return -0.5 * jnp.dot(whitened, whitened)
 
     def declared_parameters(self):
         return []

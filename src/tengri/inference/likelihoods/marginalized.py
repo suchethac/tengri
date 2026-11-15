@@ -19,32 +19,21 @@ distinct *math types* (not just channel renames).
 
 from __future__ import annotations
 
-import math
 from collections.abc import Callable, Mapping
 from dataclasses import KW_ONLY, dataclass
 
 import jax.numpy as jnp
-import numpy as np
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, exclude, shape
-from tengri.inference.likelihoods.gaussian import diag_gaussian_chi2
 from tengri.inference.likelihoods.protocol import resolve_channel_data
-from tengri.observation.banded import BandedMatrix
-from tengri.observation.calibration import (
-    _ERR_FLOOR,
-    calibration_basis,
-    joint_calibration_line_marginal,
-    marginalize_calibration as _marginalize_calibration,
-    marginalize_calibration_segments,
+from tengri.inference.likelihoods.terms import (
+    calibration_eline_marginal_term,
+    calibration_marginal_term,
+    eline_cloudy_marginal_term,
+    eline_fitted_term,
+    eline_flat_marginal_term,
+    eline_model_marginal_term,
 )
-from tengri.observation.eline_marginalization import (
-    marginalize_emission_lines as _marginalize_emission_lines,
-    model_line_prior,
-    unit_line_prior,
-    unit_model_line_prior,
-)
-from tengri.observation.linear_marginal import marginalize_linear_nuisance
-from tengri.utils.scale import representable_floor as _representable_floor
 
 __all__ = [
     "CalibrationMarginalizedLikelihood",
@@ -149,34 +138,22 @@ class CalibrationMarginalizedLikelihood:
     ) -> jnp.ndarray:
         obs_flux = resolve_channel_data(self.fnu_obs, self.fnu_obs_key, self.data_slice, data_args)
         obs_err = resolve_channel_data(self.fnu_err, self.fnu_err_key, self.data_slice, data_args)
-        if self.n_segments > 0 or self.cal_prior != "gaussian" or self.has_q:
-            return marginalize_calibration_segments(
-                prediction[self.channel],
-                obs_flux,
-                obs_err,
-                self.wavelength,
-                _segments_or_zeros(self.segments, self.wavelength),
-                n_segments=self.n_segments,
-                n_poly=self.n_poly,
-                prior_sigma=self.prior_sigma,
-                cal_prior=self.cal_prior,
-                log_q=params["cal_log_q"] if self.has_q else None,
-                q_window=self.q_window,
-                q_prior=True,
-                chol_data=_resolve_chol(self.chol_data, self.chol_key, data_args),
-                chol_offsets=self.chol_offsets,
-            )[0]
-        log_lik, _c_hat, _c_err = _marginalize_calibration(
-            model_flux=prediction[self.channel],
-            obs_flux=obs_flux,
-            obs_err=obs_err,
-            wavelength=self.wavelength,
+        return calibration_marginal_term(
+            prediction[self.channel],
+            obs_flux,
+            obs_err,
+            self.wavelength,
             n_poly=self.n_poly,
             prior_sigma=self.prior_sigma,
+            segments=self.segments,
+            n_segments=self.n_segments,
+            cal_prior=self.cal_prior,
+            log_q=params["cal_log_q"] if self.has_q else None,
+            q_window=self.q_window,
+            has_q=self.has_q,
             chol_data=_resolve_chol(self.chol_data, self.chol_key, data_args),
             chol_offsets=self.chol_offsets,
         )
-        return log_lik
 
     def declared_parameters(self):
         return []
@@ -321,7 +298,6 @@ class ELineMarginalizedLikelihood:
             design_matrix = self.design_matrix
         fnu_obs = resolve_channel_data(self.fnu_obs, self.fnu_obs_key, self.data_slice, data_args)
         fnu_err = resolve_channel_data(self.fnu_err, self.fnu_err_key, self.data_slice, data_args)
-        residual = fnu_obs - prediction[self.channel]
         pix_mask = None
         if (
             data_args is not None
@@ -331,17 +307,17 @@ class ELineMarginalizedLikelihood:
             pix_mask = data_args[self.presence_key]
             if self.data_slice is not None:
                 pix_mask = pix_mask[self.data_slice[0] : self.data_slice[1]]
-        ln_l_marg, _a_hat, _a_cov = _marginalize_emission_lines(
-            residual=residual,
-            noise=fnu_err,
-            design_matrix=design_matrix,
+        return eline_flat_marginal_term(
+            prediction[self.channel],
+            fnu_obs,
+            fnu_err,
+            design_matrix,
             prior_variance=self.prior_variance,
             prior_sigma=self.prior_sigma,
             pix_mask=pix_mask,
             chol_data=_resolve_chol(self.chol_data, self.chol_key, data_args),
             chol_offsets=self.chol_offsets,
         )
-        return ln_l_marg
 
     def declared_parameters(self):
         return []
@@ -446,27 +422,22 @@ class CloudyELineMarginalizedLikelihood:
         params: Mapping[str, jnp.ndarray] | None = None,
         data_args: Mapping[str, jnp.ndarray] | None = None,
     ) -> jnp.ndarray:
-        from tengri.observation.eline_priors import marginalize_emission_lines_cloudy
-
         params = params or {}
         design_matrix = self.design_matrix_builder(params)
         fnu_obs = resolve_channel_data(self.fnu_obs, self.fnu_obs_key, self.data_slice, data_args)
         fnu_err = resolve_channel_data(self.fnu_err, self.fnu_err_key, self.data_slice, data_args)
-        residual = fnu_obs - prediction[self.channel]
-        log_z = params["met_logzsol"]
-        neb_logU = params["neb_logU"]
-        ln_l, _a_hat, _a_err = marginalize_emission_lines_cloudy(
-            residual,
+        return eline_cloudy_marginal_term(
+            prediction[self.channel],
+            fnu_obs,
             fnu_err,
             design_matrix,
-            log_z=log_z,
-            neb_logU=neb_logU,
+            log_z=params["met_logzsol"],
+            neb_logU=params["neb_logU"],
             line_wavelengths=self.line_wavelengths,
             prior_width_dex=self.prior_width_dex,
             chol_data=_resolve_chol(self.chol_data, self.chol_key, data_args),
             chol_offsets=self.chol_offsets,
         )
-        return ln_l
 
     def declared_parameters(self):
         return []
@@ -564,31 +535,18 @@ class ModelELineMarginalizedLikelihood:
         design = self.design_matrix_builder(params)
         fnu_obs = resolve_channel_data(self.fnu_obs, self.fnu_obs_key, self.data_slice, data_args)
         fnu_err = resolve_channel_data(self.fnu_err, self.fnu_err_key, self.data_slice, data_args)
-        model_spec = prediction[self.channel]
-        redshift, dl_cm, aperture_frac, transmission = self.prior_inputs_builder(params)
-        prior = model_line_prior(
-            prediction["log_line_lums_attenuated"],
-            self.match_index,
-            self.matched,
-            self.line_wavelengths,
-            redshift,
-            dl_cm,
-            aperture_frac,
-            self.prior_width_dex,
-            transmission=transmission,
-        )
-        unit = unit_model_line_prior(design, prior, noise=fnu_err)
-        result = marginalize_linear_nuisance(
+        return eline_model_marginal_term(
+            prediction[self.channel],
             fnu_obs,
-            model_spec,
-            unit.design,
-            sigma=fnu_err,
-            prior_mean=unit.prior_mean,
-            prior_precision=unit.prior_precision,
-            scale=unit.scale,
+            fnu_err,
+            design,
+            log_line_lums=prediction["log_line_lums_attenuated"],
+            match_index=self.match_index,
+            matched=self.matched,
+            line_wavelengths=self.line_wavelengths,
+            prior_inputs=self.prior_inputs_builder(params),
+            prior_width_dex=self.prior_width_dex,
         )
-        n_pix = fnu_obs.shape[0]
-        return result.log_like + 0.5 * n_pix * math.log(2.0 * math.pi) + jnp.sum(jnp.log(fnu_err))
 
     def declared_parameters(self):
         return []
@@ -674,11 +632,11 @@ class ELineFittedLikelihood:
         params = params or {}
         design_matrix = self.design_matrix_builder(params)
         amplitudes = jnp.array([params[nm] for nm in self.amplitude_names])
-        pred_with_lines = prediction[self.channel] + design_matrix @ amplitudes
         fnu_obs = resolve_channel_data(self.fnu_obs, self.fnu_obs_key, self.data_slice, data_args)
         fnu_err = resolve_channel_data(self.fnu_err, self.fnu_err_key, self.data_slice, data_args)
-        chi2 = diag_gaussian_chi2(pred_with_lines, fnu_obs, fnu_err)
-        return -0.5 * chi2
+        return eline_fitted_term(
+            prediction[self.channel], fnu_obs, fnu_err, design_matrix, amplitudes
+        )
 
     def declared_parameters(self):
         return list(self.amplitude_names)
@@ -816,20 +774,6 @@ class CalibrationELineMarginalizedLikelihood:
     chol_offsets: tuple[int, ...] | None = None
     chol_key: str | None = None
 
-    def _line_prior(self, params: Mapping[str, jnp.ndarray], n_lines: int):
-        """Return the line prior mean and width (standard deviation) for this parameter set."""
-        if self.eline_prior_type == "cloudy":
-            from tengri.observation.eline_priors import cloudy_line_priors
-
-            means, sigmas = cloudy_line_priors(
-                log_z=params["met_logzsol"],
-                neb_logU=params["neb_logU"],
-                line_wavelengths=self.eline_line_wavelengths,
-                prior_width_dex=self.eline_prior_width_dex,
-            )
-            return means, sigmas
-        return jnp.zeros(n_lines), jnp.full(n_lines, self.eline_prior_sigma)
-
     def log_prob(
         self,
         prediction: Mapping[str, jnp.ndarray],
@@ -837,76 +781,34 @@ class CalibrationELineMarginalizedLikelihood:
         data_args: Mapping[str, jnp.ndarray] | None = None,
     ) -> jnp.ndarray:
         params = params or {}
-        model_spec = prediction[self.channel]
-        fnu_obs = resolve_channel_data(self.fnu_obs, self.fnu_obs_key, self.data_slice, data_args)
-        fnu_err = resolve_channel_data(self.fnu_err, self.fnu_err_key, self.data_slice, data_args)
-        design_lines = self.design_matrix_builder(params)
-        n_lines = design_lines.shape[1]
-        if self.n_segments > 0 or self.cal_prior != "gaussian" or self.has_q:
-            chol_data = _resolve_chol(self.chol_data, self.chol_key, data_args)
-            return self._segment_log_prob(
-                model_spec, fnu_obs, fnu_err, design_lines, params, chol_data
-            )
-        basis = calibration_basis(
-            self.wavelength, self.wavelength.min(), self.wavelength.max(), self.n_poly
-        )
-        chol_data = _resolve_chol(self.chol_data, self.chol_key, data_args)
-        if chol_data is None:
-            sigma = jnp.maximum(fnu_err, _representable_floor(_ERR_FLOOR))
-            whitening = {"sigma": sigma}
-        else:
-            sigma = chol_data[0]
-            whitening = {
-                "chol_lower": BandedMatrix(np.asarray(self.chol_offsets, dtype=int), chol_data)
-            }
-        if self.eline_prior_type == "model":
-            redshift, dl_cm, aperture_frac, transmission = self.prior_inputs_builder(params)
-            model_prior = model_line_prior(
-                prediction["log_line_lums_attenuated"],
-                self.match_index,
-                self.matched,
-                self.eline_line_wavelengths,
-                redshift,
-                dl_cm,
-                aperture_frac,
-                self.eline_prior_width_dex,
-                transmission=transmission,
-            )
-            line = unit_model_line_prior(design_lines, model_prior, noise=sigma)
-        else:
-            line_mean, line_width = self._line_prior(params, n_lines)
-            line = unit_line_prior(design_lines, line_width, noise=sigma, prior_mean=line_mean)
-        result = joint_calibration_line_marginal(
-            fnu_obs, model_spec, basis, line, self.prior_sigma, whitening=whitening
-        )
-        n_pix = fnu_obs.shape[0]
-        return result.log_like + 0.5 * n_pix * math.log(2.0 * math.pi) + jnp.sum(jnp.log(sigma))
-
-    def _segment_log_prob(self, model_spec, fnu_obs, fnu_err, design_lines, params, chol_data):
-        """Joint marginal with segment scales, a scale-free prior or the fiber-fraction latent."""
-        err = jnp.maximum(fnu_err, _representable_floor(_ERR_FLOOR))
-        noise = err if chol_data is None else chol_data[0]
-        line_mean, line_width = self._line_prior(params, design_lines.shape[1])
-        line = unit_line_prior(design_lines, line_width, noise=noise, prior_mean=line_mean)
-        marginal = marginalize_calibration_segments(
-            model_spec,
-            fnu_obs,
-            err,
+        prior_inputs = None
+        if self.prior_inputs_builder is not None and self.eline_prior_type == "model":
+            prior_inputs = self.prior_inputs_builder(params)
+        return calibration_eline_marginal_term(
+            prediction[self.channel],
+            resolve_channel_data(self.fnu_obs, self.fnu_obs_key, self.data_slice, data_args),
+            resolve_channel_data(self.fnu_err, self.fnu_err_key, self.data_slice, data_args),
+            self.design_matrix_builder(params),
             self.wavelength,
-            _segments_or_zeros(self.segments, self.wavelength),
-            n_segments=self.n_segments,
             n_poly=self.n_poly,
             prior_sigma=self.prior_sigma,
+            prior_type=self.eline_prior_type,
+            line_prior_sigma=self.eline_prior_sigma,
+            line_wavelengths=self.eline_line_wavelengths,
+            prior_width_dex=self.eline_prior_width_dex,
+            params=params,
+            log_line_lums=prediction.get("log_line_lums_attenuated"),
+            match_index=self.match_index,
+            matched=self.matched,
+            prior_inputs=prior_inputs,
+            segments=self.segments,
+            n_segments=self.n_segments,
             cal_prior=self.cal_prior,
-            lines=line,
-            log_q=params["cal_log_q"] if self.has_q else None,
             q_window=self.q_window,
-            q_prior=True,
-            chol_data=chol_data,
+            has_q=self.has_q,
+            chol_data=_resolve_chol(self.chol_data, self.chol_key, data_args),
             chol_offsets=self.chol_offsets,
-        )[0]
-        n_pix = fnu_obs.shape[0]
-        return marginal + 0.5 * n_pix * math.log(2.0 * math.pi) + jnp.sum(jnp.log(noise))
+        )
 
     def declared_parameters(self):
         return []
