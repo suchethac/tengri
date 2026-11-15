@@ -230,6 +230,12 @@ class NoiseSpec:
         Marginalize the calibration polynomial.
     lines : LineSpec or None, optional
         Marginalize or fit the emission-line amplitudes.
+    observed_floor : float, optional
+        Fractional error floor scaled by the observed flux, added in quadrature. Zero is
+        the only value scored today; :func:`validate` refuses any other.
+    nonpositive_error : {"refuse"}, optional
+        Policy for a data error at or below zero. A fit refuses it, the one value scored
+        today; :func:`validate` refuses any other.
 
     Notes
     -----
@@ -245,6 +251,8 @@ class NoiseSpec:
     chol_offsets: tuple | None = None
     calibration: CalibrationSpec | None = None
     lines: LineSpec | None = None
+    observed_floor: float = 0.0
+    nonpositive_error: str = "refuse"
 
 
 # ── Channels ──────────────────────────────────────────────────────────────────────────
@@ -274,6 +282,12 @@ class Channel:
     log_norm : callable, optional
         ``log_norm(data, noise)``: the constant ``loglik`` omits [nats]. ``None`` means the
         term has no separate constant and a warning says so.
+    legacy_name : callable, optional
+        ``legacy_name(noise)``: the adapter class name the missing-normalization warning
+        quotes.
+    kind : str, optional
+        What the channel scores. ``"data"`` is a measured observable; the value space is
+        left open for a channel that scores a derived property of the model.
     """
 
     name: str
@@ -285,6 +299,7 @@ class Channel:
     supersedes: tuple = ()
     log_norm: Callable | None = None
     legacy_name: Callable = lambda noise: ""
+    kind: str = "data"
 
 
 def _part(arr, block, noise):
@@ -760,7 +775,8 @@ def validate(noise: NoiseSpec, data_keys_present) -> None:
     ------
     NotImplementedError
         Calibration marginalization together with fitted line amplitudes: the two cannot
-        share one marginal.
+        share one marginal. An observed-scaled error floor or an error policy other than
+        refusal, which no channel scores yet.
     ValueError
         A ``data`` key that is neither a channel key nor bookkeeping, or a spectrum
         covariance key without its noise setting.
@@ -776,6 +792,13 @@ def validate(noise: NoiseSpec, data_keys_present) -> None:
             "Use eline_marginalize=True (with optional eline_prior_type) for "
             "the standard Prospector-style configuration, or disable "
             "calibration_marginalize."
+        )
+    if noise.observed_floor != 0.0:
+        raise NotImplementedError("an observed-scaled error floor is not scored yet")
+    if noise.nonpositive_error != "refuse":
+        raise NotImplementedError(
+            f"nonpositive_error={noise.nonpositive_error!r}: a fit refuses an error at or "
+            "below zero and no other policy is scored"
         )
     if noise.covariance == "banded" and noise.chol_offsets is None:
         raise ValueError("a banded covariance needs chol_offsets")

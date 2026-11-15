@@ -611,3 +611,86 @@ def test_channel_keys_and_data_term_keys_are_the_same_set():
     """Every channel key is one the data term accepts; every key it accepts has a channel."""
     emitted = _emitted_data_keys() - channels.BOOKKEEPING_KEYS
     assert channels.data_keys() == emitted, sorted(channels.data_keys() ^ emitted)
+
+
+# ── Seams that read the mask outside the loss ─────────────────────────────────────────
+
+
+def test_mask_reaches_the_sampler_log_likelihood_seams():
+    """The nested-sampling and elliptical-slice log-likelihoods score the censoring mask.
+
+    Both read ``Fitter._get_or_build_loglikelihood_fn`` and its unbounded twin, a seam beside
+    the loss and the flat log-density. The path is checked as engaged (the censoring channel
+    is the one selected, and the value differs from the unmasked Gaussian) as well as
+    numerically against the closed form.
+    """
+    from tengri.inference.loss_functions import _unstandardize_parameters
+
+    fitter, term, physical = _term_of("mask")
+    data_args = fitter._data_args
+    assert [c.name for c in selected_channels(data_args, term.noise)] == ["censoring"]
+
+    free = {k: physical[k] for k in fitter._free_names}
+    predicted = np.asarray(fitter.model.predict_photometry(free))
+    obs, err = np.asarray(data_args["data"]), np.asarray(data_args["noise"])
+    mask = np.asarray(data_args["data_mask"])
+    expected = _ref_censored(predicted, obs, err, mask, NoiseSpec(), Predictions(), f_cal=0.0)
+    unmasked = _ref_main(predicted, obs, err, NoiseSpec(), Predictions())
+    assert abs(expected - unmasked) > 1e-3
+
+    constant = float(term.log_normalization(data_args))
+    seam = fitter._get_or_build_loglikelihood_fn()
+    np.testing.assert_allclose(float(seam(free, data_args)) + constant, expected, rtol=1e-9)
+
+    zeros = {name: 0.0 for name in fitter._free_names}
+    resolved = _unstandardize_parameters(
+        zeros, fitter.spec, fitter._free_names, fitter._fixed_values, fitter.spec.stochastic
+    )
+    at_zero = {k: resolved[k] for k in fitter._free_names}
+    predicted0 = np.asarray(fitter.model.predict_photometry(at_zero))
+    expected0 = _ref_censored(predicted0, obs, err, mask, NoiseSpec(), Predictions(), f_cal=0.0)
+    unbounded = fitter._get_or_build_loglikelihood_unbounded_fn()
+    np.testing.assert_allclose(float(unbounded(zeros, data_args)) + constant, expected0, rtol=1e-9)
+
+
+def test_photometry_and_line_limits_share_one_censoring_convention():
+    """Upper and lower limits are the normal log-CDF of the same standardized residual.
+
+    The censoring channel (photometry) and the line-censor channel read one function, and the
+    standalone ``LineFluxData.log_likelihood`` agrees with them on a line set without model
+    error.
+    """
+    from tengri.observation.line_flux_data import LineFluxData
+
+    preds, data, noise = _synthetic("line_censor", "gaussian")
+    data = {**data, "line_flux_model_sigma_frac": np.zeros(N_CONSTRAINT)}
+    line_value = float(score(preds, data, noise))
+
+    as_photometry = {
+        "data": data["line_flux_obs"],
+        "noise": data["line_flux_err"],
+        "data_mask": data["line_flux_limit_mask"],
+    }
+    photometry_preds = Predictions(phot_fnu=preds.line_fluxes)
+    phot_value = float(score(photometry_preds, as_photometry, NoiseSpec(data_type="photometry")))
+    np.testing.assert_allclose(line_value, phot_value, rtol=1e-12)
+
+    lines = LineFluxData(
+        names=tuple(f"l{i}" for i in range(N_CONSTRAINT)),
+        fluxes=data["line_flux_obs"],
+        errors=data["line_flux_err"],
+        wavelengths=np.linspace(4000.0, 7000.0, N_CONSTRAINT),
+        is_upper_limit=data["line_flux_limit_mask"] == 1,
+        is_lower_limit=data["line_flux_limit_mask"] == -1,
+    )
+    standalone = float(lines.log_likelihood(preds.line_fluxes))
+    constant = float(log_normalization(data, noise))
+    np.testing.assert_allclose(line_value + constant, standalone, rtol=1e-12)
+
+
+def test_unscored_noise_settings_are_refused_by_name():
+    _, data, noise = _synthetic("photometry", "gaussian")
+    for override in ({"observed_floor": 0.05}, {"nonpositive_error": "keep"}):
+        spec = NoiseSpec(**{**noise.__dict__, **override})
+        with pytest.raises(NotImplementedError):
+            channels.validate(spec, data.keys())
