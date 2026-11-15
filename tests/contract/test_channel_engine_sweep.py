@@ -318,7 +318,8 @@ def _line_moments(preds, noise):
         assert np.all(np.asarray(prior.gaussian) == 1.0)
         return np.asarray(prior.prior_mean), np.asarray(prior.prior_width)
     sigma = lines.prior_variance**0.5 if lines.prior_variance is not None else lines.prior_sigma
-    return np.zeros(N_LINE), np.full(N_LINE, sigma)
+    n_lines = np.shape(preds.eline_design)[1]
+    return np.zeros(n_lines), np.full(n_lines, sigma)
 
 
 def _ref_lines(preds, data, noise):
