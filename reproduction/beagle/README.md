@@ -97,7 +97,7 @@ directory and the templates stay in `$BEAGLE_WORKDIR`.
 - **§3 Integrated SED.** The no-dust fiducial at z = 1, with nebular emission off on both sides,
   as overlay ratios and CANDELS band ratios.
 - **§4 Attenuation curves.** The optical depth τ̂_λ = −ln(F_dust/F_nodust) of BEAGLE's CF00, CCWW13
-  universal, Calzetti (1994) and Pei (1992) Milky Way, LMC and SMC runs, against tengri's power-law,
+  universal, Calzetti (1994) and BEAGLE's shipped Milky Way, LMC and SMC table runs, against tengri's power-law,
   chevallard13, calzetti, cardelli, lmc and smc curves. The CCWW13 full variant is not run: its
   radiative-transfer tables are not distributed with the public package, so it appears only as a
   row of §13.
@@ -131,8 +131,10 @@ directory and the templates stay in `$BEAGLE_WORKDIR`.
   et al. (2000), so the two curves differ by construction.
 - **CCWW13 full.** BEAGLE's CCWW13 full variant needs radiative-transfer tables that are not
   distributed with the public package, so it has no tengri counterpart in §4.
-- **Milky Way curve.** BEAGLE's `mw`, `lmc` and `smc` are Pei (1992). tengri's `cardelli`, `lmc` and
-  `smc` curves are the Cardelli et al. (1989) law and its LMC and SMC variants.
+- **Milky Way, LMC and SMC curves.** BEAGLE reads its `mw`, `lmc` and `smc` curves from one shipped
+  table, not from the Pei (1992) Drude sums; BEAGLE's measured depth equals that table's extinction
+  column to 0.1 %. tengri's `cardelli` is the Cardelli et al. (1989) law, and its `lmc` and `smc`
+  are the Pei (1992) Table 4 sums, so the Magellanic Cloud curves differ by construction.
 - **Nebular emission.** BEAGLE's nebular grid is the Gutkin et al. (2016) grid. tengri's Cue emulator
   is a different model, so the §8 comparison is made against tengri's gutkin16 backend, with the cue
   and cloudy backends shown as a sweep.

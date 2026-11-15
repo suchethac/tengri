@@ -212,9 +212,12 @@ print(f"setup complete in {time.perf_counter() - _T0:.1f} s")
 # STELIB. The comparison is therefore a library bracket between two BC03 releases that share
 # isochrones and IMF, not an identity. The figure shows single stellar populations of 10^10 M☉
 # at Z = 0.02 and log age 7, 8 and 9, and the tables give the ratio in four rest-frame windows.
-# Window medians lie within 8 % in the optical and near-infrared at all three ages; the rest-UV
-# at 1 Gyr is the largest difference (tengri 0.72 of BEAGLE), and BEAGLE's own `cb_june16` and
-# `bc03` sets differ by as much there (§1a), so this is the library bracket.
+# Optical and near-infrared window medians lie between 0.96 and 1.07 at all three ages, which is
+# consistent with the MILES against STELIB libraries and comparable to the spread between BEAGLE's
+# own `cb_june16` and `bc03` sets (§1a). The largest entry is the rest UV at 1 Gyr, where the
+# 1500–2500 Å median is 0.72 of BEAGLE. That window lies below both libraries' native ranges
+# (STELIB from 3200 Å, MILES from 3540 Å), so it is not a MILES-against-STELIB effect; it is a UV
+# template difference, not isolated here.
 
 # %%
 AGES_LOG = (7.0, 8.0, 9.0)
@@ -248,7 +251,7 @@ for lo, hi in WINDOWS_AA:
     )
 
 # %% [markdown]
-# The rows flagged in the four §1 windows are the library bracket: BEAGLE's `bc03` set is MILES-based and tengri's BC03 grid is STELIB, so the spread between the two is a template difference and not a tengri defect. The largest entry, 0.72 in the 1500–2500 Å window at log age 9, is the rest-UV difference described above.
+# The rows flagged in the four §1 windows are template differences: BEAGLE's `bc03` set is MILES-based and tengri's BC03 grid is STELIB, and the spread between them is not a tengri defect. The largest entry, 0.72 in the 1500–2500 Å window at log age 9, is a UV template difference, not isolated, and does not come from the MILES-against-STELIB choice.
 
 # %% [markdown]
 # ### §1a CB16 against BC03 inside BEAGLE
@@ -395,18 +398,21 @@ for lo, hi in WINDOWS_AA:
 #
 # Each `s4_*` run applies one attenuation law at a V-band depth of 1 to the §3 history, so the
 # effective depth is tau_lambda = -ln(F_dust / F_no-dust), with the dust-free `s3_fiducial` run as the
-# reference. For the single-screen laws (Calzetti, Pei 1992 Milky Way, LMC and SMC) this is the
+# reference. For the single-screen laws (Calzetti, and BEAGLE's Milky Way, LMC and SMC tables) this is the
 # curve itself. For CF00 and CCWW13 universal, the effective depth of the whole population lies
 # between the two stellar groups: old stars see the diffuse ISM alone (mu = 0.4) and stars younger
 # than 10 Myr see it plus the birth cloud. The two analytic bounds are drawn dashed, and the solid
 # line is the tengri model's own ratio with the same history. The CCWW13 variant with the
 # radiative-transfer tables (`ccww13_full`) is not run, because those tables are not distributed with
 # BEAGLE. BEAGLE's `Calzetti` is the 1994 curve and tengri's `calzetti` is the 2000 curve, so that
-# panel carries a curve difference; the printed table gives it. The Milky Way panel compares Pei (1992)
-# on BEAGLE's side with Cardelli et al. (1989) on tengri's side. Redward of 1 μm the LMC and SMC
-# depths of tengri exceed BEAGLE's by 24 % and 62 % at 10000 Å; at 20000 Å they are 1.6 and 2.8 times
-# larger. tengri's `lmc` and `smc` are the Pei (1992) Drude-sum curves, so this is a difference on
-# BEAGLE's side of the comparison (its measured LMC and SMC curves), a convention, not a tengri defect.
+# panel carries a curve difference; the printed table gives it. The Milky Way panel compares BEAGLE's
+# shipped Milky Way table with Cardelli et al. (1989) on tengri's side. BEAGLE reads its Milky Way,
+# LMC and SMC curves from that one table, and its measured LMC and SMC depths equal the table's
+# extinction column to 0.1 %. Redward of 1 μm the LMC and SMC depths of tengri exceed BEAGLE's by
+# 24 % and 62 % at 10000 Å; at 20000 Å they are 1.6 and 2.8 times larger. The manual calls the table
+# Pei (1992), but over 1 to 2 μm it is 0.62 to 0.81 of the Pei Table 4 Drude sums for the LMC and
+# 0.36 to 0.62 for the SMC, which are the sums tengri's `lmc` and `smc` use. The difference lies on
+# BEAGLE's side of the comparison: a convention, not a tengri defect.
 
 # %%
 MU = 0.4
@@ -415,9 +421,9 @@ LAWS = {
     "s4_cf00": ("CF00", None),
     "s4_calzetti": ("Calzetti (1994 | 2000)", calzetti),
     "s4_ccww13_universal": ("CCWW13 universal", None),
-    "s4_mw": ("Milky Way (Pei 1992 | CCM89)", cardelli),
-    "s4_lmc": ("LMC (Pei 1992)", lmc),
-    "s4_smc": ("SMC (Pei 1992)", smc),
+    "s4_mw": ("Milky Way (BEAGLE table | CCM89)", cardelli),
+    "s4_lmc": ("LMC (BEAGLE table)", lmc),
+    "s4_smc": ("SMC (BEAGLE table)", smc),
 }
 wl4 = np.arange(1000.0, 25001.0, 100.0)
 _w = lambda a: np.asarray(a, float)  # noqa: E731
@@ -582,7 +588,7 @@ LINE_WINDOWS_AA = (
     ((1659.0, 1663.0),),  # O III] 1661
     ((1664.0, 1668.0),),  # O III] 1666
     ((1881.0, 1885.0),),  # [Si III] 1883
-    ((1890.0, 1894.0),),  # Si III] 1888 (vacuum 1892)
+    ((1881.0, 1885.0), (1890.0, 1894.0)),  # Si III] 1888 column: BEAGLE Si3@1883 + Si3@1892 (no Si3@1888 key)
     ((1904.0, 1910.5),),  # C III] 1908 doublet
 )
 assert len(LINE_WINDOWS_AA) == len(GK_LABELS)
@@ -715,9 +721,14 @@ print(f"§8 row 0 (logU {NEB_ROWS[0][0]}, Z {NEB_ROWS[0][1]}, xi {NEB_ROWS[0][2]
 # each pair of sources. The raw table and tengri agree to 1e-14 dex on every line, so tengri's interpolation
 # is exact at these nodes. The BEAGLE differences are therefore set by how BEAGLE drives that table (its ionizing
 # spectrum and normalization), not by tengri's build; this is an inference from the agreement, not a separate test. Hα/H-beta agrees to 0.002 dex at most,
-# [N II] and [S II] to 0.01 dex in the median, and [O III] to 0.02 dex in the median and 0.24 at most. He II
-# 1640 and Si III] 1888 differ by 0.36 to 0.49 dex in the median and carry the largest spread. This section
-# does not isolate their cause; §8c gives the one-number ionizing comparison.
+# [N II] and [S II] to 0.01 dex in the median, and [O III] to 0.02 dex in the median and 0.24 at most.
+# He II 1640 carries the largest spread, 0.49 dex in the median and 1.03 at most. Si III] 1888, the table
+# column for the blend of BEAGLE's Si3@1883 and Si3@1892 lines, agrees to 0.04 dex in the median and 0.11
+# at most. Signed by metallicity, the He II 1640 gap is log10(BEAGLE / tengri) = −0.13, +0.04, +0.98 and
+# +0.87 dex at Z 0.001, 0.004, 0.014 and 0.03, and the [O III] 5007 gap is −0.01, +0.00, +0.05 and +0.13 dex.
+# BEAGLE's N_ion_HeII/N_ion is −4.68, −3.34, −3.50 and −3.65 dex at the same four metallicities. This is
+# consistent with BEAGLE's updated templates, which give harder ionizing spectra at Z ≥ 0.014; it is not
+# proven, and this section does not isolate the cause. §8c gives the one-number ionizing comparison.
 
 # %%
 fig, ax = plt.subplots(figsize=(9.0, 3.8))
@@ -743,6 +754,18 @@ for j, lab in enumerate(GK_LABELS):
     d_br = np.abs(np.log10(RB[:, j] / RR[:, j]))
     print(f"  {lab:>12s} {np.median(d_bt):15.3f} {d_bt.max():7.3f} {np.median(d_rt):12.2e} {d_rt.max():7.1e} "
           f"{np.median(d_br):12.3f} {d_br.max():7.3f}")
+
+# Signed gap per metallicity: median over the rows at each Z of log10(tengri / BEAGLE) for line / H-beta.
+print("§8a He II 1640 and [O III] 5007 gap by Z, median over 12 rows of log10(BEAGLE / tengri) (line / H-beta)")
+print(f"  {'Z':>6s} {'HeII1640 gap':>13s} {'[OIII]5007 gap':>15s} {'log N_HeII/N_ion':>17s}")
+_N_HEII = np.asarray(r_neb.galaxy_properties["N_ion_HeII"], float)
+_N_ION_NEB = np.asarray(r_neb.galaxy_properties["N_ion"], float)
+_J_HE, _J_O3 = GK_LABELS.index("HeII1640"), GK_LABELS.index("[OIII]5007")
+for z in NEB_Z:
+    idx = [i for i, (_, zz, _) in enumerate(NEB_ROWS) if zz == z]
+    gap_he = np.median(np.log10(RB[idx, _J_HE] / RT[idx, _J_HE]))
+    gap_o3 = np.median(np.log10(RB[idx, _J_O3] / RT[idx, _J_O3]))
+    print(f"  {z:6.3f} {gap_he:+13.2f} {gap_o3:+15.2f} {np.median(_N_HEII[idx] - _N_ION_NEB[idx]):17.2f}")
 
 # %% [markdown]
 # ### §8b Six ratios against log U_S
@@ -793,10 +816,15 @@ plt.show()
 # ### §8c H-beta per ionizing photon and per SFR
 #
 # BEAGLE's photon rate is `N_ion` and tengri's is `log_q_h`. Case B gives 4.78e-13 erg per photon. The
-# per-SFR column uses each source's own 10 Myr rate, which is 10 M☉/yr in both. Per photon the two codes
-# agree to 1.4 percent in the median, so the line conversion matches once the photons are counted. The
-# per-SFR ratio (0.73 in the median) is therefore the ionizing photon output per unit SFR, which is the
-# library bracket between CB16 (BEAGLE) and BC03 STELIB (tengri).
+# per-SFR column uses each source's own 10 Myr rate, which is 10 M☉/yr in both, so the per-SFR ratio is the
+# per-photon ratio times the photon-rate ratio, row by row. Per photon the two codes agree to 1.4 percent in
+# the median, so the line conversion matches once the photons are counted. The photon-rate ratio is 0.78,
+# 0.80, 0.64 and 0.75 at Z 0.001, 0.004, 0.014 and 0.03, so the per-SFR ratio (0.73 in the median) is the
+# ionizing output per unit SFR: a library bracket between CB16 (BEAGLE) and BC03 STELIB (tengri). tengri's
+# stellar Z is weighted onto its nearest SSP node alone (`logzsol_scatter` 0.001 dex): Z 0.014 and 0.03 both
+# run at the 0.02 node and Z 0.001 at the 0.0004 node, while BEAGLE's CB16 grid has exact nodes. Z 0.004 is the
+# only metallicity on both grids, and there the ionizing output differs by −0.10 dex (ratio 0.80), the clean
+# library number.
 
 # %%
 N_ION_B = np.asarray(r_neb.galaxy_properties["N_ion"], float)
@@ -834,6 +862,21 @@ for lab, b, t in (("per photon", PER_PHOTON_B, PER_PHOTON_T), ("per SFR_10", PER
           f"{t.max():10.3e} {np.median(t / b):14.3f}")
 print(f"  Case B per photon {CASE_B_ERG:.3e} erg; BEAGLE median per photon / case B {np.median(PER_PHOTON_B) / CASE_B_ERG:.3f}, "
       f"tengri median per photon / case B {np.median(PER_PHOTON_T) / CASE_B_ERG:.3f}")
+
+# Per-SFR ratio = (ionizing-photon ratio) x (per-photon ratio), row by row; both SFRs are 10 M_sun/yr.
+# tengri's stellar Z snaps to its nearest SSP node (logzsol_scatter 0.001); BEAGLE's grid has exact nodes.
+print("§8c ionizing output by Z (1 Gyr history, 12 rows per Z): log10 photon rate, Q ratio = tengri/BEAGLE, "
+      "per-photon and per-SFR ratios")
+print(f"  {'Z':>6s} {'log Q tengri':>13s} {'log N BEAGLE':>13s} {'Q ratio':>8s} {'per photon':>11s} "
+      f"{'per SFR':>8s} {'product':>8s}")
+for z in NEB_Z:
+    idx = [i for i, (_, zz, _) in enumerate(NEB_ROWS) if zz == z]
+    q_t = float(np.median(T_LOG_QH[idx]))
+    n_b = float(np.median(N_ION_B[idx]))
+    q_ratio = 10.0 ** (q_t - n_b)
+    pp = float(np.median(PER_PHOTON_T[idx] / PER_PHOTON_B[idx]))
+    ps = float(np.median(PER_SFR_T[idx] / PER_SFR_B[idx]))
+    print(f"  {z:6.3f} {q_t:13.3f} {n_b:13.3f} {q_ratio:8.3f} {pp:11.3f} {ps:8.3f} {pp * q_ratio:8.3f}")
 
 # %% [markdown]
 # ### §8d Continuum in line-free windows
@@ -1097,6 +1140,21 @@ plt.show()
 print(f"§8f spectrum ratio at tauV_eff 1, 3600-7000 A (20 A bins): BEAGLE on/off median {np.median(b_on / b_off):.3f}, "
       f"tengri/BEAGLE on median {np.median(b_t / b_on):.3f}, tengri/BEAGLE off median {np.median(b_t / b_off):.3f}")
 
+# BEAGLE's own switch for the H II part of the birth-cloud depth, read from its DUST ATTENUATION extension.
+from astropy.io import fits  # noqa: E402
+
+
+def beagle_dust_column(run, column):
+    """One column of the DUST ATTENUATION extension in the run's results FITS, as float."""
+    path = beagle_run.workdir() / "results" / run.name / f"{run.name}.fits"
+    with fits.open(path) as hdul:
+        return np.asarray(hdul["DUST ATTENUATION"].data[column], float)
+
+
+for _label, _run in (("on", by_section("s8c_hiidust_on")[0]), ("off", by_section("s8c_hiidust_off")[0])):
+    print(f"§8f BEAGLE DUST ATTENUATION, {_label} run: tauV_HII_max {np.unique(beagle_dust_column(_run, 'tauV_HII_max'))}, "
+          f"tauV_HII_accounting {np.unique(beagle_dust_column(_run, 'tauV_HII_accounting'))}")
+
 # %% [markdown]
 # BEAGLE's on run has the lower Balmer decrement at every tauV_eff (3.11 against 3.26 at 0.3, 3.87 against 4.05
 # at 1, 5.27 against 5.52 at 2). This is BEAGLE's documented convention and not a physical effect: since v0.27
@@ -1120,7 +1178,7 @@ print(f"§8f spectrum ratio at tauV_eff 1, 3600-7000 A (20 A bins): BEAGLE on/of
 # BEAGLE's `LyC_f_esc` removes that fraction of the ionizing photons from the line emission. tengri's
 # `neb_fesc` scales every nebular amplitude, lines and continuum, by one common factor, so the line
 # ratios depend on f_esc only through that factor. The expected line ratio is 1 - f_esc for BEAGLE and
-# (1 - f_esc) / (1 + 0.597 f_esc) for tengri. The continuum column compares the light between 800 and 900 Å,
+# (1 - f_esc) / (1 + 0.597 f_esc) for tengri, the CIGALE form with alpha_1 / alpha_B = 0.597. The continuum column compares the light between 800 and 900 Å,
 # below the Lyman limit, relative to f_esc = 0.
 
 # %%
@@ -1147,6 +1205,20 @@ print(f"  {'f_esc':>5s} {'cont 800-900 A B [erg/s/Hz]':>28s} {'tengri':>12s} {'T
 for k, f in enumerate(FESC_VALS):
     print(f"  {f:5.2f} {CONT_B[k]:28.4e} {CONT_T[k]:12.4e} {CONT_T[k] / CONT_B[k]:8.3f}")
 
+
+def _linear_in_f(f, y):
+    """Least-squares line y = a + b f; returns (b, a, max residual over the largest value)."""
+    b, a = np.polyfit(f, y, 1)
+    return b, a, float(np.max(np.abs(y - (a + b * f))) / float(np.max(np.abs(y))))
+
+
+_slope_b, _icpt_b, _res_b = _linear_in_f(FESC_VALS, CONT_B)
+_slope_t, _icpt_t, _res_t = _linear_in_f(FESC_VALS, CONT_T)
+print("§8g 800-900 A mean L_nu, linear in f_esc: slope [erg/s/Hz per unit f], intercept [erg/s/Hz], "
+      "max residual / largest value")
+print(f"  BEAGLE  slope {_slope_b:.3e}  intercept {_icpt_b:.3e}  residual {_res_b:.1e}")
+print(f"  tengri  slope {_slope_t:.3e}  intercept {_icpt_t:.3e}  residual {_res_t:.1e}")
+
 fig, (ax_l, ax_c) = plt.subplots(1, 2, figsize=(9.5, 3.5))
 ax_l.plot(FESC_VALS, HB_B, "o", color="C0", ms=4, label=r"BEAGLE H$\beta$")
 ax_l.plot(FESC_VALS, HA_B, "^", color="C0", ms=4, mfc="none", label=r"BEAGLE H$\alpha$")
@@ -1170,21 +1242,18 @@ plt.show()
 
 # %% [markdown]
 # BEAGLE's H-beta and Hα fall exactly as 1 - f_esc (0.900, 0.700, 0.400). tengri's fall as
-# (1 - f_esc) / (1 + 0.597 f_esc), the form stated in `docs/model_reference/nebular.md`, and its printed values
-# match that form to 0.001 at each escape fraction (0.849, 0.594, 0.295). This is a convention: BEAGLE removes
-# photons from the lines, while tengri applies one factor that also scales the continuum, so its line ratios
-# leave the Balmer decrement unchanged.
+# (1 - f_esc) / (1 + 0.597 f_esc), and its printed values match that form to 0.001 at each escape fraction
+# (0.849, 0.594, 0.295). The line ratios differ because the two codes remove photons differently: BEAGLE
+# removes the ionizing photons from the lines, while tengri applies one factor that also scales the continuum,
+# so its Balmer decrement does not change.
 #
-# Below 912 Å the two codes keep different light at f_esc = 0. In tengri's gutkin16 build without dust the
-# nebular budget absorbs the Lyman continuum of every stellar age: the mean L_ν at 800–900 Å falls from 1.76e28
-# erg/s/Hz with the nebular emission off to 2.18e20 with gutkin16 at f_esc = 0. The docs give `'young'` as the
-# gutkin16 default for `lyc_reprocessed_by`, which applies only to two-component dust, and this model has none,
-# so the key does not appear in its summary. BEAGLE keeps 1.98e26 erg/s/Hz in the same window. Its treatment of
-# the Lyman continuum is an owner statement: the picket fence acts only on stars younger than 10 Myr, so older
-# stars keep theirs. The local BEAGLE tree does not document this, so it is not checked against BEAGLE source.
-# The difference is which ages' ionizing photons are reprocessed: a convention. At f_esc 0.1, 0.3 and 0.6 the
-# escaping continuum ratio tengri/BEAGLE is 0.585, 0.612 and 0.619, close to the 0.72 line ratio of §8e and
-# the 0.73 per-SFR ratio of §8c; the ionizing-output class, not isolated.
+# The 800–900 Å continuum is linear in f_esc in both codes (the largest residual, relative to the largest value, is 2e-8 for BEAGLE and 7e-10 for tengri). BEAGLE's slope is
+# 2.82e28 erg/s/Hz per unit f_esc, and its intercept 1.98e26 erg/s/Hz is the Lyman continuum of its older
+# stars, which it does not reprocess: its picket fence acts on stars younger than 10 Myr only. tengri's slope is
+# 1.76e28 and its intercept is 2.1e20, so it reprocesses the Lyman continuum of every stellar age. The escaping
+# continuum ratio tengri/BEAGLE is 0.585, 0.612 and 0.619 at f_esc 0.1, 0.3 and 0.6, close to the slope ratio of
+# 0.63 and to the 0.72 line ratio of §8e and the 0.73 per-SFR ratio of §8c. The convention is which ages' ionizing
+# photons are reprocessed; the ionizing-output class is not isolated.
 
 # %% [markdown]
 # ### §8h Constant 100 Myr: the origin of the UV-line gaps
@@ -1256,14 +1325,16 @@ save_fig("beagle_08h_const100.png")
 plt.show()
 
 # %% [markdown]
-# The gaps persist at 100 Myr. The He II 1640 and Si III] 1888 medians are 0.490 and 0.355 dex, the same as on the
-# 1 Gyr history to 0.001 dex, and the C III] 1908 maximum is 0.537 dex on both. The tengri ratios at 100 Myr equal the
-# raw table to 7.4e-15 dex at most, so tengri's gutkin16 line ratios do not depend on the constant history, and the
-# comparison reduces to BEAGLE's 100 Myr spectrum against the table. BEAGLE's four-line medians and maxima change by
-# 0.001 dex or less between 100 Myr and 1 Gyr, so the maximum age of a constant history is not the origin of the
-# He II 1640, Si III] 1888 or C III] 1908 gaps. Verdict: the gaps persist. The remaining difference is on BEAGLE's
-# side, its nebular template set against the public table, which this notebook does not isolate. The [O III] 5007
-# residual, 0.021 dex in the median, is in the same class.
+# The He II 1640 gap persists at 100 Myr. Its median is 0.490 dex, the same as on the 1 Gyr history to 0.001 dex,
+# and the C III] 1908 maximum is 0.537 dex on both. Si III] 1888 agrees with the table to 0.040 dex in the median
+# on both histories. The tengri ratios at 100 Myr equal the raw table to 7.4e-15 dex at most, so tengri's gutkin16
+# line ratios do not depend on the constant history, and the comparison reduces to BEAGLE's 100 Myr spectrum
+# against the table. BEAGLE's four-line medians and maxima change by 0.001 dex or less between 100 Myr and 1 Gyr,
+# so the age of a constant history is not the origin of the He II 1640 or C III] 1908 gaps. BEAGLE's line-to-H-beta
+# ratios are the same on both histories, so this test shows only that the gaps are not from the history alone.
+# Verdict: the He II 1640 and C III] 1908 gaps persist. The remaining difference is on BEAGLE's side, its nebular
+# template set against the public table, which this notebook does not isolate. The [O III] 5007 residual, 0.021 dex
+# in the median, is in the same class.
 
 # %% [markdown]
 # ### §8i Line evolution with age
@@ -1546,12 +1617,16 @@ for j, (u, zr) in enumerate(zip(ONLY_LOGU, ONLY_Z)):
           f"{0.1 * t_hb / B_HB_ONLY[j]:14.4f} {raw_hb:14.4e}")
 
 # %% [markdown]
-# The two normalizations are not one constant factor apart. The ratio is 0.97 to 0.98 at logU -3.5 and rises to 2.74
-# at logU -1.5 and Z 0. Tengri's H-beta falls by 0.17 dex across the logU range, as the raw grid does, while BEAGLE's
-# falls by 0.62 dex at Z 0. Tengri matches the raw grid at the nodes (9a), so the difference lies in how BEAGLE's
-# `agn_logU` drives the grid. The cause is not isolated; §13 lists it as a template-version candidate, since BEAGLE's
-# AGN templates carry the `C100_v100_h1_r3` tags in their file names. Applying a 10 % covering fraction on top of
-# `agn_lacc` would put every ratio at 0.10 to 0.27, so this comparison takes `agn_lacc` as the ionizing luminosity.
+# The two normalizations are not one constant factor apart. The ratio is 0.97 to 0.98 at logU -3.5 and rises
+# with logU, reaching 1.82 at logU -1.5 and Z -0.5 and 2.74 at logU -1.5 and Z 0, the largest value. Tengri's H-beta falls
+# by 0.17 dex across the logU range, as the raw grid does, while BEAGLE's falls by 0.62 dex at Z 0, so the difference
+# lies in BEAGLE's AGN templates and not in the grid interpolation (§9a). BEAGLE scales its AGN templates by
+# 10^(agn_lacc − 45) with no further covering factor: its H-beta equals its template interpolated in log Z to four
+# decimals over all 30 rows, so `agn_nlr_cf` 1.0 is the matching setting here. BEAGLE's AGN templates
+# (`nlr_*_v100_h1_r3`) match the public Feltre lines to 0.01 dex at logU -3.5, except C IV and N V (+0.5 to +1.2 dex
+# at every logU), and they diverge toward high logU: the H-beta slope is 0.60 dex against 0.17 dex at Z 0.014. The
+# class is template version (measured). Applying a 10 % covering fraction on top of `agn_lacc` would put every ratio
+# at 0.10 to 0.27, so this comparison takes `agn_lacc` as the ionizing luminosity.
 
 # %% [markdown]
 # ### §9c AGN-only line ratios
@@ -1605,11 +1680,11 @@ plt.show()
 # %% [markdown]
 # Hα agrees to 0.01 dex in all six combinations, [N II] to 0.04 dex and [O III]/H-beta to 0.05 dex. The [O II] and
 # [S II] differences reach 0.17 and 0.60 dex at logU -1.5 and Z -0.5, C IV reaches -1.12 dex at logU -1.5 and Z 0, and
-# He II 1640 and C III] reach 0.32 and 0.20 dex. The UV and low-ionization lines depend on the shape of the ionizing
-# spectrum, which the two codes drive differently, and BEAGLE's AGN templates carry a `C100_v100_h1_r3` release tag that
-# the public Feltre grid does not, so these differences are classed as a template-version candidate and not isolated
-# here. He II 4686 and [Ne V] 3426 are not in the Feltre table tengri reads, which holds 20 lines, while BEAGLE's AGN
-# output lists them: a line-set coverage difference.
+# He II 1640 and C III] reach 0.32 and 0.20 dex. C IV and N V are where BEAGLE's templates differ most: measured
+# against the public Feltre lines, BEAGLE's C IV and N V lie +0.5 to +1.2 dex high at every logU, so the C IV residual
+# is in the template class. The [O II] and [S II] differences are classed the same way, as a template-version
+# candidate and not isolated here. He II 4686 and [Ne V] 3426 are not in the Feltre table tengri reads, which holds
+# 20 lines, while BEAGLE's AGN output lists them: a line-set coverage difference.
 
 # %% [markdown]
 # ### §9d Mixed H II and NLR: BPT diagram
@@ -1763,11 +1838,13 @@ plt.show()
 
 # %% [markdown]
 # The optical windows agree. Above 3500 Å the median tengri/BEAGLE ratio is 0.99 to 1.01 and the AGN share agrees to
-# within 0.02. Below 3500 Å the ratio is 1.17 and 1.09, and the H II-only ratio is 1.21 and 1.12, so this excess is in the
-# H II part and not in the NLR. It is the stellar or nebular continuum; the library bracket and the nebular continuum are
-# not separated here. The AGN share below 3500 Å differs: at 1200 to 2000 Å it follows the C IV and He II differences of
-# 9c. At 2000 to 3500 Å, where tengri's Feltre table has no line, 40 % of the BEAGLE AGN light is outside its listed
-# lines (printed above), and tengri's NLR block returns lines only, so this is model physics.
+# within 0.02. Below 3500 Å the ratio is 1.17 and 1.09, and the H II-only ratio is 1.21 and 1.12, so this excess is in
+# the H II part and not in the NLR. It is the stellar or nebular continuum; the library bracket and the nebular
+# continuum are not separated here. The AGN share below 3500 Å differs: at 1200 to 2000 Å it follows the C IV and He II
+# differences of 9c. At 2000 to 3500 Å, where tengri's Feltre table has no line, 40 % of the BEAGLE AGN light is outside
+# its listed lines (printed above). Measured against BEAGLE's AGN templates, 27 % of that light is nebular continuum
+# (template `lumin_cont`) and 13 % is an Fe II 2400 blend that BEAGLE does not list. tengri's NLR block returns lines
+# only, so that continuum and blend are a model gap in tengri.
 
 # %% [markdown]
 # ## §12 IGM absorption
@@ -1855,9 +1932,9 @@ for label, sec_i, sec_n in (
 #
 # | difference | BEAGLE | tengri | class | size measured in this notebook |
 # |---|---|---|---|---|
-# | stellar template release | MILES-based `bc2003_hr_xmiless` | STELIB-based BC03 | library bracket | §1 window medians 0.72 to 1.07; §3 ratio 1.005 to 1.009 below 0.35 μm and 0.995 to 1.049 redward (tengri/BEAGLE) |
+# | stellar template release | MILES-based `bc2003_hr_xmiless` | STELIB-based BC03 | library bracket (optical and NIR); UV template difference, not isolated (rest UV) | §1 optical and NIR window medians 0.96 to 1.07, rest-UV 1500–2500 Å median 0.72 at log age 9; §3 ratio 1.005 to 1.009 below 0.35 μm and 0.995 to 1.049 redward (tengri/BEAGLE) |
 # | CB16 against BC03 inside BEAGLE | `cb_june16` | `bc03` (both BEAGLE) | library bracket | §1a window medians 0.84 to 1.20 |
-# | nebular templates against the public table | BEAGLE nebular templates, per age | gutkin16 public table, time-integrated, with analytic continuum | library bracket (ionizing output); line set otherwise | §8c H-beta per SFR_10 ratio 0.73 and per photon 0.99 (medians); §8a line medians 0.00 to 0.49 dex, He II 1640 the largest (not isolated here) |
+# | nebular templates against the public table | BEAGLE nebular templates, per age | gutkin16 public table, time-integrated, with analytic continuum | library bracket (ionizing output); line set otherwise | §8c per-SFR_10 ratio 0.73 and per-photon 0.99 (medians), photon-rate ratio 0.80 at Z 0.004 (−0.10 dex, the clean number); §8a line medians 0.00 to 0.49 dex, He II 1640 the largest (not isolated here) |
 # | continuum and Lyman-alpha | no continuum or Lyman-alpha in the public table | analytic free-free plus two-photon continuum; Case B Lyman-alpha | convention | §8d none/analytic window means 0.97 to 0.99; shape ratio 0.93 to 1.19 across windows and metallicities |
 # | line wavelengths | air above 2000 Å | vacuum | convention | matched at vacuum in every key; not measured separately |
 # | line luminosity units | L_sun in the HII EMISSION table, header unit erg/s | erg/s | convention | converted at ingestion with BEAGLE's L_sun; §8c uses the converted values |
@@ -1866,8 +1943,8 @@ for label, sec_i, sec_n in (
 # | v0.27 tau_BC split (HII dust) | `ACCOUNT FOR HII DUST` | no HII-dust term in the §4 and §5 runs | convention | not exercised here |
 # | template rebinning at the Lyman-alpha edge | native template sampling | `REBIN TEMPLATES = 10` on BEAGLE's side only | numerical | §12 z = 6 band: +0.002 native; with rebinning BEAGLE moves by -0.14 and the difference is +0.12 |
 # | Calzetti 1994 against 2000 | `Calzetti` (1994) | `calzetti` (2000) | convention | §4 depth ratio 2000/1994: 1.11 at 1200–2200 Å, 1.05 at 2200–5500 Å, 1.00 at 5500–12000 Å |
-# | Milky Way curve | Pei (1992) | CCM89 (`cardelli`) | convention | §4 depth ratio tengri/BEAGLE: 1.06 at 1500 Å, 0.94 at 10000 Å, 1.21 at 20000 Å |
-# | LMC and SMC curves | BEAGLE's measured LMC and SMC curves | Pei (1992) Drude sums | convention (BEAGLE side) | §4 depth ratio at 10000 Å: LMC 1.24, SMC 1.62; at 20000 Å: LMC 1.60, SMC 2.79 |
+# | Milky Way curve | BEAGLE's shipped Milky Way table | CCM89 (`cardelli`) | convention | §4 depth ratio tengri/BEAGLE: 1.06 at 1500 Å, 0.94 at 10000 Å, 1.21 at 20000 Å |
+# | LMC and SMC curves | BEAGLE's shipped table: 0.62 to 0.81 (LMC) and 0.36 to 0.62 (SMC) of the Pei (1992) Drude sums over 1 to 2 μm | Pei (1992) Drude sums | convention (BEAGLE side) | §4 depth ratio at 10000 Å: LMC 1.24, SMC 1.62; at 20000 Å: LMC 1.60, SMC 2.79 |
 # | CCWW13 full law | `ccww13_full` with the inclination law | not run | convention | not run here; the inclination law is not distributed with the public package |
 # | cosmology | Planck 2015 | Planck 2018 (`Planck18`, Setup) | convention | luminosity distance at z = 1: 6791.81 against 6791.27 Mpc, ratio 1.00008 (code cell below) |
 # | noise floor | sigma^2 += (0.02 y)^2 | `noise_frac_cal` | convention | not measured here |
@@ -1877,17 +1954,17 @@ for label, sec_i, sec_n in (
 # | specific SFR | `specific_sfr` relative to total formed mass | `recent_ssfr` episode | convention | not compared here |
 # | formation time | `formation_redshift` | `age_gyr` (age at z) | convention | not compared here |
 # | Hα EW per episode SFR | episode rate over 10 Myr, EW from BEAGLE line and continuum | episode rate over `timescale_myr`, same continuum window | library bracket (ionizing output) | §8e EW ratio 0.70 at log SFR 1 (0.68 to 0.73 on rows with BEAGLE EW above 10 Å); 1.16 at log SFR -1, not classified |
-# | dust inside H II regions | `ACCOUNT FOR HII DUST` on and off | no H II-region dust term; birth-cloud screen on all nebular light | convention | §8f Balmer-decrement position between off and on: -0.01, 0.03 and 0.16 at tauV 0.3, 1 and 2 |
-# | LyC escape form | `LyC_f_esc` removes that fraction of the lines | `neb_fesc` scales lines and continuum by one factor, (1 - f) / (1 + 0.597 f) | convention | §8g H-beta at f 0.1, 0.3, 0.6: tengri 0.849, 0.594, 0.295 against BEAGLE 0.900, 0.700, 0.400 |
+# | dust inside H II regions | `ACCOUNT FOR HII DUST` on and off (`tauV_HII_max` 0.135 on, 0 off) | no H II-region dust term; birth-cloud screen on all nebular light | convention | §8f Balmer-decrement position between off and on: -0.01, 0.03 and 0.16 at tauV 0.3, 1 and 2 |
+# | LyC escape form | `LyC_f_esc` removes that fraction of the lines | `neb_fesc` scales lines and continuum by one factor, (1 − f) / (1 + 0.597 f) (the CIGALE form) | convention | §8g H-beta at f 0.1, 0.3, 0.6: tengri 0.849, 0.594, 0.295 against BEAGLE 0.900, 0.700, 0.400 |
 # | ionizing photons below 912 Å at f_esc 0 | picket fence: only stars younger than 10 Myr reprocessed | all stellar ages reprocessed in the gutkin16 build without dust | convention | §8g mean L_ν at 800–900 Å: tengri 2.18e20 against BEAGLE 1.98e26 erg/s/Hz; escaping ratio 0.585 to 0.619 at f 0.1 to 0.6 |
-# | BEAGLE nebular templates against the public table, UV lines | BEAGLE's updated templates (README: "an updated version of the stellar population + photoionization models presented in Gutkin et al., 2016") | the published 2016 grid, time-integrated | template version (BEAGLE's updated templates vs the published grid) | §8h at 100 Myr: He II 1640 and Si III] 1888 medians 0.490 and 0.355 dex, C III] 1908 maximum 0.537 dex, the same as at 1 Gyr to 0.001 dex; tengri equals the table to 7.4e-15 dex |
+# | BEAGLE nebular templates against the public table, UV lines | BEAGLE's updated templates (README: "an updated version of the stellar population + photoionization models presented in Gutkin et al., 2016") | the published 2016 grid, time-integrated | template version (BEAGLE's updated templates vs the published grid) | §8h at 100 Myr: He II 1640 median 0.490 dex, Si III] 1888 0.040 dex, C III] 1908 maximum 0.537 dex, the same as at 1 Gyr to 0.001 dex; tengri equals the table to 7.4e-15 dex |
 # | line age dependence | age-resolved nebular templates | time-integrated table, no age axis | physics (BEAGLE side) | §8i [O III]/H-beta 3.400 at 3.2 Myr and 3.649 from 32 Myr on, tengri 3.327 at every age; EW ratio 0.95, 0.79 and 0.69 at 3.2 Myr, 10 Myr and 1 Gyr |
-# | NLR normalization against logU | BEAGLE `agn_logU` drives the Feltre grid; grid file names carry the `C100_v100_h1_r3` tags | Feltre grid at the same nodes (matches the raw grid to 1e-14 dex, §9a) | template version (candidate; cause not isolated) | §9b H-beta ratio tengri/BEAGLE 0.97 to 2.74 at cf 1.0 across logU -3.5 to -1.5; BEAGLE falls 0.62 dex across logU at Z 0 against tengri 0.17 dex |
-# | AGN covering fraction | BEAGLE states a 10 % covering fraction | `agn_nlr_cf` 1.0, with `agn_lacc` taken as the ionizing luminosity | convention | §9b with `agn_nlr_cf` 0.1 the ratio would be 0.10 to 0.27, so the 10 % statement is not reproduced by that key alone |
-# | AGN UV and low-ionization lines | BEAGLE's AGN templates (`v100` tags) | Feltre table lines only | template version (candidate) | §9c tengri minus BEAGLE at logU -1.5, Z 0: C IV -1.12, He II 1640 -0.32, C III] -0.20, [O II] 0.17, [S II] -0.60 dex; Hα 0.01, [N II] 0.04, [O III] 0.05 dex |
+# | NLR normalization against logU | `agn_logU` drives its AGN templates (`nlr_*_v100_h1_r3`), which match the public Feltre lines to 0.01 dex except C IV and N V | Feltre grid at the same nodes (matches the raw grid to 1e-14 dex, §9a) | template version (measured) | §9b H-beta ratio tengri/BEAGLE 0.97 to 2.74 at cf 1.0 across logU -3.5 to -1.5; BEAGLE falls 0.62 dex across logU at Z 0 against tengri 0.17 dex |
+# | AGN covering fraction | scales its templates by 10^(agn_lacc − 45) with no covering factor (H-beta equals its template to four decimals, 30 rows) | `agn_nlr_cf` 1.0, with `agn_lacc` taken as the ionizing luminosity | convention | §9b with `agn_nlr_cf` 0.1 the ratio would be 0.10 to 0.27, so the 10 % covering fraction is not applied |
+# | AGN UV and low-ionization lines | BEAGLE's AGN templates (`v100` tags) | Feltre table lines only | template version (measured for C IV and N V; candidate for the rest) | §9c tengri minus BEAGLE at logU -1.5, Z 0: C IV -1.12, He II 1640 -0.32, C III] -0.20, [O II] 0.17, [S II] -0.60 dex; Hα 0.01, [N II] 0.04, [O III] 0.05 dex |
 # | AGN line-set coverage | He II 4686 and [Ne V] 3426 in BEAGLE's AGN output | not in the Feltre table tengri reads (20 lines) | convention | §9c n/a for both in every combination |
 # | H II continuum below 3500 Å | BEAGLE H II part with the same episode | gutkin16 H II part with BC03 STELIB | library bracket (nebular continuum not separated) | §9e tengri/BEAGLE median 1.17 at 1200–2000 Å and 1.09 at 2000–3500 Å, H II-only 1.21 and 1.12; 0.99 and 1.00 above 3500 Å |
-# | AGN non-line light | BEAGLE's AGN output includes non-line light | NLR block returns lines only | convention | §9e non-line share of BEAGLE AGN light 0.04, 0.40, 0.03 and 0.06 in the four windows from 1200 to 7000 Å |
+# | AGN non-line light | BEAGLE's AGN output includes 27 % nebular continuum and 13 % an Fe II 2400 blend at 2000–3500 Å | NLR block returns lines only | model gap (tengri) | §9e non-line share of BEAGLE AGN light 0.04, 0.40, 0.03 and 0.06 in the four windows from 1200 to 7000 Å |
 # | BEAGLE-AGN, normalization | Feltre NLR at `agn_lacc`, line output | composable `nlr` block on the same grid | convention | §9a–§9e run with the BEAGLE AGN column; disc and torus are not built |
 
 # %%
@@ -1918,7 +1995,7 @@ print(f"L_sun: BEAGLE {beagle_driver.L_SUN_BEAGLE:.4e} erg/s, tengri {L_SUN:.4e}
 # | `attenuation_type` calzetti | `'law': 'calzetti'` | tengri is the 2000 curve, BEAGLE the 1994 curve (§4) |
 # | `attenuation_type` cf00 | `law_bc: 'power_law'`, `law_diff: 'power_law'` | the two-component pair is named together |
 # | `attenuation_type` ccww13_universal | `law_bc: 'power_law'`, `law_diff: 'chevallard13'` | `chevallard13` is accepted as `law_diff` only |
-# | `attenuation_type` mw | `'law': 'ccm89'` | BEAGLE's mw is Pei (1992) (§4) |
+# | `attenuation_type` mw | `'law': 'ccm89'` | BEAGLE's mw is its shipped table (§4) |
 # | `nebular_logU` | `neb={'type': 'gutkin16', 'logU': Uniform(-4.0, -1.0)}` | the table extent is -4 to -1 |
 # | `nebular_Z` | `neb={'type': 'gutkin16', 'logZ_gas': ...}` | log10(Z/Z☉) with Z☉ 0.0142; BEAGLE value + 0.031 |
 # | `nebular_xi` | `'xi_d'` | the table nodes are 0.1, 0.3 and 0.5 |
@@ -2048,8 +2125,7 @@ def tengri_at_beagle(gid):
     wave = np.asarray(pred.wave_rest)
     l_att = np.asarray(pred.rest_sed())
     l_free = np.asarray(dust_free.rest_sed())
-    ratio = np.interp(5500.0, wave, l_att / l_free)
-    a_v = -2.5 * np.log10(ratio)
+    a_v = -2.5 * np.log10(window_mean(wave, l_att, 5450.0, 5550.0) / window_mean(wave, l_free, 5450.0, 5550.0))
     props = pred.properties
     return {
         "beagle_names": beagle_names, "tengri_bands": tengri_bands, "fnu": fnu, "sig": sig,
@@ -2095,13 +2171,38 @@ for gid in CAPSTONE_IDS:
         lo, b, hi = beagle_triple  # 16, 50, 84 %
         print(f"  {label:<24s}{b:9.3f}{lo:9.3f}{hi:9.3f}{t:9.3f}{t - b:+9.3f}")
 
+
+def implied_young_fraction(a_v, tau_v, mu=0.4):
+    """Young-star share f with A_V = -2.5 log10[(1-f) e^(-mu tau) + f e^(-tau)], by bisection on [0, 1]."""
+    target = 10.0 ** (-0.4 * a_v)
+    lo, hi = 0.0, 1.0
+    for _ in range(80):
+        mid = 0.5 * (lo + hi)
+        if (1.0 - mid) * np.exp(-mu * tau_v) + mid * np.exp(-tau_v) > target:
+            lo = mid
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
+
+
+print("§15 young-star share f from A_V = -2.5 log10[(1-f) e^(-mu tau) + f e^(-tau)], mu 0.4, tau = tauV_eff median")
+print(f"  {'galaxy':>8s} {'tauV_eff':>9s} {'tauV_HII_max':>13s} {'A_V BEAGLE':>11s} {'A_V tengri':>11s} "
+      f"{'f BEAGLE':>9s} {'f tengri':>9s}")
+for gid in CAPSTONE_IDS:
+    tau_v = RESULTS[gid]["tau_v"]
+    hii_max = beagle_quantiles(gid, "DUST ATTENUATION", "tauV_HII_max")[1]
+    a_b = beagle_values(gid)["A_V [mag]"][1]
+    a_t = RESULTS[gid]["a_v"]
+    print(f"  {gid:8d} {tau_v:9.3f} {hii_max:13.3f} {a_b:11.3f} {a_t:11.3f} "
+          f"{implied_young_fraction(a_b, tau_v):9.3f} {implied_young_fraction(a_t, tau_v):9.3f}")
+
 # %% [markdown]
 # Each table is BEAGLE's posterior median with its 16 and 84 % range, and tengri's value at that median, so the difference is the model difference at fixed parameters. Tying the gas metallicity to the stellar one leaves every printed value unchanged at the printed precision; the first-band photometry moves by under 0.01 %. Four classes follow, one per quantity.
 #
 # - log M_star (surviving): the differences of 0.01 to 0.02 dex are a library bracket. The stellar set and the surviving-mass fraction of the two codes differ, and §1 gives the template spread that this inherits; the size of its share is not isolated here.
 # - log SFR_10: the differences of up to 0.02 dex are a library bracket too. Both codes use the same 10 Myr episode, so the residual comes from the template spread in §1 and not from the episode definition.
 # - tauV_eff: the difference is zero because tengri's `tau_v` input is set to BEAGLE's `tauV_eff` at the median. The row checks that the parameter reaches the model, and carries no physics.
-# - A_V: the differences of -0.28 to +0.10 mag are a convention. tengri's A_V is the flux-weighted attenuation at 5500 Å of the rest-frame SED against its dust-free version, and BEAGLE's column is its own definition, with its own split of the birth-cloud and diffuse components at 10 Myr. The spread runs in both directions across the four galaxies, so it is not a single offset.
+# - A_V: the differences of −0.28 to +0.10 mag come from the young-star dust. Both codes measure A_V over the 100 Å window at 5500 Å against the dust-free SED. For 1826 (BEAGLE median tauV_HII_max 0.83, §8f) the +0.10 mag is BEAGLE applying only the H I part of the birth-cloud depth externally, so BEAGLE's young stars carry the smaller share of the V light: implied young-star fraction 0.10 against 0.24. For 79, 7837 and 15775 tengri's young stars carry the smaller share: 0.68 against 0.62, 0.22 against 0.20 and 0.64 against 0.51 (BEAGLE against tengri). The cause of that smaller share is not isolated here.
 
 # %%
 def beagle_sed_observed(gid, z):
@@ -2191,7 +2292,7 @@ plt.show()
 # | section | quantity | agreement measured | class |
 # |---|---|---|---|
 # | unit conversion | bolometric round trip | rel_err 3.1e-6 | numerical check |
-# | §1 | SSP window medians, tengri/BEAGLE | 0.72 to 1.07 | library bracket |
+# | §1 | SSP window medians, tengri/BEAGLE: optical and NIR; rest UV 1500–2500 Å at log age 9 | 0.96 to 1.07; 0.72 | library bracket; UV template difference (not isolated) |
 # | §1a | CB16 against BC03 inside BEAGLE, window medians | 0.84 to 1.20 | library bracket |
 # | §2 | SFR_10 and SFR_100, 10 Myr episode at tau 0.1 Gyr | 1.054 and 0.948 | numerical (tengri history grid) |
 # | §2 | M_tot | 1.000 at each tau | agreement |
@@ -2203,23 +2304,27 @@ plt.show()
 # | §5 | CF00 attenuation A_1500 and A_V | up to 0.039 and 0.016 mag | inherits the §3 bracket |
 # | §8a | Hα/H-beta, median and max | 0.000 and 0.002 dex | agreement |
 # | §8a | [O III] 5007/H-beta, median and max | 0.021 and 0.238 dex | not classified (BEAGLE drive, inferred) |
-# | §8a | He II 1640 and Si III] 1888, median | 0.49 and 0.36 dex | not classified (not isolated) |
+# | §8a | He II 1640 and Si III] 1888, median | 0.49 and 0.04 dex | He II: consistent with BEAGLE's updated templates, not proven; Si III] 1888: agreement |
+# | §8a | He II 1640 gap by Z, log10(BEAGLE/tengri), Z 0.001, 0.004, 0.014, 0.03 | −0.13, +0.04, +0.98, +0.87 dex | consistent with BEAGLE's updated templates (not proven) |
+# | §8a | [O III] 5007 gap by Z, same order | −0.01, +0.00, +0.05, +0.13 dex | not classified (BEAGLE drive, inferred) |
 # | §8c | H-beta per photon and per SFR_10, median | 0.99 and 0.73 | agreement (per photon); library bracket (per SFR) |
+# | §8c | photon-rate ratio tengri/BEAGLE, Z 0.001, 0.004, 0.014, 0.03 | 0.78, 0.80, 0.64, 0.75 (−0.10 dex at 0.004) | library bracket |
 # | §8d | continuum shape, window ratios | 0.93 to 1.19 | library bracket |
 # | §8e | Hα EW ratio, 10 Myr episode at log SFR 1 | 0.70 (0.68 to 0.73 across rows above 10 Å) | library bracket (ionizing output) |
 # | §8f | Balmer-decrement position between off and on, tauV 0.3, 1, 2 | -0.01, 0.03, 0.16 | convention |
 # | §8g | H-beta at f_esc 0.1, 0.3, 0.6, tengri against BEAGLE | 0.849, 0.594, 0.295 against 0.900, 0.700, 0.400 | convention (escape form) |
-# | §8g | mean L_ν at 800–900 Å, f_esc 0 | 2.18e20 against 1.98e26 erg/s/Hz | convention (ages reprocessed) |
-# | §8h | He II 1640 and Si III] 1888 medians at 100 Myr; C III] 1908 maximum | 0.490, 0.355 dex; 0.537 dex | template version |
+# | §8g | mean L_ν at 800–900 Å, f_esc 0 | 2.18e20 against 1.98e26 erg/s/Hz | convention (picket fence, stars under 10 Myr) |
+# | §8g | slope of 800–900 Å L_ν per unit f_esc, BEAGLE and tengri | 2.82e28 and 1.76e28 erg/s/Hz | convention (ages reprocessed) |
+# | §8h | He II 1640 and Si III] 1888 medians at 100 Myr; C III] 1908 maximum | 0.490, 0.040 dex; 0.537 dex | template version (He II, C III]) |
 # | §8i | [O III]/H-beta at saturated ages; EW ratio at 3.2 Myr, 10 Myr, 1 Gyr | 0.04 dex; 0.95, 0.79, 0.69 | physics (BEAGLE side) |
 # | §9 | AGN anchor node, and H-beta linear in L_acc | 1.0000 and 0.1000 | normalization and wiring only |
-# | §9b | AGN-only H-beta, tengri/BEAGLE at cf 1.0, logU -3.5 to -1.5 | 0.97 to 2.74 | template version (candidate) |
+# | §9b | AGN-only H-beta, tengri/BEAGLE at cf 1.0, logU -3.5 to -1.5 | 0.97 to 2.74 | template version (measured) |
 # | §9b | the same ratio with `agn_nlr_cf` 0.1 | 0.10 to 0.27 | convention |
-# | §9c | UV and low-ionization lines, tengri minus BEAGLE, logU -1.5 Z 0 | C IV -1.12, He II 1640 -0.32, C III] -0.20, [O II] 0.17, [S II] -0.60 dex | template version (candidate) |
+# | §9c | UV and low-ionization lines, tengri minus BEAGLE, logU -1.5 Z 0 | C IV -1.12, He II 1640 -0.32, C III] -0.20, [O II] 0.17, [S II] -0.60 dex | template version (measured for C IV and N V; candidate for the rest) |
 # | §9c | Hα, [N II] and [O III] against BEAGLE, all six combinations | 0.01, 0.04, 0.05 dex | agreement |
 # | §9e | tengri/BEAGLE median, 1200–2000 and 2000–3500 Å | 1.17 and 1.09 | library bracket (H II continuum) |
 # | §9e | tengri/BEAGLE median, 3500–5500 and 5500–7000 Å; NLR share agreement | 0.99 and 1.00; within 0.02 | agreement |
-# | §9e | BEAGLE non-line share of AGN light, 2000–3500 Å | 0.40 | convention |
+# | §9e | BEAGLE non-line share of AGN light, 2000–3500 Å | 0.40 (27 % continuum, 13 % Fe II 2400) | model gap (tengri) |
 # | §12 | IGM transmission, bands away from the steps | max 0.0002 | agreement |
 # | §12 | Lyman-alpha band at z = 6, native and rebinned | +0.002 and +0.12 | numerical |
 # | §13 | luminosity distance at z = 1, Planck 2015 against 2018 | ratio 1.00008 | convention |
@@ -2227,7 +2332,8 @@ plt.show()
 # | §15 | log M_star (surviving), four capstone galaxies | -0.012 to -0.020 dex | library bracket |
 # | §15 | log SFR_10, four capstone galaxies | -0.001 to +0.016 dex | library bracket |
 # | §15 | tauV_eff, four capstone galaxies | 0.000 | parameter mapping (set by construction) |
-# | §15 | A_V, four capstone galaxies | -0.28 to +0.10 mag | convention |
+# | §15 | A_V, four capstone galaxies | −0.28 to +0.10 mag | young-star dust share (1826: BEAGLE H I-only external screen; 79, 7837, 15775: smaller tengri young share) |
+# | §15 | implied young-star fraction f, BEAGLE/tengri, 1826, 79, 7837, 15775 | 0.10/0.24, 0.68/0.62, 0.22/0.20, 0.64/0.51 | cause not isolated |
 #
 # On the stellar side the two codes agree in the rest-frame ultraviolet to 1 % and in normalization, age and
 # star formation history at the level this notebook tests; redward of 0.35 μm they differ by up to 5 %, within the
@@ -2237,9 +2343,9 @@ plt.show()
 #
 # On the nebular side the strong lines agree (Hα/H-beta to 0.002 dex, the other strong lines to 0.02 dex in the
 # median), and the Hα equivalent width and the ionizing output both sit near 0.7 of BEAGLE's per unit star
-# formation rate, a library bracket. The UV and low-ionization lines do not agree. He II 1640, Si III] 1888 and
-# C III] 1908 keep their gaps at a constant 100 Myr history, which points to BEAGLE's updated nebular templates
-# rather than to the age of the history. BEAGLE's nebular templates and the public 2016 grid differ, so this is a
+# formation rate, a library bracket. The UV and low-ionization lines do not agree. He II 1640 and
+# C III] 1908 keep their gaps on a constant 100 Myr history, which points to BEAGLE's updated nebular templates
+# rather than to the age of the history. Si III] 1888 agrees to 0.04 dex. BEAGLE's nebular templates and the public 2016 grid differ, so this is a
 # template-version class, not a tengri defect. The Lyman-continuum split by stellar age is a convention. The
 # AGN normalization does not follow the same function of logU in the two codes, with a ratio from 0.97 to 2.74;
 # the AGN line ratios match in Hα, [N II] and [O III] but not in C IV, He II or [O II].
