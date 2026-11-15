@@ -55,6 +55,8 @@ EXTRA_KINDS = (
     "spec_dense_lines_fitted",
     "spec_student_t_cal",
     "spec_floor_cal",
+    "spec_floor_lines",
+    "spec_floor_cal_lines",
     "spec_student_t_lines_fitted",
     "spec_student_t_dense",
     "spec_floor_banded",
@@ -183,6 +185,10 @@ def fitter_of(kind: str) -> Fitter:
         return _spectroscopy_fitter("student_t", covariance="dense", eline="fitted")
     if kind == "spec_student_t_lines_fitted":
         return _spectroscopy_fitter("student_t", eline="fitted")
+    if kind == "spec_floor_lines":
+        return _spectroscopy_fitter("floor", eline="marginalized")
+    if kind == "spec_floor_cal_lines":
+        return _spectroscopy_fitter("floor", eline="marginalized", calibration_marginalize=True)
     if kind == "spec_floor_cal":
         return _spectroscopy_fitter("floor", calibration_marginalize=True)
     if kind == "spec_student_t_cal":

@@ -11,6 +11,8 @@ marginalization primitive adds or removes a constant.
 
 from __future__ import annotations
 
+from typing import cast
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -49,6 +51,7 @@ __all__ = [
     "eline_flat_marginal_term",
     "eline_model_marginal_term",
     "fitted_line_model",
+    "floored_noise",
     "gaussian_constant",
     "student_t_term",
 ]
@@ -94,7 +97,7 @@ def correlated_term(predicted, obs, cov_inv, chol_data, chol_offsets, presence=N
         diff = jnp.where(presence > 0, diff, 0.0)
     if chol_data is None:
         return -0.5 * (diff @ cov_inv @ diff)
-    factor = BandedMatrix(offsets=np.asarray(chol_offsets, dtype=int), data=chol_data)
+    factor = _banded_factor(chol_data, chol_offsets)
     whitened = banded_forward_substitution(factor, diff)
     return -0.5 * jnp.dot(whitened, whitened)
 
@@ -150,6 +153,98 @@ def _segments_or_zeros(segments, wavelength):
     return jnp.zeros(jnp.shape(wavelength)[0], dtype=jnp.int32)
 
 
+def floored_noise(model_flux, err, chol_data, chol_offsets, f_cal):
+    """The noise a marginal whitens with once a calibration floor is added.
+
+    Convention: the floor is scaled by ``m0``, the model BEFORE the linear nuisance terms,
+    that is the spectrum the calibration polynomial multiplies and the line amplitudes are
+    added to, not the calibrated or line-added spectrum. The noise covariance is
+    ``N = diag(sigma^2 + (f_cal * m0)^2)``, or ``C + diag((f_cal * m0)^2)`` for a pixel
+    covariance ``C``. ``N`` depends on ``m0``, so the marginal's ``ln det N`` is part of the
+    value and of its gradient; the marginal over the nuisance coefficients stays exact once
+    ``N`` is fixed.
+
+    Parameters
+    ----------
+    model_flux : array_like, shape (n_pix,)
+        ``m0``, the model before the nuisance terms [flux units].
+    err : array_like, shape (n_pix,)
+        Measurement uncertainty [flux units].
+    chol_data, chol_offsets
+        Banded lower Cholesky factor of the pixel covariance, or ``None`` for a diagonal one.
+    f_cal : float or None
+        Fractional calibration floor [dimensionless]; ``None`` or zero adds no floor.
+
+    Returns
+    -------
+    tuple
+        ``(err, chol_data, chol_offsets)`` for the marginal primitive. A diagonal ``N`` is an
+        error vector; a covariance is refactored and returned as a full-width banded factor.
+
+    Notes
+    -----
+    **JIT-compatible**: yes. A covariance is refactored on every evaluation (``O(n^3)``).
+    """
+    if f_cal is None or (isinstance(f_cal, int | float) and f_cal == 0.0):
+        return err, chol_data, chol_offsets
+    if chol_data is None:
+        from tengri.observation.noise import compute_effective_noise
+
+        return compute_effective_noise(err, model_flux, f_cal), None, None
+    cov = dense_covariance(None, chol_data, chol_offsets) + jnp.diag((f_cal * model_flux) ** 2)
+    lower = jnp.linalg.cholesky(cov)
+    n = lower.shape[0]
+    rows = jnp.arange(n)[None, :]
+    lag = jnp.arange(n)[:, None]
+    cols = rows - lag
+    bands = jnp.where(cols >= 0, lower[rows, jnp.clip(cols, 0)], 0.0)
+    return err, bands, tuple(-k for k in range(n))
+
+
+def _banded_factor(chol_data, chol_offsets) -> BandedMatrix:
+    """The banded Cholesky factor as the primitive's ``BandedMatrix``."""
+    return BandedMatrix(cast(jnp.ndarray, np.asarray(chol_offsets, dtype=int)), chol_data)
+
+
+def _model_prior_inputs(log_line_lums, match_index, matched, line_wavelengths, prior_inputs):
+    """The inputs of the model-centered line prior, refused by name when one is missing."""
+    missing = [
+        name
+        for name, value in (
+            ("log_line_lums", log_line_lums),
+            ("match_index", match_index),
+            ("matched", matched),
+            ("line_wavelengths", line_wavelengths),
+            ("prior_inputs", prior_inputs),
+        )
+        if value is None
+    ]
+    if missing:
+        raise ValueError(f"the model-centered line prior needs {', '.join(missing)}")
+    return log_line_lums, match_index, matched, line_wavelengths, prior_inputs
+
+
+def _model_prior(
+    log_line_lums, match_index, matched, line_wavelengths, prior_inputs, prior_width_dex
+):
+    """The model-centered line prior, with its inputs checked."""
+    lums, index, flags, wavelengths, inputs = _model_prior_inputs(
+        log_line_lums, match_index, matched, line_wavelengths, prior_inputs
+    )
+    redshift, dl_cm, aperture_frac, transmission = inputs
+    return model_line_prior(
+        lums,
+        index,
+        flags,
+        wavelengths,
+        redshift,
+        dl_cm,
+        aperture_frac,
+        prior_width_dex,
+        transmission=transmission,
+    )
+
+
 def calibration_marginal_term(
     model_flux,
     obs,
@@ -166,8 +261,18 @@ def calibration_marginal_term(
     has_q=False,
     chol_data=None,
     chol_offsets=None,
+    f_cal=None,
 ):
-    """Marginal log-likelihood with the Chebyshev calibration polynomial integrated out."""
+    """Marginal log-likelihood with the Chebyshev calibration polynomial integrated out.
+
+    The calibration floor ``f_cal`` is scaled by ``model_flux``, the model before the linear
+    nuisance terms (``m0``), not by the calibrated or line-added spectrum: the noise is
+    ``N = diag(err^2 + (f_cal * m0)^2)``, or ``C + diag((f_cal * m0)^2)`` for a pixel
+    covariance. ``N`` is fixed at ``m0`` and the nuisance coefficients are integrated out
+    exactly, so ``ln det N`` is part of the value and of its gradient (see
+    :func:`floored_noise`).
+    """
+    err, chol_data, chol_offsets = floored_noise(model_flux, err, chol_data, chol_offsets, f_cal)
     if n_segments > 0 or cal_prior != "gaussian" or has_q:
         return marginalize_calibration_segments(
             model_flux,
@@ -209,6 +314,7 @@ def eline_flat_marginal_term(
     pix_mask=None,
     chol_data=None,
     chol_offsets=None,
+    f_cal=None,
 ):
     """Normalized marginal log-likelihood under a zero-mean Gaussian line prior.
 
@@ -220,7 +326,15 @@ def eline_flat_marginal_term(
     width is ``Spectroscopy.eline_prior_sigma`` (default 100), the same in the batched path.
     The value is the full normalized log-density: the primitive's Gaussian constant is
     removed here, once.
+
+    The calibration floor ``f_cal`` is scaled by ``model_flux``, the model before the linear
+    nuisance terms (``m0``), not by the calibrated or line-added spectrum: the noise is
+    ``N = diag(err^2 + (f_cal * m0)^2)``, or ``C + diag((f_cal * m0)^2)`` for a pixel
+    covariance. ``N`` is fixed at ``m0`` and the nuisance coefficients are integrated out
+    exactly, so ``ln det N`` is part of the value and of its gradient (see
+    :func:`floored_noise`).
     """
+    err, chol_data, chol_offsets = floored_noise(model_flux, err, chol_data, chol_offsets, f_cal)
     ln_l_marg, _a_hat, _a_cov = marginalize_emission_lines(
         residual=obs - model_flux,
         noise=err,
@@ -246,12 +360,21 @@ def eline_cloudy_marginal_term(
     prior_width_dex,
     chol_data=None,
     chol_offsets=None,
+    f_cal=None,
 ):
     """Normalized marginal log-likelihood with line amplitudes under the Cloudy-ratio prior.
 
     The prior is Gaussian per line, with the Cloudy ratio as mean and its scatter as width, so
     the marginal is the flat-prior assembly on the model shifted by the prior mean.
+
+    The calibration floor ``f_cal`` is scaled by ``model_flux``, the model before the linear
+    nuisance terms (``m0``), not by the calibrated or line-added spectrum: the noise is
+    ``N = diag(err^2 + (f_cal * m0)^2)``, or ``C + diag((f_cal * m0)^2)`` for a pixel
+    covariance. ``N`` is fixed at ``m0`` and the nuisance coefficients are integrated out
+    exactly, so ``ln det N`` is part of the value and of its gradient (see
+    :func:`floored_noise`).
     """
+    err, chol_data, chol_offsets = floored_noise(model_flux, err, chol_data, chol_offsets, f_cal)
     from tengri.observation.eline_priors import cloudy_line_priors
 
     means, sigmas = cloudy_line_priors(
@@ -285,32 +408,29 @@ def eline_model_marginal_term(
     prior_width_dex,
     chol_data=None,
     chol_offsets=None,
+    f_cal=None,
 ):
-    """Marginal log-likelihood with line amplitudes centered on the model's own lines."""
-    redshift, dl_cm, aperture_frac, transmission = prior_inputs
-    prior = model_line_prior(
-        log_line_lums,
-        match_index,
-        matched,
-        line_wavelengths,
-        redshift,
-        dl_cm,
-        aperture_frac,
-        prior_width_dex,
-        transmission=transmission,
+    """Marginal log-likelihood with line amplitudes centered on the model's own lines.
+
+    The calibration floor ``f_cal`` is scaled by ``model_flux``, the model before the linear
+    nuisance terms (``m0``), not by the calibrated or line-added spectrum: the noise is
+    ``N = diag(err^2 + (f_cal * m0)^2)``, or ``C + diag((f_cal * m0)^2)`` for a pixel
+    covariance. ``N`` is fixed at ``m0`` and the nuisance coefficients are integrated out
+    exactly, so ``ln det N`` is part of the value and of its gradient (see
+    :func:`floored_noise`).
+    """
+    err, chol_data, chol_offsets = floored_noise(model_flux, err, chol_data, chol_offsets, f_cal)
+    prior = _model_prior(
+        log_line_lums, match_index, matched, line_wavelengths, prior_inputs, prior_width_dex
     )
     noise = err if chol_data is None else chol_data[0]
-    whitening = (
-        {"sigma": err}
-        if chol_data is None
-        else {"chol_lower": BandedMatrix(np.asarray(chol_offsets, dtype=int), chol_data)}
-    )
     unit = unit_model_line_prior(design, prior, noise=noise)
     result = marginalize_linear_nuisance(
         obs,
         model_flux,
         unit.design,
-        **whitening,
+        sigma=err if chol_data is None else None,
+        chol_lower=None if chol_data is None else _banded_factor(chol_data, chol_offsets),
         prior_mean=unit.prior_mean,
         prior_precision=unit.prior_precision,
         scale=unit.scale,
@@ -399,29 +519,32 @@ def calibration_eline_marginal_term(
     has_q=False,
     chol_data=None,
     chol_offsets=None,
+    f_cal=None,
 ):
-    """Joint marginal over the calibration polynomial and the line amplitudes."""
+    """Joint marginal over the calibration polynomial and the line amplitudes.
+
+    The calibration floor ``f_cal`` is scaled by ``model_flux``, the model before the linear
+    nuisance terms (``m0``), not by the calibrated or line-added spectrum: the noise is
+    ``N = diag(err^2 + (f_cal * m0)^2)``, or ``C + diag((f_cal * m0)^2)`` for a pixel
+    covariance. ``N`` is fixed at ``m0`` and the nuisance coefficients are integrated out
+    exactly, so ``ln det N`` is part of the value and of its gradient (see
+    :func:`floored_noise`).
+    """
+    err, chol_data, chol_offsets = floored_noise(model_flux, err, chol_data, chol_offsets, f_cal)
     params = params or {}
     if n_segments > 0 or cal_prior != "gaussian" or has_q:
         err_f = jnp.maximum(err, _representable_floor(_ERR_FLOOR))
         noise = err_f if chol_data is None else chol_data[0]
         if prior_type == "model":
-            redshift, dl_cm, aperture_frac, transmission = prior_inputs
-            line = unit_model_line_prior(
-                design,
-                model_line_prior(
-                    log_line_lums,
-                    match_index,
-                    matched,
-                    line_wavelengths,
-                    redshift,
-                    dl_cm,
-                    aperture_frac,
-                    prior_width_dex,
-                    transmission=transmission,
-                ),
-                noise=noise,
+            model_prior = _model_prior(
+                log_line_lums,
+                match_index,
+                matched,
+                line_wavelengths,
+                prior_inputs,
+                prior_width_dex,
             )
+            line = unit_model_line_prior(design, model_prior, noise=noise)
         else:
             line_mean, line_width = _calibration_line_prior(
                 prior_type, params, design, line_prior_sigma, line_wavelengths, prior_width_dex
@@ -451,19 +574,10 @@ def calibration_eline_marginal_term(
         whitening = {"sigma": sigma}
     else:
         sigma = chol_data[0]
-        whitening = {"chol_lower": BandedMatrix(np.asarray(chol_offsets, dtype=int), chol_data)}
+        whitening = {"chol_lower": _banded_factor(chol_data, chol_offsets)}
     if prior_type == "model":
-        redshift, dl_cm, aperture_frac, transmission = prior_inputs
-        model_prior = model_line_prior(
-            log_line_lums,
-            match_index,
-            matched,
-            line_wavelengths,
-            redshift,
-            dl_cm,
-            aperture_frac,
-            prior_width_dex,
-            transmission=transmission,
+        model_prior = _model_prior(
+            log_line_lums, match_index, matched, line_wavelengths, prior_inputs, prior_width_dex
         )
         line = unit_model_line_prior(design, model_prior, noise=sigma)
     else:

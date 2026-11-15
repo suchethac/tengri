@@ -305,6 +305,13 @@ def _f_cal(preds, noise):
     return 0.0
 
 
+def _floor(preds, noise):
+    """The calibration floor a marginal whitens with, or ``None`` when there is none."""
+    if noise.student_t and noise.dof is None:
+        return _f_cal(preds, noise)
+    return None
+
+
 def _has_mask(data):
     return "data_mask" in data
 
@@ -522,7 +529,8 @@ def _spectrum_norm(data, noise):
 
 
 def _marginal_active(data, noise):
-    return _is_spec(noise) and not _has_mask(data) and not noise.student_t
+    heavy_tailed = noise.student_t and noise.dof is not None
+    return _is_spec(noise) and not _has_mask(data) and not heavy_tailed
 
 
 def _lines_marginalized(noise):
@@ -555,6 +563,7 @@ def _calibration_loglik(preds, data, noise):
         has_q=cal.has_q,
         chol_data=chol,
         chol_offsets=offsets,
+        f_cal=_floor(preds, noise),
     )
 
 
@@ -588,6 +597,7 @@ def _lines_loglik(preds, data, noise):
             prior_width_dex=lines.prior_width_dex,
             chol_data=chol,
             chol_offsets=offsets,
+            f_cal=_floor(preds, noise),
         )
     if lines.prior_type == "model":
         return eline_model_marginal_term(
@@ -603,6 +613,7 @@ def _lines_loglik(preds, data, noise):
             prior_width_dex=lines.prior_width_dex,
             chol_data=chol,
             chol_offsets=offsets,
+            f_cal=_floor(preds, noise),
         )
     return eline_flat_marginal_term(
         model,
@@ -612,6 +623,7 @@ def _lines_loglik(preds, data, noise):
         prior_variance=_flat_variance(lines),
         chol_data=chol,
         chol_offsets=offsets,
+        f_cal=_floor(preds, noise),
     )
 
 
@@ -650,6 +662,7 @@ def _calibration_lines_loglik(preds, data, noise):
         has_q=cal.has_q,
         chol_data=chol,
         chol_offsets=offsets,
+        f_cal=_floor(preds, noise),
     )
 
 
@@ -839,16 +852,7 @@ def _refuse_unscorable(noise: NoiseSpec) -> None:
     marginalized = noise.calibration is not None or (
         lines is not None and lines.mode == "marginalized"
     )
-    if noise.student_t and marginalized and noise.dof is None:
-        raise NotImplementedError(
-            "A free noise_frac_cal (calibration floor) cannot be combined with "
-            "calibration_marginalize=True or eline_mode='marginalized': the floor scales with "
-            "the model, and which model (before or after the polynomial and the line "
-            "amplitudes) is a convention the batched path does not define. Fix "
-            "noise_frac_cal at zero, or fit the nuisance coefficients explicitly "
-            "(calibration_order > 0 with calibration_marginalize=False, eline_mode='fitted')."
-        )
-    if noise.student_t and marginalized:
+    if noise.student_t and marginalized and noise.dof is not None:
         raise NotImplementedError(
             "A Student-t noise_dof cannot be combined with calibration_marginalize=True or "
             "eline_mode='marginalized': the marginal has no closed form under heavy-tailed "

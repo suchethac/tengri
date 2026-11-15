@@ -49,6 +49,20 @@ __all__ = [
 # ─────────────────────────────────────────────────────────────────────
 
 
+def _floor_of(name, params):
+    """The calibration floor an adapter reads from ``params``, or ``None`` without one."""
+    if name is None:
+        return None
+    return 0.0 if params is None else params.get(name, 0.0)
+
+
+def _log_q(params):
+    """The calibration-kernel width parameter ``cal_log_q``, refused by name when absent."""
+    if params is None or "cal_log_q" not in params:
+        raise KeyError("cal_log_q: a calibration prior with a free width needs it in params")
+    return params["cal_log_q"]
+
+
 def _resolve_chol(chol_data, chol_key, data_args):
     """Return the banded factor bands read through ``data_args``, or ``None`` without a factor."""
     if chol_data is None:
@@ -129,6 +143,7 @@ class CalibrationMarginalizedLikelihood:
     chol_data: jnp.ndarray | None = None
     chol_offsets: tuple[int, ...] | None = None
     chol_key: str | None = None
+    f_cal_param: str | None = None
 
     def log_prob(
         self,
@@ -148,10 +163,11 @@ class CalibrationMarginalizedLikelihood:
             segments=self.segments,
             n_segments=self.n_segments,
             cal_prior=self.cal_prior,
-            log_q=params["cal_log_q"] if self.has_q else None,
+            log_q=_log_q(params) if self.has_q else None,
             q_window=self.q_window,
             has_q=self.has_q,
             chol_data=_resolve_chol(self.chol_data, self.chol_key, data_args),
+            f_cal=_floor_of(self.f_cal_param, params),
             chol_offsets=self.chol_offsets,
         )
 
@@ -186,6 +202,7 @@ _CALIBRATION_MARGINALIZED_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
     "chol_data": shape("banded factor bands; only their shape fixes the program"),
     "chol_offsets": content("diagonal offsets of the factor are static program structure"),
     "chol_key": content("data_args routing key changes which traced input is read"),
+    "f_cal_param": content("routing to a free calibration floor changes the graph"),
 }
 
 
@@ -262,6 +279,7 @@ class ELineMarginalizedLikelihood:
     chol_data: jnp.ndarray | None = None
     chol_offsets: tuple[int, ...] | None = None
     chol_key: str | None = None
+    f_cal_param: str | None = None
 
     def __post_init__(self) -> None:
         # Exactly one of (static design matrix) | (per-call builder)
@@ -316,6 +334,7 @@ class ELineMarginalizedLikelihood:
             prior_sigma=self.prior_sigma,
             pix_mask=pix_mask,
             chol_data=_resolve_chol(self.chol_data, self.chol_key, data_args),
+            f_cal=_floor_of(self.f_cal_param, params),
             chol_offsets=self.chol_offsets,
         )
 
@@ -356,6 +375,7 @@ _ELINE_MARGINALIZED_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
     "chol_data": shape("banded factor bands; only their shape fixes the program"),
     "chol_offsets": content("diagonal offsets of the factor are static program structure"),
     "chol_key": content("data_args routing key changes which traced input is read"),
+    "f_cal_param": content("routing to a free calibration floor changes the graph"),
 }
 
 
@@ -415,6 +435,7 @@ class CloudyELineMarginalizedLikelihood:
     chol_data: jnp.ndarray | None = None
     chol_offsets: tuple[int, ...] | None = None
     chol_key: str | None = None
+    f_cal_param: str | None = None
 
     def log_prob(
         self,
@@ -436,6 +457,7 @@ class CloudyELineMarginalizedLikelihood:
             line_wavelengths=self.line_wavelengths,
             prior_width_dex=self.prior_width_dex,
             chol_data=_resolve_chol(self.chol_data, self.chol_key, data_args),
+            f_cal=_floor_of(self.f_cal_param, params),
             chol_offsets=self.chol_offsets,
         )
 
@@ -470,6 +492,7 @@ _CLOUDY_ELINE_MARGINALIZED_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
     "chol_data": shape("banded factor bands; only their shape fixes the program"),
     "chol_offsets": content("diagonal offsets of the factor are static program structure"),
     "chol_key": content("data_args routing key changes which traced input is read"),
+    "f_cal_param": content("routing to a free calibration floor changes the graph"),
 }
 
 
@@ -527,6 +550,7 @@ class ModelELineMarginalizedLikelihood:
     chol_data: jnp.ndarray | None = None
     chol_offsets: tuple[int, ...] | None = None
     chol_key: str | None = None
+    f_cal_param: str | None = None
 
     def log_prob(
         self,
@@ -550,6 +574,7 @@ class ModelELineMarginalizedLikelihood:
             prior_inputs=self.prior_inputs_builder(params),
             prior_width_dex=self.prior_width_dex,
             chol_data=_resolve_chol(self.chol_data, self.chol_key, data_args),
+            f_cal=_floor_of(self.f_cal_param, params),
             chol_offsets=self.chol_offsets,
         )
 
@@ -582,6 +607,7 @@ _MODEL_ELINE_MARGINALIZED_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
     "chol_data": shape("banded factor bands; only their shape fixes the program"),
     "chol_offsets": content("diagonal offsets of the factor are static program structure"),
     "chol_key": content("data_args routing key changes which traced input is read"),
+    "f_cal_param": content("routing to a free calibration floor changes the graph"),
 }
 
 
@@ -812,6 +838,7 @@ class CalibrationELineMarginalizedLikelihood:
     chol_data: jnp.ndarray | None = None
     chol_offsets: tuple[int, ...] | None = None
     chol_key: str | None = None
+    f_cal_param: str | None = None
 
     def log_prob(
         self,
@@ -846,6 +873,7 @@ class CalibrationELineMarginalizedLikelihood:
             q_window=self.q_window,
             has_q=self.has_q,
             chol_data=_resolve_chol(self.chol_data, self.chol_key, data_args),
+            f_cal=_floor_of(self.f_cal_param, params),
             chol_offsets=self.chol_offsets,
         )
 
@@ -893,4 +921,5 @@ _CALIBRATION_ELINE_MARGINALIZED_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
     "chol_data": shape("banded factor bands; only their shape fixes the program"),
     "chol_offsets": content("diagonal offsets of the factor are static program structure"),
     "chol_key": content("data_args routing key changes which traced input is read"),
+    "f_cal_param": content("routing to a free calibration floor changes the graph"),
 }

@@ -37,6 +37,14 @@ inactive and the code uses the standard ``jft.Gaussian`` likelihood. When
 ``noise_frac_cal`` is a free parameter (e.g., ``Uniform(0.01, 0.2)``), the
 code switches to ``jft.VariableCovarianceGaussian``.
 
+The floor is scaled by the model before any nuisance term: the noise covariance is
+``N = diag(sigma^2 + (noise_frac_cal * m0)^2)`` (``C + diag((noise_frac_cal * m0)^2)`` with a
+pixel covariance ``C``), where ``m0`` is the model that the calibration polynomial multiplies
+or the line amplitudes are added to, not the calibrated or line-added spectrum. With
+``calibration_marginalize`` or marginalized emission lines the nuisance coefficients are then
+integrated out exactly given ``N``; ``ln det N`` depends on the model and enters the value
+and the gradient. The batched catalog path does not take a floor.
+
 Example::
 
     spec = Parameters(

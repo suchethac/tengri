@@ -50,7 +50,7 @@ def marginalize_linear_nuisance(
     prior_mean: jnp.ndarray | None = None,
     prior_precision: jnp.ndarray | None = None,
     col_mask: jnp.ndarray | None = None,
-    scale: float | None = None,
+    scale: float | jnp.ndarray | None = None,
     flat_mask: jnp.ndarray | None = None,
 ) -> MarginalResult:
     r"""Integrate linear nuisance coefficients out of a Gaussian data model in closed form.
@@ -89,7 +89,7 @@ def marginalize_linear_nuisance(
     col_mask : array_like, shape (k,), optional
         Column mask :math:`c \in \{0, 1\}^k`. A masked coefficient is fixed out of the
         model. Default: all ones.
-    scale : float, optional
+    scale : float or array_like, optional
         Scalar :math:`s` that rescales the coefficients so that the whitened design
         stays representable in float32 when the raw design is at flux scale. The
         value is independent of :math:`s` in exact arithmetic. Default: 1.

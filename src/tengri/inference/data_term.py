@@ -515,14 +515,14 @@ def resolve_data_term_options(model: Any, options: DataTermOptions) -> ResolvedD
     obs = getattr(model, "observation", None)
     spec_config = obs.spectroscopy if obs is not None else None
     has_spec = options.data_type in ("spectroscopy", "joint")
-    has_mode = spec_config is not None and hasattr(spec_config, "eline_mode")
+    eline_mode = getattr(spec_config, "eline_mode", None)
 
     eline_marginalize = options.eline_marginalize
     if eline_marginalize is None:
-        eline_marginalize = has_mode and spec_config.eline_mode == "marginalized"
+        eline_marginalize = eline_mode == "marginalized"
     eline_marginalize = bool(eline_marginalize) and has_spec
 
-    eline_fitted = bool(has_mode and spec_config.eline_mode == "fitted") and has_spec
+    eline_fitted = eline_mode == "fitted" and has_spec
 
     eline_prior_type = options.eline_prior_type
     if eline_prior_type is None:
@@ -672,7 +672,8 @@ def build_data_term(
     measured_line_defs = _resolve_measured_line_defs(model, has_line_fluxes=has_line_fluxes)
     needs_line_lums = options.eline_prior_type == "model"
     use_components = options.use_components
-    noise_spec, builders = _noise_of(likelihood, options, data_args, noise_dof)
+    noise_spec, resolved_builders = _noise_of(likelihood, options, data_args, noise_dof)
+    builders = ColumnBuilders() if resolved_builders is None else resolved_builders
 
     # Template threading: every channel routes through the threaded orchestrator so the
     # outer JIT trace sees the SSP grid and template arrays as Parameters, not Constants.

@@ -18,7 +18,9 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "Fractional calibration noise floor (added in quadrature with obs noise)",
         lambda lo, hi: lo >= 0,
         "noise_frac_cal bounds must have lo >= 0",
-        # A fraction of the flux added in quadrature to the reported errors, so
+        # A fraction of the flux added in quadrature to the reported errors, scaled by
+        # the model before any marginalized calibration or line term (N = diag(sigma^2 +
+        # (f * m0)^2), m0 the model those terms multiply or add to), so
         # 0 (the default) trusts the catalog uncertainties as given. The ceiling
         # is where "calibration floor" stops describing a floor: at 20% the
         # systematic term dominates any well-measured band, and a fit that wants

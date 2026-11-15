@@ -84,6 +84,18 @@ NOISES = (
     "cal_floor_dense",
     "cal_floor_banded",
     "lines_fitted_student_t_dense",
+    "floor_cal_marg",
+    "floor_cal_marg_banded",
+    "floor_cal_marg_dense",
+    "floor_cal_marg_segments",
+    "floor_lines_marginalized",
+    "floor_lines_marginalized_dense",
+    "floor_lines_marginalized_cloudy",
+    "floor_lines_marginalized_model",
+    "floor_cal_marg_lines",
+    "floor_cal_marg_lines_banded",
+    "floor_cal_marg_lines_segments_model",
+    "floor_lines_fitted",
     "cal_marg_fitted_lines",
     "student_t_cal_marg",
     "student_t_lines_marginalized",
@@ -101,13 +113,26 @@ CONSTRAINTS = ("line_fluxes", "line_censor", "line_ratios", "spectral_indices")
 PRESENCE_CHANNELS = tuple(c.name for c in channels.CHANNELS if "presence" in c.optional_keys)
 MAIN_NOISES = ("gaussian", "student_t", "cal_floor")
 FITTED_NOISES = tuple(n for n in NOISES if n.startswith("lines_fitted"))
-CAL_NOISES = ("cal_marg", "cal_marg_banded", "cal_marg_dense", "cal_marg_segments")
+CAL_NOISES = (
+    "cal_marg",
+    "cal_marg_banded",
+    "cal_marg_dense",
+    "cal_marg_segments",
+    "floor_cal_marg",
+    "floor_cal_marg_banded",
+    "floor_cal_marg_dense",
+    "floor_cal_marg_segments",
+)
 LINE_NOISES = (
     "lines_marginalized",
     "lines_marginalized_banded",
     "lines_marginalized_dense",
     "lines_marginalized_cloudy",
     "lines_marginalized_model",
+    "floor_lines_marginalized",
+    "floor_lines_marginalized_dense",
+    "floor_lines_marginalized_cloudy",
+    "floor_lines_marginalized_model",
 )
 JOINT_NOISES = (
     "cal_marg_lines",
@@ -117,6 +142,9 @@ JOINT_NOISES = (
     "cal_marg_lines_cloudy",
     "cal_marg_lines_model",
     "cal_marg_lines_segments_model",
+    "floor_cal_marg_lines",
+    "floor_cal_marg_lines_banded",
+    "floor_cal_marg_lines_segments_model",
 )
 SPECTRUM_NOISES = (
     "gaussian",
@@ -128,6 +156,7 @@ SPECTRUM_NOISES = (
     "student_t_banded",
     "cal_floor_dense",
     "cal_floor_banded",
+    "floor_lines_fitted",
     *FITTED_NOISES,
 )
 REFUSED_REASON = {
@@ -279,11 +308,23 @@ def _ref_spectrum(preds, data, noise):
     return _mvn(obs - model, _pixel_covariance(data, noise, err))
 
 
+def _noise_cov(preds, data, noise, err, m0):
+    """N: the pixel covariance plus the floor variance (f * m0)^2 on its diagonal.
+
+    ``m0`` is the model before the nuisance terms, the spectrum the calibration polynomial
+    multiplies and the line amplitudes are added to.
+    """
+    cov = _pixel_covariance(data, noise, err)
+    if noise.student_t and noise.dof is None:
+        cov = cov + np.diag((_f_cal_of(preds, noise) * m0) ** 2)
+    return cov
+
+
 def _ref_calibration(preds, data, noise):
     obs, err = _blocks(data, noise, "spec")
     pred, cal = np.asarray(preds.spec_fnu), noise.calibration
     basis = pred[:, None] * _calibration_basis(cal)
-    cov = _pixel_covariance(data, noise, err) + cal.prior_sigma**2 * basis @ basis.T
+    cov = _noise_cov(preds, data, noise, err, pred) + cal.prior_sigma**2 * basis @ basis.T
     return _mvn(obs - pred, cov)
 
 
@@ -326,7 +367,7 @@ def _ref_lines(preds, data, noise):
     obs, err = _blocks(data, noise, "spec")
     pred, design = np.asarray(preds.spec_fnu), np.asarray(preds.eline_design)
     mean, width = _line_moments(preds, noise)
-    cov = _pixel_covariance(data, noise, err) + (design * width) @ (design * width).T
+    cov = _noise_cov(preds, data, noise, err, pred) + (design * width) @ (design * width).T
     return _mvn(obs - pred - design @ mean, cov)
 
 
@@ -337,7 +378,7 @@ def _ref_calibration_lines(preds, data, noise):
     basis = pred[:, None] * _calibration_basis(cal)
     mean, width = _line_moments(preds, noise)
     cov = (
-        _pixel_covariance(data, noise, err)
+        _noise_cov(preds, data, noise, err, pred)
         + cal.prior_sigma**2 * basis @ basis.T
         + (design * width) @ (design * width).T
     )
@@ -448,7 +489,7 @@ def _student_fields(label):
         return {}
     if label.startswith("student_t") or "student_t" in label:
         return {"student_t": True, "dof": DOF, "f_cal_param": "noise_frac_cal"}
-    if label.startswith("cal_floor"):
+    if label.startswith(("cal_floor", "floor_")):
         return {"student_t": True, "dof": None, "f_cal_param": "noise_frac_cal"}
     return {}
 
@@ -547,6 +588,7 @@ def _line_spec(label, calibrated):
 
 
 def _synthetic_spectrum(label, rng, draw):
+    label = label.removeprefix("floor_")
     spec_p, spec_d, spec_e = draw(N_PIX)
     wave = np.linspace(4000.0, 8000.0, N_PIX)
     data = {"data": spec_d, "noise": spec_e}
@@ -692,6 +734,9 @@ FITTER_KINDS = {
     ("spectrum", "cal_floor_banded", ""): "spec_floor_banded",
     ("spectrum", "lines_fitted_student_t_dense", ""): "spec_student_t_dense_lines_fitted",
     ("calibration", "cal_marg", ""): "spec_cal",
+    ("calibration", "floor_cal_marg", ""): "spec_floor_cal",
+    ("lines", "floor_lines_marginalized", ""): "spec_floor_lines",
+    ("calibration_lines", "floor_cal_marg_lines", ""): "spec_floor_cal_lines",
     ("calibration", "cal_marg_dense", ""): "spec_dense_cal",
     ("calibration", "cal_marg_banded", ""): "spec_banded_cal",
     ("lines", "lines_marginalized", ""): "spec_lines",
@@ -773,6 +818,7 @@ def _cells():
 LIVE = [(c, n, v) for c, n, v in _cells() if exclusion_reason(c, n, v) is None]
 EXCLUDED = [(c, n, v) for c, n, v in _cells() if exclusion_reason(c, n, v) is not None]
 ENGINE_REASON = "engine does not score through channels.score"
+BATCHED_FLOOR_REASON = "the batched path does not take a calibration floor"
 
 
 def _params():
@@ -780,9 +826,12 @@ def _params():
         for channel, noise, variant in LIVE:
             marks = []
             if engine != "sequential":
-                marks = [
-                    pytest.mark.xfail(strict=True, raises=AssertionError, reason=ENGINE_REASON)
-                ]
+                reason = (
+                    BATCHED_FLOOR_REASON
+                    if engine == "batched_spectro" and noise.startswith("floor_")
+                    else ENGINE_REASON
+                )
+                marks = [pytest.mark.xfail(strict=True, raises=AssertionError, reason=reason)]
             suffix = f"-{variant}" if variant else ""
             yield pytest.param(
                 engine,
@@ -957,13 +1006,11 @@ def test_unscorable_noise_is_refused_by_name():
             channels.validate(spec, data.keys())
 
 
-def test_the_fitter_refuses_heavy_tailed_noise_and_a_floor_with_marginalization():
+def test_the_fitter_refuses_heavy_tailed_noise_with_marginalization_but_takes_a_floor():
     with pytest.raises(NotImplementedError, match="noise_dof") as heavy:
         fixtures.fitter_of("spec_student_t_cal")
     assert "calibration_marginalize" in str(heavy.value)
-    with pytest.raises(NotImplementedError, match="noise_frac_cal") as floor:
-        fixtures.fitter_of("spec_floor_cal")
-    assert "calibration_marginalize" in str(floor.value)
+    assert fixtures.fitter_of("spec_floor_cal") is not None
 
 
 # ── Seams that read the mask outside the loss ─────────────────────────────────────────
@@ -1096,22 +1143,6 @@ def test_gradient_wrt_the_log_mean_multiplier_matches_finite_differences(channel
     check_gradients(preds, data, spec)
 
 
-def test_a_calibration_floor_with_marginalization_is_refused_with_its_own_reason():
-    """A floor is Gaussian, but the batched path scores no floor, so the convention is open."""
-    preds, data, noise = _synthetic("calibration", "cal_marg")
-    floor = NoiseSpec(
-        data_type="spectroscopy",
-        calibration=noise.calibration,
-        student_t=True,
-        dof=None,
-        f_cal_param="noise_frac_cal",
-    )
-    with pytest.raises(NotImplementedError, match="noise_frac_cal"):
-        score(preds, data, floor)
-    with pytest.raises(NotImplementedError, match="noise_frac_cal"):
-        channels.validate(floor, data.keys())
-
-
 # ── The full product of noise family x covariance x nuisance ──────────────────────────
 
 FAMILIES = ("gaussian", "floor", "student_t")
@@ -1183,11 +1214,10 @@ def test_every_noise_family_covariance_and_nuisance_has_a_term_or_a_named_error(
     """No combination is scored by a term that ignores part of the noise model."""
     preds, data, noise = _product_cell(family, covariance, nuisance)
     marginalized = nuisance in ("calibration", "lines", "calibration_lines")
-    if family != "gaussian" and marginalized:
-        match = "noise_frac_cal" if family == "floor" else "noise_dof"
-        with pytest.raises(NotImplementedError, match=match):
+    if family == "student_t" and marginalized:
+        with pytest.raises(NotImplementedError, match="noise_dof"):
             score(preds, data, noise)
-        with pytest.raises(NotImplementedError, match=match):
+        with pytest.raises(NotImplementedError, match="noise_dof"):
             channels.validate(noise, data.keys())
         return
 
@@ -1285,3 +1315,88 @@ def test_a_presence_entry_of_the_wrong_length_is_rejected():
     bad = {**data, "presence": np.ones(N_BAND + 1)}
     with pytest.raises(ValueError, match="presence has"):
         score(preds, bad, noise)
+
+
+# ── The calibration floor with marginalized nuisance terms ────────────────────────────
+
+FLOOR_PAIRS = (
+    ("calibration", "floor_cal_marg", "cal_marg"),
+    ("calibration", "floor_cal_marg_segments", "cal_marg_segments"),
+    ("lines", "floor_lines_marginalized", "lines_marginalized"),
+    ("lines", "floor_lines_marginalized_cloudy", "lines_marginalized_cloudy"),
+    ("lines", "floor_lines_marginalized_model", "lines_marginalized_model"),
+    ("calibration_lines", "floor_cal_marg_lines", "cal_marg_lines"),
+    ("calibration", "floor_cal_marg_dense", "cal_marg_dense"),
+    ("calibration_lines", "floor_cal_marg_lines_banded", "cal_marg_lines_banded"),
+)
+
+
+@pytest.mark.parametrize(("channel", "floored", "plain"), FLOOR_PAIRS)
+def test_a_vanishing_floor_is_the_marginal_without_a_floor(channel, floored, plain):
+    preds, data, noise = _synthetic(channel, floored)
+    _, plain_data, plain_noise = _synthetic(channel, plain)
+    none = Predictions(**{**preds.__dict__, "params": {**preds.params, "noise_frac_cal": 1e-12}})
+    with_floor = float(score(none, data, noise) + log_normalization(data, noise))
+    without = float(
+        score(none, plain_data, plain_noise) + log_normalization(plain_data, plain_noise)
+    )
+    np.testing.assert_allclose(with_floor, without, rtol=1e-9)
+
+
+def test_the_floor_is_scaled_by_the_model_before_the_nuisance_terms():
+    """N = diag(sigma^2 + (f m0)^2) with m0 the model the nuisance multiplies or adds to.
+
+    A floor scaled by another model, here one half larger, is a different density that the
+    reference rejects by far more than its tolerance.
+    """
+    preds, data, noise = _synthetic("calibration_lines", "floor_cal_marg_lines")
+    obs, err = _blocks(data, noise, "spec")
+    m0, design = np.asarray(preds.spec_fnu), np.asarray(preds.eline_design)
+    cal = noise.calibration
+    basis = m0[:, None] * _calibration_basis(cal)
+    width = np.full(design.shape[1], noise.lines.prior_sigma)
+
+    def density(floor_model):
+        cov = (
+            _noise_cov(preds, data, noise, err, floor_model)
+            + cal.prior_sigma**2 * basis @ basis.T
+            + (design * width) @ (design * width).T
+        )
+        return _mvn(obs - m0, cov)
+
+    actual = float(score(preds, data, noise) + log_normalization(data, noise))
+    np.testing.assert_allclose(actual, density(m0), rtol=1e-10)
+    assert abs(density(1.5 * m0) - actual) > 0.05, (
+        "the control must differ by many tenths of a nat"
+    )
+
+
+def test_the_floored_marginal_depends_on_the_model_through_its_log_determinant():
+    """Moving m0 changes ln det N, so the value is not the no-floor value plus a constant."""
+    preds, data, noise = _synthetic("calibration", "floor_cal_marg")
+    plain_noise = NoiseSpec(**{**noise.__dict__, "student_t": False, "f_cal_param": None})
+    shifted = Predictions(**{**preds.__dict__, "spec_fnu": 1.4 * np.asarray(preds.spec_fnu)})
+    floored_change = float(score(shifted, data, noise) - score(preds, data, noise))
+    plain_change = float(score(shifted, data, plain_noise) - score(preds, data, plain_noise))
+    assert abs(floored_change - plain_change) > 0.05
+
+
+@pytest.mark.parametrize(("channel", "floored", "plain"), FLOOR_PAIRS)
+def test_the_gradient_through_the_model_includes_the_floored_log_determinant(
+    channel, floored, plain
+):
+    """d score / d (scale of m0) matches central differences and is not the no-floor gradient."""
+    preds, data, noise = _synthetic(channel, floored)
+    _, plain_data, plain_noise = _synthetic(channel, plain)
+    base = np.asarray(preds.spec_fnu, dtype=float)
+
+    def value(scale, spec_data, spec_noise):
+        shifted = Predictions(**{**preds.__dict__, "spec_fnu": scale * base})
+        return score(shifted, spec_data, spec_noise)
+
+    grad = float(jax.grad(value)(1.0, data, noise))
+    eps = 1e-6
+    fd = (float(value(1.0 + eps, data, noise)) - float(value(1.0 - eps, data, noise))) / (2 * eps)
+    np.testing.assert_allclose(grad, fd, rtol=1e-5)
+    plain_grad = float(jax.grad(value)(1.0, plain_data, plain_noise))
+    assert abs(grad - plain_grad) > 1e-3 * abs(plain_grad)
