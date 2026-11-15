@@ -391,11 +391,25 @@ def test_compare_prefers_the_catalog_with_the_emitting_line():
 
 
 def test_marginalized_lines_with_a_centered_prior_are_refused():
-    _, fitter, samples, _, _ = _line_mock(
-        ["Hbeta", "Halpha"], eline_prior_type="cloudy", sample=False
-    )
-    with pytest.raises(ValueError, match="eline_prior_type='flat' only"):
-        pointwise_log_likelihood(fitter, samples)
+    """A centered line prior has no closed-form conditional; the sibling builder refuses it.
+
+    The Fitter itself refuses some centered priors earlier (a Cloudy prior without
+    neb_logU), so the check is exercised on the fitter's state directly.
+    """
+    from types import SimpleNamespace
+
+    from tengri.inference.predictive import _fitted_line_sibling
+
+    _, fitter, _, _, _ = _line_mock(["Hbeta", "Halpha"], sample=False)
+    for prior in ("cloudy", "model"):
+        stub = SimpleNamespace(
+            model=fitter.model,
+            _eline_prior_type=prior,
+            _data_args=fitter._data_args,
+            data_type=fitter.data_type,
+        )
+        with pytest.raises(ValueError, match="eline_prior_type='flat' only"):
+            _fitted_line_sibling(stub)
 
 
 def test_subpackage_exports_and_criteria_on_a_fit():

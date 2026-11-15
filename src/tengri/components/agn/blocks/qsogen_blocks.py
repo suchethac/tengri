@@ -36,7 +36,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 from jax import Array
 
-from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn._params import DEFAULT_AGN_BCNORM, DEFAULT_AGN_LOG_LBOL
 from tengri.components.agn.blocks._protocol import register_agn_block
 from tengri.components.agn.qsogen import (
     _DEFAULT_BBNORM,
@@ -220,7 +220,7 @@ def qsogen_balmer_block(
     agn_log_lbol: float,
     l5100_disc: Array,
     *,
-    agn_bcnorm: float = 0.0,
+    agn_bcnorm: float = DEFAULT_AGN_BCNORM,
     **params,
 ) -> Array:
     r"""QSOgen Balmer continuum block.

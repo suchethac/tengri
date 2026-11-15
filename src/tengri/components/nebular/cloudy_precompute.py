@@ -178,11 +178,7 @@ def _band_table_refusal(ctx, nebular) -> str | None:
 
     if not ctx.wave_precomp:
         return "approx=WavePrecomp() not enabled"
-    if (
-        nebular is None
-        or nebular.config.backend != "cloudy_grid"
-        or not isinstance(nebular.backend, CloudyGridBackend)
-    ):
+    if nebular is None or not isinstance(nebular.backend, CloudyGridBackend):
         return "the nebular backend is not the CLOUDY grid"
     # The band table's (Z, U) contraction reads with the backend's own scheme: node-exact
     # PCHIP (the default, cloudy_band_table._pchip_log) or bilinear ("linear",

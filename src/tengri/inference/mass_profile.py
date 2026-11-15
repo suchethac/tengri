@@ -110,8 +110,8 @@ import jax.numpy as jnp
 from jax.scipy.special import logsumexp
 
 from tengri.inference.preconditioning import FLOAT32_HESSIAN_NAN_NOTE
-from tengri.parameters.priors import Fixed
-from tengri.utils.scale import pow10, whiten
+from tengri.parameters.priors import Fixed, Uniform
+from tengri.utils.scale import pow10, present_noise, representable_denominator, whiten
 
 if TYPE_CHECKING:
     from tengri.inference.fitter import Fitter
@@ -163,6 +163,8 @@ _REINSERT_QUAD_NODES = 384
 #: analysis prices correctly.
 _REINSERT_CHUNK_MAX = 64
 _QUAD_HALF_WIDTH_SIGMAS = 8.0
+#: A profiled MAP mass this close to a prior bound (in dex) counts as sitting on it.
+_PROFILE_MASS_BOUND_TOL = 1e-9
 #: Mathematically, any log10(mass) placeholder works for the value the mass
 #: parameter is pinned to in the working spec once it is profiled out: the
 #: unit-mass flux computed from it (``predict_photometry(...) /
@@ -1364,8 +1366,8 @@ def _profile_stats(
     # in float32, though the same derivative is finite -- if tiny -- in float64).
     # The dimensionless form naturally avoids this: mass factors cancel
     # algebraically, so neither is formed.
-    snr_pred = whiten(pred, noise)
-    snr_d = whiten(data, noise)
+    snr_pred = whiten(pred, present_noise(noise, presence))
+    snr_d = whiten(data, present_noise(noise, presence))
 
     if presence is not None:
         # The same rule as ``likelihoods.gaussian``: an absent band (presence 0)
@@ -1434,8 +1436,29 @@ def _quad_nodes(
     """
     u_lo = ell_lo - ell_ref
     u_hi = ell_hi - ell_ref
-    center = jnp.clip(jnp.log10(a_star), u_lo, u_hi)
-    sigma_u = 1.0 / (jnp.sqrt(A_ref) * a_star * jnp.log(10.0))
+    # A non-positive a_star (a non-detection) has no log10. Its window sits at
+    # the lower edge, and its width comes from the exponential fall-off of the
+    # Gaussian away from that edge (#3404). The double where keeps log10 off the
+    # untaken branch, so no NaN reaches the gradient.
+    pos = a_star > 0
+    a_safe = jnp.where(pos, a_star, 1.0)
+    log_a = jnp.log10(a_safe)
+    inside = pos & (log_a >= u_lo) & (log_a <= u_hi)
+    center = jnp.where(pos, jnp.clip(log_a, u_lo, u_hi), u_lo)
+    sigma_in = 1.0 / (jnp.sqrt(A_ref) * a_safe * jnp.log(10.0))
+    a_c = pow10(center)
+    curv = jnp.sqrt(A_ref) * a_c * jnp.log(10.0)
+    slope = A_ref * jnp.abs(a_c - a_star) * a_c * jnp.log(10.0)
+    # Third kind (tools/check_zero_hiding_clamps.py): the denominator vanishes
+    # only if A_ref == 0, i.e. the prediction carries no amplitude information.
+    # There a_star = B_ref / A_ref is already non-finite upstream, so the
+    # degenerate case propagates NaN rather than returning a plausible window.
+    # The denominator is selected before it is divided (both where branches are
+    # differentiated, see representable_denominator), so no floor is needed.
+    den_edge = jnp.maximum(curv, slope)
+    den_ok = den_edge > representable_denominator(1e-20)
+    sigma_edge = jnp.where(den_ok, 1.0 / jnp.where(den_ok, den_edge, 1.0), jnp.nan)
+    sigma_u = jnp.where(inside, sigma_in, sigma_edge)
     lo = jnp.maximum(u_lo, center - _QUAD_HALF_WIDTH_SIGMAS * sigma_u)
     hi = jnp.minimum(u_hi, center + _QUAD_HALF_WIDTH_SIGMAS * sigma_u)
     u_nodes = jnp.linspace(lo, hi, quad_nodes)
@@ -1520,6 +1543,52 @@ def _log_mass_integral(
     """
     _, log_terms = _log_quadrature_terms(A_ref, a_star, ell_lo, ell_hi, mass_prior, ell_ref)
     return logsumexp(log_terms)
+
+
+def _profile_mass_state(fitter: Fitter):
+    """Bounds and prior that ``configure_profile_mass`` set on ``fitter``.
+
+    They are attached dynamically and are not declared on ``Fitter``, so they
+    are read here, once, through ``getattr`` (pyright ratchet, #3403).
+    """
+    ell_lo, ell_hi = getattr(fitter, "_profile_mass_bounds")  # noqa: B009
+    return ell_lo, ell_hi, getattr(fitter, "_profile_mass_prior")  # noqa: B009
+
+
+def _profile_map_mass(A_ref, a_star, ell_ref, ell_lo: float, ell_hi: float, mass_prior):
+    """Conditional mode of ``log10(M)`` on the prior support, for the MAP point.
+
+    The conditional density in ``ell`` is the Gaussian in the amplitude times the
+    mass prior. For a Uniform prior its mode is ``log10(a_star) + ell_ref``
+    clipped to the support, and a non-positive amplitude puts the mode at the
+    lower edge (#3403, #3404). Other priors take the best node of the
+    quadrature grid.
+    """
+    if isinstance(mass_prior, Uniform):
+        pos = a_star > 0
+        a_safe = jnp.where(pos, a_star, 1.0)
+        return jnp.where(pos, jnp.clip(jnp.log10(a_safe) + ell_ref, ell_lo, ell_hi), ell_lo)
+    u_nodes, log_terms = _log_quadrature_terms(
+        A_ref, a_star, ell_lo, ell_hi, mass_prior, ell_ref, quad_nodes=_REINSERT_QUAD_NODES
+    )
+    _, weights = _quad_nodes(
+        A_ref, a_star, ell_lo, ell_hi, ell_ref, quad_nodes=_REINSERT_QUAD_NODES
+    )
+    best = u_nodes[jnp.argmax(log_terms - jnp.log(weights))] + ell_ref
+    return jnp.clip(best, ell_lo, ell_hi)
+
+
+def _warn_profile_mass_at_bound(mass_name: str, value: float, lo: float, hi: float) -> None:
+    """Warn that the profiled MAP mass sits on a prior bound."""
+    bound = lo if abs(value - lo) < _PROFILE_MASS_BOUND_TOL else hi
+    warnings.warn(
+        f"profile_mass: the MAP value of {mass_name!r} sits on the prior bound "
+        f"{bound:g} (support [{lo:g}, {hi:g}]). Likely causes: a non-detection "
+        "(fluxes at or below zero), a flux unit mismatch between the data and the "
+        "model, or a prior too narrow for the data.",
+        RuntimeWarning,
+        stacklevel=3,
+    )
 
 
 def _sample_log_mass(
@@ -2167,7 +2236,7 @@ def reinsert_profiled_mass(
         # Same channel set as the objective and the draw path: a point estimate
         # taken against a different set of channels would disagree with the
         # samples beside it in the same Posterior.
-        _, a_star, _, ell_ref = _profile_stats(
+        A_ref, a_star, _, ell_ref = _profile_stats(
             model,
             mass_name,
             phys,
@@ -2178,7 +2247,20 @@ def reinsert_profiled_mass(
             use_components=use_components,
             line_flux_block=_block_for(_line_flux_schema(fitter), line_obs, line_err),
         )
-        posterior.params = {**posterior.params, mass_name: jnp.log10(a_star) + ell_ref}
+        ell_lo, ell_hi, mass_prior = _profile_mass_state(fitter)
+        ell_map = _profile_map_mass(A_ref, a_star, ell_ref, ell_lo, ell_hi, mass_prior)
+        posterior.params = {**posterior.params, mass_name: ell_map}
+        at_bound = (
+            abs(float(ell_map) - ell_lo) < _PROFILE_MASS_BOUND_TOL
+            or abs(float(ell_map) - ell_hi) < _PROFILE_MASS_BOUND_TOL
+        )
+        if at_bound:
+            _warn_profile_mass_at_bound(mass_name, float(ell_map), ell_lo, ell_hi)
+        if isinstance(posterior.diagnostics, dict):
+            posterior.diagnostics = {
+                **posterior.diagnostics,
+                "profile_mass_at_bound": at_bound,
+            }
     return posterior
 
 

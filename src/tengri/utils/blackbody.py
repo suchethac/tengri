@@ -14,6 +14,8 @@ Both historical spellings delegate here: ``tengri.components.agn._phys.planck_ln
 
 from __future__ import annotations
 
+import math
+
 import jax
 import jax.numpy as jnp
 
@@ -40,6 +42,12 @@ _X_MAX: float = 500.0
 # is ~1e-221 (i.e. numerically zero) at every wavelength tengri models, so the
 # floor is unobservable in value and only pins the gradient to zero.
 _T_MIN: float = 1.0
+
+# Reference frequency [Hz] for the float32 log-space Planck prefactor (see _planck_core): the
+# logarithm is taken of nu / _NU_REF, so the exponent stays O(10) and its float32 rounding is
+# ~1e-7 relative. _LOG_PREFACTOR_AT_NU_REF = log(2h nu_ref^3 / c^2), a float64 constant.
+_NU_REF: float = 1.0e15
+_LOG_PREFACTOR_AT_NU_REF: float = math.log(2.0 * _H_PLANCK * _NU_REF**3 / _C_CGS**2)
 
 
 @jax.custom_jvp
@@ -93,7 +101,17 @@ def _planck_core(nu_w: jnp.ndarray, x: jnp.ndarray) -> jnp.ndarray:
     # float32 the Wien-tail gradient goes from a silent ``-0.0`` to the correct
     # value (x=44: -7.78e-08, x=60: -8.76e-15, x=87: -1.65e-26), each matching
     # float64.
-    return 2.0 * _H_PLANCK * nu_w * (nu_w / _C_CGS) ** 2 * jnp.exp(-x) / -jnp.expm1(-x)
+    # Float32 forms the Wien-tail product in log space: ``2h nu (nu/c)**2 exp(-x)`` is
+    # ``exp(log 2h + 3 log nu - 2 log c - x)``. Under jit XLA re-associates the constant products
+    # of the vmapped ring sum, and the ``nu**3``-sized prefactor times the underflowed ``exp(-x)``
+    # gave ``inf * 0 = NaN`` for every frequency where ``exp(-x)`` is zero (the Wien tail, lambda
+    # below 0.05 A for a 2e5 K ring; #3104). Every log-space intermediate is O(10), so no grouping
+    # can overflow, and the underflow is a clean 0. float64 keeps its original order, so it is
+    # bit-identical.
+    if nu_w.dtype == jnp.float32:
+        _log_pre = _LOG_PREFACTOR_AT_NU_REF + 3.0 * jnp.log(nu_w / _NU_REF)
+        return jnp.exp(_log_pre - x) / -jnp.expm1(-x)
+    return (2.0 * _H_PLANCK * nu_w) * ((nu_w / _C_CGS) ** 2) * jnp.exp(-x) / -jnp.expm1(-x)
 
 
 @_planck_core.defjvp

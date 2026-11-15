@@ -9,11 +9,10 @@ the two stale defaults fixed in #1394.
 
 Relationship to the *other* D thresholds
 ----------------------------------------
-``fitter._AUTO_D_THRESHOLD`` and ``fitter._MCMC_AUTO_D_THRESHOLD`` (both 20)
-decide what ``method="auto"`` / ``method="mcmc"`` **silently pick**: at or below
-20 free parameters they select NUTS, above it they switch to geoVI / ray
-tracing. Those never fire for an explicit ``method="mcmc_nuts"``, because the
-caller has already made the choice.
+``[inference] mcmc_auto_d`` in the defaults file (20 by default) decides what
+``method="auto"`` / ``method="mcmc"`` **silently pick**: at or below it they select
+NUTS, above it they switch to geoVI / ray tracing. Those never fire for an
+explicit ``method="mcmc_nuts"``, because the caller has already made the choice.
 
 :data:`NUTS_WARN_D` is that missing case: the caller asked for NUTS by name, so
 nothing overrides them, they just get told what it will cost. The two numbers
@@ -44,7 +43,7 @@ NUTS_WARN_D: int = 30
 #: mass-matrix cost.
 #:
 #: ``"mcmc"`` is absent deliberately: it auto-switches to ray tracing above
-#: ``_MCMC_AUTO_D_THRESHOLD``, so by the time D is large it is no longer NUTS.
+#: ``mcmc_auto_d``, so by the time D is large it is no longer NUTS.
 #:
 #: ``"mcmc_ghmc"`` is absent for a different reason, and the distinction matters
 #: because its signature says otherwise. GHMC's momentum generator treats

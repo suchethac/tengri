@@ -10,7 +10,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 from jax import Array
 
-from tengri.components.agn._params import DEFAULT_AGN_COS_INC, PARAMS as _AGN_PARAMS
+from tengri.components.agn._params import DEFAULT_AGN_COS_INC, PARAMS as _AGN_PARAMS, POLAR_EBV_OFF
 from tengri.components.agn.blocks._protocol import register_agn_block
 from tengri.components.agn.polar_dust import (
     polar_cone_covering_factor,
@@ -48,7 +48,7 @@ def polar_dust_attenuation_block(
     # Differs from the declared agn_polar_ebv default (0.03) on purpose: this is
     # an opt-in attenuation stage, so its default must be the no-op. A caller who
     # selects the block without asking for reddening gets none.
-    agn_polar_ebv: float = 0.0,
+    agn_polar_ebv: float = POLAR_EBV_OFF,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     agn_polar_oa: float = _DEFAULT_AGN_POLAR_OA,
     agn_polar_law: str = "smc",
@@ -115,7 +115,7 @@ def polar_dust_reemission_lnu(
     # Differs from the declared agn_polar_ebv default (0.03) on purpose: this is
     # an opt-in attenuation stage, so its default must be the no-op. A caller who
     # selects the block without asking for reddening gets none.
-    agn_polar_ebv: float = 0.0,
+    agn_polar_ebv: float = POLAR_EBV_OFF,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     agn_polar_oa: float = _DEFAULT_AGN_POLAR_OA,
     agn_polar_T: float = _DEFAULT_AGN_POLAR_T,

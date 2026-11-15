@@ -187,6 +187,11 @@ def run_smc(
     Posterior
         ``diagnostics`` carries ``n_temperatures``, ``log_evidence``,
         ``min_ancestor_ess``, ``gradients_per_draw`` and ``reached_target``.
+        ``min_ancestor_ess`` is the particle ESS of the ancestor resampling,
+        not an autocorrelation ESS; a value below 10 % of ``n_particles`` makes
+        the post-run check warn. ``n_divergent`` counts divergent *inner*
+        transitions, summed over particles, rungs and moves, and its denominator
+        is ``n_inner_transitions``, not the number of kept draws.
 
     Raises
     ------
@@ -369,6 +374,8 @@ def run_smc(
             n_particles,
         )
 
+    # The tempered sums omit the Gaussian normalization; the published ln Z adds it (#3427).
+    log_norm = context.log_evidence_normalization
     return Posterior(
         samples=samples_phys,
         params=best_params,
@@ -404,7 +411,7 @@ def run_smc(
             # log Z comes free with the weights. One value per independent
             # population: their SPREAD is the error bar, and no single run can
             # produce one.
-            "log_evidence": [float(v) for v in log_z],
+            "log_evidence": [float(v) + log_norm for v in log_z],
             "log_evidence_spread": (
                 float(jnp.max(log_z) - jnp.min(log_z)) if n_chains > 1 else None
             ),

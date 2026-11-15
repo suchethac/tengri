@@ -24,6 +24,7 @@ from tengri.observation.line_measurement import (
     precompute_line_windows,
 )
 from tengri.utils.physics_constants import C_AA
+from tests.contract._nonsplat_ssp import nonsplat_flux
 
 pytestmark = pytest.mark.regression_bug
 
@@ -62,7 +63,7 @@ def test_line_flux_over_step_is_exact_analytic_sum():
 def test_line_window_integral_over_flat_spectrum_has_exact_width():
     """A flat unit spectrum integrates to the window width, so the normalization is exact."""
     wave = np.arange(4000.0, 7000.0 + 0.25, 0.5)
-    ssp_flux = np.ones((1, 1, wave.size))
+    ssp_flux = nonsplat_flux((1, 1, wave.size))
     line = _line_def()
     precomp = precompute_line_windows(jnp.asarray(wave), jnp.asarray(ssp_flux), (line,))
     norms = np.asarray(precomp.window_norms)

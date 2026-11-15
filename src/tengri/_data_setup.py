@@ -202,8 +202,8 @@ def source_tree_root() -> Path:
     --------
     >>> from tengri._data_setup import source_tree_root
     >>> root = source_tree_root()
-    >>> if (root / "pyproject.toml").exists():
-    ...     # Running from source
+    >>> (root / "pyproject.toml").exists()  # True when running from source
+    True
     """
     pkg_root = Path(__file__).resolve().parent  # <src>/tengri
     source_root = pkg_root.parent.parent  # <src>/tengri -> <src> -> <root>
@@ -287,10 +287,9 @@ def data_path(filename: str) -> Path:
     Examples
     --------
     >>> from tengri import data_path
-    >>> templates = data_path("bosa_templates.h5")
-    >>> import h5py
-    ...
-    ... h5py.File(templates).keys()
+    >>> templates = data_path("bosa_templates.h5")  # doctest: +SKIP
+    >>> import h5py  # doctest: +SKIP
+    >>> h5py.File(templates).keys()  # doctest: +SKIP
     """
     for directory in data_dirs():
         candidate = directory / filename
@@ -503,6 +502,162 @@ _KNOWN_SSPS = {
     "fsps_prsc_c3k_a_salpeter": "fsps_prsc_c3k_a_salpeter.h5",
     "fsps_prsc_miles_kroupa": "fsps_prsc_miles_kroupa.h5",
     "fsps_prsc_miles_salpeter": "fsps_prsc_miles_salpeter.h5",
+    # Hosted grids registered by stem (catalog index, 2026-11-13): BPASS v2.2.1 / v2.3,
+    # E-MILES, MILES and sMILES IMF-slope families, alpha-enhanced MIST, Maraston 2005, MaStar.
+    "amist_c3k_hr_kroupa_afe": "amist_c3k_hr_kroupa_afe.h5",
+    "amist_c3k_hr_kroupa_afe_totalz": "amist_c3k_hr_kroupa_afe_totalz.h5",
+    "bpss_v221_bin_imf100_100": "bpss_v221_bin_imf100_100.h5",
+    "bpss_v221_bin_imf100_300": "bpss_v221_bin_imf100_300.h5",
+    "bpss_v221_bin_imf135_100": "bpss_v221_bin_imf135_100.h5",
+    "bpss_v221_bin_imf135_300": "bpss_v221_bin_imf135_300.h5",
+    "bpss_v221_bin_imf135all_100": "bpss_v221_bin_imf135all_100.h5",
+    "bpss_v221_bin_imf170_100": "bpss_v221_bin_imf170_100.h5",
+    "bpss_v221_bin_imf170_300": "bpss_v221_bin_imf170_300.h5",
+    "bpss_v221_bin_imf_chab100": "bpss_v221_bin_imf_chab100.h5",
+    "bpss_v221_bin_imf_chab300": "bpss_v221_bin_imf_chab300.h5",
+    "bpss_v221_sin_imf100_100": "bpss_v221_sin_imf100_100.h5",
+    "bpss_v221_sin_imf100_300": "bpss_v221_sin_imf100_300.h5",
+    "bpss_v221_sin_imf135_100": "bpss_v221_sin_imf135_100.h5",
+    "bpss_v221_sin_imf135_300": "bpss_v221_sin_imf135_300.h5",
+    "bpss_v221_sin_imf135all_100": "bpss_v221_sin_imf135all_100.h5",
+    "bpss_v221_sin_imf170_100": "bpss_v221_sin_imf170_100.h5",
+    "bpss_v221_sin_imf170_300": "bpss_v221_sin_imf170_300.h5",
+    "bpss_v221_sin_imf_chab100": "bpss_v221_sin_imf_chab100.h5",
+    "bpss_v221_sin_imf_chab300": "bpss_v221_sin_imf_chab300.h5",
+    "bpss_v231_bin_basel_imf135_300": "bpss_v231_bin_basel_imf135_300.h5",
+    "bpss_v231_sin_basel_imf135_300": "bpss_v231_sin_basel_imf135_300.h5",
+    "bpss_v23_bin_imf135_300_afe": "bpss_v23_bin_imf135_300_afe.h5",
+    "bpss_v23_sin_imf135_300_afe": "bpss_v23_sin_imf135_300_afe.h5",
+    "emiles_bsti_bimodal0.30": "emiles_bsti_bimodal0.30.h5",
+    "emiles_bsti_bimodal0.50": "emiles_bsti_bimodal0.50.h5",
+    "emiles_bsti_bimodal0.80": "emiles_bsti_bimodal0.80.h5",
+    "emiles_bsti_bimodal1.00": "emiles_bsti_bimodal1.00.h5",
+    "emiles_bsti_bimodal1.30": "emiles_bsti_bimodal1.30.h5",
+    "emiles_bsti_bimodal1.50": "emiles_bsti_bimodal1.50.h5",
+    "emiles_bsti_bimodal1.80": "emiles_bsti_bimodal1.80.h5",
+    "emiles_bsti_bimodal2.00": "emiles_bsti_bimodal2.00.h5",
+    "emiles_bsti_bimodal2.30": "emiles_bsti_bimodal2.30.h5",
+    "emiles_bsti_bimodal2.50": "emiles_bsti_bimodal2.50.h5",
+    "emiles_bsti_bimodal2.80": "emiles_bsti_bimodal2.80.h5",
+    "emiles_bsti_bimodal3.00": "emiles_bsti_bimodal3.00.h5",
+    "emiles_bsti_bimodal3.30": "emiles_bsti_bimodal3.30.h5",
+    "emiles_bsti_bimodal3.50": "emiles_bsti_bimodal3.50.h5",
+    "emiles_bsti_chabrier": "emiles_bsti_chabrier.h5",
+    "emiles_bsti_kroupa_revised": "emiles_bsti_kroupa_revised.h5",
+    "emiles_bsti_unimodal0.30": "emiles_bsti_unimodal0.30.h5",
+    "emiles_bsti_unimodal0.50": "emiles_bsti_unimodal0.50.h5",
+    "emiles_bsti_unimodal0.80": "emiles_bsti_unimodal0.80.h5",
+    "emiles_bsti_unimodal1.00": "emiles_bsti_unimodal1.00.h5",
+    "emiles_bsti_unimodal1.30": "emiles_bsti_unimodal1.30.h5",
+    "emiles_bsti_unimodal1.50": "emiles_bsti_unimodal1.50.h5",
+    "emiles_bsti_unimodal1.80": "emiles_bsti_unimodal1.80.h5",
+    "emiles_bsti_unimodal2.00": "emiles_bsti_unimodal2.00.h5",
+    "emiles_bsti_unimodal2.30": "emiles_bsti_unimodal2.30.h5",
+    "emiles_bsti_unimodal2.50": "emiles_bsti_unimodal2.50.h5",
+    "emiles_bsti_unimodal2.80": "emiles_bsti_unimodal2.80.h5",
+    "emiles_bsti_unimodal3.00": "emiles_bsti_unimodal3.00.h5",
+    "emiles_bsti_unimodal3.30": "emiles_bsti_unimodal3.30.h5",
+    "emiles_bsti_unimodal3.50": "emiles_bsti_unimodal3.50.h5",
+    "emiles_pdva_bimodal0.30": "emiles_pdva_bimodal0.30.h5",
+    "emiles_pdva_bimodal0.50": "emiles_pdva_bimodal0.50.h5",
+    "emiles_pdva_bimodal0.80": "emiles_pdva_bimodal0.80.h5",
+    "emiles_pdva_bimodal1.00": "emiles_pdva_bimodal1.00.h5",
+    "emiles_pdva_bimodal1.30": "emiles_pdva_bimodal1.30.h5",
+    "emiles_pdva_bimodal1.50": "emiles_pdva_bimodal1.50.h5",
+    "emiles_pdva_bimodal1.80": "emiles_pdva_bimodal1.80.h5",
+    "emiles_pdva_bimodal2.00": "emiles_pdva_bimodal2.00.h5",
+    "emiles_pdva_bimodal2.30": "emiles_pdva_bimodal2.30.h5",
+    "emiles_pdva_bimodal2.50": "emiles_pdva_bimodal2.50.h5",
+    "emiles_pdva_bimodal2.80": "emiles_pdva_bimodal2.80.h5",
+    "emiles_pdva_bimodal3.00": "emiles_pdva_bimodal3.00.h5",
+    "emiles_pdva_bimodal3.30": "emiles_pdva_bimodal3.30.h5",
+    "emiles_pdva_bimodal3.50": "emiles_pdva_bimodal3.50.h5",
+    "emiles_pdva_chabrier": "emiles_pdva_chabrier.h5",
+    "emiles_pdva_kroupa": "emiles_pdva_kroupa.h5",
+    "emiles_pdva_kroupa_revised": "emiles_pdva_kroupa_revised.h5",
+    "emiles_pdva_unimodal0.30": "emiles_pdva_unimodal0.30.h5",
+    "emiles_pdva_unimodal0.50": "emiles_pdva_unimodal0.50.h5",
+    "emiles_pdva_unimodal0.80": "emiles_pdva_unimodal0.80.h5",
+    "emiles_pdva_unimodal1.00": "emiles_pdva_unimodal1.00.h5",
+    "emiles_pdva_unimodal1.30": "emiles_pdva_unimodal1.30.h5",
+    "emiles_pdva_unimodal1.50": "emiles_pdva_unimodal1.50.h5",
+    "emiles_pdva_unimodal1.80": "emiles_pdva_unimodal1.80.h5",
+    "emiles_pdva_unimodal2.00": "emiles_pdva_unimodal2.00.h5",
+    "emiles_pdva_unimodal2.30": "emiles_pdva_unimodal2.30.h5",
+    "emiles_pdva_unimodal2.50": "emiles_pdva_unimodal2.50.h5",
+    "emiles_pdva_unimodal2.80": "emiles_pdva_unimodal2.80.h5",
+    "emiles_pdva_unimodal3.00": "emiles_pdva_unimodal3.00.h5",
+    "emiles_pdva_unimodal3.30": "emiles_pdva_unimodal3.30.h5",
+    "emiles_pdva_unimodal3.50": "emiles_pdva_unimodal3.50.h5",
+    "fsps_amist_c3k_lr_afe_chabrier": "fsps_amist_c3k_lr_afe_chabrier.h5",
+    "fsps_amist_c3k_lr_afe_chabrier_totalz": "fsps_amist_c3k_lr_afe_chabrier_totalz.h5",
+    "fsps_amist_c3k_lr_afe_kroupa": "fsps_amist_c3k_lr_afe_kroupa.h5",
+    "fsps_amist_c3k_lr_afe_kroupa_totalz": "fsps_amist_c3k_lr_afe_kroupa_totalz.h5",
+    "fsps_amist_c3k_lr_afe_salpeter": "fsps_amist_c3k_lr_afe_salpeter.h5",
+    "fsps_amist_c3k_lr_afe_salpeter_totalz": "fsps_amist_c3k_lr_afe_salpeter_totalz.h5",
+    "m05_rhb_kroupa": "m05_rhb_kroupa.h5",
+    "m05_rhb_salpeter": "m05_rhb_salpeter.h5",
+    "mastar_v27_salpeter": "mastar_v27_salpeter.h5",
+    "miles_bsti_bimodal0.30_afe": "miles_bsti_bimodal0.30_afe.h5",
+    "miles_bsti_bimodal0.50_afe": "miles_bsti_bimodal0.50_afe.h5",
+    "miles_bsti_bimodal0.80_afe": "miles_bsti_bimodal0.80_afe.h5",
+    "miles_bsti_bimodal1.00_afe": "miles_bsti_bimodal1.00_afe.h5",
+    "miles_bsti_bimodal1.30_afe": "miles_bsti_bimodal1.30_afe.h5",
+    "miles_bsti_bimodal1.50_afe": "miles_bsti_bimodal1.50_afe.h5",
+    "miles_bsti_bimodal1.80_afe": "miles_bsti_bimodal1.80_afe.h5",
+    "miles_bsti_bimodal2.00_afe": "miles_bsti_bimodal2.00_afe.h5",
+    "miles_bsti_bimodal2.30_afe": "miles_bsti_bimodal2.30_afe.h5",
+    "miles_bsti_bimodal2.50_afe": "miles_bsti_bimodal2.50_afe.h5",
+    "miles_bsti_bimodal2.80_afe": "miles_bsti_bimodal2.80_afe.h5",
+    "miles_bsti_bimodal3.00_afe": "miles_bsti_bimodal3.00_afe.h5",
+    "miles_bsti_bimodal3.30_afe": "miles_bsti_bimodal3.30_afe.h5",
+    "miles_bsti_bimodal3.50_afe": "miles_bsti_bimodal3.50_afe.h5",
+    "miles_bsti_chabrier_afe": "miles_bsti_chabrier_afe.h5",
+    "miles_bsti_kroupa_afe": "miles_bsti_kroupa_afe.h5",
+    "miles_bsti_kroupa_revised_afe": "miles_bsti_kroupa_revised_afe.h5",
+    "miles_bsti_unimodal0.30_afe": "miles_bsti_unimodal0.30_afe.h5",
+    "miles_bsti_unimodal0.50_afe": "miles_bsti_unimodal0.50_afe.h5",
+    "miles_bsti_unimodal0.80_afe": "miles_bsti_unimodal0.80_afe.h5",
+    "miles_bsti_unimodal1.00_afe": "miles_bsti_unimodal1.00_afe.h5",
+    "miles_bsti_unimodal1.30_afe": "miles_bsti_unimodal1.30_afe.h5",
+    "miles_bsti_unimodal1.50_afe": "miles_bsti_unimodal1.50_afe.h5",
+    "miles_bsti_unimodal1.80_afe": "miles_bsti_unimodal1.80_afe.h5",
+    "miles_bsti_unimodal2.00_afe": "miles_bsti_unimodal2.00_afe.h5",
+    "miles_bsti_unimodal2.30_afe": "miles_bsti_unimodal2.30_afe.h5",
+    "miles_bsti_unimodal2.50_afe": "miles_bsti_unimodal2.50_afe.h5",
+    "miles_bsti_unimodal2.80_afe": "miles_bsti_unimodal2.80_afe.h5",
+    "miles_bsti_unimodal3.00_afe": "miles_bsti_unimodal3.00_afe.h5",
+    "miles_bsti_unimodal3.30_afe": "miles_bsti_unimodal3.30_afe.h5",
+    "miles_bsti_unimodal3.50_afe": "miles_bsti_unimodal3.50_afe.h5",
+    "smiles_bsti_bimodal0.30_afe": "smiles_bsti_bimodal0.30_afe.h5",
+    "smiles_bsti_bimodal0.50_afe": "smiles_bsti_bimodal0.50_afe.h5",
+    "smiles_bsti_bimodal0.80_afe": "smiles_bsti_bimodal0.80_afe.h5",
+    "smiles_bsti_bimodal1.30_afe": "smiles_bsti_bimodal1.30_afe.h5",
+    "smiles_bsti_bimodal1.50_afe": "smiles_bsti_bimodal1.50_afe.h5",
+    "smiles_bsti_bimodal1.80_afe": "smiles_bsti_bimodal1.80_afe.h5",
+    "smiles_bsti_bimodal2.00_afe": "smiles_bsti_bimodal2.00_afe.h5",
+    "smiles_bsti_bimodal2.30_afe": "smiles_bsti_bimodal2.30_afe.h5",
+    "smiles_bsti_bimodal2.50_afe": "smiles_bsti_bimodal2.50_afe.h5",
+    "smiles_bsti_bimodal2.80_afe": "smiles_bsti_bimodal2.80_afe.h5",
+    "smiles_bsti_bimodal3.00_afe": "smiles_bsti_bimodal3.00_afe.h5",
+    "smiles_bsti_bimodal3.30_afe": "smiles_bsti_bimodal3.30_afe.h5",
+    "smiles_bsti_bimodal3.50_afe": "smiles_bsti_bimodal3.50_afe.h5",
+    "smiles_bsti_chabrier_afe": "smiles_bsti_chabrier_afe.h5",
+    "smiles_bsti_kroupa_afe": "smiles_bsti_kroupa_afe.h5",
+    "smiles_bsti_kroupa_revised_afe": "smiles_bsti_kroupa_revised_afe.h5",
+    "smiles_bsti_unimodal0.30_afe": "smiles_bsti_unimodal0.30_afe.h5",
+    "smiles_bsti_unimodal0.50_afe": "smiles_bsti_unimodal0.50_afe.h5",
+    "smiles_bsti_unimodal0.80_afe": "smiles_bsti_unimodal0.80_afe.h5",
+    "smiles_bsti_unimodal1.30_afe": "smiles_bsti_unimodal1.30_afe.h5",
+    "smiles_bsti_unimodal1.50_afe": "smiles_bsti_unimodal1.50_afe.h5",
+    "smiles_bsti_unimodal1.80_afe": "smiles_bsti_unimodal1.80_afe.h5",
+    "smiles_bsti_unimodal2.00_afe": "smiles_bsti_unimodal2.00_afe.h5",
+    "smiles_bsti_unimodal2.30_afe": "smiles_bsti_unimodal2.30_afe.h5",
+    "smiles_bsti_unimodal2.50_afe": "smiles_bsti_unimodal2.50_afe.h5",
+    "smiles_bsti_unimodal2.80_afe": "smiles_bsti_unimodal2.80_afe.h5",
+    "smiles_bsti_unimodal3.00_afe": "smiles_bsti_unimodal3.00_afe.h5",
+    "smiles_bsti_unimodal3.30_afe": "smiles_bsti_unimodal3.30_afe.h5",
+    "smiles_bsti_unimodal3.50_afe": "smiles_bsti_unimodal3.50_afe.h5",
 }
 
 # Reverse lookup used by ``load_ssp_data`` to fetch a missing local file when
@@ -607,8 +762,8 @@ def list_available_ssps() -> list[dict]:
 
         >>> import tengri
         >>> rows = tengri.list_available_ssps()
-        >>> {r["imf"] for r in rows if r["family"] == "fsps_mist_c3k_a"}
-        {'chabrier', 'kroupa', 'salpeter'}
+        >>> sorted({r["imf"] for r in rows if r["family"] == "fsps_mist_c3k_a"})
+        ['chabrier', 'kroupa', 'salpeter']
 
     See also
     --------
@@ -740,8 +895,8 @@ def download_ssp(
     Examples
     --------
     >>> import tengri
-    >>> tengri.download_ssp()  # default FSPS PARSEC+MILES grid → data/
-    >>> tengri.download_ssp("bc03_pdva_stelib_chabrier", dest="/scratch/ssp")
+    >>> tengri.download_ssp()  # doctest: +SKIP
+    >>> tengri.download_ssp("bc03_pdva_stelib_chabrier", dest="/scratch/ssp")  # doctest: +SKIP
     """
     # Resolve target directory
     if dest is None:

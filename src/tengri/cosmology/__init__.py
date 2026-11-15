@@ -9,11 +9,10 @@ instance or rely on the :data:`DEFAULT_COSMO` (Planck18) module default.
 Examples
 --------
 >>> from tengri import cosmology as cosmo
->>> cosmo.luminosity_distance_mpc(0.5)
-DeviceArray(2867.4..., dtype=float64)
->>> cosmo.PLANCK18
-CosmoParams(Om0=0.30966, w0=-1.0, wa=0.0, h=0.6766, Tcmb0=2.7255, Neff=3.046,
-            m_nu_eV=(0.0, 0.0, 0.06))
+>>> round(float(cosmo.luminosity_distance_mpc(0.5)), 3)  # Planck18
+2919.625
+>>> cosmo.PLANCK18  # doctest: +ELLIPSIS
+CosmoParams(Om0=0.30966, w0=-1.0, wa=0.0, h=0.6766, Tcmb0=2.7255, Neff=3.046, m_nu_eV=...)
 """
 
 from __future__ import annotations

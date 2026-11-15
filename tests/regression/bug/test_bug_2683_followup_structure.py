@@ -105,7 +105,10 @@ def test_a_dsps_is_the_first_order_integration(ssp, obs, label, z, sfh):
     [
         ("burst 30 Myr, lookback 1.00-1.03 Gyr, z=2.5", 2.5, _const_burst(1.03, 1.0), 0.002),
         ("burst 30 Myr, lookback 0.50-0.53 Gyr, z=2.5", 2.5, _const_burst(0.53, 0.5), 0.003),
-        ("burst 10 Myr, lookback 1.00-1.01 Gyr, z=2.5", 2.5, _const_burst(1.01, 1.0), 0.005),
+        # 0.008 since #3434 (in #3462): the default metallicity mixture is node-exact cubic
+        # Hermite, not the 0.1 dex lognormal; measured worst 0.594 % (0.330 % before, and
+        # 0.330 % again with logzsol_scatter=Fixed(0.1)). Both paths share the weights.
+        ("burst 10 Myr, lookback 1.00-1.01 Gyr, z=2.5", 2.5, _const_burst(1.01, 1.0), 0.008),
         ("periodic, z=0", 0.0, {"type": "periodic"}, 0.0015),
         ("periodic, z=2.5", 2.5, {"type": "periodic"}, 0.0015),
         ("norm, z=2.5", 2.5, {"type": "norm"}, 0.002),

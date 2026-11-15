@@ -53,7 +53,12 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.nebular._params import PARAMS as _NEB_PARAM_DECLARATIONS
+from tengri.components.nebular._params import (
+    DEFAULT_NEB_ELINE_SIGMA_KMS,
+    DEFAULT_NEB_FDUST_FRAC,
+    DEFAULT_NEB_FESC,
+    PARAMS as _NEB_PARAM_DECLARATIONS,
+)
 from tengri.components.nebular._shared import render_nebular_lines
 from tengri.components.nebular.component import NebularSEDComponent
 from tengri.components.nebular.line_precompute import _log10_four_pi_dl2
@@ -461,9 +466,11 @@ def _ssp_met_nodes(model):
 def _snap_axis_to_nodes(lo, hi, n, nodes):
     """Ascending grid on ``[lo, hi]``: the uniform axis **plus** every interior node.
 
-    ``met_logzsol`` reaches the forward through a linear interpolation over the SSP
-    metallicity axis, whose derivative jumps at each SSP node. The exact per-Q_H
-    emissivity is therefore piecewise-smooth with C0 kinks at *known* locations. A
+    ``met_logzsol`` reaches the forward through an interpolation over the SSP
+    metallicity axis that is node-exact but not smooth across the nodes: linear before
+    #3434, node-exact cubic Hermite since (#3462), which also curves inside each cell, so
+    a linear table now carries a ~1 % [OIII] floor in the widest near-solar cell. The exact
+    per-Q_H emissivity is piecewise-smooth with kinks at *known* locations. A
     PCHIP interpolant is node-exact, so a knot placed on a kink reproduces it exactly
     instead of smearing it across a cell -- an O(h) error becomes O(h^2).
 
@@ -1006,7 +1013,8 @@ def reconstruction_escape_factor(params) -> jnp.ndarray:
     from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 
     f_esc, f_dust, _ = lyc_shares(
-        jnp.asarray(params.get("neb_fesc", 0.0)), jnp.asarray(params.get("neb_fdust_frac", 0.0))
+        jnp.asarray(params.get("neb_fesc", DEFAULT_NEB_FESC)),
+        jnp.asarray(params.get("neb_fdust_frac", DEFAULT_NEB_FDUST_FRAC)),
     )
     return lyc_dust_escape_factor(f_esc, f_dust)
 
@@ -1663,7 +1671,7 @@ def _split_band_fields(
     n_lines = int(np.asarray(sed_line_waves).shape[0])
     if request is None:
         lnz = ln1pz_grid(ref_z, ref_z, 1)
-        sigma = jnp.asarray(params0.get("neb_eline_sigma_kms", 100.0))
+        sigma = jnp.asarray(params0.get("neb_eline_sigma_kms", DEFAULT_NEB_ELINE_SIGMA_KMS))
         profiles = jax.vmap(
             lambda unit: render_nebular_lines(
                 jnp.asarray(sed_line_waves), unit, jnp.asarray(wave_np), 0.0, sigma
@@ -1706,7 +1714,7 @@ def _split_band_fields(
             "cont_subband_frac": jnp.asarray(frac),
             "cont_subband_waves_rest": jnp.asarray(lam),
         }
-    sigma = jnp.asarray(params0.get("neb_eline_sigma_kms", 100.0))
+    sigma = jnp.asarray(params0.get("neb_eline_sigma_kms", DEFAULT_NEB_ELINE_SIGMA_KMS))
     unit = jax.vmap(
         lambda e: render_nebular_lines(
             jnp.asarray(sed_line_waves), e, jnp.asarray(wave_np), 0.0, sigma

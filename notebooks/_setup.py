@@ -54,8 +54,9 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 # The convergence-validated fixed-length HMC recipe. Fixed-length HMC (rather
 # than NUTS) keeps the leapfrog count off the critical path, so the cost of a
-# fit is predictable; these settings mix the six-to-eight parameter posteriors
-# in the fitting notebooks cleanly (max split-R-hat < 1.01, few divergences).
+# fit is predictable. Four chains, with the metric preconditioned on the
+# curvature at the best fit, mix the six-parameter posteriors of the fitting
+# notebooks to max R-hat <= 1.01 across all four chains.
 # Pass a `key=` at the call site — a shared seed would make the notebooks'
 # chains identical by accident rather than by design.
 HMC_VALIDATED = dict(
@@ -63,6 +64,8 @@ HMC_VALIDATED = dict(
     n_warmup=1000,
     n_samples=600,
     n_leapfrog_steps=20,
+    n_chains=4,
+    precondition=True,
     dense_mass_matrix=True,
     target_accept_rate=0.9,
 )

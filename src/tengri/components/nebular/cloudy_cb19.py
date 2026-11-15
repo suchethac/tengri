@@ -158,7 +158,7 @@ from __future__ import annotations
 import warnings
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any, ClassVar, NamedTuple
 
 import h5py
 import jax
@@ -168,10 +168,22 @@ import numpy as np
 from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri._data_setup import package_or_env_data_path
 from tengri.components.lyc import lyc_shares
+from tengri.components.nebular._component_params import NEBULAR_STANDARD_PARAMS
 from tengri.components.nebular._constants import _LOG_OH_OFFSET, _LSUN_ERG
 from tengri.components.nebular._line_ingest import catalog_air_to_vacuum
+from tengri.components.nebular._params import (
+    DEFAULT_NEB_CO,
+    DEFAULT_NEB_DNO,
+    DEFAULT_NEB_FDUST_FRAC,
+    DEFAULT_NEB_FESC,
+    DEFAULT_NEB_FESC_LYA,
+    DEFAULT_NEB_HBFRAC,
+    DEFAULT_NEB_LOG_NH,
+    DEFAULT_NEB_LOGU,
+)
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import (
+    NebularBackendDefaults,
     _qh_bilinear,
     apply_lya_escape,
     compute_qh,
@@ -181,6 +193,7 @@ from tengri.components.nebular._shared import (
     sanitize_qh_table,
     ssp_log_age_yr_axis,
 )
+from tengri.components.nebular.ionizing_spectrum import require_ionizing_coverage
 from tengri.config.exceptions import ParameterError, TengriIOError
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
@@ -749,7 +762,7 @@ _compute_log_qh_grid = jax.vmap(
 # ── Main backend class ────────────────────────────────────────────
 
 
-class CB19Backend:
+class CB19Backend(NebularBackendDefaults):
     """CB_19 CLOUDY grid-based nebular emission backend.
 
     Loads a precomputed CB_19 CLOUDY photoionization grid (Martinez-Paredes et al.
@@ -817,6 +830,20 @@ class CB19Backend:
 
     """
 
+    config_name: ClassVar[str] = "cb19"
+    supports_split_sed: ClassVar[bool] = True
+    line_fraction_policy: ClassVar[bool] = False
+    reads: ClassVar[tuple[str, ...]] = ("lnu_age", "ssp_ages_yr")
+    carries_freefree: ClassVar[bool] = False
+    additive: ClassVar[bool] = True
+    requires_instance: ClassVar[bool] = True
+    caches_filters: ClassVar[bool] = True
+
+    @classmethod
+    def parameters(cls) -> list:
+        """Free-parameter declarations this backend contributes [see class docs]."""
+        return list(NEBULAR_STANDARD_PARAMS)
+
     name = "cb19_grid"
     has_free_params = True
 
@@ -831,6 +858,36 @@ class CB19Backend:
     #: exactly this: still has the identity value rather than an
     #: ``AttributeError``. 0.0 means "table already in photons/s".
     _log_qh_scale: float = 0.0
+
+    @classmethod
+    def from_spec(cls, spec, ssp_data):
+        """Build the CB19 backend that a model spec selects, and check its free parameters.
+
+        Parameters
+        ----------
+        spec : Parameters
+            Model spec. Reads ``nebular_cb19_grid_path`` and ``free_params``.
+        ssp_data : SSPData
+            Stellar grid the backend is evaluated on.
+
+        Returns
+        -------
+        CB19Backend
+            The backend instance.
+
+        Raises
+        ------
+        CB19DegenerateGridError
+            If the grid is the flat placeholder and a nebular parameter is free.
+        """
+        kwargs = {"ssp_data": ssp_data}
+        if spec.nebular_cb19_grid_path is not None:
+            kwargs["grid_path"] = spec.nebular_cb19_grid_path
+        backend = cls(**kwargs)
+        # The grid's own axes decide which nebular parameters can move the prediction.
+        # Refuse at construction rather than at the end of a fit (#2181).
+        check_cb19_free_params(backend.grid, spec.free_params, grid_path=backend.grid_path)
+        return backend
 
     def __init__(
         self,
@@ -896,10 +953,10 @@ class CB19Backend:
         dl_cm: float,
         fixed: dict[int, float] | None = None,
         *,
-        neb_log_nH: float = 2.0,
-        neb_co: float = -0.36,
-        neb_dno: float = 0.0,
-        neb_hbfrac: float = 1.0,
+        neb_log_nH: float = DEFAULT_NEB_LOG_NH,
+        neb_co: float = DEFAULT_NEB_CO,
+        neb_dno: float = DEFAULT_NEB_DNO,
+        neb_hbfrac: float = DEFAULT_NEB_HBFRAC,
     ) -> None:
         """Preintegrate CB19 lines through filters; expose CLOUDY-shaped surface.
 
@@ -1053,6 +1110,7 @@ class CB19Backend:
         Stores a (n_met, n_age) table of ionizing photon rates. At prediction
         time, bilinear interpolation gives Q_H for each SSP age bin.
         """
+        require_ionizing_coverage(ssp_data.ssp_wave, backend="cb19 (CB19Backend)")
         ssp_wave = ssp_data.ssp_wave
         ssp_flux = ssp_data.ssp_flux  # (n_met, n_age, n_wave)
 
@@ -1127,14 +1185,14 @@ class CB19Backend:
         ssp_weights: jnp.ndarray,
         ssp_log_ages_yr: jnp.ndarray,
         log_z: float,
-        neb_logU: float = -3.0,
+        neb_logU: float = DEFAULT_NEB_LOGU,
         neb_logZ_gas: float | None = None,
-        neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 1.0,
-        neb_fdust_frac: float = 0.0,
-        neb_log_nH: float = 2.0,
-        neb_co: float = -0.36,
-        neb_dno: float = 0.0,
+        neb_fesc: float = DEFAULT_NEB_FESC,
+        neb_fesc_lya: float = DEFAULT_NEB_FESC_LYA,
+        neb_fdust_frac: float = DEFAULT_NEB_FDUST_FRAC,
+        neb_log_nH: float = DEFAULT_NEB_LOG_NH,
+        neb_co: float = DEFAULT_NEB_CO,
+        neb_dno: float = DEFAULT_NEB_DNO,
         neb_hbfrac: float | None = None,
         template_data: Any | None = None,
         **_kwargs,
@@ -1357,14 +1415,14 @@ class CB19Backend:
         ssp_wave: jnp.ndarray,
         ssp_log_ages_yr: jnp.ndarray,
         log_z: float,
-        neb_logU: float = -3.0,
+        neb_logU: float = DEFAULT_NEB_LOGU,
         neb_logZ_gas: float | None = None,
-        neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 1.0,
-        neb_fdust_frac: float = 0.0,
-        neb_log_nH: float = 2.0,
-        neb_co: float = -0.36,
-        neb_dno: float = 0.0,
+        neb_fesc: float = DEFAULT_NEB_FESC,
+        neb_fesc_lya: float = DEFAULT_NEB_FESC_LYA,
+        neb_fdust_frac: float = DEFAULT_NEB_FDUST_FRAC,
+        neb_log_nH: float = DEFAULT_NEB_LOG_NH,
+        neb_co: float = DEFAULT_NEB_CO,
+        neb_dno: float = DEFAULT_NEB_DNO,
         neb_hbfrac: float | None = None,
         line_sigma_aa: float = 0.0,
         line_sigma_kms: float = 0.0,

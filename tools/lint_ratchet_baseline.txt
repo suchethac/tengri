@@ -11,9 +11,7 @@ BLE001	src/tengri/citations/collect.py	2
 BLE001	src/tengri/components/agn/_nthcomp.py	1
 BLE001	src/tengri/components/agn/blocks/_protocol.py	1
 BLE001	src/tengri/components/agn/fritz.py	1
-BLE001	src/tengri/components/dust/draine2021_pah_ir.py	2
-BLE001	src/tengri/components/igm/_subband_cache.py	2
-BLE001	src/tengri/components/nebular/component.py	1
+BLE001	src/tengri/components/igm/_subband_cache.py	1
 BLE001	src/tengri/config/display.py	2
 BLE001	src/tengri/facade.py	3
 BLE001	src/tengri/forward/sed_model.py	1
@@ -100,7 +98,7 @@ T201	src/tengri/inference/backends/pathfinder.py	4
 T201	src/tengri/inference/backends/vi/native.py	12
 T201	src/tengri/inference/backends/vi/nifty.py	5
 T201	src/tengri/inference/catalog_fitter.py	12
-T201	src/tengri/inference/fitter.py	2
+T201	src/tengri/inference/fitter.py	1
 T201	src/tengri/inference/hierarchical.py	34
 T201	src/tengri/inference/posterior.py	1
 T201	src/tengri/utils/devices.py	8

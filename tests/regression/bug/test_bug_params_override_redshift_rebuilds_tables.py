@@ -386,6 +386,40 @@ def test_catalog_rows_without_catalog_z_range_recover_each_galaxys_truth(
         assert float(post.fixed_values["redshift"]) == z
 
 
+def test_checkpointed_rows_recover_each_galaxys_truth(synthetic_ssp_wide, tmp_path):
+    """``output_dir=`` keeps the per-row loop; each row is still fitted at ITS redshift.
+
+    The loop used to copy the model's attributes and swap the spec, which left every
+    table, the component chain and the memoized signature at the model's own redshift.
+    """
+    bands, approx, kw = _CATALOG_VARIANTS["wave"]
+    obs = Observation(photometry=Photometry.from_names(bands))
+    rows, nb = _catalog_rows(synthetic_ssp_wide, obs, approx, CATALOG_Z, **kw)
+    base = _mass_only(synthetic_ssp_wide, obs, Z_BASE, approx, **kw)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        posteriors = convenience.fit_batch(
+            base,
+            rows,
+            flux_cols=[f"f{j}" for j in range(nb)],
+            err_cols=[f"e{j}" for j in range(nb)],
+            redshift_col="z",
+            method="map",
+            n_steps=200,
+            verbose=False,
+            output_dir=str(tmp_path),
+        )
+
+    assert Z_BASE not in CATALOG_Z
+    for z, post in zip(CATALOG_Z, posteriors, strict=True):
+        logm = float(post.params["sfh_dpl_log_total_mass"])
+        assert abs(logm - TRUTH_LOGM) < 0.05, (
+            f"z={z}: recovered log M = {logm:.3f}, truth {TRUTH_LOGM}; the row was "
+            f"fitted at the model's redshift {Z_BASE}"
+        )
+
+
 def test_catalog_rebuilds_once_per_distinct_redshift(synthetic_ssp_wide):
     """Repeated catalog redshifts share one rebuilt model, and the advisory still fires."""
     obs = Observation(photometry=Photometry.from_names(OPT_BANDS))

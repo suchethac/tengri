@@ -172,13 +172,19 @@ def test_disabling_the_cache_is_honored(tmp_path, monkeypatch, base):
     assert sc.load(sc.cache_key(**base)) is None
 
 
-def test_a_corrupt_entry_degrades_to_a_miss(tmp_path, monkeypatch, base):
-    """A cache is an optimization; a bad file must not take the build down."""
+def test_a_corrupt_entry_raises_rather_than_recomputing_silently(tmp_path, monkeypatch, base):
+    """A corrupt entry is loud, not a silent miss (#3285).
+
+    This used to assert ``None``: a bad file was recomputed with no record of
+    it. The miss path is now only an absent file; see
+    ``tests/regression/bug/test_bug_3285_igm_cache_entry_validation.py``.
+    """
     monkeypatch.setenv("TENGRI_PRECOMP_CACHE_DIR", str(tmp_path))
     monkeypatch.delenv("TENGRI_DISABLE_PRECOMP_CACHE", raising=False)
     key = sc.cache_key(**base)
     (tmp_path / f"igm_subband_{key}.npz").write_bytes(b"not an npz file")
-    assert sc.load(key) is None
+    with pytest.raises(RuntimeError, match="cannot be read"):
+        sc.load(key)
 
 
 def test_disabling_the_cache_also_silences_the_memo(monkeypatch, base):

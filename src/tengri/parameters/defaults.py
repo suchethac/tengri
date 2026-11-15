@@ -203,3 +203,41 @@ def get_inference_defaults(method: str | None = None) -> dict[str, Any]:
     if method is None:
         return section
     return section.get(method, {})
+
+
+def get_mcmc_auto_d() -> int:
+    """Return ``[inference] mcmc_auto_d``, the auto-method dimensionality threshold.
+
+    This is the single source for the D cut between NUTS and the high-D
+    sampler used by ``method="auto"`` and ``method="mcmc"``. It is read
+    strictly from the active defaults file (the user override if present, else
+    the packaged one). Unlike :func:`get_inference_defaults`, it never
+    substitutes a value.
+
+    Returns
+    -------
+    int
+        The configured threshold.
+
+    Raises
+    ------
+    ConfigError
+        If the active defaults file cannot be read, or if ``mcmc_auto_d`` is
+        absent or not an integer.
+    """
+    from tengri.config.exceptions import ConfigError
+
+    path = _active_path()
+    try:
+        raw = _read_toml(path)
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        raise ConfigError(
+            f"cannot read defaults file {path} to read [inference] mcmc_auto_d "
+            f"(the auto-method threshold): {exc}"
+        ) from exc
+    if "mcmc_auto_d" not in raw.get("inference", {}):
+        raise ConfigError(f"[inference] mcmc_auto_d is missing from defaults file {path}")
+    value = raw["inference"]["mcmc_auto_d"]
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ConfigError(f"[inference] mcmc_auto_d in {path} must be an integer, got {value!r}")
+    return value

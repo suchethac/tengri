@@ -56,6 +56,12 @@ class ParameterRecord(NamedTuple):
     # silently leaving it pinned (#1264). Last field, so positional
     # construction of the historical 6-tuple keeps working.
     free_prior: object = None
+    # The public-to-internal translation, ``internal = public * scale + offset``
+    # (#3296). Carried from the declaration; ``internal_name=None`` means the
+    # internal name is the public name. ``as_param_map`` does not read these.
+    internal_name: str | None = None
+    scale: float = 1.0
+    offset: float = 0.0
 
 
 #: Units implied by a parameter-name suffix. The naming contract
@@ -245,6 +251,9 @@ def _add_declaration(
             owner=owner,
             group=group,
             free_prior=decl.free_prior,
+            internal_name=decl.internal_name,
+            scale=decl.scale,
+            offset=decl.offset,
         )
         return
     differing = [
@@ -405,6 +414,12 @@ def as_param_map() -> dict[str, tuple[str, float, float, str]]:
     inherited from the component declarations. Some parameters may need
     unit conversion; those are defined explicitly elsewhere (e.g., in
     ``tengri.parameters._shared.py``) with non-unit-scale entries.
+
+    This is the identity route: it deliberately ignores the declared
+    ``internal_name``, ``scale`` and ``offset`` fields. ``_build_param_map``
+    reads those through its own declared-translation views, and the age_binned
+    branch depends on the identity here for ``dust_tau_bc`` and
+    ``dust_tau_diff``, which it skips on purpose (#3296).
     """
     reg = registry()
     result: dict[str, tuple[str, float, float, str]] = {}

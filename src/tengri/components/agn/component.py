@@ -84,7 +84,25 @@ from tengri.components.agn._lbol_reference import (
     reference_evaluation,
     rescale,
 )
-from tengri.components.agn._params import DEFAULT_AGN_LUM_RATIO, PARAMS as _AGN_PARAMS
+from tengri.components.agn._params import (
+    DEFAULT_AGN_A_SPIN,
+    DEFAULT_AGN_ALPHA,
+    DEFAULT_AGN_COS_INC,
+    DEFAULT_AGN_EBV_DISC,
+    DEFAULT_AGN_FRAC_HOT,
+    DEFAULT_AGN_IR_FRAC,
+    DEFAULT_AGN_LOG_LEDD,
+    DEFAULT_AGN_LOG_MBH,
+    DEFAULT_AGN_LUM_RATIO,
+    DEFAULT_AGN_POLAR_OA,
+    DEFAULT_AGN_T_HOT,
+    DEFAULT_AGN_T_TORUS,
+    DEFAULT_AGN_T_WARM,
+    DEFAULT_AGN_TAU_TORUS,
+    DEFAULT_AGN_TORUS_FRAC,
+    PARAMS as _AGN_PARAMS,
+    POLAR_EBV_OFF,
+)
 from tengri.components.agn._phys import log10_nu_lnu_at
 from tengri.components.agn._publication import with_lsun_siblings
 from tengri.components.agn.adaf import adaf_accretion_diagnostics
@@ -417,7 +435,7 @@ class AGNSEDComponent(TemplateThreading):
         Mirrors the ``agn_kwargs`` assembled in :meth:`apply` for the composable model, so
         :meth:`emission_terms` and the dense path evaluate the same function.
         """
-        kwargs = numeric_agn_kwargs(params, params.get("agn_torus_frac", 0.5))
+        kwargs = numeric_agn_kwargs(params, params.get("agn_torus_frac", DEFAULT_AGN_TORUS_FRAC))
         kwargs["agn_disc_block"] = self.config.agn_disc_block
         kwargs["agn_nlr_block"] = self.config.agn_nlr_block
         kwargs["agn_blr_block"] = self.config.agn_blr_block
@@ -931,11 +949,8 @@ class AGNSEDComponent(TemplateThreading):
         model reaches.
 
         The mapping reaches ``f`` exactly where the energy ledger closes
-        (``agn_ledger_closed == 1``). The exception is ``polar_dust`` beside a library torus
-        with anisotropy (Fritz): the runner splits the dust budget on the torus's sightline
-        power, not its angle-integrated power (#3100), so the ledger does not close and the
-        realized total-dust fraction exceeds ``f`` by up to 3.25% (measured at ``f = 0.05``,
-        2.5% at ``f = 0.3``); ``agn_ir_frac_realized`` reports it.
+        (``agn_ledger_closed == 1``); ``agn_ir_frac_realized`` reports the fraction the model
+        reaches.
         """
         wave = state.wave
 
@@ -983,10 +998,10 @@ class AGNSEDComponent(TemplateThreading):
         # as inf/inf. ``agn_ir_frac == 0`` leaves the coupling inert (the user
         # torus_frac), with the log branch still finite so its unused-branch
         # gradient cannot leak (#1206).
-        agn_ir_frac = jnp.asarray(params.get("agn_ir_frac", 0.0))
+        agn_ir_frac = jnp.asarray(params.get("agn_ir_frac", DEFAULT_AGN_IR_FRAC))
         # Avoid divide-by-zero / negative leak when fracAGN ≥ 1.
         _one_minus_frac = jnp.maximum(1.0 - agn_ir_frac, 1e-6)
-        agn_torus_frac_user = jnp.asarray(params.get("agn_torus_frac", 0.5))
+        agn_torus_frac_user = jnp.asarray(params.get("agn_torus_frac", DEFAULT_AGN_TORUS_FRAC))
         # ``log_L_absorbed``, not ``log_L_ir``: this coupling wants the ABSORBED
         # stellar+nebular energy the dust screen actually intercepted, not the
         # re-emitted IR budget, which ``dust_eta_balance`` (and a declared
@@ -1407,7 +1422,10 @@ class AGNSEDComponent(TemplateThreading):
         module = registry.resolve("composable_agn")
         values = [jnp.asarray(params[name]) for name in sorted(table["axes"])]
         both = module.lookup_from_table(
-            table, "composable_agn", jnp.asarray(params.get("agn_lum_ratio", 1.0)), *values
+            table,
+            "composable_agn",
+            jnp.asarray(params.get("agn_lum_ratio", DEFAULT_AGN_LUM_RATIO)),
+            *values,
         )
         n_filters = both.shape[-1] // 2
         return both[:n_filters], both[n_filters:]
@@ -1537,7 +1555,92 @@ def _register_ledger_properties() -> None:
     )
 
 
+def _is_adaf_composable(component) -> bool:
+    """Whether ``component`` is the composable AGN with the ADAF disc (its accretion keys)."""
+    return _is_composable(component) and component.config.agn_disc_block == "adaf"
+
+
+def _published_scalar(key: str):
+    """A property reading the scalar ``key`` the forward pass published, NaN when absent.
+
+    ``outputs()`` is one static tuple, so a key a monolithic chain does not publish is still
+    declared; the ``available`` predicates keep such an entry out of the catalog, and the NaN
+    is the fallback if one is ever read against a state that lacks the key.
+    """
+
+    def fn(state, params):
+        return state.derived.get(key, jnp.asarray(jnp.nan, dtype=state.wave.dtype))
+
+    return fn
+
+
+#: Declared AGN outputs that were published but not in the catalog (#3144): key -> (units, doc,
+#: available). The ledger keys are registered on request above and are not listed here.
+_PUBLISHED_OUTPUT_PROPERTIES = {
+    "L_agn_bol": ("erg/s", "AGN accretion power 10**agn_log_lbol L_sun", None),
+    "log_L_agn_bol": ("dex", "log10(L_agn_bol / (erg/s)), float32-safe", None),
+    "L_agn_bol_lsun": (
+        "Lsun",
+        "10**agn_log_lbol, the accretion power in solar luminosities",
+        None,
+    ),
+    "log_L_agn_direct_los": (
+        "dex",
+        "log10 of the line-of-sight isotropic-equivalent direct AGN luminosity [dex re erg/s]; "
+        "composable only",
+        _is_composable,
+    ),
+    "L_agn_direct_los_lsun": (
+        "Lsun",
+        "log_L_agn_direct_los in solar luminosities; composable only",
+        _is_composable,
+    ),
+    "agn_torus_frac_effective": (
+        "",
+        "torus fraction the composable AGN was evaluated at; composable only",
+        _is_composable,
+    ),
+    "agn_adaf_mdot": (
+        "",
+        "ADAF accretion rate in Eddington units, mdot = Mdot / Mdot_Edd (Mahadevan 1997, "
+        "Eq. 4); composable with the 'adaf' disc only",
+        _is_adaf_composable,
+    ),
+    "log_L_agn_adaf_accretion": (
+        "dex",
+        "log10 of the ADAF accretion power eta_eff Mdot c^2 [dex re erg/s], eta_eff = 0.1; "
+        "composable with the 'adaf' disc only",
+        _is_adaf_composable,
+    ),
+    "L_agn_adaf_accretion_lsun": (
+        "Lsun",
+        "log_L_agn_adaf_accretion in solar luminosities; composable with the 'adaf' disc only",
+        _is_adaf_composable,
+    ),
+}
+
+
+def _register_output_properties() -> None:
+    """Register the AGN's published luminosities and ADAF keys in the property catalog (#3144)."""
+    from tengri.forward.properties import Property, register_properties
+
+    register_properties(
+        "agn",
+        {
+            key: Property(
+                units=units,
+                group="agn",
+                doc=doc,
+                fn=_published_scalar(key),
+                available=available,
+            )
+            for key, (units, doc, available) in _PUBLISHED_OUTPUT_PROPERTIES.items()
+        },
+    )
+
+
 _register_ledger_properties()
+_register_output_properties()
 
 
 def numeric_agn_kwargs(params: Mapping[str, Any], agn_torus_frac) -> dict[str, jnp.ndarray]:
@@ -1563,21 +1666,21 @@ def numeric_agn_kwargs(params: Mapping[str, Any], agn_torus_frac) -> dict[str, j
         call the model with the same defaults.
     """
     kwargs = {
-        "agn_lum_ratio": jnp.asarray(params.get("agn_lum_ratio", 1.0)),
-        "agn_alpha": jnp.asarray(params.get("agn_alpha", -1.0)),
-        "agn_log_mbh": jnp.asarray(params.get("agn_log_mbh", 8.0)),
-        "agn_log_ledd": jnp.asarray(params.get("agn_log_ledd", -1.0)),
-        "agn_a_spin": jnp.asarray(params.get("agn_a_spin", 0.0)),
+        "agn_lum_ratio": jnp.asarray(params.get("agn_lum_ratio", DEFAULT_AGN_LUM_RATIO)),
+        "agn_alpha": jnp.asarray(params.get("agn_alpha", DEFAULT_AGN_ALPHA)),
+        "agn_log_mbh": jnp.asarray(params.get("agn_log_mbh", DEFAULT_AGN_LOG_MBH)),
+        "agn_log_ledd": jnp.asarray(params.get("agn_log_ledd", DEFAULT_AGN_LOG_LEDD)),
+        "agn_a_spin": jnp.asarray(params.get("agn_a_spin", DEFAULT_AGN_A_SPIN)),
         "agn_torus_frac": jnp.asarray(agn_torus_frac),
-        "agn_T_torus": jnp.asarray(params.get("agn_T_torus", 1000.0)),
-        "agn_tau_torus": jnp.asarray(params.get("agn_tau_torus", 3.0)),
-        "agn_T_hot": jnp.asarray(params.get("agn_T_hot", 1500.0)),
-        "agn_T_warm": jnp.asarray(params.get("agn_T_warm", 300.0)),
-        "agn_frac_hot": jnp.asarray(params.get("agn_frac_hot", 0.5)),
-        "agn_cos_inc": jnp.asarray(params.get("agn_cos_inc", 0.5)),
-        "agn_polar_ebv": jnp.asarray(params.get("agn_polar_ebv", 0.0)),
-        "agn_polar_oa": jnp.asarray(params.get("agn_polar_oa", 40.0)),
-        "agn_ebv_disc": jnp.asarray(params.get("agn_ebv_disc", 0.0)),
+        "agn_T_torus": jnp.asarray(params.get("agn_T_torus", DEFAULT_AGN_T_TORUS)),
+        "agn_tau_torus": jnp.asarray(params.get("agn_tau_torus", DEFAULT_AGN_TAU_TORUS)),
+        "agn_T_hot": jnp.asarray(params.get("agn_T_hot", DEFAULT_AGN_T_HOT)),
+        "agn_T_warm": jnp.asarray(params.get("agn_T_warm", DEFAULT_AGN_T_WARM)),
+        "agn_frac_hot": jnp.asarray(params.get("agn_frac_hot", DEFAULT_AGN_FRAC_HOT)),
+        "agn_cos_inc": jnp.asarray(params.get("agn_cos_inc", DEFAULT_AGN_COS_INC)),
+        "agn_polar_ebv": jnp.asarray(params.get("agn_polar_ebv", POLAR_EBV_OFF)),
+        "agn_polar_oa": jnp.asarray(params.get("agn_polar_oa", DEFAULT_AGN_POLAR_OA)),
+        "agn_ebv_disc": jnp.asarray(params.get("agn_ebv_disc", DEFAULT_AGN_EBV_DISC)),
     }
     for key, val in params.items():
         if key.startswith("agn_") and key != "agn_log_lbol" and key not in kwargs:

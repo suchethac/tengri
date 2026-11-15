@@ -58,10 +58,25 @@ from tengri.components.agn._nthcomp import (
     nthcomp_norm_grid as _nthcomp_norm_grid,
 )
 from tengri.components.agn._params import (
+    DEFAULT_AGN_A_SPIN,
+    DEFAULT_AGN_ADAF_ALPHA,
+    DEFAULT_AGN_ADAF_BETA,
+    DEFAULT_AGN_ADAF_DELTA,
+    DEFAULT_AGN_ALPHA,
+    DEFAULT_AGN_ASTAR,
     DEFAULT_AGN_COS_INC,
+    DEFAULT_AGN_F_HARD,
+    DEFAULT_AGN_GAMMA_HARD,
+    DEFAULT_AGN_GAMMA_WARM,
+    DEFAULT_AGN_KT_HOT,
+    DEFAULT_AGN_KT_WARM,
     DEFAULT_AGN_LOG_LBOL,
+    DEFAULT_AGN_LOG_LEDD,
     DEFAULT_AGN_LOG_MBH,
+    DEFAULT_AGN_LOG_MDOT,
     DEFAULT_AGN_LUM_RATIO,
+    DEFAULT_AGN_R_WARM_RATIO,
+    DEFAULT_AGN_T_MAX,
 )
 from tengri.components.agn._phys import (
     C_LIGHT as _C_LIGHT,
@@ -72,7 +87,7 @@ from tengri.components.agn._phys import (
     ring_area as _ring_area,
     wavelength_to_nu as _wavelength_to_nu,
 )
-from tengri.components.agn._template_grid import scale_to_lbol_native
+from tengri.components.agn._template_grid import scale_to_torus_power_native
 from tengri.utils.grid_interp import library_lookup, loglog_integral, resample_template
 from tengri.utils.host_array import device_table, host_array
 from tengri.utils.physics_constants import (
@@ -87,6 +102,7 @@ from tengri.utils.physics_constants import (
 )
 from tengri.utils.scale import (
     apply_log10_scale,
+    is_float32_arithmetic,
     pow10 as _pow10,
     representable_denominator as _representable_denominator,
     representable_exponent,
@@ -141,6 +157,8 @@ _L_EDD_1MSUN_LSUN: float = float(
 _BNU_BOL_PER_T4: float = float(
     2.0 * math.pi**4 * _K_BOLTZ**4 / (15.0 * _H_PLANCK**3 * _C_LIGHT**2)
 )
+# Temperature unit [K] of the float32 bolometric sum: keeps c * T^4 / L_sun normal (#3105).
+_T_BOL_NORM: float = 1.0e5
 # 4*pi*sigma_SB / L_sun; l0_lsun = _4PI_SIGMA_SB_OVER_LSUN * r_isco_cm**2 * t_in**4.
 _4PI_SIGMA_SB_OVER_LSUN: float = float(4.0 * math.pi * _SIGMA_SB) / float(_LSUN_ERG)
 # 2*pi*sigma_SB / L_sun; per-annulus (sigma T^4 * 2*pi*r*dr) energy in L_sun.
@@ -204,8 +222,8 @@ def powerlaw_disc(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
     agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
-    agn_alpha: float = -1.0,
-    agn_T_max: float = 1e5,
+    agn_alpha: float = DEFAULT_AGN_ALPHA,
+    agn_T_max: float = DEFAULT_AGN_T_MAX,
     **_kwargs,
 ) -> jnp.ndarray:
     """Simple power-law accretion disc with exponential UV cutoff (deprecated).
@@ -750,8 +768,8 @@ def multicolor_disc(
     agn_log_lbol: float,
     agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
-    agn_log_ledd: float = -1.0,
-    agn_a_spin: float = 0.0,
+    agn_log_ledd: float = DEFAULT_AGN_LOG_LEDD,
+    agn_a_spin: float = DEFAULT_AGN_A_SPIN,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     n_radii: int = 50,
     euv_tail: str | float | None = "powerlaw",
@@ -911,7 +929,7 @@ def multicolor_disc(
     # Beyond r_sg the disc fragments rather than accretes; this is the
     # physically motivated outer boundary used by qsosed (Quera-Bofarull).
     # r_sg = 2150 * alpha^{2/9} * lambda_Edd^{4/9} * (M/1e9)^{-2/9} R_g.
-    if wavelength.dtype == jnp.float32:
+    if is_float32_arithmetic(wavelength):
         # Log-space so the ~1e44 L_bol, ~1e46 L_Edd and ~1e58 erg/s ``t_in**4``
         # numerator never materialize (float32 max 3.4e38). The RESULTS
         # (lambda_Edd ~1e-2, mdot ~1e24 g/s, t_in ~1e5 K) are all representable.
@@ -981,9 +999,16 @@ def multicolor_disc(
     def _disc_bol_lsun(cos_inc):
         """Closed-form power of the Wien disc seen at ``cos_inc`` [L_sun]."""
         ring_area_all = jax.vmap(lambda rr, drr: _ring_area(rr, drr, cos_inc))(r_grid, dr)
-        # Group the factors so no float32 intermediate leaves the normal range: (c * T^4) ~ 1e19
-        # and (area / L_sun) ~ 1e0..1e3; the bare ``c / L_sun`` ~ 5e-39 is subnormal, flushed to 0
-        # by XLA.
+        if t_profile.dtype == jnp.float32:
+            # The constant ``c / L_sun`` (c = _BNU_BOL_PER_T4) is ~4.7e-39, subnormal in float32.
+            # Under the vmapped graph XLA folds it to zero (flush-to-zero), so the disc's
+            # bolometric power vanished and the 30-75 A EUV tail with it (#3105). Measuring the
+            # temperature in units of T_NORM keeps every constant pair normal: c * T_NORM^4 / L_sun
+            # ~ 5e-19. Float64 keeps the expression below, bit-identical.
+            t_hat = t_profile / _T_BOL_NORM
+            return jnp.sum(
+                (_BNU_BOL_PER_T4 * _T_BOL_NORM**4 * t_hat**4) * (ring_area_all / float(_LSUN_ERG))
+            )
         return jnp.sum((_BNU_BOL_PER_T4 * t_profile**4) * (ring_area_all / float(_LSUN_ERG)))
 
     disc_bol_lsun = _disc_bol_lsun(agn_cos_inc)
@@ -1029,7 +1054,7 @@ def multicolor_disc(
     # ``2 cos i`` disc radiates its angle-integrated power), and the spectrum, which is
     # homogeneous of degree one in cos i, keeps its own ``2 cos i``.
     # The bolometric normalization below is closed-form / on fixed internal nodes (#2572).
-    if wavelength.dtype == jnp.float32:
+    if is_float32_arithmetic(wavelength):
         # Log-space renorm: ``l_bol_requested`` ~1e44 and the integral
         # ``l_nu_total`` (l_nu_intrinsic ~1e28 over ~1e15 Hz → ~1e43) both
         # overflow float32; only their ratio (~1e-33 when normalizing a
@@ -1595,7 +1620,7 @@ def _hot_zone_x_max(r_isco_rg: float, r_sg_rg: float) -> float:
 
 
 def kubota_done_unemitted_fraction(
-    agn_log_mbh: float, agn_log_lbol: float, agn_a_spin: float = 0.0
+    agn_log_mbh: float, agn_log_lbol: float, agn_a_spin: float = DEFAULT_AGN_A_SPIN
 ) -> float:
     r"""Share of the accretion power the K&D disc does not emit, :math:`R_{\rm unem}/L_{\rm bol}`.
 
@@ -1658,7 +1683,7 @@ def _compute_zone_radii(
     agn_r_warm_ratio: float,
     log10_l_edd: float,
     float32: bool = False,
-    agn_a_spin: float = 0.0,
+    agn_a_spin: float = DEFAULT_AGN_A_SPIN,
     h_inf: float | None = None,
 ) -> tuple:
     """Compute self-consistent zone radii: R_hot, R_warm, and R_out.
@@ -1839,7 +1864,7 @@ def _compute_zone_luminosities(
     float32: bool = False,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
     agn_log_lbol_shape: float = 0.0,
-    agn_a_spin: float = 0.0,
+    agn_a_spin: float = DEFAULT_AGN_A_SPIN,
     nthcomp_table=None,
     h_inf: float | None = None,
 ) -> tuple:
@@ -2218,15 +2243,15 @@ def kubota_done_disc_split(
     agn_log_lbol: float,
     agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
-    agn_log_ledd: float = -1.0,
-    agn_a_spin: float = 0.0,
+    agn_log_ledd: float = DEFAULT_AGN_LOG_LEDD,
+    agn_a_spin: float = DEFAULT_AGN_A_SPIN,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
-    agn_f_hard: float = 0.02,
-    agn_gamma_warm: float = 2.5,
-    agn_kt_warm: float = 0.2,
-    agn_gamma_hard: float = 1.8,
-    agn_kt_hot: float = 100.0,
-    agn_r_warm_ratio: float = 2.0,
+    agn_f_hard: float = DEFAULT_AGN_F_HARD,
+    agn_gamma_warm: float = DEFAULT_AGN_GAMMA_WARM,
+    agn_kt_warm: float = DEFAULT_AGN_KT_WARM,
+    agn_gamma_hard: float = DEFAULT_AGN_GAMMA_HARD,
+    agn_kt_hot: float = DEFAULT_AGN_KT_HOT,
+    agn_r_warm_ratio: float = DEFAULT_AGN_R_WARM_RATIO,
     n_radii: int = 50,
     agn_self_consistent_gamma: bool = False,
     agn_log_lbol_shape: float | None = None,
@@ -2287,15 +2312,15 @@ def kubota_done_disc(
     agn_log_lbol: float,
     agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
-    agn_log_ledd: float = -1.0,
-    agn_a_spin: float = 0.0,
+    agn_log_ledd: float = DEFAULT_AGN_LOG_LEDD,
+    agn_a_spin: float = DEFAULT_AGN_A_SPIN,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
-    agn_f_hard: float = 0.02,
-    agn_gamma_warm: float = 2.5,
-    agn_kt_warm: float = 0.2,
-    agn_gamma_hard: float = 1.8,
-    agn_kt_hot: float = 100.0,
-    agn_r_warm_ratio: float = 2.0,
+    agn_f_hard: float = DEFAULT_AGN_F_HARD,
+    agn_gamma_warm: float = DEFAULT_AGN_GAMMA_WARM,
+    agn_kt_warm: float = DEFAULT_AGN_KT_WARM,
+    agn_gamma_hard: float = DEFAULT_AGN_GAMMA_HARD,
+    agn_kt_hot: float = DEFAULT_AGN_KT_HOT,
+    agn_r_warm_ratio: float = DEFAULT_AGN_R_WARM_RATIO,
     n_radii: int = 50,
     agn_self_consistent_gamma: bool = False,
     agn_log_lbol_shape: float | None = None,
@@ -2543,7 +2568,7 @@ def kubota_done_disc(
        https://doi.org/10.1086/311810
     """
     nu = _wavelength_to_nu(wavelength)
-    _f32 = wavelength.dtype == jnp.float32
+    _f32 = is_float32_arithmetic(wavelength)
     # Shape luminosity (temperature, zone structure, corona fraction) vs the
     # normalization luminosity (output magnitude). They coincide by default (the
     # float64 path). On float32 the AGN component passes the TRUE L_bol for the
@@ -2647,9 +2672,9 @@ def adaf_disc(
     agn_log_lbol,
     agn_lum_ratio=DEFAULT_AGN_LUM_RATIO,
     agn_log_mbh=DEFAULT_AGN_LOG_MBH,
-    agn_adaf_beta=0.5,
-    agn_adaf_delta=0.1,
-    agn_adaf_alpha=0.3,
+    agn_adaf_beta=DEFAULT_AGN_ADAF_BETA,
+    agn_adaf_delta=DEFAULT_AGN_ADAF_DELTA,
+    agn_adaf_alpha=DEFAULT_AGN_ADAF_ALPHA,
     **_legacy_kwargs,
 ):
     """DEPRECATED thin alias for the faithful Mahadevan 1997 ADAF (#898).
@@ -2859,8 +2884,8 @@ def relagn_disc_from_grid(
     # own rule.
     agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
-    agn_log_mdot: float = -1.0,
-    agn_astar: float = 0.0,
+    agn_log_mdot: float = DEFAULT_AGN_LOG_MDOT,
+    agn_astar: float = DEFAULT_AGN_ASTAR,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     **_kwargs,
 ) -> jnp.ndarray:
@@ -2937,6 +2962,5 @@ def relagn_disc_from_grid(
     # disc does not depend on the caller's wavelength sampling or range. The
     # float32 peak-factoring (the template's integral is ~1e45 erg/s and would
     # overflow) lives in the helper.
-    return scale_to_lbol_native(
-        lnu_template, wave_native, lnu_interp, 10.0**agn_log_lbol * _LSUN_ERG
-    )
+    # Log-space power (#3183): the erg/s-scale linear power is never formed in float32.
+    return scale_to_torus_power_native(lnu_template, wave_native, lnu_interp, agn_log_lbol, 1.0)

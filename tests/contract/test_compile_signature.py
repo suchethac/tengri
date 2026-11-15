@@ -17,6 +17,7 @@ from tengri import Fitter, Parameters, SEDModel, Uniform
 from tengri.components.stellar.sps.dsps_wrapper import SSPData
 from tengri.observation.observation import Observation
 from tengri.observation.photometry_config import Photometry
+from tests.contract._nonsplat_ssp import nonsplat_flux
 
 pytestmark = pytest.mark.contract
 
@@ -27,8 +28,8 @@ def mock_ssp_data():
     n_met, n_age, n_wave = 8, 15, 200
     ssp = SSPData(
         ssp_wave=jnp.logspace(3, 4.5, n_wave),
-        ssp_flux=jnp.ones((n_met, n_age, n_wave), dtype=jnp.float64),
-        ssp_lg_age_gyr=jnp.linspace(6, 10.1, n_age),
+        ssp_flux=nonsplat_flux((n_met, n_age, n_wave)),
+        ssp_lg_age_gyr=jnp.linspace(-3.0, 1.1, n_age),
         ssp_lgmet=jnp.linspace(-2.0, 0.3, n_met),
     )
     return ssp
@@ -86,16 +87,16 @@ class TestSEDModelCompileSignature:
         # Shape (8, 15, 200)
         ssp1 = SSPData(
             ssp_wave=jnp.logspace(3, 4.5, 200),
-            ssp_flux=jnp.ones((8, 15, 200), dtype=jnp.float64),
-            ssp_lg_age_gyr=jnp.linspace(6, 10.1, 15),
+            ssp_flux=nonsplat_flux((8, 15, 200)),
+            ssp_lg_age_gyr=jnp.linspace(-3.0, 1.1, 15),
             ssp_lgmet=jnp.linspace(-2.0, 0.3, 8),
         )
 
         # Shape (8, 15, 150) - different wavelength count
         ssp2 = SSPData(
             ssp_wave=jnp.logspace(3, 4.5, 150),
-            ssp_flux=jnp.ones((8, 15, 150), dtype=jnp.float64),
-            ssp_lg_age_gyr=jnp.linspace(6, 10.1, 15),
+            ssp_flux=nonsplat_flux((8, 15, 150)),
+            ssp_lg_age_gyr=jnp.linspace(-3.0, 1.1, 15),
             ssp_lgmet=jnp.linspace(-2.0, 0.3, 8),
         )
 

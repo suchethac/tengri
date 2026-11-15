@@ -78,12 +78,11 @@ from tengri.components.stellar.sfh.registry import compute_field_gp, resolve_sfh
 from tengri.components.stellar.sps.dsps_wrapper import csp_age_dt
 from tengri.config.exceptions import (
     AdvisoryWarning,
+    AlphaFeUnconstrainedWarning,
     DeadGradientParameterWarning,
-    DegenerateParameterPairWarning,
     FilterCoverageWarning,
     ParameterError,
     ParameterMapError,
-    TengriIOError,
     warn_measured,
 )
 from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
@@ -100,6 +99,7 @@ from tengri.forward.sed_model_types import (
     PriorPredictive,
     SEDModelState,
 )
+from tengri.forward.ssp_guard import check_ssp_flux_not_splat
 from tengri.inference._backend_registry import DEFAULT_METHOD
 from tengri.observation.photometry import (
     FILTER_COVERAGE_TOLERANCE,
@@ -117,6 +117,7 @@ from tengri.parameters.translate import (
     check_unknown_params,
     get_internal_params,
 )
+from tengri.utils.batching import GALAXY_CHUNK_SIZE
 from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid import (
     grid_spacing,
@@ -240,6 +241,25 @@ def _nebular_continuum_consumers(chain):
         for c in components_consuming(chain, "sed_nebular")
         if not isinstance(c, NebularSEDComponent)
     ]
+
+
+def _met_scatter_declared(spec) -> bool:
+    """True when the user declared the metallicity scatter (#3434).
+
+    A declaration is ``met_logzsol_scatter`` named by the user (a value, a prior,
+    or a wildcard ``FREE``) or the flat ``lgmet_scatter`` kwarg. The grammar fills
+    ``met_logzsol_scatter`` with its registry default whenever a ``met`` block
+    omits it, and that fill-in is recorded in ``_group_provenance`` as
+    ``registry_default``, so it does not count. A spec with no provenance (the flat
+    ``Parameters(...)`` escape hatch) falls back to ``_user_provided``.
+    """
+    flat_kwarg = getattr(spec, "_lgmet_scatter_for_fix", None) is not None
+    if flat_kwarg:
+        return True
+    provenance = getattr(spec, "_group_provenance", None)
+    if provenance is None:
+        return "met_logzsol_scatter" in getattr(spec, "_user_provided", frozenset())
+    return provenance.get("met_logzsol_scatter") in _SCATTER_DECLARING_PROVENANCE
 
 
 def _chain_consumes(chain, key: str) -> bool:
@@ -1042,8 +1062,7 @@ def _warn_grid_warm_failed(label: str, exc: Exception) -> None:
 #: zero. Maps parameter name -> the reason, for the warning below.
 #:
 #: Empty since #1822, and kept rather than deleted: the check costs nothing and
-#: the class of bug recurs (``met_alpha_fe`` raises the same warning from its own
-#: site, and #1206/#1764 are the earlier instances).
+#: the class of bug recurs (#1206 and #1764 are the earlier instances).
 #:
 #: ``agn_kt_warm`` was the sole entry. It reached the SED only via
 #: ``_nthcomp_lnu_interp``, whose ``custom_jvp`` supplied a ``gamma`` tangent and
@@ -1074,8 +1093,6 @@ def _warn_dead_gradient_params(spec) -> None:
     freed = [name for name in _DEAD_GRADIENT_PARAMS if name in set(spec.free_params)]
     if not freed:
         return
-
-    from tengri.config.exceptions import DeadGradientParameterWarning
 
     for name in freed:
         warnings.warn(
@@ -1173,6 +1190,76 @@ def _warn_agn_dust_double_count(spec) -> None:
 _DUST_MODELS_REPUBLISHING_SED_NEBULAR = ("two_component", "age_binned", "off")
 
 
+#: Smallest resolving power that resolves the Mg b / Fe region (#3487).
+_ALPHA_FE_MIN_RESOLVING_POWER = 1000.0
+#: Rest-frame window of the Mg b / Fe features that constrain [alpha/Fe] (#3487), [Angstrom].
+_ALPHA_FE_REST_WINDOW_AA = (4800.0, 5400.0)
+
+
+def _alpha_fe_redshift_ends(spec, catalog_z_range=None) -> list[float]:
+    """Redshifts at which the model's [alpha/Fe] constraint is checked (#3487).
+
+    A catalog model's redshift is runtime (its Fixed spec value is a placeholder), so
+    both ends of the catalog range are checked. Otherwise a fixed redshift gives one
+    value and a free redshift both ends of its prior bounds, since a spectrum can cover
+    the window at one end and not the other.
+    """
+    if catalog_z_range is not None:
+        return [float(catalog_z_range[0]), float(catalog_z_range[1])]
+    dist = spec.get_distribution("redshift")
+    if dist.is_fixed:
+        return [float(dist.value)]
+    return [float(bound) for bound in dist.bounds if bound is not None]
+
+
+def _alpha_fe_observation_findings(
+    spec, observation, catalog_z_range=None
+) -> tuple[list[str], dict[str, float]]:
+    """Return why an observation cannot constrain [alpha/Fe], and the measured values (#3487).
+
+    An empty list means it can: spectral indices, or a spectrum that resolves and covers
+    the Mg b / Fe window at every redshift the model can take.
+
+    Parameters
+    ----------
+    spec : Parameters
+        The model's parameter spec, read for the redshift distribution.
+    observation : Observation
+        The model's observation.
+    catalog_z_range : tuple of float or None
+        ``(z_lo, z_hi)`` of a catalog model, whose spec redshift is a placeholder.
+
+    Returns
+    -------
+    findings : list of str
+        One phrase per reason the observation is blind to [alpha/Fe].
+    measurements : dict of str to float
+        The numbers behind the findings, for :func:`warn_measured`.
+    """
+    if observation.has_spectral_indices:
+        return [], {}
+    spectroscopy = observation.spectroscopy
+    if spectroscopy is None:
+        if observation.can_do_photometry:
+            return ["photometry only"], {}
+        return ["no spectrum and no spectral indices (line fluxes only)"], {}
+
+    findings: list[str] = []
+    measurements: dict[str, float] = {}
+    if spectroscopy.resolution is not None:
+        resolving_power = float(np.median(np.asarray(spectroscopy.resolution, dtype=float)))
+        if resolving_power < _ALPHA_FE_MIN_RESOLVING_POWER:
+            findings.append(f"R = {resolving_power:.0f}")
+            measurements["resolving_power"] = resolving_power
+    lo, hi = _ALPHA_FE_REST_WINDOW_AA
+    wave_obs = np.asarray(spectroscopy.wave_obs, dtype=float)
+    for z in _alpha_fe_redshift_ends(spec, catalog_z_range):
+        rest = wave_obs / (1.0 + z)
+        if rest.min() > lo or rest.max() < hi:
+            findings.append(f"rest coverage {rest.min():.0f}-{rest.max():.0f} A at z = {z:g}")
+    return findings, measurements
+
+
 def _validate_nebular_lines_in_spectrum(spec, observation) -> None:
     """Refuse a line-free spectrum the model cannot produce exactly.
 
@@ -1210,7 +1297,9 @@ def _validate_nebular_lines_in_spectrum(spec, observation) -> None:
     spectro = getattr(observation, "spectroscopy", None)
     if spectro is None or spectro.nebular_lines:
         return
-    if getattr(spec, "nebular_mode", None) != "cue" or not publishes:
+    from tengri.components.nebular._models import nebular_backend_class_for_mode
+
+    if not publishes or not nebular_backend_class_for_mode(spec.nebular_mode).line_fraction_policy:
         raise ValueError(
             NEBULAR_LINES_OFF_NEEDS_FRACTION
             + f" (got neb type {getattr(spec, 'nebular_mode', None)!r}, "
@@ -1289,6 +1378,10 @@ def _validate_fracagn_requires_dust(spec) -> None:
 #: the grammar filling a slot in, which a guard about a *stated* value must
 #: not read as a statement.
 _USER_PROVIDED_PROVENANCE = frozenset({"user_prior", "user_fixed", "user_free", "user_free_grid"})
+#: Provenance tags under which the user named a metallicity scatter: a value or
+#: prior (``user_*``), or a wildcard ``FREE`` that freed it (``wildcard_free``).
+#: A ``registry_default`` or wildcard ``Fixed(DEFAULT)`` fill-in is not a declaration.
+_SCATTER_DECLARING_PROVENANCE = _USER_PROVIDED_PROVENANCE | {"wildcard_free"}
 
 
 def _param_is_user_provided(spec, name: str) -> bool:
@@ -1869,6 +1962,11 @@ def _radio_mass_floor(spec) -> tuple[float, float]:
     hi = max(b[1] for b in mass_bounds)
     ssp = (getattr(spec, "_parse_inputs", {}) or {}).get("ssp_data")
     remaining = getattr(ssp, "ssp_mass_remaining", None)
+    # An embedded [alpha/Fe] table (#2250) holds the alpha = 0 plane too, so its minimum bounds
+    # the fraction at every alpha.
+    alpha_remaining = getattr(ssp, "ssp_mass_remaining_alpha", None)
+    if alpha_remaining is not None:
+        remaining = alpha_remaining
     offset = 0.0
     if remaining is not None:
         frac_min = float(np.min(np.asarray(remaining)))
@@ -2665,6 +2763,47 @@ def _fold_igm_into_subbands(
 #: component integrates the CSP with cloud-in-cell age weights for every
 #: configuration, so none of these reaches the SED. Kept so existing calls keep
 #: working; non-default values warn and are slated for removal in v1.0.
+# Largest admissible log10(age / Gyr) on an SSP age axis (#3337). The age of the
+# universe is 13.8 Gyr (log10 = 1.14); 1.2 (15.8 Gyr) leaves a margin. An axis
+# that also starts above 1 Gyr (log10 > 0) is log10(yr) read as log10(Gyr). The
+# youngest-age test keeps the shipped BPASS grid (oldest template 100 Gyr, by
+# design) admissible.
+_SSP_MAX_LG_AGE_GYR = 1.2
+
+
+def _validate_ssp_age_axis_units(ssp_lg_age_gyr) -> None:
+    """Refuse an SSP age axis that is plainly log10(yr), not log10(Gyr) (#3337).
+
+    Parameters
+    ----------
+    ssp_lg_age_gyr : array_like, shape (n_age,)
+        Template ages as log10(age / Gyr).
+
+    Raises
+    ------
+    ValueError
+        If the axis looks like log10(yr).
+
+    Notes
+    -----
+    Refused when the oldest finite template is older than
+    ``_SSP_MAX_LG_AGE_GYR`` and the youngest is above 1 Gyr. Real log10(Gyr)
+    grids start far below 1 Gyr, so both conditions hold only for log10(yr).
+    """
+    lg_age = np.asarray(ssp_lg_age_gyr, dtype=np.float64)
+    finite = lg_age[np.isfinite(lg_age)]
+    if finite.size == 0:
+        return
+    if float(finite.max()) <= _SSP_MAX_LG_AGE_GYR or float(finite.min()) <= 0.0:
+        return
+    raise ValueError(
+        f"SSP age axis reaches log10(age) = {float(finite.max()):.3f}, i.e. "
+        f"{10.0 ** float(finite.max()):.3g} Gyr, older than the universe. The axis "
+        f"looks like log10(yr), not log10(Gyr): ssp_lg_age_gyr must be log10(age / Gyr) "
+        f"(SEDModel adds 9.0 to get log10(yr)). Subtract 9 from log10(yr) ages."
+    )
+
+
 _VALID_CSP_INTEGRATION = ("trapz", "log_trapz", "log_interp", "dsps_native", "dsps_met_table")
 _DEFAULT_CSP_INTEGRATION = "trapz"
 
@@ -3135,6 +3274,18 @@ class SEDModel:
             return 0.0
         return float(dist.bounds[0]) if dist.is_fixed else None
 
+    def _spectrum_lut_sigma_v_kms(self) -> float | None:
+        """The dispersion the spectrum table bakes at build, ``None`` when none is baked.
+
+        Only a ``SpectrumPrecomp`` build pre-broadens its SSP table by the fixed
+        ``sigma_v_kms`` (#3489). The value is keyed in :meth:`compile_signature`
+        because ``spec`` is keyed without its fixed values, so two such models
+        differing only in that dispersion would otherwise share one kernel.
+        """
+        if not self._approx.get("spectrum_precomp"):
+            return None
+        return self._fixed_sigma_v_kms()
+
     def _spectrum_lut_serves_exactly(self, observation) -> bool:
         """Whether the spectrum LUT can serve this spectrum channel exactly (#2958).
 
@@ -3357,6 +3508,8 @@ class SEDModel:
         _validate_nebular_lines_in_spectrum(spec, observation)
         self.observation = observation
         self.spec = spec
+        # Refuse a splat SSP before anything is built on it (#3350).
+        check_ssp_flux_not_splat(ssp_data.ssp_flux)
         self.ssp_data = ssp_data
         self._band_tables: dict[str, dict[str, BandTable | Decline]] = {}
 
@@ -3587,7 +3740,8 @@ class SEDModel:
         param_map_deltas.append(self._init_metallicity(spec))
         self._validate_metallicity_bounds(spec, ssp_data)
         self._warn_young_top_metallicity(spec, ssp_data)
-        self._validate_alpha_fe_identifiability(spec, ssp_data)
+        self._refuse_alpha_fe_without_alpha_axis(spec, ssp_data)
+        self._warn_alpha_fe_unconstrained(spec, ssp_data)
         self._warn_sfh_beyond_oldest_template(spec, ssp_data)
 
         # ── AGB circumstellar dust-shell weighting (#2534) ─────────
@@ -3707,6 +3861,9 @@ class SEDModel:
         # cleared by _invalidate_signature() from the two methods that change
         # structure after construction.
         self._signature_memo = None
+
+        # Owner-cached plot kernels (forward/draw_maps.map_draws), by method name.
+        self._draw_kernels = {}
 
         # AGB circumstellar dust-shell weighting (#2534): a free
         # agb_dust_weight can never build a precompute LUT (see the refusal
@@ -4275,6 +4432,7 @@ class SEDModel:
         self._met_interp = spec.met_interp
         self._lgmet_scatter = float(getattr(spec, "lgmet_scatter", 0.1))
 
+        _validate_ssp_age_axis_units(ssp_data.ssp_lg_age_gyr)
         self.ssp_log_ages_yr = ssp_data.ssp_lg_age_gyr + 9.0
         self.ssp_ages_yr = 10.0**self.ssp_log_ages_yr
 
@@ -4391,10 +4549,6 @@ class SEDModel:
         dict[str, tuple[str, float, float]]
             Parameter map deltas for metallicity handling.
 
-        Raises
-        ------
-        NotImplementedError
-            If alpha_fe_evolving=True, which is currently not supported (#1767).
         """
         self._met_mode = spec.met_mode
         # _met_mode checked directly: "ramp" for evolving, "chem_evol" for chemical evolution
@@ -4410,24 +4564,9 @@ class SEDModel:
         else:
             delta.update(met_param_map)
 
-        self._alpha_fe_evolving = spec.alpha_fe_evolving
-        if self._alpha_fe_evolving:
-            # #1767: Per-age alpha-enhancement requires wiring compute_alpha_fe_evolving
-            # through the stellar component's SED production pipeline. Currently the
-            # mechanism accepts only a scalar met_alpha_fe, which is applied uniformly
-            # to all ages (either via SSP grid interpolation or effective-metallicity
-            # calculation). Supporting a per-age ramp would require architectural
-            # changes: propagating per-age arrays through the age-weight loop and
-            # modifying effective_metallicity / interpolate_alpha_only to work per-age.
-            raise NotImplementedError(
-                "alpha_fe_evolving=True is not yet supported (#1767). "
-                "The stellar component currently accepts only a scalar "
-                "met_alpha_fe [alpha/Fe] applied uniformly to all ages. "
-                "To model alpha enhancement, use alpha_fe_evolving=False "
-                "(the default) and set met_alpha_fe to a Fixed or free scalar value. "
-                "Per-age alpha ramping from alpha_fe_old to alpha_fe_young requires "
-                "architectural extensions currently under development."
-            )
+        # #1767 / #2250: a per-age [alpha/Fe] ramp is carried by the stellar component
+        # (alpha bracket per SSP age, see StellarSEDComponent._alpha_fe_at_ages).
+        self._alpha_fe_evolving = bool(spec.alpha_fe_evolving)
 
         return delta
 
@@ -4548,6 +4687,40 @@ class SEDModel:
                         grid_hi_zsol=grid_hi_zsol,
                         stacklevel=3,
                     )
+
+    def _warn_alpha_fe_unconstrained(self, spec, ssp_data):
+        """Warn once per build when a free [alpha/Fe] has no observation to constrain it (#3487).
+
+        Runs after :meth:`_refuse_alpha_fe_without_alpha_axis`, so a free [alpha/Fe] on a
+        3-D grid has already been refused. Spectral indices always constrain it. Otherwise
+        a spectrum must resolve the Mg b / Fe window (R of at least 1000) and cover the
+        4800-5400 A rest-frame window at every redshift the model can take. Photometry,
+        line fluxes, and a spectrum that misses either test leave the posterior on the
+        prior. The warning names every free [alpha/Fe] parameter.
+        """
+        from tengri.components.stellar.sps.dsps_wrapper import has_alpha_grid
+        from tengri.parameters.groups import _ALPHA_FE_PARAMS
+
+        # A model built without an observation has nothing to fit yet, so nothing to judge.
+        if self.observation is None or ssp_data is None or not has_alpha_grid(ssp_data):
+            return
+        free = [name for name in _ALPHA_FE_PARAMS if name in spec.free_params]
+        if not free:
+            return
+        findings, measurements = _alpha_fe_observation_findings(
+            spec, self.observation, self._catalog_z_range
+        )
+        if not findings:
+            return
+        lo, hi = _ALPHA_FE_REST_WINDOW_AA
+        text = (
+            f"[alpha/Fe] is free ({', '.join(free)}), but the observation cannot constrain it: "
+            f"{'; '.join(findings)}. [alpha/Fe] is constrained by the Mg b / Fe features at "
+            f"{lo:.0f}-{hi:.0f} A rest frame, which needs a spectrum that resolves them "
+            f"(R >= {_ALPHA_FE_MIN_RESOLVING_POWER:.0f}) and covers that window, or spectral "
+            "indices. The posterior will follow the prior."
+        )
+        warn_measured(text, AlphaFeUnconstrainedWarning, stacklevel=3, **measurements)
 
     def _warn_young_top_metallicity(self, spec, ssp_data):
         """Warn once per build when the metallicity weights can reach the truncated top node.
@@ -4730,84 +4903,53 @@ class SEDModel:
             z_min=z_min,
         )
 
-    def _validate_alpha_fe_identifiability(self, spec, ssp_data):
-        """Warn if a free ``met_alpha_fe`` cannot be identified by this model.
+    def _refuse_alpha_fe_without_alpha_axis(self, spec, ssp_data):
+        """Refuse a non-zero ``met_alpha_fe`` on an SSP grid with no [alpha/Fe] axis.
 
         ``[alpha/Fe]`` is a real, independently-interpolated axis only when the
-        SSP grid carries one (:func:`has_alpha_grid`, the 4D path of #226).
-        Without it, ``met_alpha_fe`` reaches the SED solely through
-        :func:`effective_metallicity`, and only from the ``"delta"`` metallicity
-        branch. That leaves two distinct failures, both silent today:
+        SSP grid carries one (:func:`has_alpha_grid`, the 4D path of #226). A 3D
+        grid stores one scaled-solar template per metallicity node, and
+        ``met_logzsol`` is the total metallicity on it, so ``met_alpha_fe``
+        would have no effect. A parameter that is accepted and does nothing is
+        refused at build, whatever the metallicity mode (#3411).
 
-        * **Any non-delta metallicity model** never reads ``met_alpha_fe`` at
-          all. Measured on a 3D grid, sweeping 0.0 -> 0.6 under ``"ramp"`` and
-          ``"two_step"``: ``numpy.array_equal`` returns ``True`` and
-          ``d(sum SED)/d(alpha)`` is exactly ``0.0`` (issue #1764). The
-          parameter is still accepted as free, so the reported posterior is the
-          prior.
-        * **Delta metallicity** folds it in as a pure additive shift,
-          ``log_z_eff = met_logzsol + 0.75 * met_alpha_fe``, so freeing it
-          alongside ``met_logzsol`` gives an exactly flat ridge (issue #1095).
-
-        This check needs three facts that live in three objects, the grid
-        (``ssp_data``), the metallicity mode (``self._met_mode``), and which
-        parameters are free (``spec``), which is why it belongs here and not on
-        the parameter declaration: :class:`Parameters` cannot see ``ssp_data``,
-        so a guard placed there would fire falsely on every 4D grid.
-
-        Warns rather than raises, matching :meth:`_validate_metallicity_bounds`:
-        the forward model is correct in every case, and both configurations are
-        legitimate if the user wants them.
+        A free ``met_alpha_fe`` and a ``Fixed`` value other than zero are both
+        refused. ``Fixed(0.0)``, the declared default, builds silently.
         """
-        if ssp_data is None:
-            return  # synthetic / placeholder construction path
-
-        distributions = getattr(spec, "_distributions", {})
-        alpha_dist = distributions.get("met_alpha_fe")
-        if alpha_dist is None or alpha_dist.is_fixed:
+        if ssp_data is None:  # synthetic / placeholder construction path
             return
 
-        from tengri.components.stellar.sps.dsps_wrapper import (
-            _ALPHA_TO_Z_COEFF,
-            has_alpha_grid,
-        )
+        from tengri.components.stellar.sps.dsps_wrapper import has_alpha_grid
+
+        distributions = getattr(spec, "_distributions", {})
+        if getattr(spec, "alpha_fe_evolving", False) and not has_alpha_grid(ssp_data):
+            raise ParameterError(
+                f"alpha_fe_evolving=True needs an SSP grid with an [alpha/Fe] axis, but the SSP "
+                f"grid {ssp_data.source or 'in use'!r} is a 3-D grid. A per-age [alpha/Fe] ramp "
+                "has no template to read on a 3-D grid. Use an alpha-enhanced 4-D grid (a name "
+                "containing '_afe'; see tengri.list_remote_ssps()), or set "
+                "alpha_fe_evolving=False."
+            )
+        alpha_dist = distributions.get("met_alpha_fe")
+        if alpha_dist is None:
+            return
 
         if has_alpha_grid(ssp_data):
             return  # 4D grid: [alpha/Fe] interpolates a real axis (#226)
 
-        met_mode = str(self._met_mode)
-        if met_mode != "delta":
-            warn_measured(
-                f"met_alpha_fe is free, but metallicity mode {met_mode!r} never "
-                f"reads it. On an SSP grid with no [alpha/Fe] axis the "
-                f"enhancement is applied only in the 'delta' branch, so "
-                f"d(SED)/d(met_alpha_fe) is exactly 0.0: no gradient-based "
-                f"sampler can move it and the reported posterior is the prior "
-                f"(issue #1764). Use met_mode='delta', pin met_alpha_fe with "
-                f"Fixed(...), or load an SSP grid carrying an [alpha/Fe] axis.",
-                DeadGradientParameterWarning,
-                gradient=0.0,
-                stacklevel=3,
-            )
+        if alpha_dist.is_fixed and float(alpha_dist.value) == 0.0:
             return
 
-        logzsol_dist = distributions.get("met_logzsol")
-        if logzsol_dist is not None and not logzsol_dist.is_fixed:
-            warn_measured(
-                f"met_alpha_fe and met_logzsol are both free, but this SSP grid "
-                f"has no [alpha/Fe] axis, so [alpha/Fe] enters only as an "
-                f"additive shift of the effective metallicity: log_z_eff = "
-                f"met_logzsol + {_ALPHA_TO_Z_COEFF} * met_alpha_fe. The pair is "
-                f"exactly degenerate, the likelihood is flat along "
-                f"met_logzsol + {_ALPHA_TO_Z_COEFF} * met_alpha_fe = const, and "
-                f"a Laplace fit assigns that direction the variance its "
-                f"eigenvalue floor implies rather than a measured one (issues "
-                f"#1095, #1515). Free one or the other, or load an SSP grid "
-                f"carrying an [alpha/Fe] axis.",
-                DegenerateParameterPairWarning,
-                coefficient=_ALPHA_TO_Z_COEFF,
-                stacklevel=3,
-            )
+        requested = f"Fixed({float(alpha_dist.value)})" if alpha_dist.is_fixed else "free"
+        grid_name = ssp_data.source or "in use"
+        raise ParameterError(
+            f"met_alpha_fe is {requested}, but the SSP grid {grid_name!r} has no [alpha/Fe] axis "
+            "(it is a 3-D grid). Its metallicity nodes are total Z and carry no "
+            "alpha-enhanced templates, so met_alpha_fe would not change the SED. "
+            "Use an alpha-enhanced 4-D grid (a name containing '_afe'; "
+            "see tengri.list_remote_ssps()), or remove met_alpha_fe, or hold it "
+            "at Fixed(0.0)."
+        )
 
     def _init_dust(self, spec):
         """Configure dust attenuation laws, nebular dust, and dust emission.
@@ -4965,6 +5107,8 @@ class SEDModel:
         dict[str, tuple[str, float, float]]
             Parameter map deltas for nebular components.
         """
+        from tengri.components.nebular._models import build_nebular_backend
+
         delta = {}
 
         if spec.nebular_mode in ("cloudy", "cue", "cb19", "gutkin16"):
@@ -4985,9 +5129,6 @@ class SEDModel:
             spec.nebular_mode if spec.nebular_mode not in ("off", "ssp") else None
         )
         if spec.nebular_mode == "cue":
-            from tengri.components.nebular import CueBackend
-            from tengri.components.nebular._balmer_series import BALMER_SERIES_N_MAX_DEFAULT
-
             # Cue-specific abundance + ionizing-spectrum free params. These
             # are validated by Parameters but were silently stripped by
             # translate.get_internal_params before being registered here.
@@ -5001,149 +5142,10 @@ class SEDModel:
             for name in _CUE_IONSPEC_IDENTITY_PARAMS:
                 if name in _user_params:
                     delta[name] = (name, 1.0, 0.0)
-            self._nebular_backend = CueBackend(
-                spec.cue_weights_path,
-                ssp_data=ssp_data,
-                nitrogen=getattr(spec, "cue_nitrogen", "absolute"),
-                lyc_max_age_yr=getattr(spec, "cue_lyc_max_age_yr", "all"),
-                balmer_series_n_max=getattr(
-                    spec, "cue_balmer_series_n_max", BALMER_SERIES_N_MAX_DEFAULT
-                ),
-            )
-        elif spec.nebular_mode == "cloudy":
-            from tengri.components.nebular import CloudyGridBackend
 
-            self._nebular_backend = CloudyGridBackend(spec.cloudy_grid_path, ssp_data)
-        elif spec.nebular_mode == "cb19":
-            # Bug A in #361: ``neb={'type': 'cb19'}`` used to fall through
-            # to the BakedIn ``else`` branch, leaving the user with a model
-            # whose ``_nebular_backend`` was the wrong class, every line
-            # accessor then returned NaN with no warning. Dispatch explicitly.
-            from tengri.components.nebular import CB19Backend
-            from tengri.components.nebular.cloudy_cb19 import check_cb19_free_params
-
-            # Build kwargs from non-None user-supplied values only (#2220),
-            # mirroring the ``mappings`` branch below: constructor defaults
-            # are the single source of truth when ``grid`` was not given.
-            kwargs = {"ssp_data": ssp_data}
-            if spec.nebular_cb19_grid_path is not None:
-                kwargs["grid_path"] = spec.nebular_cb19_grid_path
-            self._nebular_backend = CB19Backend(**kwargs)
-            # #2181: the grid's own axes decide which nebular parameters can
-            # move the prediction. On the flat placeholder grid all five are
-            # constant, so a fit explores them against a likelihood that is
-            # bit-exactly flat and reports the prior back as a posterior.
-            # Refuse at construction rather than at the end of a fit.
-            check_cb19_free_params(
-                self._nebular_backend.grid,
-                spec.free_params,
-                grid_path=self._nebular_backend.grid_path,
-            )
-        elif spec.nebular_mode == "gutkin16":
-            # Gutkin+2016 NEOGAL line table (#983). Same failure mode as the cb19
-            # branch above: without this arm the build fell through to BakedIn.
-            # The table stores vacuum labels and absolute log Z, so neb_logZ_gas
-            # takes the unit-converting delta registered above.
-            from tengri.components.nebular import Gutkin16Backend
-
-            # Build kwargs from non-None user-supplied values only (#2220).
-            kwargs = {"ssp_data": ssp_data}
-            if spec.nebular_gutkin16_grid_path is not None:
-                kwargs["grid_path"] = spec.nebular_gutkin16_grid_path
-            if spec.nebular_gutkin16_mup is not None:
-                kwargs["mup"] = spec.nebular_gutkin16_mup
-            if spec.nebular_gutkin16_continuum is not None:
-                kwargs["continuum"] = spec.nebular_gutkin16_continuum
-            self._nebular_backend = Gutkin16Backend(**kwargs)
-        elif spec.nebular_mode == "mappings":
-            # MAPPINGS V photoionization grid (Flury et al. 2024). Stellar model,
-            # density structure, and ionizing source warning are configurable.
-            from tengri.components.nebular import MappingsPhotoStellarBackend
-
-            # Build kwargs from non-None user-supplied values only; constructor defaults
-            # are the single source of truth.
-            kwargs = {"ssp_data": ssp_data}
-            if spec.nebular_mappings_grid_path is not None:
-                kwargs["grid_path"] = spec.nebular_mappings_grid_path
-            if spec.nebular_mappings_model is not None:
-                kwargs["model"] = spec.nebular_mappings_model
-            if spec.nebular_mappings_density is not None:
-                kwargs["density"] = spec.nebular_mappings_density
-            if spec.nebular_mappings_ionizing_source_warning is not None:
-                kwargs["ionizing_source_warning"] = spec.nebular_mappings_ionizing_source_warning
-
-            self._nebular_backend = MappingsPhotoStellarBackend(**kwargs)
-
-            # Validate grid completeness (issue #2082): the grid file contains 51.2%
-            # NaN in logHB_per_logq, making it unsuitable for predictions.
-            logHB = np.asarray(self._nebular_backend.grid.logHB_per_logq)
-            nan_count = np.sum(~np.isfinite(logHB))
-            total_count = logHB.size
-            nan_frac = float(nan_count / total_count)
-            if nan_frac > 0.01:  # More than 1% NaN indicates incomplete grid
-                grid_path = spec.nebular_mappings_grid_path or "data/flury2024_grids.h5"
-                raise TengriIOError(
-                    f"MAPPINGS V stellar grid data is incomplete. "
-                    f"The file {grid_path} contains {100 * nan_frac:.1f}% NaN values "
-                    f"in logHB_per_logq ({nan_count}/{total_count} cells). "
-                    f"This indicates the grid was not fully computed. The grid must be "
-                    f"regenerated using scripts/build_flury2024_grids.py before this "
-                    f"backend can emit valid predictions. See GitHub issue #2082."
-                )
-        elif spec.nebular_mode == "mappings_agn":
-            # MAPPINGS V AGN photoionization grid (Flury et al. 2024). AGN grids
-            # use OPTXAGNF ionizing source, density structure and ionizing source
-            # warning are configurable.
-            from tengri.components.nebular import MappingsPhotoAGNBackend
-
-            # Build kwargs from non-None user-supplied values only; constructor defaults
-            # are the single source of truth.
-            kwargs = {}
-            if spec.nebular_mappings_agn_grid_path is not None:
-                kwargs["grid_path"] = spec.nebular_mappings_agn_grid_path
-            if spec.nebular_mappings_agn_density is not None:
-                kwargs["density"] = spec.nebular_mappings_agn_density
-            if spec.nebular_mappings_agn_ionizing_source_warning is not None:
-                warn_setting = spec.nebular_mappings_agn_ionizing_source_warning
-                kwargs["ionizing_source_warning"] = warn_setting
-
-            self._nebular_backend = MappingsPhotoAGNBackend(**kwargs)
-
-            # Model protocol refusal (issue #2082): MappingsPhotoAGNBackend does not
-            # implement predict_nebular_sed(), which the forward path calls. The AGN
-            # ionizing source parameters (agn_log_lbol, agn_logedd, agn_logmbh) are
-            # required to wire the interface.
-            raise ValueError(
-                "MappingsPhotoAGNBackend: model protocol surface incomplete. "
-                "The class lacks predict_nebular_sed(agn_log_lbol, agn_logedd, "
-                "agn_logmbh, ...) required by the forward path. The necessary "
-                "AGN ionizing source parameter declarations and protocol adapter "
-                "are pending. See GitHub issue #2082."
-            )
-        else:
-            from tengri.components.nebular import BakedInBackend
-
-            # R49: an explicit neb={'type': 'ssp'} or neb={'type': 'none'}
-            # (both resolve here -- 'ssp' never falls into any branch above,
-            # 'none' resolves to nebular_mode='off' identically to an omitted
-            # neb=) states the baked-in choice, so the advisory is silenced.
-            # An omitted neb= reaches this same branch with the same
-            # nebular_mode='off' but _nebular_explicit=False, so the
-            # advisory still fires -- it is the only signal that
-            # distinguishes "the user said no nebular emission" from
-            # "the user never mentioned nebular emission at all".
-            warning_mode = "suppress" if spec._nebular_explicit else "warn"
-            # When nebular_mode is 'off' and explicitly stated (neb={'type': 'none'}),
-            # don't pass ssp_data to avoid the bare-grid check. The refusal should not
-            # fire when the user explicitly disabled nebular emission. The
-            # _nebular_explicit attribute is always present and distinguishes explicit
-            # neb={'type': 'none'} from an omitted neb=.
-            ssp_data_for_backend = (
-                None if (spec.nebular_mode == "off" and spec._nebular_explicit) else ssp_data
-            )
-            self._nebular_backend = BakedInBackend(
-                ionizing_source_warning=warning_mode, ssp_data=ssp_data_for_backend
-            )
+        # The registry names the backend class for the grammar mode; the class builds
+        # the instance from the spec (``from_spec``), so no branch here names a backend.
+        self._nebular_backend = build_nebular_backend(spec, ssp_data)
 
         return delta
 
@@ -6765,6 +6767,21 @@ class SEDModel:
 
     # ── Predictions (public API) ──────────────────────────────────────
 
+    # Per-draw maps for posterior plots, evaluated by
+    # :func:`tengri.forward.draw_maps.map_draws` (named by method, cached per model).
+
+    def _sfr_mean_draw(self, params):
+        """Smooth parametric SFR [Msun/yr] of one draw, linear-time grid."""
+        return self.predict_sfh(params)["sfr_mean"]
+
+    def _sfr_full_draw(self, params):
+        """SFR [Msun/yr] of one draw: ``sfr_full`` if stochastic, else ``sfr_mean``."""
+        return self.predict_sfh(params)["sfr_full" if self.spec.stochastic else "sfr_mean"]
+
+    def _rest_sed_draw(self, params):
+        """Rest-frame SED L_nu [erg/s/Hz] of one draw, on the model's rest grid."""
+        return self._predict_rest_sed(params).sed
+
     def predict_sfh(self, params, n_linear=1000, grid="linear"):
         """Compute SFH on a uniform linear-time grid (plots) or the native log-age grid.
 
@@ -6806,9 +6823,12 @@ class SEDModel:
 
         Notes
         -----
-        **JIT-compatible**: no, uses Python-side interpolation. For
-        JIT-compatible SFH evaluation, use :meth:`predict_properties`
-        to get integrated quantities (stellar mass, age, etc.).
+        **JIT/vmap-compatible**: yes (#715). ``jax.jit(jax.vmap(model.predict_sfh))``
+        traces for every SFH family, on both grids, with no host conversion; a
+        batch of draws is evaluated in one compiled call. Use
+        :func:`tengri.vmap_chunked` rather than a bare ``vmap`` over thousands of
+        draws. For integrated quantities (stellar mass, age, etc.) use
+        :meth:`predict_properties`.
 
         **Time grid**: with ``grid="linear"`` the output is resampled onto a
         uniform linear-time (lookback) grid, not the internal log-age grid. This
@@ -7275,6 +7295,16 @@ class SEDModel:
         check_missing_free_params(params, self.spec, self._param_map)
         return Prediction(self, params)
 
+    def __getstate__(self) -> dict:
+        """Pickle state without the owner-cached draw kernels (not picklable).
+
+        :func:`tengri.forward.draw_maps.map_draws` caches compiled kernels on the
+        instance; those are rebuilt on demand after unpickling or copying.
+        """
+        state = self.__dict__.copy()
+        state.pop("_draw_kernels", None)
+        return state
+
     def compile_signature(self) -> tuple:
         """Return a hashable signature identifying JIT-graph shape and structure.
 
@@ -7353,15 +7383,21 @@ class SEDModel:
         from tengri._cache_keys import derive_key
         from tengri.forward._signature_policy import SIGNATURE_POLICY, SIGNATURE_VERSION
 
+        tail = (
+            ("x64", bool(jax.config.jax_enable_x64)),
+            ("backend", jax.default_backend()),
+            ("spec_resample_conserving", self._spectrum_resample_decision()),
+        )
+        # Present only when a spectrum table is baked, so models without one keep
+        # their signature (#3489).
+        lut_sigma_v_kms = self._spectrum_lut_sigma_v_kms()
+        if lut_sigma_v_kms is not None:
+            tail = (*tail, ("spec_lut_sigma_v_kms", lut_sigma_v_kms))
         signature = derive_key(
             self,
             SIGNATURE_POLICY,
             version=SIGNATURE_VERSION,
-            tail=(
-                ("x64", bool(jax.config.jax_enable_x64)),
-                ("backend", jax.default_backend()),
-                ("spec_resample_conserving", self._spectrum_resample_decision()),
-            ),
+            tail=tail,
         )
         self._signature_memo = signature
         return signature
@@ -7375,7 +7411,18 @@ class SEDModel:
         ``_nebular_grid_table`` and drops the chain memo). A source-level
         guard test enforces that no other method needs to call this: see
         :meth:`compile_signature`'s Notes.
+
+        The structural kernel filed under the outgoing signature is retired
+        with it. That kernel reads the model that built it at trace time, so
+        left in place it would hand this model's new structure to any other
+        model that still has the old signature.
         """
+        # Absent during construction: the first call precedes the memo's own assignment.
+        outgoing = vars(self).get("_signature_memo")
+        if outgoing is not None:
+            from tengri.inference._model_cache import _default_owner
+
+            _default_owner.retire_structural_kernel(outgoing)
         self._signature_memo = None
 
     def predict_photometry(self, params, *, ssp_data=None, template_data=None, ztable_data=None):
@@ -8342,8 +8389,10 @@ class SEDModel:
         # catalog that predict_line_fluxes reads, so shock parameters get zero
         # gradient from line-flux fitting.
         if self._uses_shock:
-            backend_name = type(backend).__name__.lower()
-            is_photoionized = any(name in backend_name for name in ("cue", "cloudygrid"))
+            from tengri.components.nebular.cloudy_grid import CloudyGridBackend
+            from tengri.components.nebular.cue import CueBackend
+
+            is_photoionized = isinstance(backend, CueBackend | CloudyGridBackend)
             if is_photoionized:
                 from tengri.config.exceptions import ShockPhotoionizedMixedWarning
 
@@ -8484,7 +8533,7 @@ class SEDModel:
                     "Configured nebular backend did not publish a discrete "
                     "line catalog to state.derived (expected keys "
                     "'line_waves' and 'line_lums'). The BakedIn backend bakes "
-                    "lines into the SSP grid; ShockBackend publishes a "
+                    "lines into the SSP grid; the shock component publishes a "
                     "continuous line SED instead. Switch to Cue or CloudyGrid."
                 )
             all_waves = jnp.asarray(state.derived["line_waves"])
@@ -9040,7 +9089,15 @@ class SEDModel:
         return line_ratio_data.model_ratio(num_flux, den_flux)
 
     def predict_spectral_indices(
-        self, params, index_defs, *, state=None, approx=False, fast=UNSET, fixed_values=None
+        self,
+        params,
+        index_defs,
+        *,
+        state=None,
+        approx=False,
+        fast=UNSET,
+        fixed_values=None,
+        broaden=True,
     ):
         """Predict spectral index values from the model SED.
 
@@ -9077,7 +9134,7 @@ class SEDModel:
             grid points, as the exact path evaluates it), **stellar + two-component (or no) dust +
             baked-in (or no) nebular, delta metallicity, parametric non-field SFH**. Any
             other configuration (additive nebular, AGN, non-delta metallicity,
-            GP-field SFH, alpha-Fe grid) **raises** ``ValueError`` rather than
+            GP-field SFH) **raises** ``ValueError`` rather than
             silently falling back, because ``approx=True`` is an explicit opt-in;
             use ``approx=False`` there. Slope indices are filled from the exact
             SED (they are not window-LUT-expressible).
@@ -9086,6 +9143,15 @@ class SEDModel:
             Spelled ``fast`` until 2026-08.
         fast : bool, optional
             Deprecated spelling of `approx`. Removed in v1.0.
+        broaden : bool, default True
+            Measure each index on the rest-frame SED broadened by the model's
+            ``sigma_v_kms`` (#3466), so the model index is comparable with an observed
+            index measured at its own dispersion. ``broaden=False`` measures the
+            unbroadened SED, the :math:`\\sigma = 0` index, for data already corrected
+            to :math:`\\sigma = 0`. At ``sigma_v_kms = 0`` the two are identical. The
+            broadening is :func:`~tengri.observation.spectral_indices.broaden_index_sed`.
+            The window-LUT path (``approx=True``) does not broaden, so it raises for a
+            broadened measurement with a nonzero ``sigma_v_kms``.
 
         Returns
         -------
@@ -9106,7 +9172,7 @@ class SEDModel:
         :attr:`~tengri.SpectralIndexDef.pseudo_continuum`).
         """
         from tengri.forward.result import SEDResult
-        from tengri.observation.spectral_indices import measure_index_jax
+        from tengri.observation.spectral_indices import broaden_index_sed, measure_index_jax
 
         approx = resolve_renamed_flag(
             approx,
@@ -9120,7 +9186,24 @@ class SEDModel:
         # grid path gutted (#1665). Same guard as predict_spectrum, this
         # consumer was simply missing from that census.
 
+        # The model's own velocity dispersion (#3466), read from the merged params so a
+        # Fixed or evaluation-time sigma_v_kms is seen the same way as a free one. Only a
+        # broadened measurement needs it, so broaden=False never reads it.
+        sigma_v_kms = (
+            self._get_sigma_v_kms(self._evaluation_params(params, fixed_values))
+            if broaden
+            else 0.0
+        )
+
         if approx:
+            # Decided from the spec, not the value: under jit sigma_v is a tracer even when
+            # it is Fixed at 0, and the window LUT is exact for that case.
+            if broaden and self._fixed_sigma_v_kms() != 0.0:
+                raise ValueError(
+                    "predict_spectral_indices(approx=True) measures the window LUT, which "
+                    "does not broaden the SED by sigma_v_kms. Use approx=False, or pass "
+                    "broaden=False for the sigma = 0 index (#3466)."
+                )
             return self._feature_fast_indices(params, tuple(index_defs), fixed_values=fixed_values)
 
         # Spectral indices (D4000 / Balmer break / Lick EW) are rest-frame
@@ -9144,6 +9227,8 @@ class SEDModel:
         else:
             rest = SEDResult(wavelength=state.wave, sed=state.sed_intrinsic)
         wave_rest, flux_rest = rest.wavelength, rest.sed
+        if broaden:
+            flux_rest = broaden_index_sed(wave_rest, flux_rest, sigma_v_kms)
 
         indices = [measure_index_jax(wave_rest, flux_rest, idx_def) for idx_def in index_defs]
         return jnp.array(indices)
@@ -9211,9 +9296,7 @@ class SEDModel:
             # under a joint-then-standalone call order). Same fix as
             # :meth:`_line_window_precomp`.
             with jax.ensure_compile_time_eval():
-                pc = precompute_index_windows(
-                    self.ssp_data.ssp_wave, self.ssp_data.ssp_flux, index_defs
-                )
+                pc = self._alpha_window_table(precompute_index_windows, index_defs)
             cache[key] = pc
         return pc
 
@@ -9239,11 +9322,52 @@ class SEDModel:
             # UnexpectedTracerError. Inputs are the concrete build-time SSP grid,
             # so this is a genuine compile-time constant.
             with jax.ensure_compile_time_eval():
-                pc = precompute_line_windows(
-                    self.ssp_data.ssp_wave, self.ssp_data.ssp_flux, line_defs
-                )
+                pc = self._alpha_window_table(precompute_line_windows, line_defs)
             cache[key] = pc
         return pc
+
+    def _alpha_window_table(self, build, defs):
+        """Window table of ``build(ssp_wave, flux, defs)`` on the model's SSP grid.
+
+        A 3D grid is built directly. A 4D grid (``(n_met, n_alpha, n_age, n_wave)``) is built
+        one [alpha/Fe] plane at a time through the same 3D builder and stacked on axis 1 by
+        :func:`~tengri.observation.spectral_indices.stack_alpha_planes`; the consumers then
+        collapse that axis at ``met_alpha_fe``.
+        """
+        from tengri.components.stellar.sps.dsps_wrapper import has_alpha_grid
+        from tengri.observation.spectral_indices import stack_alpha_planes
+
+        ssp = self.ssp_data
+        if not has_alpha_grid(ssp):
+            return build(ssp.ssp_wave, ssp.ssp_flux, defs)
+        return stack_alpha_planes(
+            [build(ssp.ssp_wave, ssp.ssp_flux[:, k], defs) for k in range(ssp.ssp_flux.shape[1])]
+        )
+
+    def _fast_alpha_bracket(self, full_params):
+        """``(ia, fa)`` of ``met_alpha_fe`` on the 4D grid's [alpha/Fe] axis, else ``None``.
+
+        Reads ``met_alpha_fe`` from the merged parameter dict (free or Fixed) with the same
+        default :meth:`StellarSEDComponent.apply` uses, so the fast path and the exact forward
+        collapse the alpha axis at the same node weights.
+        """
+        from tengri.components.stellar.sps.dsps_wrapper import alpha_bracket, has_alpha_grid
+
+        ssp = self.ssp_data
+        if not has_alpha_grid(ssp):
+            return None
+        from tengri.components.stellar.component import _alpha_fe_at_ages
+        from tengri.cosmology import age_at_z
+        from tengri.parameters.resolve import require_redshift
+
+        evolving = bool(getattr(self, "_alpha_fe_evolving", False))
+        t_universe_gyr = (
+            age_at_z(require_redshift(full_params, "_fast_alpha_bracket")) if evolving else None
+        )
+        alpha_fe = _alpha_fe_at_ages(
+            full_params, ssp, evolving=evolving, t_universe_gyr=t_universe_gyr
+        )
+        return alpha_bracket(ssp.ssp_alpha_fe, alpha_fe)
 
     def _require_feature_fast_eligible(self, chain, *, caller="predict_spectral_indices"):
         r"""Return the stellar component, or raise if the chain is unsupported.
@@ -9302,7 +9426,7 @@ class SEDModel:
                     f"LUT does not model. Use approx=False for this model."
                 )
         neb = next((c for c in chain if isinstance(c, NebularSEDComponent)), None)
-        if neb is not None and getattr(neb.config, "backend", None) != "baked_in":
+        if neb is not None and neb.backend_class.additive:
             raise ValueError(
                 f"{caller}(approx=True) supports baked-in nebular only "
                 f"(chain has backend={getattr(neb.config, 'backend', None)!r}); an additive "
@@ -9365,7 +9489,9 @@ class SEDModel:
         # No mass scale: every break and EW index is a ratio of window means, so
         # total_mass x L_sun cancels. Applied here it is ~1e43 for a 1e10 Msun
         # galaxy and overflows float32 in the F_lambda conversion (#3149).
-        values = measure_indices_from_window_lut(joint_weights, 1.0, transmission, pc)
+        values = measure_indices_from_window_lut(
+            joint_weights, 1.0, transmission, pc, alpha=self._fast_alpha_bracket(full_params)
+        )
 
         # Slope indices are not a single-window functional → the LUT leaves NaN
         # in those slots; fill them from one exact rest-frame SED measurement.
@@ -9646,7 +9772,12 @@ class SEDModel:
                     stellar.compute_age_boundary_fractions(full_params),
                 )
             fluxes = measure_line_fluxes_from_window_lut(
-                joint_weights, total_mass, transmission, pc, log10_4pi_dl2
+                joint_weights,
+                total_mass,
+                transmission,
+                pc,
+                log10_4pi_dl2,
+                alpha=self._fast_alpha_bracket(full_params),
             )
             return fluxes * igm_T
 
@@ -11502,8 +11633,9 @@ class SEDModel:
         -------
         dict[str, Any] | None
             Nested dict with namespace keys (``"nebular"``, ``"dust_ir"``,
-            ``"agn"``) carrying the threaded template data for that
-            subsystem. Returns ``None`` if no components need threading.
+            ``"agn"``, ``"stellar"``) carrying the threaded template data for that
+            subsystem. ``"stellar"`` holds the fixed-z stellar LUT array fields
+            (#2812). Returns ``None`` if no components need threading.
         """
         # Build the chain if it is not cached yet, rather than bailing out.
         #
@@ -11546,6 +11678,22 @@ class SEDModel:
                     result["nebular"] = template
                     break
             break
+
+        # ── Fixed-z stellar LUTs (#2812) ──
+        # The per-redshift SSP x filter (and SSP x pixel) tables. Read off the closure
+        # they were 8.8 of the fit kernel's 8.9 MB of StableHLO and the only
+        # constants that differ between two fixed redshifts, so every distinct z
+        # compiled from scratch.
+        # Threaded, two fixed-z models lower to the same HLO and share one compile
+        # through the persistent cache.
+        from tengri.components.stellar.component import StellarSEDComponent
+
+        for component in cached:
+            if isinstance(component, StellarSEDComponent):
+                stellar_luts = component.fixed_z_luts_for_threading()
+                if stellar_luts:
+                    result["stellar"] = stellar_luts
+                break
 
         # ── Fast-nebular grid: the continuum z-table ──
         # ``n_z x n_filter`` floats per grid node (tens of MB for a three-axis
@@ -12107,7 +12255,6 @@ class SEDModel:
             needs_l_ir
             and dust is not None
             and self._approx.get("wave_precomp")
-            and not bool(getattr(self.spec, "alpha_fe_evolving", False))
             and not unsafe_free
             and self.ssp_data is not None
         ):
@@ -12222,10 +12369,8 @@ class SEDModel:
                 # ``lyc_in_energy_balance=True`` unmasks the LyC region in the first
                 # place (otherwise B/G alone are already exact, LyC-masked
                 # out unconditionally).
-                _PHOTOIONIZED_NEB_BACKENDS = ("cue", "cloudy_grid", "cb19", "gutkin16", "mappings")
                 _live_neb = any(
-                    isinstance(c, NebularSEDComponent)
-                    and getattr(c.config, "backend", None) in _PHOTOIONIZED_NEB_BACKENDS
+                    isinstance(c, NebularSEDComponent) and c.backend_class.supports_split_sed
                     for c in chain
                 )
                 _fesc_exact = lyc_in_energy_balance and _live_neb
@@ -12727,23 +12872,7 @@ class SEDModel:
             neb_backend_name = None
             neb_backend_instance = None
         else:
-            cls_name = type(neb_inst).__name__.lower()
-            if "bakedin" in cls_name:
-                neb_backend_name = "baked_in"
-            elif "cb19" in cls_name:
-                neb_backend_name = "cb19"
-            elif "cloudygrid" in cls_name:
-                neb_backend_name = "cloudy_grid"
-            elif "mappings" in cls_name:
-                neb_backend_name = "mappings"
-            elif "gutkin16" in cls_name:
-                neb_backend_name = "gutkin16"
-            elif "cue" in cls_name:
-                neb_backend_name = "cue"
-            elif "shock" in cls_name:
-                neb_backend_name = "shock"
-            else:
-                neb_backend_name = "baked_in"  # fallback
+            neb_backend_name = neb_inst.config_name
             neb_backend_instance = neb_inst
 
         # Which attenuation-law shape parameters did somebody actually ask for?
@@ -12796,7 +12925,9 @@ class SEDModel:
             field=field_on,
             metallicity_model=getattr(self, "_met_mode", "delta"),
             n_grid=int(getattr(self.spec, "n_grid", 256)),
-            lgmet_scatter=float(getattr(self, "_lgmet_scatter", 0.2)),
+            alpha_fe_evolving=bool(getattr(self, "_alpha_fe_evolving", False)),
+            lgmet_scatter=float(getattr(self, "_lgmet_scatter", 0.1)),
+            lgmet_scatter_declared=_met_scatter_declared(self.spec),
             age_kernel=getattr(self.spec, "age_kernel", None),
             sfh_bin_edges_gyr=getattr(self.spec, "bin_edges_gyr", None),
             met_bin_edges_log_yr=getattr(self.spec, "met_bin_edges_log_yr", None),
@@ -12892,8 +13023,6 @@ class SEDModel:
 
         from tengri.components.agn.component import AGNSEDComponent
         from tengri.components.igm.component import IGMSEDComponent
-        from tengri.components.nebular.component import NebularSEDComponent
-        from tengri.components.stellar.component import StellarSEDComponent
 
         # Does this model have a LIVE nebular Lyman-continuum mask (#2439,
         # #2427)? A photoionized nebular backend whose ``neb_fesc`` is not
@@ -12910,20 +13039,21 @@ class SEDModel:
         # anything (including ``{'type': 'none'}'``, which resolves to
         # ``backend="baked_in"`` -- "nebular emission already baked into the
         # SSP grid, publish nothing"), so ``isinstance`` alone is not the live
-        # -mask test: ``backend="baked_in"`` and ``backend="shock"`` both
-        # return from ``NebularSEDComponent.apply`` before ever reaching the
-        # ``neb_fesc`` masking block (Issue #301 / #2439 / #2427) -- neither
-        # publishes ``lyc_transmission``, so the stellar LUT's whole-band and
+        # -mask test: ``backend="baked_in"`` returns from
+        # ``NebularSEDComponent.apply`` before ever reaching the
+        # ``neb_fesc`` masking block (Issue #301 / #2439 / #2427) -- it
+        # does not publish ``lyc_transmission``, so the stellar LUT's whole-band and
         # sub-band LyC split would be pure, uncorrected, wasted compute for
         # them (and, on far-IR filters whose observed-frame footprint sits
         # nowhere near the forced 912(1+z) edge, could trip the sub-band
         # partition's own conservation assertion for no physical reason).
         # Only the photoionized backends run that block.
-        _PHOTOIONIZED_NEB_BACKENDS = ("cue", "cloudy_grid", "cb19", "gutkin16", "mappings")
+        from tengri.components.nebular.component import NebularSEDComponent
+        from tengri.components.stellar.component import StellarSEDComponent
+
         lyc_mask_live = False
         _live_neb = any(
-            isinstance(c, NebularSEDComponent)
-            and getattr(c.config, "backend", None) in _PHOTOIONIZED_NEB_BACKENDS
+            isinstance(c, NebularSEDComponent) and c.backend_class.supports_split_sed
             for c in chain
         )
         if _live_neb:
@@ -13182,8 +13312,10 @@ class SEDModel:
 
     # ── Batch operations ──────────────────────────────────────────────
 
-    def predict_photometry_batch(self, params_batch, *, ssp_data=None, template_data=None):
-        """Compute photometry for a batch of parameter sets via jax.vmap.
+    def predict_photometry_batch(
+        self, params_batch, *, ssp_data=None, template_data=None, chunk_size=GALAXY_CHUNK_SIZE
+    ):
+        """Compute photometry for a batch of parameter sets, in chunks of galaxies.
 
         **Use this method for** posterior chains / mock catalogs (batched
         forward pass). **For interactive single-galaxy use**, access
@@ -13193,6 +13325,9 @@ class SEDModel:
         ----------
         params_batch : dict of arrays
             Each value has shape (N, ...) with leading batch dimension.
+        chunk_size : int, keyword-only, default 32
+            Galaxies per compiled chunk [galaxies]. Peak memory scales with the
+            chunk, about ``n_age * n_wave * 8`` bytes per galaxy [bytes].
 
         Returns
         -------
@@ -13216,9 +13351,17 @@ class SEDModel:
         """
         from tengri.forward.convenience import predict_photometry_batch as _fn
 
-        return _fn(self, params_batch, ssp_data=ssp_data, template_data=template_data)
+        return _fn(
+            self,
+            params_batch,
+            ssp_data=ssp_data,
+            template_data=template_data,
+            chunk_size=chunk_size,
+        )
 
-    def predict_spectrum_batch(self, params_batch, *, ssp_data=None, template_data=None):
+    def predict_spectrum_batch(
+        self, params_batch, *, ssp_data=None, template_data=None, chunk_size=GALAXY_CHUNK_SIZE
+    ):
         """Compute spectra for a batch of parameter sets via jax.vmap.
 
         **Use this method for** batched spectra over posterior chains.
@@ -13252,7 +13395,13 @@ class SEDModel:
         """
         from tengri.forward.convenience import predict_spectrum_batch as _fn
 
-        return _fn(self, params_batch, ssp_data=ssp_data, template_data=template_data)
+        return _fn(
+            self,
+            params_batch,
+            ssp_data=ssp_data,
+            template_data=template_data,
+            chunk_size=chunk_size,
+        )
 
     @classmethod
     def from_config(
@@ -13832,7 +13981,9 @@ class SEDModel:
             return ""
         return json_str
 
-    def prior_predictive(self, n: int = 500, seed: int = 42) -> PriorPredictive:
+    def prior_predictive(
+        self, n: int = 500, seed: int = 42, chunk_size: int = GALAXY_CHUNK_SIZE
+    ) -> PriorPredictive:
         """Sample from the prior and evaluate forward model on each draw.
 
         Parameters
@@ -13859,7 +14010,7 @@ class SEDModel:
         """
         from tengri.forward.convenience import prior_predictive as _fn
 
-        return _fn(self, n=n, seed=seed)
+        return _fn(self, n=n, seed=seed, chunk_size=chunk_size)
 
     def fit(
         self,
@@ -14214,17 +14365,12 @@ class SEDModel:
             sfh = self.predict_sfh(posterior.params)
             ax.plot(sfh["t_gyr"], sfh["sfr_mean"], color=color, lw=2, label=label)
         else:
-            n_total = len(next(iter(posterior.samples.values())))
-            sfh_draws = []
-            for i in range(n_total):
-                s_i = {k: posterior.samples[k][i] for k in posterior.samples}
-                sfh_i = self.predict_sfh(s_i)
-                key = "sfr_full" if self.spec.stochastic else "sfr_mean"
-                sfh_draws.append(sfh_i[key])
-
             import numpy as np
 
-            sfh_arr = np.array(sfh_draws)
+            from tengri.forward.draw_maps import map_draws
+
+            n_total = len(next(iter(posterior.samples.values())))
+            sfh_arr = map_draws(self, "_sfr_full_draw", posterior.samples)
             t_gyr = np.array(self.predict_sfh(posterior.params)["t_gyr"])
 
             lo = np.percentile(sfh_arr, 16, axis=0)

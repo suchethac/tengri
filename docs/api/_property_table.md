@@ -1,5 +1,9 @@
 | Name | Units | Group | Component | Description |
 |------|-------|-------|-----------|-------------|
+| `L_agn_adaf_accretion_lsun` | Lsun | agn | agn | log_L_agn_adaf_accretion in solar luminosities; composable with the 'adaf' disc only |
+| `L_agn_bol` | erg/s | agn | agn | AGN accretion power 10**agn_log_lbol L_sun |
+| `L_agn_bol_lsun` | Lsun | agn | agn | 10**agn_log_lbol, the accretion power in solar luminosities |
+| `L_agn_direct_los_lsun` | Lsun | agn | agn | log_L_agn_direct_los in solar luminosities; composable only |
 | `L_agn_disc_los_lsun` | Lsun | agn | agn | log_L_agn_disc_los in solar luminosities |
 | `L_agn_disc_lsun` | Lsun | agn | agn | log_L_agn_disc in solar luminosities |
 | `L_agn_disc_unemitted_lsun` | Lsun | agn | agn | log_L_agn_disc_unemitted in solar luminosities |
@@ -13,9 +17,11 @@
 | `L_agn_torus_los_lsun` | Lsun | agn | agn | log_L_agn_torus_los in solar luminosities |
 | `L_agn_torus_lsun` | Lsun | agn | agn | log_L_agn_torus in solar luminosities |
 | `L_agn_torus_unemitted_lsun` | Lsun | agn | agn | log_L_agn_torus_unemitted in solar luminosities |
+| `agn_adaf_mdot` | — | agn | agn | ADAF accretion rate in Eddington units, mdot = Mdot / Mdot_Edd (Mahadevan 1997, Eq. 4); composable with the 'adaf' disc only |
 | `agn_ir_frac_realized` | — | agn | agn | AGN fraction agn_ir_frac measures, from what the model emitted: the AGN dust power over AGN dust plus the host's absorbed power (total dust), or the AGN share of the light in ir_frac_window. Equals agn_ir_frac where agn_ir_frac_saturated is 0 and agn_ledger_closed is 1; composable AGN only |
 | `agn_ir_frac_saturated` | — | agn | agn | 1.0 when agn_norm='conserving' cannot reach the requested agn_ir_frac: the covering factor it asks for sits at a bound of [0, 1] (or at the line bound 1 - E_lines/E_disc), so agn_ir_frac_realized differs from agn_ir_frac; else 0.0. Composable AGN only |
 | `agn_ledger_closed` | — | agn | agn | 1.0 when the angle-integrated pieces plus the unemitted ones add up to the accretion power agn_lum_ratio * 10**agn_log_lbol L_sun, else 0.0 (self-contained quasar templates, agn_norm='independent', 'cigale_joint' with lines or an active agn_ir_frac tie, polar dust beside a library torus with anisotropy); composable AGN only |
+| `agn_torus_frac_effective` | — | agn | agn | torus fraction the composable AGN was evaluated at; composable only |
 | `balmer_break` | — | sed | stellar | Balmer break diagnostic |
 | `balmer_decrement` | — | lines | nebular | Balmer decrement: Hα/Hβ |
 | `bpt_nii` | dex | lines | nebular | BPT-NII diagnostic: log10([NII]6584 / Hα) |
@@ -37,6 +43,9 @@
 | `l_x_agn` | Lsun | xray | xray | X-ray luminosity from AGN. `l_x_agn = 10**(log_l_x_agn - log10(L_sun))` |
 | `l_x_total` | Lsun | xray | xray | Total X-ray luminosity (XRB + AGN). `l_x_total = 10**(log_l_x_total - log10(L_sun))` |
 | `l_x_xrb` | Lsun | xray | xray | X-ray luminosity from X-ray binaries. `l_x_xrb = 10**(log_l_x_xrb - log10(L_sun))` |
+| `log_L_agn_adaf_accretion` | dex | agn | agn | log10 of the ADAF accretion power eta_eff Mdot c^2 [dex re erg/s], eta_eff = 0.1; composable with the 'adaf' disc only |
+| `log_L_agn_bol` | dex | agn | agn | log10(L_agn_bol / (erg/s)), float32-safe |
+| `log_L_agn_direct_los` | dex | agn | agn | log10 of the line-of-sight isotropic-equivalent direct AGN luminosity [dex re erg/s]; composable only |
 | `log_L_agn_disc` | dex | agn | agn | log10 power [dex re erg/s] of the disc (with its corona) as emitted, integrated over all directions (sphere mean over cos i); composable AGN only |
 | `log_L_agn_disc_los` | dex | agn | agn | log10 power [dex re erg/s] of the disc (with its corona) as emitted along agn_cos_inc, the integral of that piece of the SED; composable AGN only |
 | `log_L_agn_disc_unemitted` | dex | agn | agn | log10 power [dex re erg/s] carried by the disc (with its corona) but removed before it leaves the AGN (torus screen, polar dust, attenuation block, disc reddening), integrated over all directions; composable AGN only |

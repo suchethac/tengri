@@ -17,16 +17,19 @@ import numpy as np
 
 from tengri import (
     Fitter,
+    Fixed,
     Gaussian,
-    Model,
     Observation,
-    ParamSpec,
     Photometry,
     Posterior,
+    SEDModel,
     Uniform,
+    builders,
     load_filter_set,
     load_ssp_data,
+    vmap_chunked,
 )
+from tengri.observation import Spectroscopy
 
 # ── Paths ──────────────────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -47,19 +50,17 @@ PSD_REGIMES = {
 }
 
 # ── Default SFH params (star-forming galaxy) ──────────────────────
+# Short names: the ``sfh`` group of SEDModel.build resolves them to sfh_dpl_*.
 DEFAULT_SFH = dict(
-    sfh_dpl_alpha=Uniform(0.5, 3.0),
-    sfh_dpl_beta=Uniform(0.3, 2.0),
-    sfh_dpl_tau_gyr=Uniform(1.0, 8.0),
-    sfh_dpl_log_total_mass=Uniform(10.0, 11.5),
+    alpha=Uniform(0.5, 3.0),
+    beta=Uniform(0.3, 2.0),
+    tau_gyr=Uniform(1.0, 8.0),
+    log_total_mass=Uniform(10.0, 11.5),
 )
 
-DEFAULT_SPS = dict(
-    met_logzsol=Gaussian(-0.5, 0.3, lo=-2.0, hi=0.0),
-    dust_tau_bc=Uniform(0.0, 2.0),
-    dust_tau_diff=Uniform(0.0, 1.0),
-    dust_slope=-0.7,
-)
+# Metallicity group and Charlot-Fall power-law dust (slope fixed at -0.7).
+DEFAULT_MET = {"logzsol": Gaussian(-0.5, 0.3, lo=-2.0, hi=0.0)}
+DEFAULT_DUST_TAU = dict(tau_bc=Uniform(0.0, 2.0), tau_diff=Uniform(0.0, 1.0))
 
 
 # ── Plotting defaults ─────────────────────────────────────────────
@@ -127,19 +128,20 @@ def make_model(
     n_grid: int = 128,
     free_psd: bool = False,
     filter_names: list | None = None,
-) -> Model:
-    """Create a Model for a given PSD regime.
+) -> SEDModel:
+    """Create an SEDModel for a given PSD regime.
 
     Parameters
     ----------
     psd_regime : str
         One of "smooth", "moderate", "bursty", "highly_bursty".
     redshift : float
-        Galaxy redshift.
+        Galaxy redshift, fixed.
     stochastic : bool
-        Whether to use the correlated-field SFH.
+        Whether to use the correlated-field SFH (``type=["dpl", "field"]``).
+        If False, the SFH is a plain double power law and the PSD is unused.
     n_grid : int
-        Number of GP grid points.
+        Number of GP grid points (``n_grid`` of ``SEDModel.build``).
     free_psd : bool
         If True, make psd_sigma and psd_tau_myr free parameters.
     filter_names : list, optional
@@ -147,24 +149,29 @@ def make_model(
     """
     psd = PSD_REGIMES[psd_regime]
 
-    spec_kwargs = dict(**DEFAULT_SFH, **DEFAULT_SPS)
-
     if free_psd:
-        spec_kwargs["sfh_field_psd_sigma"] = Uniform(0.1, 4.0)
-        spec_kwargs["sfh_field_psd_tau_myr"] = Uniform(1.0, 300.0)
+        psd_priors = dict(psd_sigma=Uniform(0.1, 4.0), psd_tau_myr=Uniform(1.0, 300.0))
     else:
-        spec_kwargs["sfh_field_psd_sigma"] = psd["psd_sigma"]
-        spec_kwargs["sfh_field_psd_tau_myr"] = psd["psd_tau_myr"]
+        psd_priors = dict(psd_sigma=Fixed(psd["psd_sigma"]), psd_tau_myr=Fixed(psd["psd_tau_myr"]))
 
-    spec_kwargs["redshift"] = redshift
-    spec_kwargs["stochastic"] = stochastic
-    spec_kwargs["n_grid"] = n_grid
+    if stochastic:
+        sfh = {"type": ["dpl", "field"], **DEFAULT_SFH, **psd_priors}
+    else:
+        sfh = builders.sfh.dpl(**DEFAULT_SFH)
 
-    spec = ParamSpec(**spec_kwargs)
-    ssp = get_ssp()
-    obs = get_observation(filter_names)
-
-    return Model(spec, ssp, observation=obs)
+    return SEDModel.build(
+        ssp_data=get_ssp(),
+        observation=get_observation(filter_names),
+        sfh=sfh,
+        met=DEFAULT_MET,
+        dust_attenuation=builders.dust.two_component(
+            law="power_law", slope=Fixed(-0.7), **DEFAULT_DUST_TAU
+        ),
+        # The wNE SSP carries its nebular emission baked in, so neb is stated as "ssp".
+        neb={"type": "ssp"},
+        redshift=Fixed(redshift),
+        n_grid=n_grid,
+    )
 
 
 # ── Mock generation ───────────────────────────────────────────────
@@ -182,13 +189,13 @@ class MockGalaxy:
 
 
 def generate_mock_galaxy(
-    model: Model, key, snr: float = 20.0, spec_snr: float = 15.0, wave_spec=None
+    model: SEDModel, key, snr: float = 20.0, spec_snr: float = 15.0, wave_spec=None
 ) -> MockGalaxy:
     """Generate a single mock galaxy.
 
     Parameters
     ----------
-    model : Model
+    model : SEDModel
         Configured model.
     key : PRNGKey
         Random key.
@@ -225,7 +232,7 @@ def generate_mock_galaxy(
 
 
 def generate_mock_population(
-    model: Model, n_galaxies: int, key, snr: float = 20.0, **kwargs
+    model: SEDModel, n_galaxies: int, key, snr: float = 20.0, **kwargs
 ) -> list[MockGalaxy]:
     """Generate a population of mock galaxies."""
     keys = jax.random.split(key, n_galaxies)
@@ -245,7 +252,7 @@ class FitResult:
 
 
 def fit_galaxy(
-    model: Model,
+    model: SEDModel,
     galaxy: MockGalaxy,
     method: str = "mcmc_raytrace",
     data_type: str = "photometry",
@@ -255,7 +262,7 @@ def fit_galaxy(
 
     Parameters
     ----------
-    model : Model
+    model : SEDModel
         The forward model.
     galaxy : MockGalaxy
         Mock data.
@@ -270,12 +277,11 @@ def fit_galaxy(
         data = galaxy.spec_obs
         noise = galaxy.spec_noise
         # Rebuild model with spectroscopic observation
-        from tengri import SpectroscopyConfig
-
         spec_obs = Observation(
-            spectroscopy=SpectroscopyConfig(wave_obs=galaxy.wave_spec),
+            spectroscopy=Spectroscopy(wave_obs=galaxy.wave_spec),
         )
-        model = Model(model.spec, model.ssp_data, observation=spec_obs)
+        # SEDModel has no ssp_data attribute; the SSP is the cached get_ssp() grid.
+        model = SEDModel(model.spec, get_ssp(), observation=spec_obs)
     else:
         data = galaxy.flux_obs
         noise = galaxy.noise
@@ -305,7 +311,40 @@ def fit_galaxy(
 
 
 # ── SFH residual metrics ─────────────────────────────────────────
-def sfh_residuals(model: Model, fit_result: FitResult, t_max_gyr: float = 1.0) -> dict:
+def posterior_sfr_full(model, samples, n_draw: int, chunk_size: int = 16) -> np.ndarray:
+    """Full SFR history [Msun/yr] of the first ``n_draw`` posterior draws.
+
+    Parameters
+    ----------
+    model : SEDModel
+        SEDModel whose ``predict_sfh`` evaluates each draw.
+    samples : dict
+        Posterior samples, one array of shape ``(n_samples,)`` per parameter.
+    n_draw : int
+        Number of leading draws to evaluate.
+    chunk_size : int, optional
+        Draws per batched call. Bounds the live memory of the vmapped SFH (#715).
+
+    Returns
+    -------
+    ndarray, shape (n_draw, n_linear)
+        Full SFR history [Msun/yr] on the model's linear lookback grid.
+
+    Notes
+    -----
+    Batched with :func:`tengri.vmap_chunked` over the jit-safe
+    ``predict_sfh``, not a per-draw Python loop (#715). The chunked map keeps
+    at most ``chunk_size`` draws in one compiled call.
+    """
+    batch = {k: jnp.asarray(v)[:n_draw] for k, v in samples.items()}
+
+    def sfr_full(p):
+        return model.predict_sfh(p)["sfr_full"]
+
+    return np.asarray(vmap_chunked(sfr_full, chunk_size=chunk_size)(batch))
+
+
+def sfh_residuals(model: SEDModel, fit_result: FitResult, t_max_gyr: float = 1.0) -> dict:
     """Compute SFH recovery metrics.
 
     Returns
@@ -325,13 +364,7 @@ def sfh_residuals(model: Model, fit_result: FitResult, t_max_gyr: float = 1.0) -
         return {"rmse_log_sfr": np.nan}
 
     n_samples = min(posterior.diagnostics.get("n_samples", 50), 50)
-    sfr_draws = []
-    for i in range(n_samples):
-        s_i = {k: posterior.samples[k][i] for k in posterior.samples}
-        sfh_i = model.predict_sfh(s_i)
-        sfr_draws.append(np.array(sfh_i["sfr_full"]))
-
-    sfr_arr = np.array(sfr_draws)  # (n_samples, n_t)
+    sfr_arr = posterior_sfr_full(model, posterior.samples, n_samples)  # (n_samples, n_t)
     sfr_median = np.median(sfr_arr, axis=0)
 
     # Log-space metrics (avoid log(0))

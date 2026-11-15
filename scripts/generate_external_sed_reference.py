@@ -1256,6 +1256,10 @@ def _cigale_build_skirtor(case: dict) -> list:
     sk.parameters["Mcl"] = float(case["Mcl"])  # clump mass fraction
     sk.parameters["i"] = int(case["i"])  # inclination (0=face-on Type 1, 90=edge-on Type 2)
     sk.parameters["fracAGN"] = float(case["fracAGN"])  # bolometric AGN fraction
+    # #2480: disk_type=0 is SKIRTOR's own disc spectrum (Stalevski et al. 2016), the disc
+    # the template library stores and tengri emits. pCIGALE's default, disk_type=1,
+    # substitutes the Schartmann (2005) shape (1.7x the optical power at equal bolometric).
+    sk.parameters["disk_type"] = 0
     sk.parameters["delta"] = 0.0  # no polar dust attenuation modification
     sk._init_code()  # reload SKIRTOR templates with updated geometry/fracAGN
     mods.append(sk)

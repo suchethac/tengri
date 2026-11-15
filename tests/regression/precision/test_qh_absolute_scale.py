@@ -104,7 +104,9 @@ def test_mappings_halpha_over_qh_is_case_b_through_the_component(ssp_path):
     ssp_kw = {"mass_remaining": "dsps_fit"} if "bpss_" in ssp_path.name else {}
     ssp = load_ssp_data(str(ssp_path), **ssp_kw)
     with patch.object(
-        mp, "_load_stellar_grid", return_value=(_case_b_grid(), ["cont", "inst"], 1, 0)
+        mp,
+        "_load_stellar_grid",
+        return_value=mp.MappingsStellarLoad(_case_b_grid(), ["cont", "inst"], 1, 0),
     ):
         model = _model(ssp, "mappings", ionizing_source_warning="suppress")
     derived = model.predict_state(_PARAMS).derived

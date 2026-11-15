@@ -35,6 +35,8 @@ NAME_MAP = {
     "casey2012": "Casey2012",
     "dale2014": "Dale2014",
     "themis": "THEMIS",
+    "mbb": "MBB",
+    "lopez24": "Lopez24",
     "schreiber2016": "Schreiber2016",
     "fritz2006": "Fritz2006",
     "skirtor2016": "SKIRTOR2016",

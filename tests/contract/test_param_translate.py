@@ -8,7 +8,6 @@ import pytest
 from tengri.parameters.translate import (
     _NON_SFH_PARAM_MAP,
     LOG10_ZSUN,
-    PARAM_MAP,
     _build_param_map,
     find_short_param,
     get_internal_params,
@@ -241,27 +240,28 @@ class TestGetInternalParams:
         assert params == original
 
 
-# ── Tests for legacy PARAM_MAP ────────────────────────────────────
+# ── Unit facts of the live translation table ──────────────────────
 
 
-class TestLegacyParamMap:
-    """Tests for the legacy module-level PARAM_MAP (backward compat)."""
+class TestTranslationTableUnits:
+    """Scale and offset facts of the registry-built translation table."""
 
-    def test_contains_sfh_params(self):
-        assert "sfh_alpha" in PARAM_MAP
-        assert "sfh_beta" in PARAM_MAP
+    def test_dpl_alpha_beta_are_identity(self):
+        pm = _build_param_map(["dpl"])
+        assert pm["sfh_dpl_alpha"] == ("alpha", 1.0, 0.0)
+        assert pm["sfh_dpl_beta"] == ("beta", 1.0, 0.0)
 
     def test_unit_conversion_tau_peak(self):
-        _, scale, offset = PARAM_MAP["sfh_tau_peak_gyr"]
+        _, scale, offset = _build_param_map(["dpl"])["sfh_dpl_tau_gyr"]
         assert scale == 1e9  # Gyr -> yr
         assert offset == 0.0
 
     def test_unit_conversion_psd_tau(self):
-        _, scale, offset = PARAM_MAP["psd_tau_myr"]
+        _, scale, offset = _build_param_map(["dpl", "field"])["sfh_field_psd_tau_myr"]
         assert scale == 1e6  # Myr -> yr
         assert offset == 0.0
 
     def test_metallicity_solar_offset(self):
-        _, scale, offset = PARAM_MAP["met_logzsol"]
+        _, scale, offset = _build_param_map(["dpl"])["met_logzsol"]
         assert scale == 1.0
         assert abs(offset - LOG10_ZSUN) < 1e-12

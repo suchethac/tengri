@@ -6,6 +6,8 @@
 ``-inf``. Each site below is driven at a zero input in float32 (the precision
 #1206 delivers) and must return a finite value. The expected values are the ones
 the floor implies: ``log10(finfo(float32).tiny)`` replaces ``log10(0)``.
+
+The exception is ``fnu_to_ab_mag``: zero flux is ``+inf`` mag by definition (#3433).
 """
 
 from __future__ import annotations
@@ -42,14 +44,18 @@ def test_surface_brightness_to_mag_zero_area_is_finite_float32():
         assert float(mag) == pytest.approx(20.0 - 2.5 * _LOG10_TINY_F32, rel=1e-5)
 
 
-def test_fnu_to_ab_mag_zero_flux_is_finite_float32():
-    """A zero flux density is floored to the smallest normal, not ``-inf`` dex."""
+def test_fnu_to_ab_mag_zero_flux_is_plus_inf_float32():
+    """A zero flux density is ``+inf`` mag in float32, not a floored finite value (#3433).
+
+    The earlier floor to the smallest normal read 46.22 mag in float32, which looks
+    like a faint detection. ``+inf`` is the AB magnitude of zero flux, and it is
+    the same in float32 and float64.
+    """
     from tengri.utils.magnitudes import fnu_to_ab_mag
 
     with jax.enable_x64(False):
         mag = fnu_to_ab_mag(jnp.float32(0.0))
-        assert bool(jnp.isfinite(mag))
-        assert float(mag) != 0.0
+        assert bool(jnp.isposinf(mag)), f"zero flux should be +inf mag, got {float(mag)}"
 
 
 def test_compute_uv_slope_zero_luminosity_is_finite_float32():

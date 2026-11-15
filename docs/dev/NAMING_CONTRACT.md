@@ -524,11 +524,8 @@ integral of its nodes but resampled linearly, so it carries 1.22e-4 more than
 - `'cigale_joint'` with lines (added on top of the disc, as CIGALE adds nebular emission) or with
   an active `agn_ir_frac` tie (CIGALE's `agn_power` normalization, unchanged for parity; the
   anchor is `log_L_agn_power`);
-- the `polar_dust` block beside a torus whose library keeps its anisotropy (the five registered
-  above): the runner splits the dust budget between the torus and the polar dust on the torus's
-  sightline power rather than its angle-integrated power, so the pieces miss the accretion power
-  by the anisotropy (measured +2.5% for `nenkova_agnfitter` at `cos i = 0.8`). Splitting on the
-  angle-integrated power changes the SED and is not part of this ledger.
+The `polar_dust` block beside an anisotropic library torus is not on this list: the runner splits
+the dust budget on the torus's angle-integrated power (#3100), so the ledger closes there too.
 
 The first two kinds also emit a `RecipeWarning` at build naming the reason
 (`validate_block_recipe` rule 10). No piece is rescaled to force a closure. In pure float32 the

@@ -83,6 +83,7 @@ from tengri.inference.backends.mcmc._shared import (
     _get_flat_logdensity,
     _set_cached_adaptation,
     adaptation_method_key,
+    refuse_dead_warmup,
 )
 from tengri.inference.backends.mcmc.chain_program import (
     DUAL_AVERAGING,
@@ -323,6 +324,14 @@ def run_first_order(
             jax.block_until_ready(pos)
         positions_per_chain.append(pos)
         accept_per_chain.append(acc)
+        # Refuse before caching, so a non-finite step size is never written (#3317).
+        refuse_dead_warmup(
+            None,
+            sampler={"barker": "Barker", "mala": "MALA"}[proposal],
+            step_size=float(step_size),
+            n_warmup=int(n_warmup),
+            n_samples=int(n_samples),
+        )
         _set_cached_adaptation(fitter, adapt_key, {"step_size": step_size})
         if verbose:
             logger.info(

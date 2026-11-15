@@ -125,6 +125,15 @@ class CompositeLikelihood:
                 total = total + lk.log_prob(prediction, params)
         return total
 
+    def log_normalization(self, data_args: Mapping[str, jnp.ndarray] | None = None):
+        """Sum of the constituents' normalizations: what :meth:`log_prob` omits (#3427)."""
+        from tengri.inference.likelihoods.protocol import log_normalization_of
+
+        total = jnp.asarray(0.0)
+        for lk in self.likelihoods:
+            total = total + log_normalization_of(lk, data_args)
+        return total
+
     def declared_parameters(self) -> list[str]:
         """Union of constituents' declared parameter names.
 

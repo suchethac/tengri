@@ -37,6 +37,73 @@ logger = logging.getLogger(__name__)
 # memory scales with this, not with n_samples.
 _PROPERTY_CHUNK = 64
 
+# Draws per compiled kernel for the per-draw summaries (sed_components,
+# equivalent_widths, posterior_predictive). A bare vmap over 1000 draws peaked at
+# 17.7 GB where this chunked map peaks near 1 GB (#715).
+_DRAW_CHUNK = 16
+
+
+def _map_over_draws(fn, samples, indices=None, *, owner, name):
+    """Evaluate ``fn`` on every posterior draw in bounded, jitted chunks.
+
+    Equivalent to the per-draw loop ``fn({k: v[i] if v.ndim >= 1 else v})`` for
+    ``i`` in ``indices``, stacked along a new leading axis, but compiled once per
+    chunk instead of once per draw.
+
+    Parameters
+    ----------
+    fn : callable
+        ``dict -> pytree`` of one draw's parameters; must be jit-traceable.
+    samples : Mapping
+        Parameter name to array with a leading draw axis. A 0-d entry is held
+        fixed across draws.
+    indices : array_like of int, optional
+        Draws to evaluate, in order. Default ``None`` evaluates every draw.
+    owner : SEDModel
+        The model ``fn`` closes over. Its compiled chunk kernel is cached on it,
+        keyed by ``name`` and ``owner.compile_signature()``, so a repeated call
+        reuses the program and a structural change to the model recompiles.
+    name : hashable
+        Identifies ``fn`` among the kernels cached on ``owner``; must include every
+        value ``fn`` closes over besides ``owner``.
+
+    Returns
+    -------
+    pytree
+        Each leaf of ``fn``'s output with leading axis ``len(indices)``.
+
+    Notes
+    -----
+    **JIT-compatible**: ``fn`` is jitted per chunk of ``_DRAW_CHUNK`` draws through
+    :func:`tengri.utils.batching.vmap_chunked`, which falls back to an eager loop
+    (with a warning) if ``fn`` is not traceable.
+    """
+    from tengri.inference._model_cache import _default_owner
+    from tengri.utils.batching import vmap_chunked
+
+    sel = None if indices is None else np.asarray(indices)
+    if sel is None:
+        n = int(next(np.shape(v)[0] for v in samples.values() if np.ndim(v) >= 1))
+    else:
+        n = int(sel.shape[0])
+    batch = {}
+    for k, v in samples.items():
+        arr = jnp.asarray(v)
+        if arr.ndim == 0:
+            batch[k] = jnp.broadcast_to(arr, (n,))
+        else:
+            batch[k] = arr if sel is None else arr[sel]
+    signature = getattr(owner, "compile_signature", None)
+    if callable(signature):
+        namespace = _default_owner.get_or_compile_model(owner)
+        key = ("draw_map", name, signature())
+        mapped = namespace.get(key)
+        if mapped is None:
+            mapped = namespace[key] = vmap_chunked(fn, chunk_size=_DRAW_CHUNK)
+    else:
+        mapped = vmap_chunked(fn, chunk_size=_DRAW_CHUNK)
+    return mapped(batch)
+
 
 def _bundle_siblings(model, name: str, exclude=()) -> tuple[str, ...]:
     """``name`` and every not-yet-computed property evaluated in the same bundle.
@@ -1074,9 +1141,8 @@ class Posterior:
         ``sed_intrinsic`` (stellar pre-attenuation) is reconstructed
         from the published ``lnu_age`` cube via ``sum(lnu_age, axis=0)``.
 
-        For Posterior draws this is still a Python loop (one
-        orchestrator pass per sample); JIT vectorization across draws
-        is a separate optimization.
+        For Posterior draws the orchestrator pass runs once per sample, compiled
+        in chunks of ``_DRAW_CHUNK`` draws (bounded peak memory).
 
         Examples
         --------
@@ -1109,21 +1175,15 @@ class Posterior:
                 out[key] = comp[key]
             return out
 
-        # Sampling path
+        # Sampling path: one orchestrator pass per draw, compiled in bounded chunks.
         sample_keys = [k for k, v in self.samples.items() if v.ndim >= 1]
-        n = int(self.samples[sample_keys[0]].shape[0]) if sample_keys else 1
-
-        first = _one({k: (v[0] if v.ndim >= 1 else v) for k, v in self.samples.items()})
-        wave_out = first["wavelength"]
-        stacked = {key: [first[key]] for key in self._COMPONENT_KEYS}
-        for i in range(1, n):
-            params_i = {k: (v[i] if v.ndim >= 1 else v) for k, v in self.samples.items()}
-            comp = _one(params_i)
-            for key in self._COMPONENT_KEYS:
-                stacked[key].append(comp[key])
-        out = {"wavelength": wave_out}
+        if sample_keys:
+            comp = _map_over_draws(_one, self.samples, owner=self._model, name="sed_components")
+        else:
+            comp = jax.tree_util.tree_map(lambda x: x[None], _one(self.samples))
+        out = {"wavelength": comp["wavelength"][0]}
         for key in self._COMPONENT_KEYS:
-            out[key] = jnp.stack(stacked[key], axis=0)
+            out[key] = comp[key]
         return out
 
     def agn_fraction(self, wavelength=None) -> jnp.ndarray:
@@ -1299,11 +1359,15 @@ class Posterior:
             ew_arr = np.asarray(_ew_for_params(self.params))
             return {name: (float(ew_arr[i]),) * 3 for i, name in enumerate(names)}
 
-        n = int(self.samples[keys[0]].shape[0])
-        ew_samples = np.empty((n, len(names)))
-        for i in range(n):
-            params_i = {k: (v[i] if v.ndim >= 1 else v) for k, v in self.samples.items()}
-            ew_samples[i] = np.asarray(_ew_for_params(params_i))
+        ew_name = (
+            "equivalent_widths",
+            float(window_aa),
+            float(continuum_width_aa),
+            tuple(wavelengths),
+        )
+        ew_samples = np.asarray(
+            _map_over_draws(_ew_for_params, self.samples, owner=self._model, name=ew_name)
+        )
 
         result: dict[str, tuple[float, float, float]] = {}
         for j, name in enumerate(names):
@@ -1785,11 +1849,13 @@ class Posterior:
                     indices = np.asarray(
                         jax.random.choice(key, n_total, shape=(int(n_samples),), replace=True)
                     )
-                preds_list = []
-                for idx in indices:
-                    params_i = {k: (v[idx] if v.ndim >= 1 else v) for k, v in self.samples.items()}
-                    preds_list.append(_predict_one(params_i))
-                preds = jnp.stack(preds_list, axis=0)
+                preds = _map_over_draws(
+                    _predict_one,
+                    self.samples,
+                    indices=indices,
+                    owner=self._model,
+                    name="posterior_predictive",
+                )
 
         residuals = (data_arr[None, :] - preds) / noise_arr[None, :]
         chi2 = jnp.sum(residuals**2, axis=1)
