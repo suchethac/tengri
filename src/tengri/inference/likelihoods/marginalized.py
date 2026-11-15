@@ -33,6 +33,7 @@ from tengri.inference.likelihoods.terms import (
     eline_fitted_term,
     eline_flat_marginal_term,
     eline_model_marginal_term,
+    floor_value,
 )
 
 __all__ = [
@@ -47,13 +48,6 @@ __all__ = [
 # ─────────────────────────────────────────────────────────────────────
 # Calibration polynomial, Chebyshev marginalization
 # ─────────────────────────────────────────────────────────────────────
-
-
-def _floor_of(name, params):
-    """The calibration floor an adapter reads from ``params``, or ``None`` without one."""
-    if name is None:
-        return None
-    return 0.0 if params is None else params.get(name, 0.0)
 
 
 def _log_q(params):
@@ -167,7 +161,7 @@ class CalibrationMarginalizedLikelihood:
             q_window=self.q_window,
             has_q=self.has_q,
             chol_data=_resolve_chol(self.chol_data, self.chol_key, data_args),
-            f_cal=_floor_of(self.f_cal_param, params),
+            f_cal=floor_value(params, self.f_cal_param),
             chol_offsets=self.chol_offsets,
         )
 
@@ -334,7 +328,7 @@ class ELineMarginalizedLikelihood:
             prior_sigma=self.prior_sigma,
             pix_mask=pix_mask,
             chol_data=_resolve_chol(self.chol_data, self.chol_key, data_args),
-            f_cal=_floor_of(self.f_cal_param, params),
+            f_cal=floor_value(params, self.f_cal_param),
             chol_offsets=self.chol_offsets,
         )
 
@@ -457,7 +451,7 @@ class CloudyELineMarginalizedLikelihood:
             line_wavelengths=self.line_wavelengths,
             prior_width_dex=self.prior_width_dex,
             chol_data=_resolve_chol(self.chol_data, self.chol_key, data_args),
-            f_cal=_floor_of(self.f_cal_param, params),
+            f_cal=floor_value(params, self.f_cal_param),
             chol_offsets=self.chol_offsets,
         )
 
@@ -574,7 +568,7 @@ class ModelELineMarginalizedLikelihood:
             prior_inputs=self.prior_inputs_builder(params),
             prior_width_dex=self.prior_width_dex,
             chol_data=_resolve_chol(self.chol_data, self.chol_key, data_args),
-            f_cal=_floor_of(self.f_cal_param, params),
+            f_cal=floor_value(params, self.f_cal_param),
             chol_offsets=self.chol_offsets,
         )
 
@@ -691,10 +685,7 @@ class ELineFittedLikelihood:
         """``(f_cal, dof)`` of the heavy-tailed variant, or ``None`` for Gaussian noise."""
         if not self.student_t:
             return None
-        f_cal = 0.0
-        if self.f_cal_param is not None and self.f_cal_param in params:
-            f_cal = params[self.f_cal_param]
-        return f_cal, self.dof
+        return floor_value(params, self.f_cal_param), self.dof
 
     def declared_parameters(self):
         return list(self.amplitude_names)
@@ -873,7 +864,7 @@ class CalibrationELineMarginalizedLikelihood:
             q_window=self.q_window,
             has_q=self.has_q,
             chol_data=_resolve_chol(self.chol_data, self.chol_key, data_args),
-            f_cal=_floor_of(self.f_cal_param, params),
+            f_cal=floor_value(params, self.f_cal_param),
             chol_offsets=self.chol_offsets,
         )
 

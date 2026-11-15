@@ -53,6 +53,7 @@ from tengri.inference.likelihoods.terms import (
     censored_term,
     correlated_noise_term,
     correlated_term,
+    floor_value,
     student_t_term,
 )
 
@@ -316,10 +317,7 @@ class StudentTLikelihood:
         # free parameter the inference engine fits, read it from the
         # params dict each call. Otherwise fall back to the static
         # ``f_cal`` constant.
-        if self.f_cal_param is not None and params is not None and self.f_cal_param in params:
-            f_cal = params[self.f_cal_param]
-        else:
-            f_cal = self.f_cal
+        f_cal = floor_value(params, self.f_cal_param, self.f_cal)
         return student_t_term(
             prediction[self.channel],
             resolve_channel_data(self.obs, self.obs_key, self.data_slice, data_args),
@@ -429,10 +427,7 @@ class CensoredLikelihood:
         params: Mapping[str, jnp.ndarray] | None = None,
         data_args: Mapping[str, jnp.ndarray] | None = None,
     ) -> jnp.ndarray:
-        if self.f_cal_param is not None and params is not None and self.f_cal_param in params:
-            f_cal = params[self.f_cal_param]
-        else:
-            f_cal = self.f_cal
+        f_cal = floor_value(params, self.f_cal_param, self.f_cal)
         return censored_term(
             prediction[self.channel],
             resolve_channel_data(self.obs, self.obs_key, self.data_slice, data_args),
@@ -567,9 +562,7 @@ class MultivariateGaussianLikelihood:
         if self.chol_data is not None:
             chol = resolve_channel_data(self.chol_data, self.chol_key, None, data_args)
         if self.student_t:
-            f_cal = 0.0
-            if params is not None and self.f_cal_param in params:
-                f_cal = params[self.f_cal_param]
+            f_cal = floor_value(params, self.f_cal_param)
             return correlated_noise_term(
                 prediction[self.channel],
                 obs,

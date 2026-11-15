@@ -46,6 +46,7 @@ from tengri.inference.likelihoods.terms import (
     eline_flat_marginal_term,
     eline_model_marginal_term,
     fitted_line_model,
+    floor_value,
     student_t_term,
 )
 
@@ -297,17 +298,10 @@ def _part(arr, block, noise):
     return arr[: noise.n_phot] if block == "phot" else arr[noise.n_phot :]
 
 
-def _f_cal(preds, noise):
-    name = noise.f_cal_param
-    if name is not None and name in preds.params:
-        return preds.params[name]
-    return 0.0
-
-
 def _floor(preds, noise):
     """The calibration floor a marginal whitens with, or ``None`` when there is none."""
     if noise.student_t and noise.dof is None:
-        return _f_cal(preds, noise)
+        return floor_value(preds.params, noise.f_cal_param)
     return None
 
 
@@ -401,7 +395,9 @@ def _n_present(obs, present):
 def _photometry_loglik(preds, data, noise):
     pred, obs, err, present = _phot_inputs(preds, data, noise)
     if noise.student_t:
-        return _student_t_with_presence(pred, obs, err, _f_cal(preds, noise), noise.dof, present)
+        return _student_t_with_presence(
+            pred, obs, err, floor_value(preds.params, noise.f_cal_param), noise.dof, present
+        )
     return diag_gaussian_log_prob(pred, obs, err)
 
 
@@ -437,7 +433,9 @@ def _censoring_loglik(preds, data, noise):
         obs = jnp.where(present, obs, 0.0)
         err = jnp.where(present, err, 1.0)
         mask = jnp.where(present, mask, 0)
-    return censored_term(pred, obs, err, mask, _f_cal(preds, noise), noise.dof)
+    return censored_term(
+        pred, obs, err, mask, floor_value(preds.params, noise.f_cal_param), noise.dof
+    )
 
 
 def _censoring_norm(data, noise):
@@ -498,11 +496,13 @@ def _spectrum_loglik(preds, data, noise):
             cov_inv=None if banded else data["spec_cov_inv"],
             chol_data=data["spec_chol_data"] if banded else None,
             chol_offsets=noise.chol_offsets if banded else None,
-            f_cal=_f_cal(preds, noise),
+            f_cal=floor_value(preds.params, noise.f_cal_param),
             dof=noise.dof,
         )
     if noise.student_t:
-        return student_t_term(model, obs, err, _f_cal(preds, noise), noise.dof)
+        return student_t_term(
+            model, obs, err, floor_value(preds.params, noise.f_cal_param), noise.dof
+        )
     if noise.covariance == "diagonal":
         return diag_gaussian_log_prob(model, obs, err)
     if noise.covariance == "banded":

@@ -51,9 +51,21 @@ __all__ = [
     "eline_flat_marginal_term",
     "eline_model_marginal_term",
     "fitted_line_model",
+    "floor_value",
     "floored_noise",
     "student_t_term",
 ]
+
+
+def floor_value(params, name, default=0.0):
+    """The fractional calibration floor ``params[name]`` [dimensionless], or ``default``.
+
+    ``default`` is returned when the noise model names no floor parameter, when ``params`` is
+    absent, and when the name is not among them. A floor of zero adds nothing.
+    """
+    if name is None or params is None:
+        return default
+    return params.get(name, default)
 
 
 def student_t_term(predicted, obs, err, f_cal, dof):
