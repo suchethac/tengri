@@ -1028,3 +1028,19 @@ def test_gradient_wrt_the_log_mean_multiplier_matches_finite_differences(channel
     assert "cal_log_q" in _scalar_params(preds, spec)
     assert np.isfinite(float(score(preds, data, spec)))
     check_gradients(preds, data, spec)
+
+
+def test_a_calibration_floor_with_marginalization_is_refused_with_its_own_reason():
+    """A floor is Gaussian, but the batched path scores no floor, so the convention is open."""
+    preds, data, noise = _synthetic("calibration", "cal_marg")
+    floor = NoiseSpec(
+        data_type="spectroscopy",
+        calibration=noise.calibration,
+        student_t=True,
+        dof=None,
+        f_cal_param="noise_frac_cal",
+    )
+    with pytest.raises(NotImplementedError, match="calibration floor"):
+        score(preds, data, floor)
+    with pytest.raises(NotImplementedError, match="calibration floor"):
+        channels.validate(floor, data.keys())

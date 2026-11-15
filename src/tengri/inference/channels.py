@@ -796,6 +796,14 @@ def _refuse_unscorable(noise: NoiseSpec) -> None:
     marginalized = noise.calibration is not None or (
         lines is not None and lines.mode == "marginalized"
     )
+    if noise.student_t and marginalized and noise.dof is None:
+        raise NotImplementedError(
+            "A calibration floor (noise_frac_cal) with a marginalized calibration polynomial "
+            "or marginalized emission-line amplitudes is not scored: the floor scales with the "
+            "model, and which model (before or after the polynomial and the line amplitudes) "
+            "is a convention the batched path does not define. Drop noise_frac_cal, or fit "
+            "the nuisance coefficients explicitly (calibration_order > 0, eline_mode='fitted')."
+        )
     if noise.student_t and marginalized:
         raise NotImplementedError(
             "Student-t noise with a marginalized calibration polynomial or marginalized "
