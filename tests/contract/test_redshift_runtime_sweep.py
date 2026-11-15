@@ -765,3 +765,125 @@ def test_a_declined_band_table_is_reported_once(case, caplog):
     ]
     assert len(msgs) == 1, msgs
     assert "redshift is a runtime input" in msgs[0]
+
+
+# ── Fits: the fitted mass follows the runtime redshift ─────────────────────────
+#
+# A forward evaluation that follows z (every cell above) does not make a fit follow it:
+# the mass profiled out of the likelihood is read back through its own forward pass, and
+# a pass at the declared redshift rescales the mass by (d_L(z_declared) / d_L(z))^2 while
+# the loss, which never sees the rescaling, stays the exact fit's. Shape and loss cells
+# cannot see that, so these cells compare the recovered mass with the mass of a fit built
+# fixed at the galaxy's z, and with the truth the mock was drawn at, at redshifts that
+# span the table and sit close to both of its edges.
+
+FIT_ZS = (0.06, 0.32, 0.94)
+FIT_BANDS = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z", "wise_w1", "wise_w2"]
+FIT_TRUTH = {"sfh_dpl_log_total_mass": 10.0, "sfh_dpl_tau_gyr": 3.0, "dust_tau_diff": 0.3}
+#: Atol [dex] between a runtime-z fit and the fixed-z fit of the same mock. The table's
+#: flux error is below 3e-3 per band (RTOL), at most 1.3e-3 dex of mass at fixed colors;
+#: the measured gap is 1e-4 dex at all three FIT_ZS. A baked distance gives at least
+#: 1.07 dex over FIT_ZS.
+FIT_LOGM_VS_EXACT = 0.005
+#: Atol [dex] on the truth: the noiseless fixed-z fit itself sits up to 0.05 dex off it
+#: at z = 0.94, where the age-mass-dust degeneracy and the priors shift the optimum.
+FIT_LOGM_VS_TRUTH = 0.1
+
+
+def _fit_model(representation, redshift):
+    approx = None
+    if representation != "exact":
+        approx = WavePrecomp(catalog_z_range=Z_RANGE)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return SEDModel.build(
+            ssp_data=_ssp(),
+            observation=Observation(photometry=Photometry.from_names(FIT_BANDS)),
+            sfh={
+                "type": "dpl",
+                "all_params": Fixed(DEFAULT),
+                "log_total_mass": Uniform(8.0, 12.5),
+                "tau_gyr": Uniform(0.5, 10.0),
+            },
+            dust_attenuation={
+                "type": "two_component",
+                "law": "calzetti",
+                "all_params": Fixed(DEFAULT),
+                "tau_diff": Uniform(0.0, 1.5),
+            },
+            neb={"type": "ssp"},
+            redshift=redshift,
+            approx=approx,
+        )
+
+
+@cache
+def _fit_mock(z):
+    flux = np.asarray(_fit_model("exact", Fixed(z)).predict_photometry(FIT_TRUTH))
+    return flux, 0.05 * flux
+
+
+def _map_logm(representation, z, *, runtime):
+    """MAP log mass of the mock at ``z``, by an override or by a build fixed at ``z``."""
+    from tengri import ForwardModel
+    from tengri.inference.fitter import Fitter
+
+    flux, noise = _fit_mock(z)
+    base = _fit_model(representation, Fixed(Z_PLACEHOLDER if runtime else z))
+    fitter = Fitter(
+        ForwardModel.build(sed=base),
+        flux,
+        noise,
+        approx=None if representation == "exact" else "auto",
+        params_override={"redshift": z} if runtime else None,
+    )
+    assert fitter._profile_mass_resolved, "the cell must exercise the profiled-mass fit"
+    post = fitter.run("map", verbose=False, key=jax.random.PRNGKey(0))
+    return float(post.params["sfh_dpl_log_total_mass"])
+
+
+@cache
+def _fixed_z_logm(z):
+    return _map_logm("exact", z, runtime=False)
+
+
+@pytest.mark.parametrize("z", FIT_ZS)
+@pytest.mark.parametrize("representation", REPRESENTATIONS)
+def test_map_mass_at_a_runtime_redshift_matches_the_fixed_z_fit(representation, z):
+    """A MAP fit at an override z returns the mass of a fit built fixed at that z."""
+    got = _map_logm(representation, z, runtime=True)
+    ref = _fixed_z_logm(z)
+    assert abs(got - ref) < FIT_LOGM_VS_EXACT, (
+        f"{representation} z={z}: logM {got:.3f} vs fixed-z fit {ref:.3f}"
+    )
+    truth = FIT_TRUTH["sfh_dpl_log_total_mass"]
+    assert abs(got - truth) < FIT_LOGM_VS_TRUTH, f"{representation} z={z}: logM {got:.3f}"
+
+
+@pytest.mark.parametrize("representation", REPRESENTATIONS)
+def test_catalog_masses_at_per_galaxy_redshifts_match_the_fixed_z_fits(representation):
+    """Catalog.fit with a redshift column returns each galaxy's fixed-z mass at its own z."""
+    from tengri import Catalog, ForwardModel
+
+    fluxes = [_fit_mock(z) for z in FIT_ZS]
+    n_b = len(FIT_BANDS)
+    table = {"z": np.asarray(FIT_ZS)}
+    for j in range(n_b):
+        table[f"f{j}"] = np.asarray([f[0][j] for f in fluxes])
+        table[f"e{j}"] = np.asarray([f[1][j] for f in fluxes])
+    fwd = ForwardModel.build(sed=_fit_model(representation, Fixed(Z_PLACEHOLDER)))
+    cat = Catalog(
+        fwd,
+        table,
+        flux_unit="cgs_fnu",
+        redshift_col="z",
+        flux_cols=[f"f{j}" for j in range(n_b)],
+        err_cols=[f"e{j}" for j in range(n_b)],
+    )
+    kw = {"approx": None} if representation == "exact" else {}
+    fit = cat.fit(key=jax.random.PRNGKey(0), method="map", properties=("stellar_mass",), **kw)
+    got = np.log10(np.asarray(fit["stellar_mass"]))
+    ref = np.asarray([_fixed_z_logm(z) for z in FIT_ZS])
+    np.testing.assert_allclose(
+        got, ref, atol=FIT_LOGM_VS_EXACT, err_msg=f"{representation}: catalog logM at z={FIT_ZS}"
+    )
