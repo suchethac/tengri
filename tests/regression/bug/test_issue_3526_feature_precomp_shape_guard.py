@@ -320,3 +320,31 @@ def test_free_delayed_sfh_builds_with_feature_precomp_on_padova(phot_and_line_ob
         approx=(WavePrecomp(), FeaturePrecomp()),
         sfh=_free_delayed(),
     )
+
+
+def test_a_free_amplitude_only_sfh_builds_with_feature_precomp_on_the_mist_default(
+    phot_and_line_obs,
+):
+    """A free log_total_mass with a fixed tau has a fixed shape, so it is not probed.
+
+    Every parametric family renormalizes its SFR to 10**log_total_mass, and the per-Q_H
+    lines divide Q_H out, so the amplitude cannot move them. Only a free shape parameter
+    (tau, the SFH's own shape) needs the twin probe.
+    """
+    import tengri
+    from tengri import DEFAULT, FeaturePrecomp, WavePrecomp
+    from tengri.parameters.priors import Fixed, Uniform
+
+    obs, _ = phot_and_line_obs
+    _build(
+        tengri.load_ssp(),
+        obs,
+        approx=(WavePrecomp(), FeaturePrecomp()),
+        sfh={
+            "type": "delayed",
+            "all_params": Fixed(DEFAULT),
+            "log_total_mass": Uniform(9.0, 11.0),
+            "tau_gyr": 1.0,
+            "age_gyr": 5.0,
+        },
+    )

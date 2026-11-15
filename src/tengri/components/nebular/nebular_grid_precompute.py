@@ -887,9 +887,26 @@ def probe_ionizing_shape_drift(model, ref_params, *, axes, axis_names, wavelengt
     return float(departures[index]), _line_names(waves)[index], float(ratios[index])
 
 
+def _is_sfh_normalization(name: str) -> bool:
+    """True for a parameter that only sets the SFH's amplitude, never its shape.
+
+    Every parametric family renormalizes its SFR to ``10**log_total_mass``
+    (``sfh_<family>_log_total_mass``), so the per-photon lines, which divide Q_H out,
+    do not depend on it. Any other ``sfh_*`` parameter can change the shape.
+    """
+    return name.startswith("sfh_") and name.endswith("_log_total_mass")
+
+
 def _has_free_sfh(spec) -> bool:
-    """True when the SFH carries a free parameter (its history is unknown at build)."""
-    return any(str(name).startswith("sfh_") for name in spec.free_params)
+    """True when the SFH has a free parameter that can change its shape (#3526).
+
+    A free amplitude alone (``log_total_mass``) leaves the shape fixed, so the
+    grid's per-photon lines are the same for every draw and no probe is needed.
+    """
+    return any(
+        str(name).startswith("sfh_") and not _is_sfh_normalization(str(name))
+        for name in spec.free_params
+    )
 
 
 def _tabulated_sfh_twin(model):
