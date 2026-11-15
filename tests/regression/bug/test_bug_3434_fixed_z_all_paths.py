@@ -19,11 +19,11 @@ from tengri import load_ssp
 from tengri._data_setup import find_data
 from tengri.components.stellar.component import (
     _delta_met_weights,
-    _lgmet_hermite_weights,
     _lgmet_weights,
     tabulated_history_weights,
 )
 from tengri.components.stellar.sps import dsps_wrapper as dw
+from tengri.components.stellar.sps.met_pchip import met_weights
 
 pytestmark = pytest.mark.regression_bug
 
@@ -146,7 +146,7 @@ def test_undeclared_paths_agree_with_component_node_exact_read(name):
     grid = _axis(name)
     g = jnp.asarray(grid)
     for z in _query_scan(grid, 97):
-        ref = np.asarray(_lgmet_hermite_weights(jnp.asarray(float(z)), g))
+        ref = np.asarray(met_weights(jnp.asarray(float(z)), g))
         for path_name, path in _paths(grid).items():
             np.testing.assert_allclose(
                 path(float(z), UNDECLARED), ref, rtol=0.0, atol=1e-10, err_msg=path_name
@@ -206,7 +206,7 @@ def test_default_scatter_is_undeclared_on_every_helper():
     g = jnp.asarray(grid)
     flux = jnp.eye(grid.size)[:, None, :]
     for z in _query_scan(grid, 41):
-        ref = np.asarray(_lgmet_hermite_weights(jnp.asarray(float(z)), g))
+        ref = np.asarray(met_weights(jnp.asarray(float(z)), g))
         np.testing.assert_allclose(
             np.asarray(dw.compute_lgmet_weights(jnp.asarray(float(z)), g)), ref, atol=1e-10
         )

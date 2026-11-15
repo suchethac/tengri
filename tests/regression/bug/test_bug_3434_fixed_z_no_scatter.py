@@ -20,9 +20,9 @@ from tengri import load_ssp
 from tengri.components.stellar.component import (
     StellarSEDComponentConfig,
     _delta_met_weights,
-    _lgmet_hermite_weights,
     _lgmet_weights,
 )
+from tengri.components.stellar.sps.met_pchip import met_weights
 
 pytestmark = pytest.mark.regression_bug
 
@@ -47,14 +47,14 @@ def test_node_exact_one_hot_at_three_nodes(lgmet_grid):
     _, lg = lgmet_grid
     n = lg.size
     for k in (0, n // 2, n - 1):
-        w = np.asarray(_lgmet_hermite_weights(float(lg[k]), jnp.asarray(lg)))
+        w = np.asarray(met_weights(float(lg[k]), jnp.asarray(lg)))
         np.testing.assert_allclose(w, _one_hot(n, k), rtol=0.0, atol=1e-12)
 
 
 def test_weights_sum_to_one_between_nodes(lgmet_grid):
     _, lg = lgmet_grid
     for z in np.linspace(lg[0], lg[-1], 37):
-        w = np.asarray(_lgmet_hermite_weights(float(z), jnp.asarray(lg)))
+        w = np.asarray(met_weights(float(z), jnp.asarray(lg)))
         assert w.shape == lg.shape
         assert np.isfinite(w).all()
         assert abs(w.sum() - 1.0) < 1e-12
@@ -65,7 +65,7 @@ def test_reproduces_linear_data_exactly(lgmet_grid):
     grid = jnp.asarray(lg)
     a, b = 0.7, -0.3
     for z in np.linspace(lg[0], lg[-1], 29):
-        w = np.asarray(_lgmet_hermite_weights(float(z), grid))
+        w = np.asarray(met_weights(float(z), grid))
         assert abs(w @ (a * lg + b) - (a * z + b)) < 1e-10
 
 
@@ -77,7 +77,7 @@ def test_reproduces_quadratic_data_on_non_uniform_grid(lgmet_grid):
     grid = jnp.asarray(lg)
     y = 0.3 * lg**2 - 0.5 * lg + 0.2
     for z in np.linspace(lg[0], lg[-1], 41):
-        w = np.asarray(_lgmet_hermite_weights(float(z), grid))
+        w = np.asarray(met_weights(float(z), grid))
         exact = 0.3 * z**2 - 0.5 * z + 0.2
         assert abs(w @ y - exact) < 1e-9
 
@@ -90,10 +90,10 @@ def test_short_and_synthetic_grids_are_node_exact(nodes):
     grid = jnp.asarray(lg)
     n = lg.size
     for k in range(n):
-        w = np.asarray(_lgmet_hermite_weights(float(lg[k]), grid))
+        w = np.asarray(met_weights(float(lg[k]), grid))
         np.testing.assert_allclose(w, _one_hot(n, k), atol=1e-12)
     for z in np.linspace(lg[0], lg[-1], 17):
-        w = np.asarray(_lgmet_hermite_weights(float(z), grid))
+        w = np.asarray(met_weights(float(z), grid))
         assert abs(w.sum() - 1.0) < 1e-12
         assert abs(w @ (0.4 * lg - 0.1) - (0.4 * z - 0.1)) < 1e-10
 
@@ -101,8 +101,8 @@ def test_short_and_synthetic_grids_are_node_exact(nodes):
 def test_outside_grid_holds_edge_node(lgmet_grid):
     _, lg = lgmet_grid
     n = lg.size
-    lo = np.asarray(_lgmet_hermite_weights(float(lg[0]) - 1.0, jnp.asarray(lg)))
-    hi = np.asarray(_lgmet_hermite_weights(float(lg[-1]) + 1.0, jnp.asarray(lg)))
+    lo = np.asarray(met_weights(float(lg[0]) - 1.0, jnp.asarray(lg)))
+    hi = np.asarray(met_weights(float(lg[-1]) + 1.0, jnp.asarray(lg)))
     np.testing.assert_allclose(lo, _one_hot(n, 0), atol=1e-12)
     np.testing.assert_allclose(hi, _one_hot(n, n - 1), atol=1e-12)
 
@@ -113,7 +113,7 @@ def test_gradient_finite_and_continuous_within_interval(lgmet_grid):
     data = jnp.asarray(np.cos(np.arange(lg.size)))
 
     def read(z):
-        return jnp.dot(_lgmet_hermite_weights(z, grid), data)
+        return jnp.dot(met_weights(z, grid), data)
 
     g = jax.grad(read)
     k = lg.size // 2
