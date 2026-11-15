@@ -28,7 +28,7 @@ and old metal-poor stars do not average.
 
 Reference: Conroy+2013.
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-185
+.. GENERATED FROM PYTHON SOURCE LINES 12-188
 
 
 
@@ -42,7 +42,7 @@ Reference: Conroy+2013.
 
  .. code-block:: none
 
-    /tengri/examples/usecases/plot_usecase_simulation_seds.py:62: DefaultFixedParametersWarning: Group 'met' states no 'all_params' disposition, so its remaining parameter was fixed at declared defaults:
+    /tengri/examples/usecases/plot_usecase_simulation_seds.py:65: DefaultFixedParametersWarning: Group 'met' states no 'all_params' disposition, so its remaining parameter was fixed at declared defaults:
       met_alpha_fe=0
 
     To fit them, pass 'all_params': FREE:
@@ -50,6 +50,8 @@ Reference: Conroy+2013.
     To keep them fixed and silence this warning, say so explicitly:
       met={'all_params': Fixed(DEFAULT), ...}
       model_zt = tengri.SEDModel.build(
+    /tengri/src/tengri/forward/sed_model.py:13820: YoungTopMetallicityWarning: met_logzsol reaches Z = 0.1197 (its upper bound, Z = 0.0600, plus 3 x the metallicity-scatter upper bound of 0.1 dex that the scatter kernel spans), above Z = 0.0497, where the metallicity weights start to use the Z = 0.0600 node of this SSP grid (its highest complete node is Z = 0.0400). The Z = 0.0600 node has no stars above ~12 Msun for log10(age/yr) <= 7.15: FSPS ISOCHRONES/PARSEC/isoc_z0.0600.dat: Mini capped at 12.01 Msun for every log age 5.50-7.15 (343 rows at 5.50; isoc_z0.0200.dat reaches 300 Msun); the PARSEC massive-star tracks stop at Z = 0.04 (Chen et al. 2015, MNRAS 452, 1068). The metallicity is therefore held at Z = 0.0400 for log10(age/yr) <= 7.15, and the top node's weight rises linearly with log age to 1 at 7.20; older populations use the top node unchanged. To use a MIST [Z/H] = +0.5 node (FSPS zlegend Z = 0.0449) at young ages instead, load the grid with top_z='mist': tengri.load_ssp(<name>, top_z='mist') or load_ssp_data(<path>, top_z='mist'). That node has MIST isochrones, so between Z = 0.0400 and 0.0449 the young population switches isochrone physics, not only metallicity.
+      return cls(
 
 
 
@@ -74,6 +76,7 @@ Reference: Conroy+2013.
     import tengri
     from tengri.plot import setup_style
     from tengri.units import LOG10_ZSUN
+    from tengri.utils.cosmology import age_at_z
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -84,7 +87,9 @@ Reference: Conroy+2013.
 
     Z_OBS = 0.1
     N_GAL, N_T = 6, 60
-    t_gyr = np.linspace(0.0, 12.5, N_T)
+    # The history ends at the age of the universe at the observed redshift: SFR
+    # after that time cannot reach the observer, and from_histories refuses it.
+    t_gyr = np.linspace(0.0, float(age_at_z(Z_OBS)), N_T)
 
     # Stand-in for a snapshot's merger-tree histories: delayed-tau SFHs whose
     # formation timescale varies across the population, from a fast early-forming
@@ -237,7 +242,7 @@ Reference: Conroy+2013.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.828 seconds)
+   **Total running time of the script:** (0 minutes 17.123 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_simulation_seds.py:
