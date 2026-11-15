@@ -12231,6 +12231,7 @@ class SEDModel:
         from tengri.components.dust.energy_balance_precompute import (
             build_energy_balance_lut,
             build_energy_balance_lut_over_z,
+            build_energy_balance_lut_with_slopes,
         )
         from tengri.components.dust.two_component import DustSEDComponent
         from tengri.components.nebular.component import NebularSEDComponent
@@ -12324,17 +12325,17 @@ class SEDModel:
                     tau_diff_grid=tau_v_grid,
                 )
                 if z_nodes is None:
-                    lut = build_energy_balance_lut(
-                        jnp.asarray(self.ssp_data.ssp_flux),
-                        jnp.asarray(self.ssp_data.ssp_wave),
+                    lut = build_energy_balance_lut_with_slopes(
+                        build_energy_balance_lut,
+                        self.ssp_data,
                         bc_params={k: float(v) for k, v in dust_params.items()},
                         diff_params={k: float(v) for k, v in dust_params.items()},
                         **single_kwargs,
                     )
                 else:
-                    lut = build_energy_balance_lut_over_z(
-                        jnp.asarray(self.ssp_data.ssp_flux),
-                        jnp.asarray(self.ssp_data.ssp_wave),
+                    lut = build_energy_balance_lut_with_slopes(
+                        build_energy_balance_lut_over_z,
+                        self.ssp_data,
                         ln1pz=z_nodes,
                         params_at_z=lambda z: (_single_params(z), _single_params(z)),
                         **single_kwargs,
@@ -12419,9 +12420,9 @@ class SEDModel:
                 )
 
             if not is_single_component and z_nodes is not None:
-                lut = build_energy_balance_lut_over_z(
-                    jnp.asarray(self.ssp_data.ssp_flux),
-                    jnp.asarray(self.ssp_data.ssp_wave),
+                lut = build_energy_balance_lut_with_slopes(
+                    build_energy_balance_lut_over_z,
+                    self.ssp_data,
                     ln1pz=z_nodes,
                     params_at_z=_two_params,
                     law_bc=law_bc,
@@ -12439,9 +12440,9 @@ class SEDModel:
                 )
             elif not is_single_component:
                 # Two-component: use the standard LUT builder
-                lut = build_energy_balance_lut(
-                    jnp.asarray(self.ssp_data.ssp_flux),
-                    jnp.asarray(self.ssp_data.ssp_wave),
+                lut = build_energy_balance_lut_with_slopes(
+                    build_energy_balance_lut,
+                    self.ssp_data,
                     law_bc=law_bc,
                     law_diff=law_diff,
                     f_obscuration=float(
