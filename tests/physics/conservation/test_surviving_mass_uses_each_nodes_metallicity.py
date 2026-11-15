@@ -19,6 +19,28 @@ from tengri import DEFAULT, Fixed, SEDModel, SSPData, load_ssp_data
 pytestmark = pytest.mark.conservation
 
 
+def _pchip_surviving_fraction(state, table, ssp_lgmet):
+    """Surviving fraction from each age's own metallicity, read by PCHIP (#2613, #3434).
+
+    An independent reference: every age column of the mass-remaining table is read at that
+    age's metallicity with SciPy's monotone PCHIP (the owner's #3434 ruling, "PCHIP each
+    SSP"), then weighted by the published exact age weights. ``met_exact_z`` is the
+    metallicity the forward model reads at, scalar or one per age.
+    """
+    from scipy.interpolate import PchipInterpolator
+
+    age_w = np.asarray(state.derived["met_exact_joint"]).sum(axis=0)
+    age_w = age_w / age_w.sum()
+    lgmet = np.asarray(ssp_lgmet, dtype=float)
+    table = np.asarray(table, dtype=float)
+    z = np.broadcast_to(np.asarray(state.derived["met_exact_z"], dtype=float), age_w.shape)
+    z = np.clip(z, lgmet[0], lgmet[-1])
+    m_rem = np.array(
+        [float(PchipInterpolator(lgmet, table[:, a])(z[a])) for a in range(age_w.size)]
+    )
+    return float(np.sum(age_w * m_rem)), z, age_w
+
+
 @pytest.fixture
 def ssp_with_z_dependent_mass_remaining(synthetic_ssp_wide):
     """Build a Z-dependent mass-remaining table for testing.
@@ -158,25 +180,18 @@ class TestSurvivingMassUsesEachNodesMetallicity:
         # Extract derived quantities
         log_mstar_formed = state.derived["log_mstar_formed"]
         log_mstar_surviving = state.derived["log_mstar_surviving"]
-        joint_weights = state.derived["joint_weights"]  # shape (n_met, n_age)
+        exact_surv_frac, z_age, age_w = _pchip_surviving_fraction(
+            state, ssp.ssp_mass_remaining, ssp.ssp_lgmet
+        )
 
-        # For bins/bins_continuity: verify the mass-weighted metallicity differs between ages
+        # For bins/bins_continuity: the per-age metallicity must vary, or the test has no teeth
         if met_mode in ("bins", "bins_continuity"):
-            # Per-age mass-weighted metallicity
-            jw_per_age = jnp.sum(joint_weights, axis=0)  # sum over Z for each age
-            z_weights = joint_weights / jnp.sum(joint_weights)  # normalized (n_met, n_age)
-            age_z_means = jnp.sum(z_weights * ssp.ssp_lgmet[:, None], axis=0)  # (n_age,)
-            z_spread = jnp.ptp(age_z_means)  # peak-to-peak
-            assert float(z_spread) > 0.3, (
-                f"For {met_mode}: mass-weighted Z spread {float(z_spread):.4f} dex "
+            live = age_w > 1e-6 * age_w.max()
+            z_spread = float(np.ptp(z_age[live]))
+            assert z_spread > 0.3, (
+                f"For {met_mode}: per-age Z spread {z_spread:.4f} dex "
                 f"must exceed 0.3 dex to test Z-dependence"
             )
-
-        # Normalize joint weights to sum to 1
-        jw_norm = joint_weights / jnp.sum(joint_weights)
-
-        # Compute exact surviving mass: Σ_age Σ_Z w(age, Z) · m_rem(age, Z)
-        exact_surv_frac = float(jnp.sum(jw_norm * ssp.ssp_mass_remaining))
 
         # Published surviving mass
         published_surv = 10.0 ** float(log_mstar_surviving)
@@ -191,7 +206,7 @@ class TestSurvivingMassUsesEachNodesMetallicity:
             rtol=1e-6,
             err_msg=(
                 f"Surviving mass {published_surv:.6e} != "
-                f"exact joint-weight sum {expected_surviving:.6e} "
+                f"per-age PCHIP sum {expected_surviving:.6e} "
                 f"(ratio {published_surv / expected_surviving - 1:+.4%})"
             ),
         )
@@ -298,19 +313,13 @@ class TestSurvivingMassUsesEachNodesMetallicity:
         # Extract derived quantities
         log_mstar_formed = state.derived["log_mstar_formed"]
         log_mstar_surviving = state.derived["log_mstar_surviving"]
-        joint_weights = state.derived["joint_weights"]
-
-        # Normalize joint weights to sum to 1
-        jw_norm = joint_weights / jnp.sum(joint_weights)
-
         # The table the loader resolved for this registered grid (the companion, #2751).
         # It is NOT the grid file's embedded ssp_mass_remaining: that table differs from the
         # companion by up to 0.132, so contracting over it moved the ratio from 0 to +1.489%.
         table = np.asarray(ssp.ssp_mass_remaining)
         assert ssp.mass_remaining_source.startswith("companion:")
 
-        # Compute exact surviving mass: Σ_age Σ_Z w(age, Z) · m_rem(age, Z)
-        exact_surv_frac = float(jnp.sum(jw_norm * table))
+        exact_surv_frac, _, _ = _pchip_surviving_fraction(state, table, ssp.ssp_lgmet)
 
         # Published surviving mass
         published_surv = 10.0 ** float(log_mstar_surviving)
@@ -324,7 +333,7 @@ class TestSurvivingMassUsesEachNodesMetallicity:
             rtol=1e-6,
             err_msg=(
                 f"Surviving mass {published_surv:.6e} != "
-                f"exact joint-weight sum {expected_surviving:.6e} "
+                f"per-age PCHIP sum {expected_surviving:.6e} "
                 f"(ratio {published_surv / expected_surviving - 1:+.4%})"
             ),
         )
