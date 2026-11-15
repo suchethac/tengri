@@ -16,12 +16,15 @@ edit:
 |---|---|
 | Star formation history shape, GP-based bursty SFH | `components/stellar/sfh/` |
 | Stellar spectra, SSP grids, mass remaining | `components/stellar/sps/` |
+| Derived stellar properties (formed and surviving mass, sSFR, luminosity-weighted ages, UV colors, ionizing output) and their property-catalog registration | `components/stellar/properties.py` |
 | Dust attenuation laws (Calzetti, Charlot+Fall, …) | `components/dust/attenuation.py` |
 | Two-component screen depths and parameterization (`'tau_bc_diff'` or `'tauv_mu'`: total `tau_v` and diffuse fraction `mu`) | `components/dust/_apply.py` (`screen_optical_depths`), declarations in `components/dust/_params.py`; tests `tests/contract/test_dust_tauv_mu_grammar.py`, `tests/contract/test_two_component_native_unchanged.py`, `tests/regression/dust/test_tauv_mu_build_path.py`, `tests/components/dust/test_tauv_mu_parameterization.py` |
 | Chevallard+13 optical-depth-dependent diffuse-ISM law (`chevallard13`) | `components/dust/attenuation.py` (`chevallard13`); tests `tests/components/dust/test_chevallard13_law.py`, `tests/components/dust/test_chevallard13_plumbing.py` |
 | Dust IR emission (modified BB, Casey, Dale, DL07, PAH) | `components/dust/emission/` (`analytic/` closed-form components, `templates/` library components) |
 | Dust energy-balance integral (`L_absorbed`, LyC-masked) | `forward/energy_balance.py` (canonical `bolometric_absorbed`, #922); fast-path LUT in `components/dust/energy_balance_precompute.py` |
 | Nebular continuum + line emission | `components/nebular/` |
+| Nebular backend selection (`config.backend` name to class), a backend's declared parameters and capabilities | `components/nebular/_models.py` (`nebular_backend_classes`, `resolve_nebular_backend`); each backend class in `components/nebular/` declares its own members; shared defaults in `components/nebular/_shared.py` (`NebularBackendDefaults`); ADR-0024 |
+| Nebular backend defaults a backend overrides (`call_kwargs`, `split_nebular`, `extra_derived`, `line_catalog_kwargs`, `precompute_check`) | `components/nebular/_shared.py` (`NebularBackendDefaults`); overrides on the backend class |
 | Gutkin+2016 H II line tables (`neb={'type': 'gutkin16'}`) | `components/nebular/gutkin16.py` (`Gutkin16Backend`); grid `data/gutkin16_grid.h5`, built by `scripts/build_gutkin16_grid.py` from `data/neogal/`; tests `tests/components/nebular/test_gutkin16_backend.py`, `tests/components/nebular/test_gutkin16_grid_regen.py`, `tests/contract/test_gutkin16_grammar.py` |
 | AGN disc / torus / NLR / BLR | `components/agn/` |
 | IGM transmission | `components/igm/` |
@@ -85,7 +88,9 @@ Each component owns its own `_params.py` (see the list above and the
 | Instrument LSF (Gaussian) and the DESI/PFS banded resolution matrix | `observation/spectrum.py` (`apply_lsf`), `observation/banded.py` (`banded_matvec`, `resolution_bands_from_desi`, `block_diagonal_bands`) |
 | Loading a DESI coadd (per-camera b/r/z grids + their resolution matrices) | `io/desi.py` (`read_desi`, `read_desi_cameras`, `desi_spectroscopy`) |
 | The `Fitter` class and JIT-cached engines | `inference/fitter.py`, `inference/jit_engine.py` |
+| The one data term (positive log-likelihood of one structure, shared by `Fitter` and the hierarchical flat seam) | `inference/data_term.py` (`build_data_term`, `build_data_args`) |
 | MCMC / VI / Pathfinder backends | `inference/backends/` |
+| The one adapted-chain runner for the MCMC families (`ChainProgram`, `Adaptation`, `adapt_chain` / `sample_chain` / `run_chain`) | `inference/backends/mcmc/chain_program.py` |
 | Likelihood implementations | `inference/likelihoods/` |
 | Batched spectroscopic likelihood and MAP across a catalog (one compile per bucket) | `inference/batched_spectro.py`, `observation/batched.py`; see [`batched-spectroscopy.md`](batched-spectroscopy.md) |
 | Posterior containers + diagnostics | `inference/posterior.py` |

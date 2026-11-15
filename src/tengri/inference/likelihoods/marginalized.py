@@ -25,7 +25,6 @@ from dataclasses import KW_ONLY, dataclass
 
 import jax.numpy as jnp
 import numpy as np
-from jax.scipy.linalg import block_diag
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, exclude, shape
 from tengri.inference.likelihoods.gaussian import diag_gaussian_chi2
@@ -34,6 +33,7 @@ from tengri.observation.banded import BandedMatrix
 from tengri.observation.calibration import (
     _ERR_FLOOR,
     calibration_basis,
+    joint_calibration_line_marginal,
     marginalize_calibration as _marginalize_calibration,
     marginalize_calibration_segments,
 )
@@ -453,8 +453,8 @@ class CloudyELineMarginalizedLikelihood:
         fnu_obs = resolve_channel_data(self.fnu_obs, self.fnu_obs_key, self.data_slice, data_args)
         fnu_err = resolve_channel_data(self.fnu_err, self.fnu_err_key, self.data_slice, data_args)
         residual = fnu_obs - prediction[self.channel]
-        log_z = params.get("met_logzsol", 0.0)
-        neb_logU = params.get("neb_logU", -3.0)
+        log_z = params["met_logzsol"]
+        neb_logU = params["neb_logU"]
         ln_l, _a_hat, _a_err = marginalize_emission_lines_cloudy(
             residual,
             fnu_err,
@@ -822,8 +822,8 @@ class CalibrationELineMarginalizedLikelihood:
             from tengri.observation.eline_priors import cloudy_line_priors
 
             means, sigmas = cloudy_line_priors(
-                log_z=params.get("met_logzsol", 0.0),
-                neb_logU=params.get("neb_logU", -3.0),
+                log_z=params["met_logzsol"],
+                neb_logU=params["neb_logU"],
                 line_wavelengths=self.eline_line_wavelengths,
                 prior_width_dex=self.eline_prior_width_dex,
             )
@@ -876,19 +876,8 @@ class CalibrationELineMarginalizedLikelihood:
         else:
             line_mean, line_width = self._line_prior(params, n_lines)
             line = unit_line_prior(design_lines, line_width, noise=sigma, prior_mean=line_mean)
-        design = jnp.concatenate([model_spec[:, None] * basis, line.design], axis=1)
-        prior_mean = jnp.concatenate([jnp.zeros(self.n_poly), line.prior_mean])
-        prior_precision = block_diag(
-            jnp.eye(self.n_poly) / self.prior_sigma**2, line.prior_precision
-        )
-        result = marginalize_linear_nuisance(
-            fnu_obs,
-            model_spec,
-            design,
-            **whitening,
-            prior_mean=prior_mean,
-            prior_precision=prior_precision,
-            scale=line.scale,
+        result = joint_calibration_line_marginal(
+            fnu_obs, model_spec, basis, line, self.prior_sigma, whitening=whitening
         )
         n_pix = fnu_obs.shape[0]
         return result.log_like + 0.5 * n_pix * math.log(2.0 * math.pi) + jnp.sum(jnp.log(sigma))

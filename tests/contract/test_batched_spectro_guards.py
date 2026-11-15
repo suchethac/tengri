@@ -312,30 +312,64 @@ def test_chunk_size_must_be_a_positive_integer(synthetic_ssp, bad):
 
 
 def test_chunk_size_splits_the_bucket_into_vmapped_chunks(synthetic_ssp, monkeypatch):
-    """chunk_size must reach the vmap: three galaxies in chunks of one run three calls."""
+    """chunk_size must reach the vmap: three galaxies in chunks of one run three calls.
+
+    The chunk program is jitted and cached (#3247), so the Python chunk functions run
+    only while tracing: three equal-shape chunks share one trace. The count is taken
+    on the program calls, one per chunk, which is what chunk_size controls.
+    """
     import tengri.inference.batched_spectro as module
 
     mock = _mock_catalog(synthetic_ssp)
     template = _free_z_model(synthetic_ssp, mock[0]["wave"], _banded(mock[0]["wave"]))
     batches = build_spectro_batches([_record(g) for g in mock], quantum=420, model=template)
     calls = []
+    real_chunk_program = module._chunk_program
 
-    def counted(name):
-        original = getattr(module, name)
+    def counting_chunk_program(model, spec, options):
+        program = real_chunk_program(model, spec, options)
 
-        def counting(*args, **kwargs):
-            calls.append(int(args[1].z.shape[0]))
-            return original(*args, **kwargs)
+        def counting(batch, init, tables):
+            calls.append(int(batch.z.shape[0]))
+            return program(batch, init, tables)
 
         return counting
 
-    monkeypatch.setattr(module, "_lbfgs_chunk", counted("_lbfgs_chunk"))
-    monkeypatch.setattr(module, "_fit_chunk", counted("_fit_chunk"))
+    monkeypatch.setattr(module, "_chunk_program", counting_chunk_program)
     fit_spectra_map_vmap(template, batches, n_steps=2, chunk_size=1)
     assert calls == [1, 1, 1]
     calls.clear()
     fit_spectra_map_vmap(template, batches, n_steps=2)
     assert calls == [3]
+
+
+def test_chunk_size_none_maps_the_whole_bucket_in_one_call(synthetic_ssp, monkeypatch):
+    """Documented contract: chunk_size=None is one whole-bucket call, handled in this module."""
+    import tengri.inference.batched_spectro as module
+
+    mock = _mock_catalog(synthetic_ssp)
+    template = _free_z_model(synthetic_ssp, mock[0]["wave"], _banded(mock[0]["wave"]))
+    batches = build_spectro_batches([_record(g) for g in mock], quantum=420, model=template)
+    calls = []
+    real_chunk_program = module._chunk_program
+
+    def counting_chunk_program(model, spec, options):
+        program = real_chunk_program(model, spec, options)
+
+        def counting(batch, init, tables):
+            calls.append(int(batch.z.shape[0]))
+            return program(batch, init, tables)
+
+        return counting
+
+    monkeypatch.setattr(module, "_chunk_program", counting_chunk_program)
+    none_fit = fit_spectra_map_vmap(template, batches, n_steps=2, chunk_size=None)
+    assert calls == [3]
+    np.testing.assert_allclose(
+        np.asarray(none_fit["nlp"]),
+        np.asarray(fit_spectra_map_vmap(template, batches, n_steps=2)["nlp"]),
+        rtol=1e-9,
+    )
 
 
 # ── A banded template refuses records without the banded operator ─────────

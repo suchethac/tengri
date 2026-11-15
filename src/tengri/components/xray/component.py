@@ -412,7 +412,8 @@ class XRaySEDComponent(TemplateThreading):
                 # (Gamma=2.0) and LMXB (Gamma=1.56) carry different photon indices, so
                 # the mix shifts with SFR and stellar mass. Integrating each term
                 # separately at build time is therefore exact where integrating the
-                # total would not be. See SEDModel._additive_term_band_response.
+                # total would not be. See
+                # tengri.components._term_response_table.additive_term_band_response.
                 ref = self.emission_terms(params, band["lam_ref"], **inputs)
                 amps = jnp.stack([t[i] for i, t in enumerate(ref.values())]) / band["S_ref"]
                 precomputed = amps @ band["R"]
@@ -456,9 +457,9 @@ class XRaySEDComponent(TemplateThreading):
 
     #: Cross-component scalars this emitter reads off ``state.derived``, with two
     #: deliberately distant probe draws: see
-    #: ``tengri.SEDModel._additive_term_band_response``. Every term must come back
-    #: *proportional* between the two, or it is not rank-1 and earns no constant band
-    #: response. Every value is nonzero on purpose, so a term that stays identically
+    #: ``tengri.components._term_response_table.additive_term_band_response``. Every term
+    #: must come back *proportional* between the two, or it is not rank-1 and earns no
+    #: constant band response. Every value is nonzero on purpose, so a term that stays identically
     #: zero across both draws is zero for a structural reason, not a probe artifact.
     EMITTER_PROBE_INPUTS: ClassVar[tuple[dict[str, float], dict[str, float]]] = (
         {

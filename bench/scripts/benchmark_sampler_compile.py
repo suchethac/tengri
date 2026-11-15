@@ -39,12 +39,16 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import tengri  # noqa: E402
 from benchmark_notebook_sampler import NOTEBOOKS  # noqa: E402
+
+import tengri  # noqa: E402
 from tengri import Fitter  # noqa: E402
 from tengri.analysis.mock import generate_mock  # noqa: E402
 from tengri.inference._sample_utils import _maybe_map_init  # noqa: E402
-from tengri.inference.backends.mcmc import _shared  # noqa: E402
+from tengri.inference.backends.mcmc import (
+    _shared,  # noqa: E402
+    chain_program as cp,  # noqa: E402
+)
 
 #: Draws per program. Small and identical across samplers: the scan length is a
 #: loop bound in the lowered program, not an unrolled body, so it moves the
@@ -90,15 +94,37 @@ def main() -> None:
 
     cases = {
         "nuts (max_doublings=10)": (
-            _shared._nuts_full_scan,
-            (init_flat, wkey, keys, log_p2, data_args, N_WARMUP, 10, False, 0.8, False),
+            cp.run_chain,
+            (
+                cp.NUTS,
+                cp.WINDOW_NUTS,
+                init_flat,
+                wkey,
+                None,
+                keys,
+                log_p2,
+                data_args,
+                N_WARMUP,
+                cp.NUTSConfig(max_doublings=10, use_dense=False, target_accept_rate=0.8),
+            ),
         ),
         "hmc L=10 diag": (
-            _shared._hmc_full_scan,
-            (init_flat, wkey, keys, log_p2, data_args, N_WARMUP, 10, False, 0.85),
+            cp.run_chain,
+            (
+                cp.HMC,
+                cp.WINDOW_HMC(10, True),
+                init_flat,
+                wkey,
+                None,
+                keys,
+                log_p2,
+                data_args,
+                N_WARMUP,
+                cp.HMCConfig(n_leapfrog=10, use_dense=False, target_accept_rate=0.85),
+            ),
         ),
         # Warmup only, because that is now the whole of what differs: the
-        # low-rank runner samples through the shared ``_hmc_chain_scan`` like
+        # low-rank runner samples through the shared ``sample_chain(HMC)`` like
         # ``mcmc_hmc`` does, so a fused-scan row would price the same sampling
         # program twice and attribute it to the metric.
         "hmc L=10 lowrank (warmup)": (
@@ -106,12 +132,34 @@ def main() -> None:
             (init_flat, wkey, log_p2, data_args, N_WARMUP, 10, 10, 0.85),
         ),
         "barker": (
-            _shared._first_order_full_scan,
-            (init_flat, wkey, keys, log_p2, data_args, N_WARMUP, "barker", 0.574),
+            cp.run_chain,
+            (
+                cp.FIRST_ORDER,
+                cp.DUAL_AVERAGING,
+                init_flat,
+                wkey,
+                None,
+                keys,
+                log_p2,
+                data_args,
+                N_WARMUP,
+                cp.FirstOrderConfig(proposal="barker", target_accept_rate=0.574),
+            ),
         ),
         "mala": (
-            _shared._first_order_full_scan,
-            (init_flat, wkey, keys, log_p2, data_args, N_WARMUP, "mala", 0.574),
+            cp.run_chain,
+            (
+                cp.FIRST_ORDER,
+                cp.DUAL_AVERAGING,
+                init_flat,
+                wkey,
+                None,
+                keys,
+                log_p2,
+                data_args,
+                N_WARMUP,
+                cp.FirstOrderConfig(proposal="mala", target_accept_rate=0.574),
+            ),
         ),
     }
 

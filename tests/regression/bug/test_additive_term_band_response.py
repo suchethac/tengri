@@ -307,7 +307,9 @@ def test_a_zero_term_is_not_referenced_at_the_first_grid_node():
     """
     m = _model("xray_yang20", approx=WavePrecomp())
     _params(m)
-    lam_ref = np.asarray(m._agn_term_response_cache["lam_ref"])
+    from tengri.forward.precompute.band_table import arrays_of
+
+    lam_ref = np.asarray(arrays_of(m.band_table("agn", "term_band_response"))["lam_ref"])
     first_node = float(np.asarray(m._rest_wavelength)[0])
     assert first_node < 1.0, "the X-ray wing is the premise of this test"
     assert not np.any(lam_ref == first_node), lam_ref
@@ -340,7 +342,7 @@ def test_a_free_shape_parameter_refuses_the_band_response(name):
     """
     dense = _model(name, approx=WavePrecomp(), free_shape=True)
     _params(dense)  # force the build-time warmup that populates the cache
-    assert getattr(dense, f"_{_block(name)}_term_response_cache", "unset") is None
+    assert dense.band_table(_block(name), "term_band_response") is None
 
 
 def test_the_summed_sed_is_not_rank1():

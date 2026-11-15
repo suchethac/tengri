@@ -70,21 +70,20 @@ def compute_green_function(
     array, shape (n_age,)
         Green's function G(t_age).
     """
-    n_age = ssp_flux_at_z.shape[0]
-
     if filter_wave is not None and filter_trans is not None:
-        # Photometric Green's function
+        # Photometric Green's function, vectorized over the age axis (#715).
         weight = filter_trans * _filter_weight(filter_wave, convention)
         denom = jnp.trapezoid(weight, filter_wave)
-        greens = jnp.zeros(n_age)
 
-        for i in range(n_age):
-            ssp_on_filt = jnp.interp(filter_wave, ssp_wave, ssp_flux_at_z[i], left=0.0, right=0.0)
-            num = jnp.trapezoid(ssp_on_filt * weight, filter_wave)
-            # Derivative-sized floor: this is a denominator, so its VJP needs
-            # 1/floor**2 representable, not just floor (#1860).
-            greens = greens.at[i].set(num / jnp.maximum(denom, representable_denominator(1e-30)))
-        return greens
+        def _on_filter(ssp_row):
+            return jnp.interp(filter_wave, ssp_wave, ssp_row, left=0.0, right=0.0)
+
+        # Each row is interpolated onto the filter; the intermediate is (n_age, n_filter).
+        ssp_on_filt = jax.vmap(_on_filter)(ssp_flux_at_z)
+        num = jnp.trapezoid(ssp_on_filt * weight, filter_wave, axis=-1)
+        # Derivative-sized floor: this is a denominator, so its VJP needs
+        # 1/floor**2 representable, not just floor (#1860).
+        return num / jnp.maximum(denom, representable_denominator(1e-30))
 
     elif wave_target is not None:
         # Monochromatic Green's function

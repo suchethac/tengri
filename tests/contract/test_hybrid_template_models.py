@@ -32,13 +32,13 @@ pytestmark = pytest.mark.bounds
 from tengri.components.dust.dust_emission_precompute import (
     build_astrodust_photometry_lookup,
     build_bosa_photometry_lookup,
+    build_dale2014_photometry_lookup,
     build_dl14_photometry_lookup,
-    build_lookup,
     build_themis_photometry_lookup,
     precompute_astrodust_photometry,
     precompute_bosa_photometry,
+    precompute_dale2014_photometry,
     precompute_dl14_photometry,
-    precompute_for_model,
     precompute_themis_photometry,
 )
 from tengri.components.dust.emission_templates import (
@@ -330,10 +330,8 @@ class TestDale2014HybridVsExact:
         fw = [jnp.asarray(w) for w in fw_list]
         ft = [jnp.asarray(t) for t in ft_list]
         templates = load_dale2014_templates(str(_DALE_FILE))
-        # Use the production precompute_for_model + build_lookup since
-        # Dale2014 routes through the generic path, not a bespoke module.
-        preint = precompute_for_model("dale2014", fw, ft, redshift=0.0, parameters=None)
-        lookup = build_lookup(preint, model_name="dale2014")
+        preint = precompute_dale2014_photometry(templates, fw, ft, redshift=0.0)
+        lookup = build_dale2014_photometry_lookup(preint)
         exact_fn = create_dale2014_from_grid(str(_DALE_FILE))
         return templates, fw, ft, lookup, exact_fn
 

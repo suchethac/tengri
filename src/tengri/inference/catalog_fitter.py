@@ -27,6 +27,8 @@ import numpy as np
 from jax.flatten_util import ravel_pytree
 
 from tengri._mapping import ReadOnlyPropertyMapping
+from tengri.config.exceptions import BackendError, TengriError
+from tengri.inference._backend_registry import pip_hint
 from tengri.inference._batching import AUTO, chunking_was_requested, resolve_forward_chunk_size
 from tengri.inference._dimension_guard import warn_if_nuts_high_dim as _warn_if_nuts_high_dim
 from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
@@ -751,6 +753,17 @@ class CatalogProperties(ReadOnlyPropertyMapping):
         )
 
 
+_ALL_ABSENT_REASON = (
+    "catalog row {i}: every band is absent (missing='mask' left no present flux), "
+    "so there is nothing to fit. Drop the row or give it at least one band."
+)
+
+
+def _all_absent(presence) -> bool:
+    """True when a galaxy's presence mask marks every band absent."""
+    return presence is not None and not np.any(np.asarray(presence) != 0)
+
+
 class _CatalogFitterOriginal:
     """Per-galaxy catalog inference with optional K-way on-device parallelism.
 
@@ -1192,7 +1205,7 @@ class _CatalogFitterOriginal:
                 all_noise = np.concatenate(
                     [np.asarray(g["noise"]).reshape(-1) for g in self.galaxies]
                 )
-            except Exception:
+            except TengriError:
                 logging.getLogger(__name__).warning(
                     "LUT-bias advisory skipped: galaxy flux/noise arrays could not be "
                     "concatenated.",
@@ -1605,6 +1618,12 @@ class _CatalogFitterOriginal:
                 )
         return n_data
 
+    def _refuse_all_absent_rows(self):
+        """Raise for an all-absent galaxy: a batched engine cannot record a refusal."""
+        rows = [i for i, g in enumerate(self.galaxies) if _all_absent(g.get("presence"))]
+        if rows:
+            raise ValueError("; ".join(_ALL_ABSENT_REASON.format(i=i) for i in rows))
+
     def _run_native(
         self,
         method_tag,
@@ -1624,6 +1643,7 @@ class _CatalogFitterOriginal:
     ):
         from tengri.inference.posterior import Posterior
 
+        self._refuse_all_absent_rows()
         t0 = time.time()
         n_gal = self.n_galaxies
         # K galaxies per dispatch (#1189). AUTO by default: one galaxy per
@@ -1960,6 +1980,9 @@ class _CatalogFitterOriginal:
                 "method='mcmc_nuts'/'mcmc_hmc' if you specifically want a dense "
                 "mass matrix estimated from warmup instead."
             )
+        # Argument refusals first, then the data: a bad argument is named whatever
+        # the catalog holds.
+        self._refuse_all_absent_rows()
         t0 = time.time()
         n_gal = self.n_galaxies
         # K galaxies per dispatch (#1189). AUTO by default: one galaxy per
@@ -2521,14 +2544,12 @@ class _CatalogFitterOriginal:
                 thread_redshift=thread_redshift,
                 thread_line_fluxes=thread_line_fluxes,
             )
-        except ImportError:  # pragma: no cover - optax is a declared MAP extra
-            warnings.warn(
-                "init_from='map' needs optax; falling back to random starts. "
-                "Install optax, or pass init_from=None to silence this.",
-                RuntimeWarning,
-                stacklevel=2,
-            )
-            return all_init
+        except ImportError as exc:
+            raise BackendError(
+                "init_from='map' requires optax, which is not installed.  Install it with:\n"
+                f"    {pip_hint('optax')}\n"
+                "or pass init_from=None to start the catalog fit from random points."
+            ) from exc
 
         t0 = time.time()
         warm = map_with_shared(
@@ -2606,6 +2627,14 @@ class _CatalogFitterOriginal:
             override = {"redshift": galaxy["redshift"]} if "redshift" in galaxy else None
             # Per-galaxy presence mask for heterogeneous catalogs (missing="mask" in ingestion)
             presence = galaxy.get("presence", None)
+            if _all_absent(presence):
+                # Refused, not fitted: a fit of no present band returns NaN logM
+                # with no error (#3405). Same routing as a DeadFitError below.
+                why = _ALL_ABSENT_REASON.format(i=i)
+                if not record_refusals:
+                    raise ValueError(why)
+                refusals[i] = why
+                continue
             fitter_i = Fitter(
                 self.model,
                 galaxy["flux_obs"],

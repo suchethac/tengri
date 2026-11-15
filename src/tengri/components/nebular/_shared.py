@@ -7,6 +7,7 @@ Functions extracted from individual backends to eliminate duplication.
 from __future__ import annotations
 
 import math as _math
+from collections.abc import Callable
 
 import jax
 import jax.numpy as jnp
@@ -209,6 +210,105 @@ def _render_conserving(
     return sed.at[nearest].add(dropped / jnp.where(representable, w_near, 1.0))
 
 
+def velocity_window_nodes(
+    line_wavelengths: jnp.ndarray, obs_wavelengths: jnp.ndarray, line_sigma_kms: float
+) -> jnp.ndarray:
+    """Largest number of grid nodes that any line's support window holds (JIT-safe scalar)."""
+    h, _ = _velocity_half_width(line_wavelengths, obs_wavelengths, line_sigma_kms)
+    lo = jnp.searchsorted(obs_wavelengths, line_wavelengths - h, side="left")
+    hi = jnp.searchsorted(obs_wavelengths, line_wavelengths + h, side="left")
+    return jnp.max(hi - lo)
+
+
+def _render_velocity_windowed(
+    line_wavelengths: jnp.ndarray,
+    line_luminosities: jnp.ndarray,
+    obs_wavelengths: jnp.ndarray,
+    h: jnp.ndarray,
+    nearest: jnp.ndarray,
+    lo: jnp.ndarray,
+) -> jnp.ndarray:
+    """Windowed form of :func:`place_line_profiles_velocity_dense`, same conservation rule.
+
+    Each line is evaluated on the :data:`VELOCITY_WINDOW_NODES` nodes starting at ``lo``.
+    Nodes past the window are masked out and the rest are exact zeros in the dense form,
+    so the spectrum is the same; only the summation order differs (round-off).
+    """
+    n_wave = obs_wavelengths.shape[0]
+    raw = lo[:, None] + jnp.arange(VELOCITY_WINDOW_NODES)[None, :]  # (n_lines, K)
+    in_window = raw < n_wave
+    idx = jnp.minimum(raw, n_wave - 1)
+    u = (obs_wavelengths[idx] - line_wavelengths[:, None]) / h[:, None]
+    kernel = jnp.where(in_window & (jnp.abs(u) < 1.0), (35.0 / 32.0) * (1.0 - u**2) ** 3, 0.0)
+    lam2_over_c = (line_wavelengths * 1e-8) ** 2 / _C_CGS  # (n_lines,) [s·cm]
+    profiles = kernel / (h[:, None] * 1e-8) * lam2_over_c[:, None]  # (n_lines, K) [1/Hz]
+    quad_w = _nu_quadrature_weights(obs_wavelengths)  # (n_wave,) [Hz]
+    area = jnp.sum(quad_w[idx] * profiles, axis=1)  # (n_lines,)
+    # Same containment and rescale rules as _render_conserving (see its comments).
+    contained = (line_wavelengths - h >= obs_wavelengths[0]) & (
+        line_wavelengths + h <= obs_wavelengths[-1]
+    )
+    rescale = contained & (area > 0.0)
+    scaled = profiles / jnp.where(rescale, area, 1.0)[:, None]
+    sed = jnp.zeros(n_wave, dtype=scaled.dtype).at[idx].add(scaled * line_luminosities[:, None])
+    w_near = quad_w[nearest]
+    representable = w_near > 0.0
+    dropped = jnp.where(contained & (area <= 0.0) & representable, line_luminosities, 0.0)
+    return sed.at[nearest].add(dropped / jnp.where(representable, w_near, 1.0))
+
+
+def place_line_profiles_velocity(
+    line_wavelengths: jnp.ndarray,
+    line_luminosities: jnp.ndarray,
+    obs_wavelengths: jnp.ndarray,
+    line_sigma_kms: float,
+) -> jnp.ndarray:
+    """Render emission lines as velocity-width triweight profiles (JIT/trace-safe).
+
+    Same spectrum as :func:`place_line_profiles_velocity_dense` (the physics, the flux
+    conservation and the gradient are documented there), computed on each line's support
+    window instead of the full grid. The window is a static :data:`VELOCITY_WINDOW_NODES`
+    nodes; a traced check falls back to the dense form when a line's window is wider,
+    so the result is exact for every width.
+    """
+    if obs_wavelengths.shape[0] <= 1:
+        return place_line_profiles_velocity_dense(
+            line_wavelengths, line_luminosities, obs_wavelengths, line_sigma_kms
+        )
+    h, _ = _velocity_half_width(line_wavelengths, obs_wavelengths, line_sigma_kms)
+    lo = jnp.searchsorted(obs_wavelengths, line_wavelengths - h, side="left")
+    hi = jnp.searchsorted(obs_wavelengths, line_wavelengths + h, side="left")
+    fits = jnp.max(hi - lo) <= VELOCITY_WINDOW_NODES
+    # Each branch is checkpointed. Without it, the backward pass of the cond stores the
+    # untaken dense branch's (n_wave, n_lines) residuals as zeros, which cost more than
+    # the windowed render itself (measured 3.6 ms against 1.4 ms per value-and-grad on
+    # MIST). Checkpointing keeps only the branch inputs as residuals and recomputes the
+    # taken branch in the backward pass, so forward-mode (jvp, hessian) still works.
+    return jax.lax.cond(
+        fits,
+        jax.checkpoint(_render_velocity_windowed_from_inputs),
+        jax.checkpoint(place_line_profiles_velocity_dense),
+        line_wavelengths,
+        line_luminosities,
+        obs_wavelengths,
+        line_sigma_kms,
+    )
+
+
+def _render_velocity_windowed_from_inputs(
+    line_wavelengths: jnp.ndarray,
+    line_luminosities: jnp.ndarray,
+    obs_wavelengths: jnp.ndarray,
+    line_sigma_kms: float,
+) -> jnp.ndarray:
+    """Windowed render from the public inputs (the window start is derived here)."""
+    h, nearest = _velocity_half_width(line_wavelengths, obs_wavelengths, line_sigma_kms)
+    lo = jnp.searchsorted(obs_wavelengths, line_wavelengths - h, side="left")
+    return _render_velocity_windowed(
+        line_wavelengths, line_luminosities, obs_wavelengths, h, nearest, lo
+    )
+
+
 def place_line_profiles(
     line_wavelengths: jnp.ndarray,
     line_luminosities: jnp.ndarray,
@@ -359,13 +459,38 @@ def place_line_profiles(
     return sed
 
 
-def place_line_profiles_velocity(
+#: Grid nodes a line's support window may hold before the renderer falls back to the
+#: dense profile matrix. Covers the 0-500 km/s prior with room to spare on the SSP grids
+#: in use (a 100 km/s line spans 10-60 nodes); a wider window is still rendered exactly.
+VELOCITY_WINDOW_NODES = 256
+
+
+def _velocity_half_width(
+    line_wavelengths: jnp.ndarray, obs_wavelengths: jnp.ndarray, line_sigma_kms: float
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """Support half-width [Å] and nearest grid node of each line (shared by both renderers)."""
+    sigma_aa = (line_sigma_kms / _C_KM_S) * line_wavelengths  # (n_lines,) [Å]
+    h_raw = 3.0 * sigma_aa
+    if obs_wavelengths.shape[0] > 1:
+        dwave_local, nearest = _grid_bracket(obs_wavelengths, line_wavelengths)
+        return jnp.maximum(h_raw, 0.5 * dwave_local), nearest
+    h = jnp.maximum(h_raw, line_wavelengths * 1e-6)  # degenerate grid: tiny floor
+    return h, jnp.zeros(line_wavelengths.shape, dtype=jnp.int32)
+
+
+def place_line_profiles_velocity_dense(
     line_wavelengths: jnp.ndarray,
     line_luminosities: jnp.ndarray,
     obs_wavelengths: jnp.ndarray,
     line_sigma_kms: float,
 ) -> jnp.ndarray:
-    r"""Render emission lines as velocity-width triweight profiles (JIT/trace-safe).
+    r"""Reference renderer: the full ``(n_wave, n_lines)`` profile matrix.
+
+    :func:`place_line_profiles_velocity` returns the same spectrum; this dense form is
+    kept as its reference and as the fallback for a window wider than
+    :data:`VELOCITY_WINDOW_NODES`.
+
+    Render emission lines as velocity-width triweight profiles (JIT/trace-safe).
 
     Each line is a compact-support triweight kernel
     :math:`K(u)=\tfrac{35}{32}(1-u^2)^3` (``|u|<1``) with a width that scales
@@ -425,8 +550,6 @@ def place_line_profiles_velocity(
     physically sets only the shape.
     """
     # Triweight variance is h²/9, so the support half-width h = 3σ.
-    sigma_aa = (line_sigma_kms / _C_KM_S) * line_wavelengths  # (n_lines,) [Å]
-    h_raw = 3.0 * sigma_aa
     # Floor h at the LOCAL grid spacing, per line (#1836). The floor exists so
     # σ→0 stays finite, but it also decides whether the grid samples the profile
     # at all: and a *global* statistic cannot answer a local question. The
@@ -438,12 +561,7 @@ def place_line_profiles_velocity(
     # A window of half-width ≥ the local spacing always contains a grid node,
     # which is what makes the discrete renormalization below well-posed.
     # ``obs_wavelengths.shape`` is static, so the size guard is JIT-safe.
-    if obs_wavelengths.shape[0] > 1:
-        dwave_local, nearest = _grid_bracket(obs_wavelengths, line_wavelengths)
-        h = jnp.maximum(h_raw, 0.5 * dwave_local)  # (n_lines,) [Å]
-    else:
-        h = jnp.maximum(h_raw, line_wavelengths * 1e-6)  # degenerate grid: tiny floor
-        nearest = jnp.zeros(line_wavelengths.shape, dtype=jnp.int32)
+    h, nearest = _velocity_half_width(line_wavelengths, obs_wavelengths, line_sigma_kms)
     u = (obs_wavelengths[:, None] - line_wavelengths[None, :]) / h[None, :]
     kernel = jnp.where(jnp.abs(u) < 1.0, (35.0 / 32.0) * (1.0 - u**2) ** 3, 0.0)
     # Unit area in λ is K(u)/h; the λ²/c Jacobian converts to unit area in ν.
@@ -1467,6 +1585,11 @@ class NebularContinuumFallback:
         """Delegate all unknown attributes and methods to the primary backend."""
         return getattr(self.primary, name)
 
+    @property
+    def config_name(self) -> str:
+        """The wrapped backend's ``config.backend`` string, so the wrapper names what it wraps."""
+        return self.primary.config_name
+
     def predict_nebular_sed(self, *args, **kwargs) -> jnp.ndarray:
         """Predict nebular SED: lines + continuum via fallback chain.
 
@@ -1586,3 +1709,79 @@ def ssp_log_age_yr_axis(ssp_lg_age_gyr: jnp.ndarray) -> jnp.ndarray:
     shipped SSP) the result is bit-identical to ``ssp_lg_age_gyr + 9.0``.
     """
     return jnp.maximum(jnp.asarray(ssp_lg_age_gyr) + 9.0, ZERO_AGE_ANCHOR_FLOOR_LG_AGE_YR)
+
+
+class NebularBackendDefaults:
+    """Defaults the nebular component asks of every backend.
+
+    A backend inherits the answer that suits it and overrides only what it
+    differs on: Cue supplies the population keywords, the line-catalog keywords,
+    the derived ``neb_log_no`` and the continuum split; CloudyGrid supplies the
+    continuum split; BakedIn supplies the precompute construction.
+
+    ``predict_nebular_line_luminosities`` is declared, not defined: a backend
+    publishes a line catalog exactly when it defines that method, and the
+    forward model reads its presence (``hasattr``) as the capability. A default
+    here would make every backend read as publishing lines.
+    """
+
+    predict_nebular_line_luminosities: Callable[..., tuple]
+
+    @classmethod
+    def precompute_check(cls, *, suppress_warning: bool) -> None:
+        """Run the work a backend does when the component precomputes (none by default)."""
+
+    @classmethod
+    def line_catalog_kwargs(cls, *, full_catalog: bool) -> dict:
+        """Extra keywords for the discrete line-catalog call (none by default)."""
+        return {}
+
+    def extra_derived(self, common: dict, params) -> dict:
+        """Derived keys published beyond ``sed_nebular`` and the line catalog (none by default)."""
+        return {}
+
+    def call_kwargs(self, state, params, common: dict) -> dict:
+        """Keyword arguments for the emission and line calls, with the SSP population.
+
+        Parameters
+        ----------
+        state : ForwardState
+            Current pipeline state; ``derived["age_weights"]`` and
+            ``derived["ssp_ages_yr"]`` are required.
+        params : Mapping
+            Prefix-sliced parameter dict this component sees (unused here).
+        common : dict
+            The component's shared kwargs; never mutated.
+
+        Returns
+        -------
+        dict
+            ``common`` plus ``ssp_weights`` (Msun per SSP age bin) and
+            ``ssp_log_ages_yr`` (log10 of the SSP ages in yr).
+
+        Raises
+        ------
+        ValueError
+            If the stellar population was not published upstream.
+        """
+        age_weights = state.derived.get("age_weights")
+        ssp_ages_yr = state.derived.get("ssp_ages_yr")
+        if ssp_ages_yr is None or age_weights is None:
+            raise ValueError(
+                f"{type(self).config_name.upper()} backend requires state.derived['ssp_ages_yr'] "
+                "and state.derived['age_weights'] (CSP mass weights from "
+                "StellarSEDComponent). Build the chain with a stellar "
+                "component upstream."
+            )
+        return {
+            **common,
+            "ssp_weights": jnp.asarray(age_weights),
+            "ssp_log_ages_yr": jnp.log10(jnp.asarray(ssp_ages_yr)),
+        }
+
+    def split_nebular(self, call: dict, template_data):
+        """Return ``(continuum, line_wave, line_lum)`` for ``split_sed``; a line-only backend has a zero continuum."""
+        line_wave, line_lum = self.predict_nebular_line_luminosities(
+            **call, template_data=template_data
+        )
+        return jnp.zeros_like(call["ssp_wave"]), line_wave, line_lum

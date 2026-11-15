@@ -1835,11 +1835,10 @@ class Observation:
           the correction below always applies when nebular is present,
           gate or not; live means a PHOTOIONIZED backend, ``cue``/
           ``cloudy_grid``/``cb19``/``mappings`` — ``backend="baked_in"``
-          (``neb={'type': 'none'}``) and ``backend="shock"`` both put a
-          ``NebularSEDComponent`` in the chain but return from ``apply``
-          before ever reaching the ``neb_fesc`` masking block, so neither
-          counts), so no chunk can straddle the break. R2: each
-          consumer multiplies the raw chunks by the SAME shared factor,
+          (``neb={'type': 'none'}``) puts a ``NebularSEDComponent`` in the
+          chain but returns from ``apply`` before ever reaching the
+          ``neb_fesc`` masking block, so it does not count), so no chunk can straddle
+          the break. R2: each consumer multiplies the raw chunks by the SAME shared factor,
           ``stellar_subband_lyc_factor_precomp`` — published flat by
           ``NebularSEDComponent`` (``where(node<912, fesc, 1)``, the only
           rule available where there is no birth-cloud concept, e.g. the
@@ -2355,8 +2354,9 @@ class Observation:
         # phot_rest_fnu: the SED reprojected at z=0, d_L=10 pc, the galaxy as it is.
         from tengri.utils.physics_constants import TEN_PC_CM
 
-        cosmology_rest = 1.0 / (4.0 * jnp.pi * TEN_PC_CM**2)
-        phot_rest_fnu = _restband_lnu(state) * cosmology_rest
+        # 1/(4 pi (10 pc)^2) ~ 8e-41 is subnormal in float32, so it is applied as a
+        # log10 offset (#3361), never as a standalone linear factor.
+        phot_rest_fnu = apply_log10_scale(_restband_lnu(state), log10_flux_scale(0.0, TEN_PC_CM))
 
         # IGM / DLA attenuation. The IGM component publishes its full
         # transmission curve on the dense rest grid even under WavePrecomp, so
@@ -2682,8 +2682,8 @@ class Observation:
         # spec_rest_fnu: same LUT sum projected at z=0, d_L=10pc.
         from tengri.utils.physics_constants import TEN_PC_CM
 
-        cosmology_rest = 1.0 / (4.0 * jnp.pi * TEN_PC_CM**2)
-        spec_rest_fnu = total_spec_lnu * cosmology_rest
+        # Log10 offset for the same reason as phot_rest_fnu (#3361).
+        spec_rest_fnu = apply_log10_scale(total_spec_lnu, log10_flux_scale(0.0, TEN_PC_CM))
 
         # IGM / DLA attenuation. Unlike the photometry LUT, the spectrum LUT is
         # per-pixel, so the observed-frame transmission is applied *exactly*:

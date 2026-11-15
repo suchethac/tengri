@@ -18,9 +18,16 @@ import numpy as np
 from jax.flatten_util import ravel_pytree
 from jax.scipy.optimize import minimize as _jax_minimize
 
+from tengri.config.exceptions import warn_measured
 from tengri.inference._model_cache import _default_owner as _model_cache_owner
 from tengri.inference.context import InferenceContext
+from tengri.inference.lbfgs_driver import BoundLoss, lbfgs_to_gtol
 from tengri.inference.likelihoods.gaussian import inv_noise_std
+from tengri.inference.map_stationarity import (
+    MAP_DECREMENT_BAR,
+    compiled_derivatives,
+    stationarity,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +46,11 @@ _ALL_OPTIMIZERS = _OPTAX_OPTIMIZERS | _SCIPY_OPTIMIZERS
 #: grad norm at that point is round-off noise that depends on the XLA build
 #: (2e-5 to 4e-4, #3083), so it is not a convergence measure.
 _SCIPY_FTOL = 1e-15
+
+#: Optax L-BFGS runs allowed after scipy's stop when the point is not stationary (#3205).
+#: scipy stops at a crease of the objective on some galaxies with ``ABNORMAL``; the
+#: shared driver continues from there to the smooth optimum.
+_MAP_CONTINUATION_ROUNDS = 2
 
 # Short-form name aliases used in fitter and tests
 _JAXOPT_SOLVERS = _SCIPY_OPTIMIZERS
@@ -252,6 +264,39 @@ def _get_or_build_map_fns(model, loss_fn, optimizer, learning_rate):
 # ── scipy quasi-Newton path (single-galaxy, no JAX compilation for optimizer)
 
 
+def _flat_map_loss(loss_fn, unravel_fn):
+    """Return ``flat_loss(vec, data)``, the negative log-posterior of a flat standardized vector.
+
+    The data is an argument, not a closure, so the compiled certificate is reused for
+    every dataset of the same shape (#3530).
+    """
+
+    def flat_loss(vec, data_args):
+        return loss_fn(unravel_fn(vec), data_args)
+
+    return flat_loss
+
+
+def _certificate_loss(model, loss_fn, init_params):
+    """The certificate's flat objective, built once per model, loss and parameter structure.
+
+    A fresh closure per call would miss the compiled-derivative cache, so every warm MAP
+    run re-traced and reloaded its executable from the persistent compile cache (#3530).
+    The entry lives in the model's cache beside ``loss_fn``, which it holds.
+    """
+    _, unravel_fn = ravel_pytree(init_params)
+    leaves = jax.tree_util.tree_leaves(init_params)
+    structure = (
+        jax.tree_util.tree_structure(init_params),
+        tuple((jnp.shape(leaf), str(jnp.result_type(leaf))) for leaf in leaves),
+    )
+    memo = _model_cache_owner.get_or_compile_model(model).setdefault("map_certificate_loss", {})
+    key = (id(loss_fn), structure)
+    if key not in memo:
+        memo[key] = _flat_map_loss(loss_fn, unravel_fn)
+    return memo[key]
+
+
 def _run_map_scipy(
     context: InferenceContext,
     *,
@@ -366,11 +411,59 @@ def _run_map_scipy(
     )
     wall_time = time.time() - t0
 
-    best_params = unravel_fn(jnp.asarray(result.x))
+    _reject_nonfinite_map(unravel_fn(jnp.asarray(result.x)))
+
+    certify_loss = _certificate_loss(context.model, loss_fn, init_params)
+    # A converged stop needs no certificate: scipy's point is the answer (#3530). The
+    # certificate is called only when this gate says its check is needed.
+    x_scipy = jnp.asarray(result.x)
+    accepted = _scipy_stop_accepted(
+        certify_loss, x_scipy, scipy_success=bool(result.success), gtol=tol, data=data_args
+    )
+    if accepted is not None:
+        final_loss, grad_norm = accepted
+        x_final, decrement, converged, attempts, reason = x_scipy, None, True, 1, None
+    else:
+        x_final, final_loss, grad_norm, decrement, converged, attempts, reason = (
+            _certify_map_point(
+                certify_loss,
+                x_scipy,
+                scipy_success=bool(result.success),
+                n_steps=n_steps,
+                gtol=tol,
+                data=data_args,
+            )
+        )
+    if reason == "hessian_not_finite":
+        warn_measured(
+            f"MAP point not certified: the Hessian at the returned point has non-finite "
+            f"entries after {attempts} optimizer run(s), so its curvature and Newton "
+            f"decrement are unknown. The point is reported with map_converged=False. "
+            f"scipy reported {result.message!r}.",
+            decrement=decrement,
+            grad_norm=grad_norm,
+        )
+    elif reason == "precision_limit":
+        warn_measured(
+            f"MAP point not certified: float32 precision can't verify the Newton-decrement bar "
+            f"{MAP_DECREMENT_BAR:.0e} nats (decrement {decrement:.3e}). The point is the "
+            f"optimizer's stop, reported with map_converged=False; use float64 to certify. "
+            f"scipy reported {result.message!r}.",
+            decrement=decrement,
+            grad_norm=grad_norm,
+        )
+    elif not converged:
+        warn_measured(
+            f"MAP stopped at a non-stationary point after {attempts} optimizer run(s): Newton "
+            f"decrement {decrement:.3e} nats against the bar {MAP_DECREMENT_BAR:.0e}. "
+            f"scipy reported {result.message!r}. The returned point is not a minimum.",
+            decrement=decrement,
+            grad_norm=grad_norm,
+        )
+
+    best_params = unravel_fn(x_final)
     _reject_nonfinite_map(best_params)
     best_params_physical = context.to_physical(best_params)
-    final_loss = float(result.fun)
-    converged = result.success
 
     if verbose:
         cv_msg = " (converged)" if converged else ""
@@ -379,8 +472,6 @@ def _run_map_scipy(
             f"{result.nit} iters, {n_evals[0]} evals{cv_msg}, "
             f"loss={final_loss:.6f}"
         )
-
-    grad_norm = float(jnp.linalg.norm(jnp.asarray(result.jac)))
 
     # ``losses`` always has at least the seeded initial-point value (above),
     # even when scipy converges in zero iterations and ``callback`` never
@@ -399,9 +490,203 @@ def _run_map_scipy(
             "optimizer": opt_name,
             "converged": converged,
             "grad_norm": grad_norm,
+            "map_converged": converged,
+            "map_decrement": decrement,
+            "map_attempts": attempts,
+            "map_reason": reason,
+            "map_message": str(result.message),
         },
         loss_history=loss_hist,
         _model=context.model,
+    )
+
+
+#: Coefficient of ``eps(dtype) * |nlp|`` in the round-off bar. Loss rounding in a sum of
+#: this size is a few eps |nlp|; 8 keeps the bar above it.
+_ROUND_OFF_EPS_MULTIPLE = 8
+
+
+def _round_off_bar(best_nlp: float, dtype) -> float:
+    """Largest loss rise [nats] a stationary candidate may carry over ``best_nlp``.
+
+    ``stationary`` already means the Newton decrement is below MAP_DECREMENT_BAR (1e-8
+    nats), so a rise below that is below what certification can resolve. The eps term
+    only keeps the bar above loss rounding at large ``|nlp|``; neither term is fitted.
+    Float64 at nlp 163: 1e-8, about 140 times the largest measured rise (6.96e-11).
+    """
+    eps = float(jnp.finfo(dtype).eps)
+    return max(MAP_DECREMENT_BAR, _ROUND_OFF_EPS_MULTIPLE * eps * abs(float(best_nlp)))
+
+
+#: Multiple K of ``eps(dtype)`` below which the Newton-decrement bar cannot be resolved.
+#: K is not tuned: every K from about 0.09 to about 4.5e7 gives the same decision for both
+#: dtypes. Float32 (eps 1.19e-7) is unreachable for K >= 0.09 (K eps >= 1e-8); float64
+#: (eps 2.22e-16) is reachable for K < 4.5e7 (K eps < 1e-8). K = 8 is the same few-eps
+#: multiple as the round-off bar above.
+_PRECISION_EPS_MULTIPLE = 8
+
+
+def _bar_reachable(dtype) -> bool:
+    """Whether ``dtype`` can resolve ``MAP_DECREMENT_BAR``.
+
+    False when ``MAP_DECREMENT_BAR <= _PRECISION_EPS_MULTIPLE * eps(dtype)``. Float64 at
+    1e-8 nats is about 4e6 times its 1.8e-15 floor, so it is reachable; float32's floor is
+    about 9.5e-7 nats, which the 1e-8 bar sits below, so it is not.
+    """
+    eps = float(jnp.finfo(dtype).eps)
+    return _PRECISION_EPS_MULTIPLE * eps < MAP_DECREMENT_BAR
+
+
+def _accept_round(candidate, best, bar: float) -> bool:
+    """Whether a continuation round's end replaces the current best iterate.
+
+    A finite candidate below ``best``'s loss is accepted. A stationary candidate within
+    ``bar`` above it is accepted too, because the rise is round-off of a converged point.
+    A non-stationary candidate with any rise, and a stationary one with a real rise, is
+    rejected: that point is a different minimum, or a worse one, and the best stays.
+    A non-finite candidate is never accepted.
+    """
+    if not np.isfinite(candidate.nlp):
+        return False
+    if not np.isfinite(best.nlp) or candidate.nlp < best.nlp:
+        return True
+    return candidate.stationary and candidate.nlp - best.nlp <= bar
+
+
+def _bind_data(flat_loss, data):
+    """``flat_loss`` bound to ``data`` as a traced argument (see :class:`BoundLoss`).
+
+    Each continuation round binds afresh, but the compiled driver keys on ``flat_loss`` and
+    the data shapes, so the rounds share one program (#3530).
+    """
+    return BoundLoss(flat_loss, data)
+
+
+def _scipy_stop_accepted(flat_loss, x, *, scipy_success, gtol, data=None):
+    """``(nlp, grad_norm)`` at scipy's stop when it is accepted without a certificate.
+
+    Accepted when scipy reported success and max |grad| at ``x`` is below ``gtol``;
+    ``None`` otherwise, meaning the Newton-decrement certificate must decide.
+    """
+    value_and_grad, _ = compiled_derivatives(flat_loss)
+    value, grad = value_and_grad(x, data)
+    if scipy_success and float(jnp.max(jnp.abs(grad))) < gtol:
+        return float(value), float(jnp.linalg.norm(grad))
+    return None
+
+
+def _certify_map_point(flat_loss, x, *, scipy_success, n_steps, gtol, data=None):
+    """Return the point to report after scipy's stop, continuing with the shared driver if needed.
+
+    Parameters
+    ----------
+    flat_loss : callable
+        ``flat_loss(vec) -> scalar``, the negative log-posterior of a flat standardized vector,
+        or ``flat_loss(vec, data)`` when ``data`` is given.
+    data : pytree, optional
+        The dataset, passed to ``flat_loss`` as a traced argument.
+    x : jax.Array, shape (D,)
+        scipy's stopping point.
+    scipy_success : bool
+        Whether scipy reported success at ``x``.
+    n_steps : int
+        Iteration cap of each continuation run.
+    gtol : float
+        Gradient tolerance of each continuation run.
+
+    Returns
+    -------
+    x : jax.Array, shape (D,)
+        The reported point.
+    nlp : float
+        Negative log-posterior at ``x`` [nats].
+    grad_norm : float
+        Euclidean norm of the gradient at ``x`` in standardized coordinates.
+    decrement : float or None
+        Newton decrement at ``x`` [nats], ``None`` when the certificate was not needed.
+    stationary : bool
+        Whether ``x`` is accepted as a MAP point. False whenever the Hessian is not
+        finite: curvature is then unknown, so no point is certified.
+    attempts : int
+        Optimizer runs spent, scipy's included.
+    reason : str or None
+        ``"hessian_not_finite"`` when the Hessian at the reported point has a
+        non-finite entry; ``"precision_limit"`` when the dtype cannot resolve
+        ``MAP_DECREMENT_BAR`` and the point is not stationary, so scipy's stop is
+        reported with no continuation round; ``None`` otherwise. The continuation
+        rounds stop at once for a non-finite Hessian, because another L-BFGS run from
+        the same point does not restore a finite Hessian.
+
+    Notes
+    -----
+    The Hessian certificate runs only when it can change the answer. When scipy reports
+    success and the re-evaluated max |grad| at ``x`` is below ``gtol``, the point is
+    accepted without the Hessian (``stat`` is ``None``, one attempt). Otherwise the
+    Newton decrement is measured, and a point that is not stationary is continued with
+    the shared optax driver, at most ``_MAP_CONTINUATION_ROUNDS`` runs. A non-finite
+    Hessian is never read as a zero decrement: it yields ``stationary=False`` with a NaN
+    decrement and ``reason="hessian_not_finite"``.
+
+    Float32 precision rule: when ``MAP_DECREMENT_BAR <= _PRECISION_EPS_MULTIPLE * eps``
+    (K = 8, see ``_PRECISION_EPS_MULTIPLE``), the dtype cannot resolve the bar, so no
+    continuation round runs. Stationarity is measured once at scipy's stop and that point
+    is returned, converged when it is genuinely stationary, otherwise with
+    ``reason="precision_limit"``. Float64 keeps its continuation rounds.
+    """
+    accepted = _scipy_stop_accepted(
+        flat_loss, x, scipy_success=scipy_success, gtol=gtol, data=data
+    )
+    if accepted is not None:
+        nlp, grad_norm = accepted
+        return x, nlp, grad_norm, None, True, 1, None
+    stat = stationarity(flat_loss, x, data)
+    attempts = 1
+    if scipy_success and stat.stationary:
+        return x, stat.nlp, stat.grad_norm, stat.decrement, True, attempts, None
+    dtype = jnp.asarray(x).dtype
+    if not _bar_reachable(dtype):
+        # The continuation rounds could only replay round-off here, so scipy's stop is the
+        # answer. A genuinely stationary point is converged whatever scipy reported; a
+        # non-finite Hessian keeps its own reason.
+        if not stat.hessian_finite:
+            reason = "hessian_not_finite"
+        elif stat.stationary:
+            reason = None
+        else:
+            reason = "precision_limit"
+        return (
+            x,
+            stat.nlp,
+            stat.grad_norm,
+            stat.decrement,
+            stat.stationary,
+            attempts,
+            reason,
+        )
+    best_x, best = x, stat
+    for _ in range(_MAP_CONTINUATION_ROUNDS):
+        if not best.hessian_finite:
+            break
+        x, _, _ = lbfgs_to_gtol(_bind_data(flat_loss, data), best_x, n_steps=n_steps, gtol=gtol)
+        attempts += 1
+        stat = stationarity(flat_loss, x, data)
+        if not _accept_round(stat, best, _round_off_bar(best.nlp, dtype)):
+            # The next round would start from the same best point, and lbfgs_to_gtol is
+            # deterministic (bytes identical, float32 and float64), so it would replay this one.
+            break
+        best_x, best = x, stat
+        if best.stationary:
+            break
+    x, stat = best_x, best
+    reason = None if stat.hessian_finite else "hessian_not_finite"
+    return (
+        x,
+        stat.nlp,
+        stat.grad_norm,
+        stat.decrement,
+        stat.stationary,
+        attempts,
+        reason,
     )
 
 
@@ -1149,14 +1434,23 @@ def run_laplace(context, *, key, init_from=None, n_map_steps=1000, **kwargs):
         # unbounded point the Hessian is evaluated at, the same space the runners use.
         _reject_nonfinite_map(map_params)
 
+    from tengri.inference.backends.mcmc._shared import _get_flat_logdensity
+
+    # Same flat log-posterior the samplers and run_pathfinder use.
+    log_posterior_flat_2arg, unravel_fn, init_flat, data_args = _get_flat_logdensity(
+        context.fitter,
+        map_params,
+    )
+
     return run_laplace(
         key=key,
-        loss_fn=context.neg_log_posterior_fn,
-        data_args=context.data_args,
-        map_params_unbounded=map_params,
+        logdensity_fn=log_posterior_flat_2arg,
+        data_args=data_args,
+        position=init_flat,
+        unravel_fn=unravel_fn,
         to_physical_fn=context.to_physical,
         model=context.model,
-        grad_fn=context.grad_fn,
+        log_evidence_normalization=context.log_evidence_normalization,
         **kwargs,
     )
 

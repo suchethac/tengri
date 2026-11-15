@@ -174,7 +174,11 @@ def test_tabulated_nodes_bit_exact_vs_txt(tracked):
                 continue
             line_lum = row[5:]
             expected = np.log10(np.maximum(line_lum, 1e-30) * _LSUN_ERG) - log_qh[iz, im]
-            assert np.array_equal(log_line[idx], expected), idx
+            # The builder's log10 is the platform libm: macOS and glibc differ in the
+            # last bit, so the float table compares at a few ulp (as #3231 did for Feltre).
+            np.testing.assert_allclose(
+                log_line[idx], expected, rtol=1e-13, atol=0.0, equal_nan=True, err_msg=str(idx)
+            )
             checked += 1
     assert checked == 14 * 7 * 3 * 2 * 9 * 2 - 19
 

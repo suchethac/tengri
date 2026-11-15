@@ -212,7 +212,10 @@ def test_g_prebroadened_table_equals_sum_route(ssp_data_wne):
     s_sum = _spectrum(summed, 300.0)
     # Same operation in two orders of linear ops: relative to the median flux so FFT
     # roundoff in the deepest absorption pixels does not dominate.
-    assert float(np.max(np.abs(s_table - s_sum))) <= 1e-6 * float(np.median(np.abs(s_sum)))
+    # Route bar, 3x the measured 1.21e-5 on the PCHIP read (main, Hermite: 5.4e-8). PCHIP is
+    # non-linear: the prebroadened table reads PCHIP of the broadened columns, the sum route
+    # broadens the PCHIP read of the raw columns, and the two differ at about 1e-5.
+    assert float(np.max(np.abs(s_table - s_sum))) <= 3.6e-5 * float(np.median(np.abs(s_sum)))
 
 
 # ── (h) no resolution cap: the LUT holds at R = 5000 ──────────────────────────
@@ -239,16 +242,22 @@ def test_h_lut_matches_exact_at_r5000_without_fallback(ssp_data_wne):
 # Re-captured on main ac75d42fe: the SFH timing parameters became fractions of
 # age(z) (#2748), which moves the fixture's default tsnorm SFH at z = 0.1, so the
 # arrays pinned before it (and the ones below in _PINNED_EXACT) no longer apply.
+# Re-captured again on main debe80a55 (2026-11-15) after #3434 (in #3462): fixed
+# metallicity carries no metallicity scatter, which moves these spectra by up to
+# 0.36% (test d), 0.37% (wne_B) and 3.6% (synth_B, the synthetic grid's coarse Z nodes).
 # The pins still guard the LUT-with-no-instrument and the exact path against
 # unintended change; a ruled physics change re-captures them.
+# Re-pinned 2026-11-15: monotone PCHIP metallicity read (#3434, owner ruling 'True PCHIP
+# on the spectra'). Main's values are 8.800566e-29 ... 1.410505e-27; the PCHIP read moves the
+# low-flux pixels by up to 2.4e-4 relative. Control (Hermite read) reproduces main to 1e-15.
 _PREFIX_LUT_WNE_RNONE = [
-    8.832206167702604e-29,
-    3.165934477902422e-28,
-    5.070904983979376e-28,
-    7.318035949559824e-28,
-    8.560968754669802e-28,
-    1.1660212420805499e-27,
-    1.4095711285515449e-27,
+    8.801267342704195e-29,
+    3.157198494420064e-28,
+    5.065771660279481e-28,
+    7.304963047431351e-28,
+    8.537459097668553e-28,
+    1.166429892201843e-27,
+    1.4114134809927024e-27,
 ]
 
 
@@ -268,22 +277,25 @@ def test_d_resolution_none_is_bit_for_bit_prefix(ssp_data_wne):
 
 _PINNED_EXACT = {
     "synth_B": [
-        2.6005432403292307e-12,
-        1.905869690855171e-12,
-        1.463844810911483e-12,
-        1.162784433602384e-12,
-        9.467437807646447e-13,
-        7.873430053226903e-13,
-        6.6513321392689e-13,
+        2.5081147137035423e-12,
+        1.8381312565409746e-12,
+        1.4118168280720108e-12,
+        1.1214567408671232e-12,
+        9.130946064725257e-13,
+        7.593592545423278e-13,
+        6.414930444347694e-13,
     ],
+    # Re-pinned 2026-11-15: monotone PCHIP metallicity read (#3434, owner ruling 'True PCHIP on
+    # the spectra'). Main's wne_B pins moved by up to 7.8e-5 relative (index 0); synth_B unchanged
+    # to 1e-15 (no metallicity read in that grid's exact path beyond round-off).
     "wne_B": [
-        8.84153748248348e-29,
-        3.105164351808286e-28,
-        4.976330494264325e-28,
-        7.382143463596137e-28,
-        8.807978458553114e-28,
-        1.1653075487088356e-27,
-        1.4096784141453878e-27,
+        8.809892332215404e-29,
+        3.0971669624388303e-28,
+        4.97178887693843e-28,
+        7.36909509847369e-28,
+        8.781304804237832e-28,
+        1.165689373104462e-27,
+        1.4115376352795165e-27,
     ],
 }
 
@@ -350,7 +362,10 @@ def test_i_free_z_fixed_sigma_v_cube_equals_sum_route(ssp_data_wne, z):
     assert chain[0]._state.spec_ssp_broadened is not None
     s_cube = np.asarray(cube.predict_spectrum({"redshift": z}))
     s_sum = np.asarray(summed.predict_spectrum({"redshift": z, "sigma_v_kms": 300.0}))
-    assert float(np.max(np.abs(s_cube - s_sum))) <= 1e-6 * float(np.median(np.abs(s_sum)))
+    # Route bar at 3x the measured PCHIP route gap (z=0.08: 1.05e-5, z=0.12: 1.18e-5; main with
+    # the Hermite read: 5.1e-8 and 5.6e-8). Same cause as test_g: PCHIP is non-linear.
+    bar = {0.08: 3.2e-5, 0.12: 3.6e-5}[z]
+    assert float(np.max(np.abs(s_cube - s_sum))) <= bar * float(np.median(np.abs(s_sum)))
 
 
 # ── (j) routing of a free sigma_v ──────────────────────────────────────────────

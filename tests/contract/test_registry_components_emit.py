@@ -48,6 +48,8 @@ import jax.numpy as jnp
 import pytest
 
 from tengri import DEFAULT, Fixed, SEDModel
+from tengri.components.dust.laws._registry import is_diffuse_only_law, law_screen_keys
+from tengri.components.stellar.sfh.registry import SFH_REGISTRY
 from tengri.parameters.groups import _legacy_radio_type_to_blocks
 from tengri.registry import _RegistryTable
 
@@ -169,8 +171,8 @@ def _template_data_unavailable(name: str) -> bool:
 
     Some components are backed by a large published grid that is not committed
     (``draine2021_pah`` needs a 104 MB PAHspec HDF5). Absent it, the component
-    is behaving *correctly* when it warns and contributes nothing -- that is the
-    designed response, not the silent no-op this census exists to catch. Without
+    raises ``TengriIOError`` naming the file (#3284) -- that is the designed
+    response, not the silent no-op this census exists to catch. Without
     this probe the census reads "production component does not emit" on a
     machine that simply has no grid, which is the wrong accusation.
 
@@ -180,6 +182,10 @@ def _template_data_unavailable(name: str) -> bool:
     import jax.numpy as _jnp
 
     from tengri.components.sed_model_component import _REGISTRY as _COMPONENT_REGISTRY
+    from tests._data_skip import PAHSPEC_EMISSION_TYPES, has_pahspec
+
+    if name in PAHSPEC_EMISSION_TYPES:
+        return not has_pahspec()
 
     for key in (name, f"{name}_ir"):
         cls = _COMPONENT_REGISTRY.get(key)
@@ -263,17 +269,19 @@ class TestRegistryComponentsEmit:
                 return True, "dust_emission published and nonzero"
 
             elif kind == "dust_attenuation":
-                # Dust law: build model with dust config
+                # Dust law: build model with dust config. A law declared diffuse-only
+                # has no single-screen spelling, so it is carried on law_diff.
+                if is_diffuse_only_law(name):
+                    dust_cfg = {"type": "two_component", **law_screen_keys(name)}
+                else:
+                    dust_cfg = {"type": "single_component", "law": name}
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore")
                     model = SEDModel.build(
                         ssp_data=synthetic_ssp_wide,
                         observation=synthetic_tophat_obs,
                         sfh={"type": "const"},
-                        dust_attenuation={
-                            "type": "single_component",
-                            "law": name,
-                        },
+                        dust_attenuation=dust_cfg,
                         redshift=Fixed(0.1),
                     )
 
@@ -286,10 +294,17 @@ class TestRegistryComponentsEmit:
                 # SFH: build model with sfh config
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore")
+                    # A current episode splices over the smooth member its
+                    # registry entry declares (smooth_base); standing alone it
+                    # is refused by design, so the sweep composes it with that.
+                    sfh_type = name
+                    base = SFH_REGISTRY[name].smooth_base
+                    if base is not None:
+                        sfh_type = [base, name]
                     model = SEDModel.build(
                         ssp_data=synthetic_ssp_wide,
                         observation=synthetic_tophat_obs,
-                        sfh={"type": name},
+                        sfh={"type": sfh_type},
                         redshift=Fixed(0.1),
                     )
 
@@ -413,8 +428,8 @@ class TestRegistryComponentsEmit:
         if not success and _template_data_unavailable(name):
             pytest.skip(
                 f"{kind}:{name}: required template grid is not present on this "
-                f"machine, so contributing nothing is the correct behavior "
-                f"(the component warns). Reported: {msg}"
+                f"machine, so the component refusing to build is the correct "
+                f"behavior. Reported: {msg}"
             )
 
         assert success, (

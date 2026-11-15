@@ -8,18 +8,25 @@ unbounded point it actually uses.
 
 import jax.numpy as jnp
 import pytest
+from jax.flatten_util import ravel_pytree
 
 from tengri.inference.backends import map_dispatch
 from tengri.inference.context import InferenceContext
 
 
 class _FakeContext:
-    """Minimal stand-in exposing the one method run_laplace calls on the init point."""
+    """Minimal stand-in for what run_laplace reads off the context.
+
+    ``log_evidence_normalization`` is the Gaussian-likelihood constant added to the
+    published evidence since #3427; 0.0 keeps this guard test about ``init_from`` only.
+    """
 
     neg_log_posterior_fn = None
+    log_evidence_normalization = 0.0
     data_args = None
     grad_fn = None
     model = None
+    fitter = None
 
     def __init__(self, unbounded):
         self._unbounded = unbounded
@@ -41,8 +48,15 @@ def spy_laplace(monkeypatch):
         return "laplace-result"
 
     import tengri.inference.backends.laplace as laplace_mod
+    import tengri.inference.backends.mcmc._shared as shared_mod
+
+    def _fake_flat_logdensity(fitter, map_params):
+        """Stand-in for the flat log-posterior: flat position and its unravel."""
+        flat, unravel = ravel_pytree(map_params)
+        return (lambda position, data: 0.0), unravel, flat, None
 
     monkeypatch.setattr(laplace_mod, "run_laplace", _spy)
+    monkeypatch.setattr(shared_mod, "_get_flat_logdensity", _fake_flat_logdensity)
     monkeypatch.setattr(InferenceContext, "from_target", staticmethod(lambda c: c))
     return calls
 
@@ -62,4 +76,4 @@ def test_laplace_accepts_finite_init_from(spy_laplace):
     ctx = _FakeContext(point)
     out = map_dispatch.run_laplace(ctx, key=None, init_from=object())
     assert out == "laplace-result"
-    assert spy_laplace[0]["map_params_unbounded"] is point
+    assert jnp.array_equal(spy_laplace[0]["position"], ravel_pytree(point)[0])

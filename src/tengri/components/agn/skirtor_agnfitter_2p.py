@@ -50,12 +50,22 @@ from collections.abc import Callable
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.agn._params import DEFAULT_AGN_COS_INC, DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn._params import (
+    DEFAULT_AGN_COS_INC,
+    DEFAULT_AGN_LOG_LBOL,
+    DEFAULT_AGN_OA_SKIRTOR,
+    DEFAULT_AGN_TORUS_FRAC,
+)
 from tengri.components.agn._skirtor_agnfitter_sightline import (
     accepts_retired_incl_skirtor,
     skirtor_incl_from_cos_inc,
 )
-from tengri.components.agn._template_grid import TorusTemplateGrid, torus_lnu_from_grid
+from tengri.components.agn._template_grid import (
+    TorusTemplateGrid,
+    cache_per_float_dtype,
+    loaded_template,
+    torus_lnu_from_grid,
+)
 
 __all__ = [
     "create_skirtor_agnfitter_2p_from_grid",
@@ -92,7 +102,7 @@ def _load_skirtor_agnfitter_2p_arrays(grid_path: str) -> dict:
         }
 
 
-@functools.cache
+@cache_per_float_dtype
 def load_skirtor_agnfitter_2p_grid(grid_path: str) -> TorusTemplateGrid:
     """Load a ``SKIRTOR_mean_2p`` grid HDF5 into a :class:`TorusTemplateGrid` pytree.
 
@@ -121,7 +131,7 @@ def load_skirtor_agnfitter_2p_grid(grid_path: str) -> TorusTemplateGrid:
     """
     raw = _load_skirtor_agnfitter_2p_arrays(grid_path)
     return TorusTemplateGrid(
-        template=np.asarray(raw["template"]),
+        template=loaded_template(raw["template"]),
         axes=(np.asarray(raw["oa_axis"]), np.asarray(raw["incl_axis"])),
         wave_grid=np.asarray(raw["wavelength"]),
     )
@@ -132,9 +142,9 @@ def skirtor_agnfitter_2p_sed_from_grid(
     grid: TorusTemplateGrid,
     wavelength: jnp.ndarray,
     agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
-    agn_oa_skirtor: float = 40.0,
+    agn_oa_skirtor: float = DEFAULT_AGN_OA_SKIRTOR,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
-    agn_torus_frac: float = 0.5,
+    agn_torus_frac: float = DEFAULT_AGN_TORUS_FRAC,
     **_kwargs,
 ) -> jnp.ndarray:
     r"""``SKIRTOR_mean_2p`` torus SED at a single (oa, incl) node.
@@ -245,7 +255,7 @@ def load_skirtor_agnfitter_2p_default_grid() -> TorusTemplateGrid:
     return load_skirtor_agnfitter_2p_grid(_find_skirtor_agnfitter_2p_grid())
 
 
-@functools.cache
+@cache_per_float_dtype
 def _load_skirtor_agnfitter_2p_default() -> Callable:
     return create_skirtor_agnfitter_2p_from_grid(_find_skirtor_agnfitter_2p_grid())
 

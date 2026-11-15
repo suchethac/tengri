@@ -69,10 +69,11 @@ CLOUDY_LABEL_AIR_MAX_AA: float = float("inf")
 #: 7320.5 and 7330.2 Angstrom, 2.5 and 1.8 Angstrom from the labels, so
 #: converting the label as an air wavelength lands 3.55 and 1.81 Angstrom red of
 #: the vacuum centers (#3113). The centers come from the line list, not from here.
+#: Cloudy's 7332.15 label is a different line, [Ar IV] (``Ar 4 7332.15A`` in Cue's
+#: line names), quoted as a measured air wavelength: it takes the plain conversion.
 CLOUDY_BLEND_LABEL_LINES: dict[float, str] = {
     7323.0: "OII_7320",
     7332.0: "OII_7330",
-    7332.15: "OII_7330",
 }
 
 _BLEND_LABEL_TOL_AA = 1.0e-3

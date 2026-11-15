@@ -4,14 +4,17 @@ r"""The kubota_done corona carries exactly its counted power; the total closes o
 The three-zone model splits the accretion power into the hot corona, :math:`H_\nu`, and the
 disc and warm zones, :math:`D_\nu`. The corona is counted at :math:`l_{\rm hot}` (the
 Page-Thorne dissipation inside :math:`R_{\rm hot}`, equal to :math:`f_{\rm hard} L_{\rm Edd}`
-at the defaults). The corona takes exactly that power, and the disc and warm zones carry the
-rest, :math:`L_{\rm acc} - l_{\rm hot}`, so that
+at the defaults). The corona takes exactly that power, and the disc and warm zones carry
+their own dissipation, :math:`L_{\rm acc} - l_{\rm hot} - R_{\rm unem}`, where
+:math:`R_{\rm unem}` is the dissipation beyond :math:`R_{\rm out}` that the disc does not emit
+(Kubota & Done 2018 Sec. 2.2; #3015), so that
 
 .. math::
 
     \int H_\nu\,{\rm d}\nu = l_{\rm hot}, \qquad
-    \int D_\nu\,{\rm d}\nu = L_{\rm acc} - l_{\rm hot}, \qquad
-    \int (2\cos i\,D_\nu + H_\nu)\,{\rm d}\nu \big|_{\cos i = 0.5} = L_{\rm acc}.
+    \int D_\nu\,{\rm d}\nu = L_{\rm acc} - l_{\rm hot} - R_{\rm unem}, \qquad
+    \int (2\cos i\,D_\nu + H_\nu)\,{\rm d}\nu \big|_{\cos i = 0.5}
+    = L_{\rm acc} - R_{\rm unem}.
 
 Every expected value is written from these identities, never read from a pin. The spectra
 are integrated on a converged log grid over :math:`10^{-2}`--:math:`10^{9}` A.
@@ -26,6 +29,7 @@ import numpy as np
 import pytest
 
 from tengri.components.agn import disc as disc_module
+from tengri.components.agn._params import DEFAULT_AGN_LOG_MBH
 from tengri.components.agn.blocks.runner import compose_l_nu
 from tengri.utils.physics_constants import C_AA, L_SUN
 
@@ -64,6 +68,11 @@ def _l_hot_counted_over_lbol() -> float:
     return float(defaults["agn_f_hard"].default * l_edd / _L_ACC)
 
 
+def _unemitted_over_lbol() -> float:
+    """``R_unem / L_acc`` from the closed form at the kubota_done default mass [dimensionless]."""
+    return float(disc_module.kubota_done_unemitted_fraction(DEFAULT_AGN_LOG_MBH, _LOG_LBOL))
+
+
 def _spectrum(cos_inc: float):
     _, components = compose_l_nu(
         jnp.asarray(_WAVE),
@@ -83,13 +92,15 @@ def test_corona_spectrum_integrates_to_its_counted_power():
 
 
 def test_disc_and_warm_zones_carry_the_rest_of_the_accretion_power():
-    """2 cos i D_nu at cos i = 1 has the disc power L_acc - l_hot, so D_nu = L_acc - l_hot."""
+    """D_nu integrates to L_acc - l_hot - R_unem: the zones emit their own dissipation (#3015)."""
     disc_only = _spectrum(1.0) - _spectrum(0.0)  # 2 D_nu
     assert _integral_over_lbol(disc_only) / 2.0 == pytest.approx(
-        1.0 - _l_hot_counted_over_lbol(), rel=_TOL
+        1.0 - _l_hot_counted_over_lbol() - _unemitted_over_lbol(), rel=_TOL
     )
 
 
-def test_total_line_of_sight_power_at_half_cos_i_is_l_acc():
-    """L_nu(i) = 2 cos i D_nu + H_nu integrates to L_acc at cos i = 0.5."""
-    assert _integral_over_lbol(_spectrum(0.5)) == pytest.approx(1.0, rel=_TOL)
+def test_total_line_of_sight_power_at_half_cos_i_is_l_acc_less_the_unemitted_share():
+    """L_nu(i) = 2 cos i D_nu + H_nu integrates to L_acc - R_unem at cos i = 0.5."""
+    assert _integral_over_lbol(_spectrum(0.5)) == pytest.approx(
+        1.0 - _unemitted_over_lbol(), rel=_TOL
+    )

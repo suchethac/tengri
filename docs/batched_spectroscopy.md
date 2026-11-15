@@ -233,10 +233,24 @@ rest of the stellar sum on a 3-D cube.
 ## Choosing a sampler
 
 `fit_spectra_catalog_mcmc` takes `sampler="nuts"` (the default), `"hmc"`, `"chees"` or `"ghmc"`.
-Use `"chees"` for catalog-wide posteriors. `"ghmc"` runs MEADS with `n_chains=32` and
-`n_superchains=8` by default and a fixed-length warmup, and it returns the per-galaxy
-`nested_rhat`. On narrow posteriors it does not reach NUTS: at DESI-like signal to noise the
-measured gap is 0.48 posterior widths.
+Use `"chees"` for catalog-wide posteriors. `"ghmc"` runs MEADS (Hoffman & Sountsov 2022) with
+a fixed-length warmup in two phases and returns the per-galaxy `nested_rhat`. The first phase
+samples in coordinates whitened at each galaxy's MAP with the analytic metric of `precondition=`
+(full strength unless `precondition` names another), and MEADS adapts a diagonal scale per fold,
+the step size, the damping and the slice translation on top. At `rewhiten_at` (default 0.5) of
+the warmup the coordinates are re-estimated from the ensemble (the mean and the Stan-regularized
+covariance of every chain's positions over the second half of the first phase), the chains are
+mapped into them, the momenta are redrawn, and the adaptation continues with its state carried
+over. Sampling is plain GHMC with the warmup's fold-averaged parameters held fixed.
+
+Each fold needs at least `2 D` chains, where `D` is the number of sampled coordinates, because a
+fold's standard deviation becomes the next fold's momentum scale and one outlying chain among too
+few sets it. Fewer raises `ConfigError` naming the minimum `n_chains` (`2 D` times `n_folds`). The
+default `n_chains` is the smallest multiple of `n_superchains` (8) and `n_folds` (4) that is at
+least 32 and gives every fold `2 D` chains. A galaxy whose metric or ensemble covariance cannot be
+factorized returns NaN draws with every transition flagged divergent. At DESI-like signal to noise
+on the two-galaxy mock catalog the posterior medians agree with NUTS to within 0.07 of the NUTS
+full 16-84 percent width, and the nested R-hat is at most 1.01.
 
 ## Measured numbers
 

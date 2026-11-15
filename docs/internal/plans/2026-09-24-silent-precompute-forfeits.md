@@ -1,5 +1,7 @@
 # Silent Precompute Forfeits: Observable Pattern
 
+> **Superseded by ADR-0021.** Band-table decline reasons are now owned by each component's precompute adapter (`Decline(reason)` in `src/tengri/forward/precompute/band_table.py`), read from the one memo `SEDModel._band_tables` by `src/tengri/forward/precompute_report.py`, not from per-builder attributes. The pattern below is the record of the 2026-09-24 decision.
+
 **Issue:** #2485
 **Date:** 2026-09-24
 

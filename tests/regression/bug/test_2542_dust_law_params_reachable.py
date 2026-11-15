@@ -36,7 +36,11 @@ import pytest
 
 from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, SSPData
 from tengri.components.dust._params import ATTENUATION_PARAMS
-from tengri.components.dust.laws._registry import DUST_LAWS, law_kwarg_names
+from tengri.components.dust.laws._registry import (
+    DUST_LAWS,
+    is_diffuse_only_law,
+    law_user_kwarg_names,
+)
 from tengri.observation.photometry import FilterCurve
 
 pytestmark = pytest.mark.regression_bug
@@ -156,8 +160,7 @@ def _enabling_overrides(param_name: str) -> dict[str, float]:
 @pytest.mark.parametrize("law_name", list(DUST_LAWS.keys()), ids=lambda x: x)
 def test_every_law_parameter_is_declared(law_name: str):
     """Every parameter in a law's signature must be in ATTENUATION_PARAMS (except wavelength)."""
-    kw_set = law_kwarg_names(law_name)
-    subset = kw_set - {"wavelength", "redshift"}
+    subset = law_user_kwarg_names(law_name)
     declared_names = {param.name for param in ATTENUATION_PARAMS}
 
     missing = subset - declared_names
@@ -176,8 +179,11 @@ def test_single_component_param_reaches_curve(law_name: str, uv_ssp, uv_obs):
     This test iterates over every parameter of every law and verifies it is reachable
     through the grammar by checking that the SED changes when the parameter changes.
     """
-    kw_set = law_kwarg_names(law_name)
-    params_to_test = kw_set - {"wavelength", "redshift"}
+    if is_diffuse_only_law(law_name):
+        # Declared diffuse-screen only (registry role): single_component refuses it,
+        # so there is no single-screen build to sweep.
+        pytest.skip(f"{law_name} is legal only as law_diff of a two_component model")
+    params_to_test = law_user_kwarg_names(law_name)
     if not params_to_test:
         # Enumerated from the registry, not hand-listed: a law with a bare
         # ``(wavelength)`` signature (calzetti, smc, lmc, ...) has nothing to
@@ -228,8 +234,10 @@ def test_two_component_param_reaches_bc_diff_screens(law_name: str, screen: str,
 
     Before Part A, bc and diff screens silently dropped law-specific parameters.
     """
-    kw_set = law_kwarg_names(law_name)
-    params_to_test = kw_set - {"wavelength", "redshift"}
+    if screen == "bc" and is_diffuse_only_law(law_name):
+        # Declared diffuse-screen only: there is no birth-cloud screen to put it on.
+        pytest.skip(f"{law_name} is legal only as law_diff; no bc screen exists for it")
+    params_to_test = law_user_kwarg_names(law_name)
     if not params_to_test:
         # Same reasoning as test_single_component_param_reaches_curve: a
         # parameter-less law has nothing to sweep on this screen either.

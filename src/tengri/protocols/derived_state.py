@@ -106,10 +106,24 @@ class DerivedState:
     # published so DustSEDComponent can evaluate L_ir from a precomputed
     # bolometric (tau_bc, tau_diff) LUT instead of the full stellar cube.
     joint_weights: jnp.ndarray | None = None
+    #: Metallicity-read joint for the exact contractions (#3434, phase 2): (n_met, n_age)
+    #: on a declared scatter, (1, n_age) age marginal when undeclared; with the galaxy's
+    #: log Z (scalar or per age) and the SSP metallicity nodes it is read over.
+    met_exact_joint: jnp.ndarray | None = None
+    met_exact_z: jnp.ndarray | None = None
+    met_exact_lgmet: jnp.ndarray | None = None
     #: log10(total_mass x L_sun) [dex]. The linear erg/s scale is ~1e43 for a
     #: 1e10 Msun galaxy and overflows float32 for any galaxy above ~9e4 Msun, so
     #: only the log form is published (#1206, #3149).
     log_stellar_mass_scale: jnp.ndarray | None = None
+    #: Lower [alpha/Fe] node index ``ia`` and fraction ``fa`` of the model's
+    #: ``met_alpha_fe`` on a 4D grid, shape () each, or (n_age,) each under
+    #: ``alpha_fe_evolving`` (one bracket per SSP age): the bracket the stellar
+    #: component collapses its own cube at. Published only on a grid with an
+    #: [alpha/Fe] axis; the dust energy-balance LUT collapses its alpha axis at
+    #: the same bracket. ``None`` on a 3D grid.
+    stellar_alpha_bracket_index: jnp.ndarray | None = None
+    stellar_alpha_bracket_fraction: jnp.ndarray | None = None
     ssp_ages_yr: jnp.ndarray | None = None
     age_weights: jnp.ndarray | None = None
     #: Surviving mass per SSP age bin [Msun], shape (n_age,): ``age_weights`` times
@@ -468,6 +482,12 @@ class DerivedState:
     # the ``agn_ir_frac`` coupling derives); its energy ledger, computed on request as
     # properties (#3076), re-evaluates the chain at it.
     agn_torus_frac_effective: jnp.ndarray | None = None
+    # 1.0 when agn_norm='conserving' cannot reach the requested agn_ir_frac (its covering factor
+    # sits at a bound), else 0.0. Published by the composable AGN only.
+    agn_ir_frac_saturated: jnp.ndarray | None = None
+    # log10 of the host light in the agn_ir_frac window (int L_nu / lambda^2 dlambda, or its
+    # value at one wavelength); the realized window fraction is served from it on request.
+    log_agn_ir_frac_window_host: jnp.ndarray | None = None
     # log10 of the line-of-sight isotropic-equivalent bolometric luminosity of
     # the AGN's direct emission [dex re erg/s]: int L_nu(i) dnu with
     # L_nu(i) = 2 cos i D_nu + H_nu, before the torus screen and the polar dust

@@ -12,7 +12,6 @@ from __future__ import annotations
 import math
 from typing import NamedTuple
 
-import jax
 import jax.numpy as jnp
 
 from tengri.observation.banded import BandedMatrix, banded_forward_substitution
@@ -232,12 +231,14 @@ def marginalize_linear_nuisance(
         design_w = (weight / sigma)[:, None] * design * coef_scale
         log_norm = jnp.sum(weight * jnp.log(sigma))
     else:
-        resid = banded_forward_substitution(chol_lower, weight * (data - model0))
-        design_w = jax.vmap(
-            lambda column: banded_forward_substitution(chol_lower, column),
-            in_axes=1,
-            out_axes=1,
-        )(weight[:, None] * design * coef_scale)
+        # One batched substitution: the residual rides as column 0 of the right-hand side
+        # beside the scaled design columns, so the serial scan runs once per evaluation.
+        rhs = jnp.concatenate(
+            [(weight * (data - model0))[:, None], weight[:, None] * design * coef_scale],
+            axis=1,
+        )
+        whitened = banded_forward_substitution(chol_lower, rhs)
+        resid, design_w = whitened[:, 0], whitened[:, 1:]
         log_norm = jnp.sum(jnp.log(chol_lower.data[0]))
     prior_s = precision * coef_scale**2
 

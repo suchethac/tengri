@@ -415,8 +415,7 @@ def test_band_response_fast_path_survives_free_override(ssp_real, declaration, e
         dust_emission={"type": emission_type, "log_L_ir": log_l_ir, "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.0),
     )
-    chain = m._build_component_chain()
-    resp = m._dust_emission_band_response(chain)
+    resp = m.band_table("dust_emission", "emission_band_response")
     assert resp is not None, (
         f"{emission_type} band-response fast path disabled under a {declaration} "
         "dust_log_L_ir override, though its emission shape does not depend on "
@@ -447,8 +446,7 @@ def test_dh02_band_response_fast_path_disabled_after_shape_tracking(ssp_real, de
         dust_emission={"type": "dh02_ce01", "log_L_ir": log_l_ir, "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.0),
     )
-    chain = m._build_component_chain()
-    resp = m._dust_emission_band_response(chain)
+    resp = m.band_table("dust_emission", "emission_band_response")
     assert resp is None, (
         f"dh02_ce01 band-response fast path should be disabled under a {declaration} "
         "dust_log_L_ir override (factors_l_ir=False means shape is not factorable)"
@@ -460,7 +458,7 @@ def test_bosa_band_response_stays_disabled_regardless_of_override(ssp_real, decl
     """BOSA's OWN (pre-existing, unrelated) shape/L_ir coupling still disables the fast path.
 
     Not a claim that dust_log_L_ir causes this: the homogeneity probe
-    (``SEDModel._dust_emission_band_response``) measures BOSA's raw
+    (``_emission_band_response``, dust adapter) measures BOSA's raw
     ``predict()`` at two L_ir values and finds it non-proportional
     independent of anything this feature touches. Pinned here so a future
     change to either mechanism is caught by name.
@@ -476,8 +474,7 @@ def test_bosa_band_response_stays_disabled_regardless_of_override(ssp_real, decl
         dust_emission={"type": "bosa", "log_L_ir": log_l_ir, "all_params": Fixed(DEFAULT)},
         redshift=Fixed(0.0),
     )
-    chain = m._build_component_chain()
-    resp = m._dust_emission_band_response(chain)
+    resp = m.band_table("dust_emission", "emission_band_response")
     assert resp is None, "BOSA's band-response fast path unexpectedly active"
 
 

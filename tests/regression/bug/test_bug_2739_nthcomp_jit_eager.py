@@ -81,8 +81,11 @@ def kubota_model():
     return _contract._build_agn_only(ssp, {"type": "kubota_done", "all_params": FREE})
 
 
+# The contract's prior-draw ``agn_f_hard`` (0.096) puts this point (lambda_Edd = 0.03) past the
+# hot-flow switch: R_hot = R_out and the warm zone has zero width (Kubota & Done 2018 Sec. 2.2;
+# #3015), so ``agn_kt_warm`` has no response there. ``f_hard = 0.01`` keeps the zones separate.
 _POINTS = [
-    pytest.param({}, id="default"),
+    pytest.param({"agn_f_hard": 0.01}, id="default"),
     pytest.param({"agn_f_hard": 0.005}, id="r_hot_unclipped"),
 ]
 

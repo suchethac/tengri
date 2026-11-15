@@ -82,6 +82,42 @@ _REGISTRY: dict[str, str] = {
     "nlr_gaussian": "tengri.components.agn.nlr_gaussian_precompute",
 }
 
+#: Maps a component that owns band tables to the adapter module that builds them. The contract
+#: is :class:`~tengri.forward.precompute.band_table.BandTableProvider`, a sibling of
+#: :class:`~tengri.forward.precompute.protocol.PrecomputeModule`.
+BAND_TABLE_PROVIDERS: dict[str, str] = {
+    "dust_emission": "tengri.components.dust.dust_emission_precompute",
+    "agn": "tengri.components.agn.blocks.composable_precompute",
+    "nebular": "tengri.components.nebular.cloudy_precompute",
+    "shock": "tengri.components.nebular.mappings_shock_precompute",
+    "radio": "tengri.components.radio.radio_precompute",
+    "xray": "tengri.components.xray.xray_precompute",
+}
+
+
+def resolve_band_table_provider(name: str) -> ModuleType:
+    """Return the band-table provider module of a component.
+
+    Parameters
+    ----------
+    name : str
+        Component name, a key of ``BAND_TABLE_PROVIDERS``.
+
+    Returns
+    -------
+    ModuleType
+        The adapter module, which satisfies ``BandTableProvider``.
+
+    Raises
+    ------
+    KeyError
+        If the component has no band-table provider. The message names the component.
+    """
+    module_path = BAND_TABLE_PROVIDERS.get(name)
+    if module_path is None:
+        raise KeyError(f"no band-table provider registered for component {name!r}")
+    return importlib.import_module(module_path)
+
 
 def resolve(component_name: str) -> ModuleType | None:
     """Return the precompute module for a component name, or None if not registered.

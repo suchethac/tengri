@@ -713,26 +713,41 @@ def test_written_out_discs_agree_with_cigale_output(disk_type, delta):
 #: (log M_BH 10). The standalone kubota_done SED at 1e4 A moves +3.6% at log M_BH 8 (the warm
 #: zone moved out) and the corona at 0.01 A moves -1.85% at log M_BH 10 (the clipped corona
 #: carries ``L_0 h(x_clip)``, which follows ``Mdot``).
+# Re-pinned 2026-11-15 after #3434 (in #3462): an undeclared metallicity scatter is now a node-
+# exact cubic-Hermite read of the SSP. The sum moves +3.9e-4 to +4.6e-4 and the other elements by
+# up to -1.6e-3; 8aff37cb3 reproduces the previous values to 5.6e-9 (largest element).
 _DISC_TIMES_ETA_T_REFERENCE = {
     6.0: (
-        1.558710938929855e32,
-        85017112985480.6,
-        2.8902213555268623e28,
-        8.773309142845245e21,
+        1.559409976871857e32,
+        85389391208234.4,
+        2.8855429418458107e28,
+        8.778586637207044e21,
     ),
     8.0: (
-        1.652877199966401e32,
-        2.0700319790200544e16,
-        3.103315723328423e28,
-        8.825368698532178e21,
+        1.6539648153426048e32,
+        2.419949129928412e16,
+        3.099429361197953e28,
+        8.830677640210973e21,
     ),
     10.0: (
-        1.672066126593175e32,
-        9818827856132108.0,
-        3.1299782093620715e28,
-        9.558113648207253e21,
+        1.782007651815151e32,
+        6.035185906510221e17,
+        3.336309004385196e28,
+        8.778105440222744e21,
     ),
 }
+#: Re-captured for #3015. (1) The disc ends at R_out = r_sg (Kubota & Done 2018; RELAGN), with no
+#: 10 R_isco floor or 0.5 R_out clip, and the dissipation beyond it is unemitted. (2) The tied
+#: corona keeps the untied model's ratio to the disc, ``H / D = f / (1 - f - R_unem / L)``: the
+#: disc and warm zones now carry ``1 - f - R_unem / L`` of the accretion power, not ``1 - f``.
+#: At log M_BH 10, log L_bol 11 (lambda_Edd = 3.0e-4) ``r_sg`` = 21.1 R_g, the hot flow fills the
+#: disc (R_hot = R_out), the model has no disc or warm zone and the corona keeps its own scale.
+#: Old -> new, relative, in (sum, first, middle, last) order, against the pins before this change:
+#:   log M_BH 6:  +8.7e-11 / +3.77e-03 / 0 / 0
+#:   log M_BH 8:  +2.01e-04 / +1.68e-01 / +2.14e-04 / 0
+#:   log M_BH 10: +0.143 / +105 / +0.156 / 0 (the corona at the 0.01 A bin is 1e-8 of the peak)
+#: At log M_BH 8 the corona rises by ``(1 - f) / (1 - f - R_unem / L)`` = 0.342 / 0.2926 = 1.169
+#: (f = 0.658, R_unem / L = 0.0494), which is the first-bin move, where the corona dominates.
 
 
 @pytest.mark.parametrize("agn_log_mbh", [6.0, 8.0, 10.0])

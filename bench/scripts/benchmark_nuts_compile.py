@@ -30,9 +30,9 @@ subgraph that carries it:
     ``jax.value_and_grad`` of the same. Every sampler here pays this per
     leapfrog step; the brief's ~5-10 ms in-scan gradient is this program.
 ``nuts_warmup``
-    ``_nuts_warmup_only`` -- ``blackjax.window_adaptation`` and nothing else.
+    ``adapt_chain(NUTS, WINDOW_NUTS)`` -- ``blackjax.window_adaptation`` and nothing else.
 ``nuts_scan``
-    ``_nuts_chain_scan`` -- the sampling half against fixed adaptation.
+    ``sample_chain(NUTS)`` -- the sampling half against fixed adaptation.
 ``hmc_warmup`` / ``hmc_scan``
     The same two halves for fixed-length HMC, as the control: HMC has the same
     forward model and the same gradient and *no* ragged tree, so
@@ -153,9 +153,8 @@ def _flat_pieces(forward, flux_noise, map_seed, key_fit, precondition=None):
     from tengri.inference._sample_utils import _maybe_map_init
     from tengri.inference.backends.mcmc._shared import _get_flat_logdensity
     from tengri.inference.context import InferenceContext
-    from tengri.inference.preconditioning import prepare_preconditioning
-
     from tengri.inference.fitter import Fitter
+    from tengri.inference.preconditioning import prepare_preconditioning
 
     flux, noise = flux_noise
     context = InferenceContext.from_target(Fitter(forward, data=flux, noise=noise, approx="auto"))
@@ -190,11 +189,16 @@ def measure_stage(
     import blackjax
     import jax
 
-    from tengri.inference.backends.mcmc._shared import (
-        _hmc_chain_scan,
-        _hmc_warmup_only,
-        _nuts_chain_scan,
-        _nuts_warmup_only,
+    from tengri.inference.backends.mcmc.chain_program import (
+        HMC,
+        NUTS,
+        WINDOW_HMC,
+        WINDOW_NUTS,
+        HMCConfig,
+        NUTSConfig,
+        NUTSSamplerConfig,
+        adapt_chain,
+        sample_chain,
     )
 
     forward, data, map_seed, key_fit, cfg = _build_problem(notebook, seed)
@@ -220,35 +224,57 @@ def measure_stage(
         args = (init_flat, data_args)
         traced = args
     elif stage == "nuts_warmup":
-        fn = _nuts_warmup_only
+        fn = adapt_chain
+        nuts_cfg = NUTSConfig(
+            max_doublings=int(max_doublings),
+            use_dense=use_dense,
+            target_accept_rate=target_accept_rate,
+        )
+        args = (NUTS, WINDOW_NUTS, init_flat, key, ld, data_args, n_warmup, nuts_cfg)
+        traced = (init_flat, key, data_args)
+    elif stage == "nuts_scan":
+        state = blackjax.mcmc.nuts.init(init_flat, ld_1arg)
+        inv_mass = jax.numpy.ones(n_dim)
+        fn = sample_chain
         args = (
+            NUTS,
+            state,
+            chain_keys,
+            ld,
+            data_args,
+            (0.1, inv_mass),
+            NUTSSamplerConfig(max_doublings=int(max_doublings)),
+        )
+        traced = (state, chain_keys, data_args, (0.1, inv_mass))
+    elif stage == "hmc_warmup":
+        fn = adapt_chain
+        hmc_cfg = HMCConfig(
+            n_leapfrog=int(n_leapfrog),
+            use_dense=use_dense,
+            target_accept_rate=target_accept_rate,
+        )
+        args = (
+            HMC,
+            WINDOW_HMC(int(n_leapfrog), not use_dense),
             init_flat,
             key,
             ld,
             data_args,
             n_warmup,
-            use_dense,
-            target_accept_rate,
-            False,
-            int(max_doublings),
+            hmc_cfg,
         )
-        traced = (init_flat, key, data_args)
-    elif stage == "nuts_scan":
-        state = blackjax.mcmc.nuts.init(init_flat, ld_1arg)
-        inv_mass = jax.numpy.ones(n_dim)
-        fn = _nuts_chain_scan
-        args = (state, chain_keys, ld, data_args, 0.1, inv_mass, int(max_doublings))
-        traced = (state, chain_keys, data_args, 0.1, inv_mass)
-    elif stage == "hmc_warmup":
-        fn = _hmc_warmup_only
-        args = (init_flat, key, ld, data_args, n_warmup, n_leapfrog, use_dense, target_accept_rate)
         traced = (init_flat, key, data_args)
     elif stage == "hmc_scan":
         state = blackjax.mcmc.hmc.init(init_flat, ld_1arg)
         inv_mass = jax.numpy.ones(n_dim)
-        fn = _hmc_chain_scan
-        args = (state, chain_keys, ld, data_args, 0.1, inv_mass, int(n_leapfrog))
-        traced = (state, chain_keys, data_args, 0.1, inv_mass)
+        fn = sample_chain
+        hmc_cfg = HMCConfig(
+            n_leapfrog=int(n_leapfrog),
+            use_dense=use_dense,
+            target_accept_rate=target_accept_rate,
+        )
+        args = (HMC, state, chain_keys, ld, data_args, (0.1, inv_mass), hmc_cfg)
+        traced = (state, chain_keys, data_args, (0.1, inv_mass))
     else:  # pragma: no cover - argparse constrains the choices
         raise ValueError(f"unknown stage {stage!r}")
 
@@ -380,7 +406,7 @@ def fit_decompose(notebook: str, *, seed: int, kwargs: dict) -> dict:
     difference as **compile**. It is not, or not only. ``run_nuts`` caches its
     adaptation on the Model keyed by ``_adaptation_cache_key``, which includes
     a fingerprint of the target data, so a second ``fit`` on the *same* galaxy
-    hits that cache and skips ``_nuts_warmup_only`` **entirely** — its execution
+    hits that cache and skips ``adapt_chain`` **entirely** — its execution
     as well as its compile. A cold-minus-warm difference taken that way is
     ``compile + the whole warmup run``, and the two want opposite fixes.
 

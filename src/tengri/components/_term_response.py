@@ -6,7 +6,7 @@ scalar amplitude times a spectral shape fixed by the emitter's shape parameters.
 Because the filter integral is linear, each term's per-filter response is a
 constant of the evaluation redshift and the band flux collapses to
 ``sum_k A_k * R_kf``. The response is built once, tabulated over redshift, in
-``tengri.SEDModel._additive_term_band_response`` and threaded into the JIT as
+``tengri.components._term_response_table.additive_term_band_response`` and threaded into the JIT as
 ``template_data``; this module is the single reader,
 so the namespace key cannot drift between the producer and its consumers.
 

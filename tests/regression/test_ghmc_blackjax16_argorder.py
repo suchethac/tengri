@@ -20,7 +20,12 @@ import pytest
 
 import tengri
 from tengri import DEFAULT, Fitter, Fixed, Observation, Photometry, SEDModel, Uniform
-from tengri.inference.backends.mcmc._shared import _ghmc_full_scan
+from tengri.inference.backends.mcmc.chain_program import (
+    GHMC,
+    WINDOW_GHMC,
+    GHMCConfig,
+    run_chain,
+)
 from tengri.observation.photometry import FilterCurve
 
 pytestmark = pytest.mark.regression_bug
@@ -45,7 +50,9 @@ def test_ghmc_scan_reproduces_a_unit_gaussian():
     call, raises or gives a chain whose moments miss these bounds.
     """
     warmup_key, init_key, chain_key = jax.random.split(jax.random.PRNGKey(0), 3)
-    positions, divergent, step_size, inv_mass = _ghmc_full_scan(
+    draws_out, (step_size, inv_mass) = run_chain(
+        GHMC,
+        WINDOW_GHMC,
         jnp.zeros(2),
         warmup_key,
         init_key,
@@ -53,14 +60,12 @@ def test_ghmc_scan_reproduces_a_unit_gaussian():
         _logdensity,
         jnp.asarray(_CENTER),
         300,
-        0.8,
-        0.5,
-        0.5,
+        GHMCConfig(alpha=0.5, delta=0.5, target_accept_rate=0.8),
     )
-    draws = np.asarray(positions)
+    draws = np.asarray(draws_out.position)
     assert np.isfinite(float(step_size))
     assert np.all(np.isfinite(np.asarray(inv_mass)))
-    assert not np.any(np.asarray(divergent))
+    assert not np.any(np.asarray(draws_out.divergent))
     assert draws.mean(axis=0) == pytest.approx(_CENTER, abs=0.25)
     assert draws.var(axis=0) == pytest.approx(np.ones(2), abs=0.3)
 

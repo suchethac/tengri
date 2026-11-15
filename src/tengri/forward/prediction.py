@@ -304,6 +304,12 @@ class SEDQuantities(NamedTuple):
 class EmissionLines(NamedTuple):
     """Emission line luminosities, headline survey lines plus the full backend catalog.
 
+    **Units: every field is in erg/s.** This is the NamedTuple returned by
+    :meth:`SEDModel.predict_emission_lines` and built by
+    :func:`tengri.forward.state_to_emission_lines`. It is not the
+    :attr:`Prediction.lines` accessor, whose headline fields are in L_sun
+    (:class:`LineProperties`, #1206 section A).
+
     NaN for the headline fields and empty arrays for ``all_*`` when no
     nebular model is active. For doublets ([O II], C IV) the headline
     fields sum both components.
@@ -356,17 +362,14 @@ class EmissionLines(NamedTuple):
     Notes
     -----
     JAX-compatible array container. All fields are JAX arrays compatible with
-    ``jax.jit`` and ``jax.vmap``. Returned by :attr:`Prediction.lines` when
-    accessed. All fields return NaN if no nebular model is active in the SEDModel.
+    ``jax.jit`` and ``jax.vmap``. All fields return NaN if no nebular model is
+    active in the SEDModel.
 
     Examples
     --------
-    Access via :attr:`Prediction.lines` after calling :meth:`SEDModel.predict`:
-
     .. code-block:: python
 
-        pred = model.predict(params)
-        lines = pred.lines  # LineProperties accessor with .get() method
+        lines = model.predict_emission_lines(params)  # EmissionLines, erg/s
         print(float(lines.halpha))  # H-alpha luminosity [erg/s]
         print(float(lines.oiii_5007))  # [OIII] 5007 Å luminosity [erg/s]
         # BPT diagram
@@ -374,6 +377,9 @@ class EmissionLines(NamedTuple):
         bpt_y = float(lines.oiii_5007 / lines.hbeta)
         # Access lines outside the headline catalog via nearest-wavelength
         heii_1640 = lines.get(1640.42)  # closest match in ``all_waves``
+
+    ``model.predict(params).lines`` is a different object (:class:`LineProperties`):
+    its headline fields are in L_sun, while its ``all_lums`` and ``get`` are in erg/s.
     """
 
     lya: jnp.ndarray
@@ -2165,15 +2171,13 @@ class Prediction:
 
         self._cache["sed_total"] = state.sed_intrinsic
 
-        lnu_age = derived.get("lnu_age")
-        if lnu_age is not None:
-            from tengri.utils.physics_constants import L_SUN
+        from tengri.utils.physics_constants import L_SUN
 
-            lnu_age_arr = jnp.asarray(lnu_age)
-            self._cache["sed_intrinsic"] = jnp.sum(lnu_age_arr, axis=0)
-            aw = jnp.asarray(self._cache["weights"])
-            aw_safe = jnp.maximum(aw, 1e-30)
-            self._cache["ssp_flux_at_z"] = lnu_age_arr / (aw_safe[:, None] * L_SUN)
+        lnu_age_arr = jnp.asarray(derived["lnu_age"])
+        self._cache["sed_intrinsic"] = jnp.sum(lnu_age_arr, axis=0)
+        aw = jnp.asarray(self._cache["weights"])
+        aw_safe = jnp.maximum(aw, 1e-30)
+        self._cache["ssp_flux_at_z"] = lnu_age_arr / (aw_safe[:, None] * L_SUN)
 
         sed_attenuated = derived.get("sed_dust_attenuated")
         if sed_attenuated is not None:

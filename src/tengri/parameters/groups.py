@@ -103,6 +103,7 @@ from collections.abc import Callable, Iterable, Mapping
 from functools import cache, lru_cache
 from typing import NamedTuple
 
+from tengri.components.dust.foreground import FOREGROUND_LAWS
 from tengri.components.dust.laws._registry import refuse_diffuse_only_law
 from tengri.components.nebular._balmer_series import BALMER_SERIES_N_MAX_DEFAULT
 from tengri.config.exceptions import (
@@ -188,6 +189,70 @@ _CANONICAL_FIXED_DEFAULTS: dict[str, float] = {
     # byte-unchanged; free it to fit the MDF width.
     "met_logzsol_scatter": 0.1,
 }
+
+
+_ALPHA_FE_PARAM = "met_alpha_fe"
+
+
+#: The [alpha/Fe] parameters: the scalar and the per-age pair (#2250). Each is Fixed(0) by
+#: default on every grid (owner ruling 2026-11-14); an explicit prior is honored and checked
+#: against the grid's nodes.
+_ALPHA_FE_PARAMS = ("met_alpha_fe", "met_alpha_fe_old", "met_alpha_fe_young")
+
+
+def _alpha_fe_grid_hint(ssp_data, short_name: str = "alpha_fe") -> str:
+    """Name the grid's [alpha/Fe] node range for a refusal, or ``""`` on a 3D grid."""
+    import numpy as np
+
+    from tengri.components.stellar.sps.dsps_wrapper import has_alpha_grid
+
+    if ssp_data is None or not has_alpha_grid(ssp_data):
+        return ""
+    nodes = np.asarray(ssp_data.ssp_alpha_fe, dtype=float)
+    return (
+        f" For this grid: {short_name}: Uniform({nodes.min():g}, {nodes.max():g}), "
+        "its [alpha/Fe] node range."
+    )
+
+
+def _check_alpha_fe_explicit_prior(resolved: dict, provenance: dict[str, str], ssp_data) -> None:
+    """Refuse an explicit [alpha/Fe] prior that misses the grid; warn if it overhangs.
+
+    Covers ``met_alpha_fe`` and the per-age pair ``met_alpha_fe_old`` / ``_young``.
+
+    An explicit prior is always honored. A prior with no overlap with the grid's
+    [alpha/Fe] nodes is refused by name; one that extends past them is kept and
+    warned about once with :class:`GridSupportWarning`, naming the nodes.
+    """
+    import numpy as np
+
+    from tengri.components.stellar.sps.dsps_wrapper import has_alpha_grid
+    from tengri.config.exceptions import GridSupportWarning
+
+    if ssp_data is None or not has_alpha_grid(ssp_data):
+        return
+    nodes = np.asarray(ssp_data.ssp_alpha_fe, dtype=float)
+    g_lo, g_hi = float(nodes.min()), float(nodes.max())
+    for name in _ALPHA_FE_PARAMS:
+        dist = resolved.get(name)
+        if dist is None or provenance.get(name) != "user_prior":
+            continue
+        d_lo, d_hi = dist.bounds
+        if d_hi < g_lo or d_lo > g_hi:
+            raise ParameterError(
+                f"{name}: the prior Uniform({d_lo:g}, {d_hi:g}) does not overlap "
+                f"the [alpha/Fe] nodes of the SSP grid ({g_lo:g}..{g_hi:g}), so every draw "
+                "would be clipped onto an edge node. Choose a range inside the grid."
+            )
+        if d_lo < g_lo or d_hi > g_hi:
+            warnings.warn(
+                f"{name}: the prior Uniform({d_lo:g}, {d_hi:g}) extends past the "
+                f"[alpha/Fe] nodes of the SSP grid ({g_lo:g}..{g_hi:g}); the part outside "
+                "is clipped onto the edge nodes, so the prior mass there has no effect on "
+                "the SED.",
+                GridSupportWarning,
+                stacklevel=3,
+            )
 
 
 def _expand_free(param_name: str, registry_default: Distribution) -> Distribution:
@@ -615,6 +680,27 @@ def _valid_xray_types() -> frozenset[str]:
     return frozenset(valid_types)
 
 
+def _slot_laws(valid_laws, *, diffuse: bool) -> list[str]:
+    """Return the laws a grammar slot may be offered as remedies in an error.
+
+    Parameters
+    ----------
+    valid_laws : iterable of str
+        Every accepted dust law name.
+    diffuse : bool
+        True for the ``law_diff`` slot, False for ``law``/``law_bc``/``law_neb``.
+
+    Returns
+    -------
+    list of str
+        The names the slot accepts, so a remedy never names a spelling the
+        build refuses (the diffuse-only law on a birth-cloud slot, #3178).
+    """
+    from tengri.components.dust.laws._registry import names_legal_in_slot
+
+    return names_legal_in_slot(sorted(valid_laws), diffuse_slot=diffuse)
+
+
 def _valid_dust_laws() -> frozenset[str]:
     """Return accepted ``dust_attenuation.law`` values from the registry.
 
@@ -869,8 +955,8 @@ _VALID_AGN_TORUS_TYPES = _agn_block_types("torus")
 _VALID_AGN_NLR_TYPES = _agn_block_types("nlr")
 
 #: Valid AGN broad-line region block types (derived from ``AGN_BLOCKS['blr']``).
-#: Includes ``"qsogen"`` which lives on the qsogen model.
-_VALID_AGN_BLR_TYPES = _agn_block_types("blr") | {"qsogen"}
+#: ``"qsogen"`` is one of those registrations (``qsogen_blocks.py``).
+_VALID_AGN_BLR_TYPES = _agn_block_types("blr")
 
 #: Valid AGN feii block types (derived from ``AGN_BLOCKS['feii']``: the
 #: block-registration decorator is the single source of truth, so a new feii
@@ -1436,12 +1522,18 @@ def parse_groups(**kwargs) -> Parameters:
         if not wildcard_active and claiming_category is not None:
             claim_scope = wildcard_scopes.get(f"agn.{claiming_category}")
             wildcard_active = claim_scope is None or param_name in claim_scope
-        final_dist, tag = _resolve_value(
-            param_name,
-            group_dict,
-            structural_params.get_distribution(param_name),
-            wildcard_active=wildcard_active,
-        )
+        try:
+            final_dist, tag = _resolve_value(
+                param_name,
+                group_dict,
+                structural_params.get_distribution(param_name),
+                wildcard_active=wildcard_active,
+            )
+        except ParameterError as err:
+            if param_name not in _ALPHA_FE_PARAMS:
+                raise
+            hint = _alpha_fe_grid_hint(ssp_data, param_name.removeprefix("met_"))
+            raise ParameterError(f"{err}{hint}") from err
 
         # Record whether an active wildcard-FREE actually freed this parameter.
         # ``wildcard_fixed_inactive`` is deliberate block scoping, not a failure,
@@ -1545,6 +1637,7 @@ def parse_groups(**kwargs) -> Parameters:
         provenance,
     )
     grid_labels = _narrow_free_priors_to_grid(resolved_kwargs, provenance, structural_params)
+    _check_alpha_fe_explicit_prior(resolved_kwargs, provenance, ssp_data)
     _refuse_explicit_grid_overhang(resolved_kwargs, provenance, structural_params)
     _approx = kwargs.get("approx")
     _warn_free_redshift_onset_ceiling(resolved_kwargs)
@@ -1552,7 +1645,12 @@ def parse_groups(**kwargs) -> Parameters:
     _check_met_bins_fit_cosmic_age(resolved_kwargs, kwargs)
 
     final_params = Parameters(
-        **resolved_kwargs, _grammar_validated=True, _timing_excluded=timing_dropped
+        **resolved_kwargs,
+        _grammar_validated=True,
+        _timing_excluded=timing_dropped,
+        # Which names only an ``all_params: FREE`` wildcard freed: the spec distinguishes them
+        # from a FREE the user wrote by name (the screened-fracAGN settlement reads it).
+        _wildcard_freed=frozenset(n for n, t in provenance.items() if t == "wildcard_free"),
     )
     # Fill in provenance for params not touched by user/wildcard
     for name in list(final_params._distributions.keys()):
@@ -2957,9 +3055,37 @@ def _all_law_shape_params() -> frozenset[str]:
     return frozenset().union(*(_law_shape_params(name) for name in DUST_LAWS), frozenset())
 
 
+#: Shape parameters a law reads but that an ``all_params`` wildcard must not free.
+#: The power law's UV bump is opt-in: a wildcard keeps the bare Charlot & Fall
+#: curve, and the bump is freed only when named explicitly. Laws that read the
+#: bump by default (noll09, ...) are not listed here and keep the wildcard freeing it.
+_WILDCARD_EXCLUDED_LAW_PARAMS: dict[str, frozenset[str]] = {
+    "power_law": frozenset({"dust_bump_strength", "dust_bump_x0", "dust_bump_gamma"}),
+}
+
 #: Law slots a two-component/single-component dust model can select. Each is an
 #: independent choice, so a shape parameter is live if *any* slot's law reads it.
 _DUST_LAW_SLOTS: tuple[str, ...] = ("dust_law_bc", "dust_law_diff", "dust_law_neb")
+
+
+def _selected_dust_laws(structural_params: Parameters) -> list[str]:
+    """Attenuation law names the structural spec selects, one per filled slot.
+
+    Parameters
+    ----------
+    structural_params : Parameters
+        Structural-only spec; the law slots are read off it.
+
+    Returns
+    -------
+    list of str
+        Law names in slot order, with unfilled slots omitted.
+    """
+    return [
+        law
+        for law in (getattr(structural_params, slot, None) for slot in _DUST_LAW_SLOTS)
+        if law is not None
+    ]
 
 
 def _agn_ir_frac_explicit_and_active(agn_dict: object) -> bool:
@@ -3103,9 +3229,8 @@ def _dust_wildcard_scopes(
         # inverted.
         active_shape = frozenset().union(
             *(
-                _law_shape_params(law)
-                for law in (getattr(structural_params, slot, None) for slot in _DUST_LAW_SLOTS)
-                if law is not None
+                _law_shape_params(law) - _WILDCARD_EXCLUDED_LAW_PARAMS.get(law, frozenset())
+                for law in _selected_dust_laws(structural_params)
             ),
             frozenset(),
         )
@@ -3827,6 +3952,7 @@ def _translate_met(met_dict: dict, result: dict) -> None:
             "still works; this mixes the two.)"
         )
     _set_met_mode(met_dict.get("type"), result)
+    _translate_alpha_fe_evolving(met_dict, result)
 
     # ``met_bin_edges_log_yr`` is a structural setting (array of bin edges in
     # log Gyr) that only applies to metallicity-history modes (bins, bins_continuity).
@@ -3839,6 +3965,38 @@ def _translate_met(met_dict: dict, result: dict) -> None:
         _validate_met_bin_edges(met_type, met_dict["met_bin_edges_log_yr"])
         _validate_met_ladder_keys(met_type, met_dict, len(met_dict["met_bin_edges_log_yr"]) - 1)
         result["met_bin_edges_log_yr"] = met_dict["met_bin_edges_log_yr"]
+
+
+def _translate_alpha_fe_evolving(met_dict: dict, result: dict) -> None:
+    """Route ``met={'alpha_fe_evolving': True, 'alpha_fe_old': ..., 'alpha_fe_young': ...}``.
+
+    The flag swaps the scalar ``met_alpha_fe`` for the pair ``met_alpha_fe_old`` (oldest
+    stars) and ``met_alpha_fe_young`` (present day), #2250. The two spellings are exclusive
+    and are refused by name when mixed; the pair is refused without the flag.
+
+    Raises
+    ------
+    ValueError
+        If the flag is not a bool, if ``alpha_fe`` and ``alpha_fe_evolving`` are both given,
+        or if ``alpha_fe_old`` / ``alpha_fe_young`` appear without the flag set to True.
+    """
+    evolving = met_dict.get("alpha_fe_evolving", False)
+    if not isinstance(evolving, bool):
+        raise ValueError(f"met['alpha_fe_evolving'] must be True or False, not {evolving!r}.")
+    pair = [k for k in ("alpha_fe_old", "alpha_fe_young") if k in met_dict]
+    if evolving:
+        if "alpha_fe" in met_dict:
+            raise ValueError(
+                "met group: 'alpha_fe' (a scalar [alpha/Fe]) and 'alpha_fe_evolving': True "
+                "are exclusive. Give alpha_fe_old and alpha_fe_young for a per-age ramp, or "
+                "alpha_fe for one [alpha/Fe] at every age."
+            )
+        result["alpha_fe_evolving"] = True
+    elif pair:
+        raise ValueError(
+            f"met group: {pair} need 'alpha_fe_evolving': True; without it the model has a "
+            "single scalar met_alpha_fe, so give alpha_fe instead."
+        )
 
 
 def _set_met_mode(met_mode, result: dict) -> None:
@@ -4093,7 +4251,9 @@ def _translate_age_binned(dust_atten_dict: dict, result: dict) -> None:
     if law_neb is not None:
         valid_laws = _valid_dust_laws()
         if law_neb not in valid_laws:
-            raise _unknown_name_error("dust law", law_neb, valid_laws, keyword="law_neb")
+            raise _unknown_name_error(
+                "dust law", law_neb, _slot_laws(valid_laws, diffuse=False), keyword="law_neb"
+            )
         result["dust_law_neb"] = law_neb
     declared = AgeBinnedDustComponent(
         config=AgeBinnedDustComponentConfig(
@@ -4763,7 +4923,9 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
                 f"'law': 'calzetti', 'tau_v': ...}}"
             )
         if dust_law not in valid_laws:
-            raise _unknown_name_error("dust law", dust_law, valid_laws, keyword="law")
+            raise _unknown_name_error(
+                "dust law", dust_law, _slot_laws(valid_laws, diffuse=False), keyword="law"
+            )
         # Store law on both _bc and _diff for consistency (single screen)
         result["dust_law_bc"] = dust_law
         result["dust_law_diff"] = dust_law
@@ -4815,16 +4977,26 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
         # Resolve to the two-screen form
         if has_law:
             if dust_law not in valid_laws:
-                raise _unknown_name_error("dust law", dust_law, valid_laws, keyword="law")
+                raise _unknown_name_error(
+                    "dust law", dust_law, _slot_laws(valid_laws, diffuse=False), keyword="law"
+                )
             result["dust_law_bc"] = dust_law
             result["dust_law_diff"] = dust_law
         else:
             # Both law_bc and law_diff are given (already checked above)
             if dust_law_bc not in valid_laws:
-                raise _unknown_name_error("dust law", dust_law_bc, valid_laws, keyword="law_bc")
+                raise _unknown_name_error(
+                    "dust law",
+                    dust_law_bc,
+                    _slot_laws(valid_laws, diffuse=False),
+                    keyword="law_bc",
+                )
             if dust_law_diff not in valid_laws:
                 raise _unknown_name_error(
-                    "dust law", dust_law_diff, valid_laws, keyword="law_diff"
+                    "dust law",
+                    dust_law_diff,
+                    _slot_laws(valid_laws, diffuse=True),
+                    keyword="law_diff",
                 )
             result["dust_law_bc"] = dust_law_bc
             result["dust_law_diff"] = dust_law_diff
@@ -5786,11 +5958,12 @@ _RADIO_SF_PARAM_NAMES: frozenset[str] = frozenset().union(*_RADIO_SF_PARAMS_BY_M
 _RADIO_AGN_PARAM_NAMES: frozenset[str] = frozenset().union(*_RADIO_AGN_READS_BY_MODEL.values())
 
 
-#: Valid laws for the MW foreground screen (#297). Only the closed-form
-#: laws that take a single ``R_V`` parameter are usable as a foreground
-#: screen: host-dust laws with two free knobs (slope, bump, ...) would
-#: collide with the host ``dust`` block's parameter prefix.
-_VALID_FOREGROUND_LAWS = frozenset({"cardelli", "fitzpatrick99"})
+#: Valid laws for the MW foreground screen (#297), derived from the dispatch
+#: table :data:`FOREGROUND_LAWS` that :func:`foreground_transmission` evaluates.
+#: Only the closed-form laws that take a single ``R_V`` parameter are in that
+#: table: host-dust laws with two free knobs (slope, bump, ...) would collide
+#: with the host ``dust`` block's parameter prefix.
+_VALID_FOREGROUND_LAWS = frozenset(FOREGROUND_LAWS)
 
 #: Laws the AGN attenuation-stage block actually implements. One entry, and that
 #: is the honest count: ``components/agn/reddening.py`` imports ``prevot_smc``
@@ -5960,7 +6133,7 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     # history, and both select a model with ``type`` like every other group
     # (#1720). It replaces ``met={'type': ...}`` (#311) outright: two
     # spellings of one setting is the maintenance cost this removes.
-    "met": frozenset({"type", "*", "all_params", "met_bin_edges_log_yr"}),
+    "met": frozenset({"type", "*", "all_params", "met_bin_edges_log_yr", "alpha_fe_evolving"}),
     "dust_attenuation": frozenset(
         {
             "type",
@@ -6181,6 +6354,9 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         # met={} entry is never forced onto call sites that diff against
         # from_groups.
         _Structural("type", "met_mode", "delta"),
+        # Per-age [alpha/Fe] ramp (#2250): the boolean that replaces the scalar
+        # ``alpha_fe`` with ``alpha_fe_old`` / ``alpha_fe_young`` in this group.
+        _Structural("alpha_fe_evolving", "alpha_fe_evolving", False),
         # Bin edges [log Gyr] for metallicity-history modes (bins, bins_continuity).
         # None falls back to _DEFAULT_MET_BIN_EDGES_LOG_YR. Only valid for types that
         # use lookback-time bins for metallicity history.
@@ -6224,7 +6400,7 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         ),
         _Structural("shock_screen", "dust_shock_screen", "diffuse", only_types=("two_component",)),
         _Structural("agn_screen", "dust_agn_screen", "none", only_types=("two_component",)),
-        _Structural("age_mixture", "dust_age_mixture", "per_node", only_types=("two_component",)),
+        _Structural("age_mixture", "dust_age_mixture", "grouped", only_types=("two_component",)),
         _Structural(
             "parameterization",
             "dust_parameterization",
@@ -6601,6 +6777,13 @@ def _variant_scoped_param_names(
             return law is not None and short_to_full(stem) in _law_shape_params(law)
 
         shared = {name for name in shared if name not in per_screen or _screen_law_reads(name)}
+        # Naming a flat parameter explicitly is accepted whenever a selected law reads it,
+        # including the opt-in bump that the wildcard scope leaves out.
+        explicit_reads = frozenset().union(
+            *(_law_shape_params(law) for law in _selected_dust_laws(structural_params)),
+            frozenset(),
+        )
+        shared = shared | (owned & explicit_reads)
 
     return frozenset(set(scope) | shared)
 
@@ -9345,7 +9528,9 @@ def parameters_to_groups(spec: Parameters) -> dict:
     #
     # The block emitted is ``met`` (#1720), which is the only spelling now:
     # ``met={'type': ...}``, the parallel of ``sfh={'type': ...}``.
-    use_met_block = getattr(spec, "met_mode", "delta") != "delta"
+    use_met_block = getattr(spec, "met_mode", "delta") != "delta" or bool(
+        getattr(spec, "alpha_fe_evolving", False)
+    )
     # A monolithic AGN model and the six sub-block selectors are mutually
     # exclusive surfaces: ``_translate_agn`` raises when a non-composable
     # ``agn['type']`` appears next to sub-block keys. So the moment the type is
@@ -9539,7 +9724,45 @@ def parameters_to_groups(spec: Parameters) -> dict:
         # Only include if non-default
         result["n_grid"] = spec.n_grid
 
-    return result
+    return _without_undeclared_met_scatter(result, spec)
+
+
+def _without_undeclared_met_scatter(result: dict, spec: Parameters) -> dict:
+    """Withhold an undeclared metallicity scatter from the emitted groups.
+
+    The scatter decides how a metallicity is read from the SSP grid: an undeclared
+    scatter is read node-exactly, a declared one through the lognormal kernel
+    (``_met_scatter_declared``). A flat spec lists every parameter explicitly, so
+    the untouched default would be emitted as a user ``Fixed`` and read back as a
+    declaration, which changes the photometry of the round-tripped model. The key
+    is withheld unless the spec declares it; the grammar then fills in the same
+    registry default the original carried.
+
+    Parameters
+    ----------
+    result : dict
+        Nested-dict output of :func:`parameters_to_groups`.
+    spec : Parameters
+        The spec the output was emitted from.
+
+    Returns
+    -------
+    dict
+        ``result`` with the ``logzsol_scatter`` key removed from its groups when
+        the scatter is undeclared, otherwise ``result`` unchanged.
+    """
+    from tengri.forward.sed_model import _met_scatter_declared
+
+    if _met_scatter_declared(spec):
+        return result
+    return {
+        key: (
+            {k: v for k, v in value.items() if k != "logzsol_scatter"}
+            if isinstance(value, dict)
+            else value
+        )
+        for key, value in result.items()
+    }
 
 
 @cache

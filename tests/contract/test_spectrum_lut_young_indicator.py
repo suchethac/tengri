@@ -26,6 +26,7 @@ from tengri import (
     SpectrumPrecomp,
     list_dust_laws,
 )
+from tengri.components.dust.laws._registry import law_screen_keys
 from tengri.observation.spectroscopy import Spectroscopy
 
 pytestmark = pytest.mark.contract
@@ -54,7 +55,11 @@ def test_spectroscopy_only_spectrum_lut_publishes_the_single_indicator(synthetic
         ssp_data=synthetic_ssp_wide,
         observation=obs,
         sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
-        dust_attenuation={"type": "two_component", "law": law, "all_params": Fixed(DEFAULT)},
+        dust_attenuation={
+            "type": "two_component",
+            **law_screen_keys(law),
+            "all_params": Fixed(DEFAULT),
+        },
         neb={"type": "none"},
         redshift=Fixed(0.3),
         approx=SpectrumPrecomp(),
@@ -67,7 +72,11 @@ def test_spectroscopy_only_spectrum_lut_publishes_the_single_indicator(synthetic
         ssp_data=synthetic_ssp_wide,
         observation=obs,
         sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
-        dust_attenuation={"type": "two_component", "law": law, "all_params": Fixed(DEFAULT)},
+        dust_attenuation={
+            "type": "two_component",
+            **law_screen_keys(law),
+            "all_params": Fixed(DEFAULT),
+        },
         neb={"type": "none"},
         redshift=Fixed(0.3),
     )
@@ -146,7 +155,7 @@ def test_spectrum_lut_matches_exact_for_young_populations(synthetic_ssp_wide, sf
         sfh=sfh,
         dust_attenuation={
             "type": "two_component",
-            "law": law,
+            **law_screen_keys(law),
             "tau_bc": Fixed(1.0),
             "tau_diff": Fixed(0.3),
             "all_params": Fixed(DEFAULT),
@@ -162,7 +171,7 @@ def test_spectrum_lut_matches_exact_for_young_populations(synthetic_ssp_wide, sf
         sfh=sfh,
         dust_attenuation={
             "type": "two_component",
-            "law": law,
+            **law_screen_keys(law),
             "tau_bc": Fixed(1.0),
             "tau_diff": Fixed(0.3),
             "all_params": Fixed(DEFAULT),

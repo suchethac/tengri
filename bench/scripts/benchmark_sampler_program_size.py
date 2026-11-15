@@ -33,7 +33,7 @@ import time
 import jax
 import jax.numpy as jnp
 
-from tengri.inference.backends.mcmc import _shared
+from tengri.inference.backends.mcmc import _shared, chain_program as cp
 
 #: Dimension of the toy target. The lowered control flow does not depend on it.
 N_DIM = 4
@@ -61,26 +61,70 @@ def main() -> None:
 
     cases = {
         "nuts (max_doublings=10)": (
-            _shared._nuts_full_scan,
-            (init, wkey, keys, _target, scales, N_WARMUP, 10, False, 0.8, False),
+            cp.run_chain,
+            (
+                cp.NUTS,
+                cp.WINDOW_NUTS,
+                init,
+                wkey,
+                None,
+                keys,
+                _target,
+                scales,
+                N_WARMUP,
+                cp.NUTSConfig(max_doublings=10, use_dense=False, target_accept_rate=0.8),
+            ),
         ),
         "hmc L=10 diag": (
-            _shared._hmc_full_scan,
-            (init, wkey, keys, _target, scales, N_WARMUP, 10, False, 0.85),
+            cp.run_chain,
+            (
+                cp.HMC,
+                cp.WINDOW_HMC(10, True),
+                init,
+                wkey,
+                None,
+                keys,
+                _target,
+                scales,
+                N_WARMUP,
+                cp.HMCConfig(n_leapfrog=10, use_dense=False, target_accept_rate=0.85),
+            ),
         ),
-        # Warmup only; the sampling half is ``_hmc_chain_scan``, shared with
+        # Warmup only; the sampling half is ``sample_chain(HMC)``, shared with
         # ``mcmc_hmc``, so it is already priced by that row.
         "hmc L=10 lowrank (warmup)": (
             _shared._hmc_low_rank_warmup_only,
             (init, wkey, _target, scales, N_WARMUP, 10, 2, 0.85),
         ),
         "barker": (
-            _shared._first_order_full_scan,
-            (init, wkey, keys, _target, scales, N_WARMUP, "barker", 0.574),
+            cp.run_chain,
+            (
+                cp.FIRST_ORDER,
+                cp.DUAL_AVERAGING,
+                init,
+                wkey,
+                None,
+                keys,
+                _target,
+                scales,
+                N_WARMUP,
+                cp.FirstOrderConfig(proposal="barker", target_accept_rate=0.574),
+            ),
         ),
         "mala": (
-            _shared._first_order_full_scan,
-            (init, wkey, keys, _target, scales, N_WARMUP, "mala", 0.574),
+            cp.run_chain,
+            (
+                cp.FIRST_ORDER,
+                cp.DUAL_AVERAGING,
+                init,
+                wkey,
+                None,
+                keys,
+                _target,
+                scales,
+                N_WARMUP,
+                cp.FirstOrderConfig(proposal="mala", target_accept_rate=0.574),
+            ),
         ),
     }
 

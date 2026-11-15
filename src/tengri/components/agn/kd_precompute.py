@@ -39,20 +39,27 @@ from tengri.components.agn._nt_emissivity import (
     nt_rt as _nt_rt,
 )
 from tengri.components.agn._params import (
+    DEFAULT_AGN_A_SPIN,
     DEFAULT_AGN_COS_INC,
+    DEFAULT_AGN_F_HARD,
+    DEFAULT_AGN_GAMMA_HARD,
+    DEFAULT_AGN_GAMMA_WARM,
+    DEFAULT_AGN_KT_HOT,
+    DEFAULT_AGN_KT_WARM,
+    DEFAULT_AGN_LOG_LEDD,
     DEFAULT_AGN_LOG_MBH,
     DEFAULT_AGN_LUM_RATIO,
+    DEFAULT_AGN_R_WARM_RATIO,
 )
 from tengri.components.agn._phys import (
     C_LIGHT as _C_LIGHT,
     H_PLANCK as _H_PLANCK,
     K_BOLTZ as _K_BOLTZ,
-    TWO_FACES as _TWO_FACES,
     ring_area as _ring_area,
 )
 from tengri.forward.precompute import reach_axes
 from tengri.utils.physics_constants import KEV_TO_ERG as _KEV_TO_ERG, L_SUN
-from tengri.utils.scale import pow10 as _pow10, representable_denominator
+from tengri.utils.scale import pow10 as _pow10
 
 # numpy >= 2.0 uses trapezoid; older versions used trapz
 _np_trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
@@ -835,6 +842,7 @@ def _compute_bh_and_radii(
         efficiency [all in CGS units].
     """
     from tengri.components.agn.disc import (
+        _clip_zone_radii,
         _disc_dissipation_per_mdot_c2,
         _gravitational_radius,
         _hot_flow_luminosity,
@@ -843,6 +851,7 @@ def _compute_bh_and_radii(
         _nt_l0,
         _r_hot_bisect,
         _self_gravity_radius,
+        _zone_outer_radius_rg,
     )
 
     r_g = _gravitational_radius(agn_log_mbh)
@@ -870,7 +879,7 @@ def _compute_bh_and_radii(
 
     # Zone radii
     r_sg_rg = _self_gravity_radius(agn_log_mbh, l_edd_ratio)
-    r_out_cm = jnp.maximum(r_sg_rg, r_isco_rg * 10.0) * r_g
+    r_out_cm = _zone_outer_radius_rg(r_sg_rg, r_isco_rg) * r_g
 
     # Same L_hot as the runtime corona (#2572): R_hot and the SED share one definition.
     l_hot_target = _hot_flow_luminosity(
@@ -886,8 +895,7 @@ def _compute_bh_and_radii(
     r_warm_ratio_safe = jnp.clip(agn_r_warm_ratio, 1.1, 10.0)
     r_warm_cm = r_hot_cm * r_warm_ratio_safe
 
-    r_hot_cm = jnp.clip(r_hot_cm, r_isco_cm * 1.01, r_out_cm * 0.5)
-    r_warm_cm = jnp.clip(r_warm_cm, r_hot_cm * 1.01, r_out_cm * 0.9)
+    r_hot_cm, r_warm_cm = _clip_zone_radii(r_hot_cm, r_warm_cm, r_isco_cm, r_out_cm)
 
     return r_hot_cm, r_warm_cm, r_out_cm, t_in, eta
 
@@ -901,7 +909,7 @@ def _integrate_outer_zone(
     kd_data: KDPreintegratedData,
     agn_cos_inc: float,
     _SIGMA_SB: float,
-    agn_a_spin: float = 0.0,
+    agn_a_spin: float = DEFAULT_AGN_A_SPIN,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Integrate outer standard disc via filter-level Planck lookup.
 
@@ -971,7 +979,7 @@ def _integrate_warm_zone(
     agn_kt_warm: float,
     _SIGMA_SB: float,
     _K_BOLTZ_KEV: float,
-    agn_a_spin: float = 0.0,
+    agn_a_spin: float = DEFAULT_AGN_A_SPIN,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Integrate warm Comptonization zone via filter-level nthcomp/Planck lookup.
 
@@ -1061,15 +1069,15 @@ def kubota_done_disc_preintegrated(
     agn_log_lbol: float,
     agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
-    agn_log_ledd: float = -1.0,
-    agn_a_spin: float = 0.0,
+    agn_log_ledd: float = DEFAULT_AGN_LOG_LEDD,
+    agn_a_spin: float = DEFAULT_AGN_A_SPIN,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
-    agn_f_hard: float = 0.02,
-    agn_gamma_warm: float = 2.5,
-    agn_kt_warm: float = 0.2,
-    agn_gamma_hard: float = 1.8,
-    agn_kt_hot: float = 100.0,
-    agn_r_warm_ratio: float = 2.0,
+    agn_f_hard: float = DEFAULT_AGN_F_HARD,
+    agn_gamma_warm: float = DEFAULT_AGN_GAMMA_WARM,
+    agn_kt_warm: float = DEFAULT_AGN_KT_WARM,
+    agn_gamma_hard: float = DEFAULT_AGN_GAMMA_HARD,
+    agn_kt_hot: float = DEFAULT_AGN_KT_HOT,
+    agn_r_warm_ratio: float = DEFAULT_AGN_R_WARM_RATIO,
     n_radii: int = 50,
     agn_self_consistent_gamma: bool = False,
     **_kwargs,
@@ -1161,7 +1169,7 @@ def kubota_done_disc_preintegrated(
     )
 
     # ── Zone 1: Outer standard disc ──
-    outer_phot, outer_bol = _integrate_outer_zone(
+    outer_phot, _ = _integrate_outer_zone(
         r_warm_cm,
         r_out_cm,
         r_isco_cm,
@@ -1174,7 +1182,7 @@ def kubota_done_disc_preintegrated(
     )
 
     # ── Zone 2: Warm Comptonization ──
-    warm_phot, warm_bol = _integrate_warm_zone(
+    warm_phot, _ = _integrate_warm_zone(
         r_hot_cm,
         r_warm_cm,
         r_isco_cm,
@@ -1198,7 +1206,7 @@ def kubota_done_disc_preintegrated(
         agn_f_hard,
         log10_l_edd - (agn_log_lbol + _LOG10_LSUN),
         agn_a_spin,
-        x_hot_max=0.5 * r_out_cm / r_isco_cm,
+        x_hot_max=r_out_cm / r_isco_cm,
         h_inf=h_inf,
     )
     l_hot_erg = hot_fraction * l_bol_unit
@@ -1238,17 +1246,10 @@ def kubota_done_disc_preintegrated(
     # This equals the spectral integral by energy conservation (same as the
     # full-wavelength code's trapezoid integral, to numerical precision).
     # outer_bol and warm_bol are one-face annulus powers with no cos i; ``_TWO_FACES`` makes D.
-    # The disc and warm zones carry ``(1 - s) L_bol`` and the corona
-    # ``s L_bol = L_hot``, with ``s`` the hot flow's share of L_bol (``s <= 0.99``), as in the
-    # full-wavelength path; the output scales linearly with ``agn_lum_ratio``.
-    l_disc_unnorm = _TWO_FACES * (outer_bol + warm_bol)
-    scale_disc = (
-        l_bol_unit
-        * (1.0 - hot_fraction)
-        / jnp.maximum(l_disc_unnorm, representable_denominator(1e-100))
-    )
-
-    total_phot = (outer_phot + warm_phot) * scale_disc + hot_phot
+    # No rescale (#3015): the disc and warm zones carry their own Page-Thorne dissipation
+    # ``L0 (h(x_out) - h(x_hot))`` and the corona ``L_hot``, as in the full-wavelength path. The
+    # dissipation beyond ``R_out`` is unemitted, so the output is below ``L_bol`` by that share.
+    total_phot = (outer_phot + warm_phot) + hot_phot
     return total_phot * agn_lum_ratio
 
 

@@ -49,3 +49,69 @@ absolute value for `SSPData.ssp_resolution_kms` and the sign for the
 **Format**: plain text, two columns (wavelength [Å], signed velocity
 dispersion [km/s]), one row per node, matching the source `.lambda`/`.res`
 row order exactly.
+
+## c3k_hr.dat
+
+**Source**: FSPS (<https://github.com/cconroy20/fsps>, full commit
+`05b5e550ddd7ffb1e71102b75cfbfdf057c211fd`, 2026-07-31), read at
+`libfsps/src/sps_setup.f90` (`SPECTRA/C3K/<spec_type>/<spec_type>.res`).
+Repository paths and raw URLs at that commit:
+
+- `SPECTRA/C3K/c3k_hr/c3k_hr.lambda`,
+  `https://raw.githubusercontent.com/cconroy20/fsps/05b5e550ddd7ffb1e71102b75cfbfdf057c211fd/SPECTRA/C3K/c3k_hr/c3k_hr.lambda`
+- `SPECTRA/C3K/c3k_hr/c3k_hr.res` (sigma column only; the shipped file
+  carries the `.lambda` wavelength column with the same sigma values)
+- `SPECTRA/C3K/readme.md`
+
+**Checksums** (sha256): source `c3k_hr.lambda` and the shipped file
+`c3k_hr.dat` are byte-identical, `7a2943299cd41d0c637e84303cd37b910ed3624c636335694f3370f4bb81a62c`.
+`c3k_hr.res` (`476db5dc245234c6d6f7553c2ce95c25335e31c2376ea333b585d8948b0064e8`)
+has the same sigma column as the `.lambda` file.
+
+**Content**: 10992 rows, 100 to ~1e8 Å, two columns (wavelength [Å], signed
+velocity dispersion [km/s]), unmodified from the source file. C3K v2.3
+high-resolution (vt = 10 km/s) SSP spectra, downsampled by FSPS onto the
+native C3K log(g)-log(Teff) grid.
+
+**Resolution table** (R = λ/FWHM, FSPS `readme.md`, C3K_HR):
+
+| λ [Å]           | σ_v [km/s] (abs) | R    | sign     |
+|-----------------|------------------|------|----------|
+| 100 – 1000      | 636.6            | 200  | approximate (negative) |
+| 1001 – 3000     | 254.6            | 500  | measured (positive)    |
+| 3000.5 – 9998.8 | 42.4             | 3000 | measured (positive)    |
+| 10000 – 25000   | 254.6            | 500  | measured (positive)    |
+| > 25251         | 2546.3           | 50   | approximate (negative) |
+
+The R = 500 row of the readme's 25000 – 1e8 Å entry does not match the
+file beyond ~25250 Å, where the table carries σ = 2546 km/s (R = 50,
+negative). The file is the authority; the readme's 25000 – 1e8 Å row is
+not reproduced in the table.
+
+## c3k_lr.dat
+
+**Source**: FSPS (same commit `05b5e550ddd7ffb1e71102b75cfbfdf057c211fd`),
+`SPECTRA/C3K/c3k_lr/c3k_lr.lambda` (raw URL pattern as above). The
+`c3k_lr.res` sigma column is in the same repository directory.
+
+**Checksums** (sha256): source `c3k_lr.lambda` and shipped `c3k_lr.dat`
+are byte-identical, `d25c1630f682de4a02557f404f6fe9562257d446e95e4079f4250ed56b1098d5`.
+
+**Content**: 1936 rows, 100 to ~1e8 Å, two columns, unmodified.
+
+**Resolution table** (readme.md, C3K_LR):
+
+| λ [Å]           | σ_v [km/s] (abs) | R   | sign     |
+|-----------------|------------------|-----|----------|
+| 100 – 2989      | 1273.1           | 100 | approximate (negative) |
+| 3001 – 24922    | 1273.1           | 100 | measured (positive)    |
+| > 25251         | 2546.3           | 50  | approximate (negative) |
+
+The 24922 – 25251 Å range is covered by the 25000 Å node, which carries
+σ = +2546.3 (positive, R = 50), a single-node boundary value.
+
+## Licence
+
+FSPS is MIT licensed: "The MIT License (MIT) Copyright (c) 2009-2021
+Charlie Conroy & contributors" (`LICENSE` at the commit above). The
+tables are repackaged with attribution, not modified.

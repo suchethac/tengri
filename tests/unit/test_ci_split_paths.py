@@ -359,3 +359,58 @@ class TestCiSplitByDuration:
         assert len(splits) == 2
         for ln in splits:
             assert "--durations tools/ci_bug_durations.json" in ln
+
+
+INFERENCE_ROOT = "tests/inference"
+INFERENCE_LEDGER = REPO / "tools" / "ci_inference_durations.json"
+
+
+class TestCiSplitInference:
+    """The slow-tier inference legs are split by the measured per-file ledger."""
+
+    def test_ledger_names_exactly_the_inference_test_files(self) -> None:
+        ledger = json.loads(INFERENCE_LEDGER.read_text())
+        tree = {
+            str(pathlib.Path(INFERENCE_ROOT) / p.name)
+            for p in (REPO / INFERENCE_ROOT).glob("test_*.py")
+        }
+        assert set(ledger) == tree
+        assert all(isinstance(v, (int, float)) and v >= 0 for v in ledger.values())
+
+    def test_legs_are_disjoint_cover_the_tree_and_none_is_empty(self) -> None:
+        parts = _parts(INFERENCE_ROOT, 3, "--durations", str(INFERENCE_LEDGER))
+        flat = [p for part in parts for p in part]
+        assert len(flat) == len(set(flat)), "legs overlap"
+        tree = sorted(
+            str(pathlib.Path(INFERENCE_ROOT) / p.name)
+            for p in (REPO / INFERENCE_ROOT).glob("test_*.py")
+        )
+        assert sorted(flat) == tree
+        assert all(parts)
+
+    def test_the_two_heaviest_files_do_not_share_a_leg(self) -> None:
+        ledger = json.loads(INFERENCE_LEDGER.read_text())
+        heaviest = sorted(ledger, key=lambda k: -ledger[k])[:2]
+        parts = _parts(INFERENCE_ROOT, 3, "--durations", str(INFERENCE_LEDGER))
+        homes = [next(i for i, part in enumerate(parts) if f in part) for f in heaviest]
+        assert homes[0] != homes[1], heaviest
+
+    def test_the_lighter_legs_are_balanced(self) -> None:
+        ledger = json.loads(INFERENCE_LEDGER.read_text())
+        parts = _parts(INFERENCE_ROOT, 3, "--durations", str(INFERENCE_LEDGER))
+        sums = sorted(sum(ledger[p] for p in part) for part in parts)
+        # The heaviest file fills one leg; the other two split the rest evenly.
+        assert sums[1] / sums[0] <= 1.05, sums
+
+    def test_workflow_passes_the_inference_ledger_and_the_hang_flags(self) -> None:
+        text = (REPO / ".github" / "workflows" / "tests.yml").read_text()
+        lines = [
+            ln
+            for ln in text.splitlines()
+            if "ci_split_paths.py" in ln and f"--root {INFERENCE_ROOT}" in ln
+        ]
+        assert len(lines) == 1
+        line = lines[0]
+        assert "--durations tools/ci_inference_durations.json" in line
+        for flag in ("-v", "--timeout=600", "--timeout-method=signal", "--durations=30"):
+            assert flag in line.split(), flag

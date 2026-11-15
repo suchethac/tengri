@@ -122,7 +122,7 @@ def test_coefficients_are_built_through_the_registry(monkeypatch):
     monkeypatch.setattr(msp, "shock_band_coefficients", spy)
     model = _build(approx=True)
     model._template_data_for_jit()
-    assert model._shock_band_table_decline is None
+    assert model.band_table_decline("shock", "band_table") is None
     assert len(seen) == 1 and seen[0] == 4
     assert "shock_band_table" in model._template_data_for_jit()
 
@@ -193,7 +193,7 @@ def test_exact_mode_carries_no_coefficients():
     model = _build(approx=False)
     template = model._template_data_for_jit()
     assert template is None or "shock_band_table" not in template
-    assert getattr(model, "_shock_band_table_cache", None) is None
+    assert model.band_table("shock", "band_table") is None
 
 
 @_SKIP
@@ -204,4 +204,4 @@ def test_free_redshift_declines_the_gate():
     model = _build(approx=True, redshift=Uniform(0.05, 0.2))
     template = model._template_data_for_jit()
     assert "shock_band_table" not in (template or {})
-    assert "redshift is free" in model._shock_band_table_decline
+    assert "redshift is free" in model.band_table_decline("shock", "band_table").reason

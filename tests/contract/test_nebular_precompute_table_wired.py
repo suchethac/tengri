@@ -142,7 +142,7 @@ def test_table_is_built_through_the_registry(cloudy_source, monkeypatch):
     monkeypatch.setattr(cp, "precompute", spy)
     model = _build(cloudy_source, approx=True)
     model._template_data_for_jit()
-    assert model._cloudy_band_table_decline is None
+    assert model.band_table_decline("nebular", "band_table") is None
     assert len(seen) == 1
     assert {"backend", "wave", "line_sigma_kms"} <= set(seen[0])
     assert "nebular_band_table" in model._template_data_for_jit()
@@ -206,7 +206,7 @@ def test_exact_mode_carries_no_table_and_stays_exact(cloudy_source):
     model = _build(cloudy_source, approx=False)
     template = model._template_data_for_jit()
     assert template is None or "nebular_band_table" not in template
-    assert getattr(model, "_cloudy_band_table_cache", None) is None
+    assert model.band_table("nebular", "band_table") is None
 
 
 def test_free_eline_sigma_declines_the_gate(cloudy_source):
@@ -219,23 +219,25 @@ def test_free_eline_sigma_declines_the_gate(cloudy_source):
     )
     template = model._template_data_for_jit()
     assert "nebular_band_table" not in (template or {})
-    assert "neb_eline_sigma_kms" in model._cloudy_band_table_decline
+    assert "neb_eline_sigma_kms" in model.band_table_decline("nebular", "band_table").reason
     assert tengri is not None
 
 
 def test_non_linear_grid_interp_declines_the_gate(cloudy_source, monkeypatch):
     """(e) A CLOUDY backend on grid_interp='triweight' declines the table, reason recorded."""
-    import functools
-
-    import tengri.components.nebular as nebular_pkg
     from tengri.components.nebular.cloudy_grid import CloudyGridBackend
 
+    # The model builds its backend through ``from_spec`` (the nebular registry).
     monkeypatch.setattr(
-        nebular_pkg,
-        "CloudyGridBackend",
-        functools.partial(CloudyGridBackend, grid_interp="triweight"),
+        CloudyGridBackend,
+        "from_spec",
+        classmethod(
+            lambda cls, spec, ssp_data: cls(
+                spec.cloudy_grid_path, ssp_data, grid_interp="triweight"
+            )
+        ),
     )
     model = _build(cloudy_source, approx=True)
     template = model._template_data_for_jit()
     assert "nebular_band_table" not in (template or {})
-    assert "grid_interp='triweight'" in model._cloudy_band_table_decline
+    assert "grid_interp='triweight'" in model.band_table_decline("nebular", "band_table").reason

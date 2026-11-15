@@ -16,6 +16,8 @@ library, inlined, every time. A pytree passed as an argument becomes a
 
 from __future__ import annotations
 
+import functools
+import inspect
 from collections.abc import Callable
 from typing import NamedTuple
 
@@ -30,14 +32,21 @@ from tengri.components.agn._phys import (
 from tengri.utils.grid_interp import interp_nd_pchip, loglog_integral, resample_template
 from tengri.utils.host_array import device_table
 from tengri.utils.physics_constants import C_AA as _C_AA, L_SUN as _LSUN_ERG
+from tengri.utils.scale import apply_log10_scale
 
 __all__ = [
     "BUDGET_WAVE",
     "TorusTemplateGrid",
     "analytic_bolometric_nu",
+    "cache_per_float_dtype",
+    "float32_safe_template",
+    "loaded_template",
     "native_bolometric_nu",
     "native_bolometric_nu_np",
+    "process_float_dtype",
+    "scale_by_torus_power",
     "scale_to_lbol_native",
+    "scale_to_torus_power_native",
     "torus_lnu_from_grid",
 ]
 
@@ -76,6 +85,22 @@ class TorusTemplateGrid(NamedTuple):
     anisotropy: jnp.ndarray | None = None
 
 
+def process_float_dtype() -> np.dtype:
+    """The process's floating dtype: float64 under x64, float32 otherwise.
+
+    The one spelling of "which precision mode is JAX in" for the torus loaders and the
+    host-side tables they build (:func:`loaded_template`, :func:`cache_per_float_dtype`,
+    ``_torus_inclination.anisotropy_values``). A kernel reads the dtype of its own
+    wavelength array instead, which is what it evaluates in.
+
+    Returns
+    -------
+    numpy.dtype
+        ``float64`` or ``float32``.
+    """
+    return np.dtype(jax.dtypes.canonicalize_dtype(float))
+
+
 def float32_safe_template(template, dtype):
     """A tabulated template as a float32-representable array when ``dtype`` is float32.
 
@@ -84,7 +109,8 @@ def float32_safe_template(template, dtype):
     casting them to float32 flushes every entry to zero. In float32 a host (numpy) table is
     divided by its peak, in float64 on the host, before it is cast; the scale is divided out
     again by :func:`scale_to_lbol_native`, so the SED is unchanged. In float64, and for a table
-    already on the device (a tracer threaded through ``jit``), the table is returned as is.
+    already on the device (a tracer threaded through ``jit``), the table is returned as is; a
+    threaded table is float32-safe only if its loader stored it so (:func:`loaded_template`).
 
     Parameters
     ----------
@@ -107,6 +133,80 @@ def float32_safe_template(template, dtype):
         if peak > 0.0:
             return template / peak
     return template
+
+
+def loaded_template(template) -> np.ndarray:
+    """A library's template as a loader stores it: float32-safe in a float32 process.
+
+    The kernels make a host table float32-safe at the point of use
+    (:func:`float32_safe_template`), but a table threaded through ``jit`` as an argument
+    (``blocks._protocol.collect_block_templates``) is cast to float32 when it enters the
+    trace, before any kernel sees it, and a ~1e-68 table flushes to zero: the torus
+    is then silently 0. So a loader running in float32 stores the table divided by its
+    peak (the shape is all a template carries; every kernel divides by its integral).
+    In float64 the table is stored as read, so float64 results are unchanged bit for bit.
+    Pair with :func:`cache_per_float_dtype`.
+
+    The table is divided by its global peak, not record by record, so every record keeps
+    its scale relative to the others, which the anisotropy table relies on. The cost is that
+    entries more than ~1e-38 below the peak (float32's smallest normal) flush to zero: about
+    11% of the positive entries of the SKIRTOR AGNfitter 1- and 2-parameter tables, deep
+    tails that leave the float32 SED within ~3e-6 of float64. Every other library keeps all
+    of its entries.
+
+    Parameters
+    ----------
+    template : array_like
+        Tabulated SEDs as read [arbitrary units: shape only].
+
+    Returns
+    -------
+    ndarray
+        ``template`` as a NumPy array, or ``template / max(template)`` when JAX runs in
+        float32.
+    """
+    return float32_safe_template(np.asarray(template), process_float_dtype())
+
+
+def cache_per_float_dtype(loader: Callable) -> Callable:
+    """Cache a grid loader once per process float dtype (float64 under x64, else float32).
+
+    A loader that stores its template float32-safe (:func:`float32_safe_template` at the
+    process dtype) builds a different table in each precision mode, so a cache keyed on the
+    path alone hands one mode's table to the other: the raw table to a float32 forward
+    that threads it through ``jit`` (where the cast flushes it to zero), or the rescaled
+    table to a float64 forward. The key carries the dtype, as the SKIRTOR loaders do
+    (#2275).
+
+    Parameters
+    ----------
+    loader : callable
+        The loader, with hashable arguments.
+
+    Returns
+    -------
+    callable
+        The cached loader, with ``cache_clear``, ``cache_info`` and ``__wrapped__`` (the
+        uncached loader). Arguments may be passed by position or keyword: they are bound to
+        the loader's signature first, so ``load(path)`` and ``load(grid_path=path)`` share
+        one entry.
+    """
+    signature = inspect.signature(loader)
+
+    @functools.cache
+    def _for_dtype(float_dtype_name: str, args: tuple, kwargs: tuple):
+        return loader(*args, **dict(kwargs))
+
+    @functools.wraps(loader)
+    def cached(*args, **kwargs):
+        bound = signature.bind(*args, **kwargs)
+        bound.apply_defaults()
+        key = tuple(sorted(bound.kwargs.items()))
+        return _for_dtype(process_float_dtype().name, bound.args, key)
+
+    cached.cache_clear = _for_dtype.cache_clear
+    cached.cache_info = _for_dtype.cache_info
+    return cached
 
 
 def native_bolometric_nu(
@@ -258,6 +358,145 @@ def scale_to_lbol_native(
     return l_scale * sed / native_bolometric_nu(template_native, wave_native)
 
 
+#: Float32 only: at or below this ``agn_log_lbol`` [dex re L_sun] the torus power is formed
+#: as a linear erg/s product, above it as a ``log10`` offset (:func:`_float32_torus_power`).
+#: Each branch is float64-accurate on one side only, measured on one torus per code path
+#: (CAT3D-Wind, Nenkova 2p, Fritz, Silva+04): the linear product's forward derivative is
+#: ``inf`` above about -7 (finite at -8, ``inf`` from -6), because JAX's JVP of
+#: ``l_scale / integral`` multiplies ``l_scale`` by the integral's tangent (~1e13) before it
+#: divides; the offset branch is within 1.5e-5 of float64 down to -16 and degrades below
+#: (1e-4 at -20, 0.3 at the ~1e10 erg/s reference luminosity, ``agn_log_lbol`` ~ -23.6,
+#: where its intermediates are subnormal). -12 sits between the two, with four to five
+#: decades of margin each way, and keeps that reference on the linear branch.
+_FLOAT32_LINEAR_MAX_LOG_LBOL = -12.0
+
+
+def _float32_torus_power(linear, sed, integral, agn_log_lbol, agn_torus_frac):
+    r"""Float32 :math:`f\,10^{\rm agn\_log\_lbol} L_\odot\,T_\nu / \int T_\nu d\nu`, range-safe.
+
+    At or below ``agn_log_lbol = _FLOAT32_LINEAR_MAX_LOG_LBOL`` (-12, a power of at most
+    ~4e21 erg/s) the linear product ``linear(l_scale)`` is used as is: its value and its
+    forward and reverse derivatives are finite there. That branch holds the ~1e10 erg/s
+    reference luminosity ``_lbol_reference.reference_evaluation`` evaluates at
+    (``agn_log_lbol`` ~ -23.6), which keeps its value bit for bit. Above it the power and the
+    integral are one ``log10`` offset, applied by ``utils.scale.apply_log10_scale``
+    (NAMING_CONTRACT 4c), and :math:`L_\odot` (in range) multiplies the result, so no
+    erg/s-scale linear value is formed and the output is finite whenever the emitted
+    :math:`L_\nu` is. The linear product is finite in value up to ``agn_log_lbol`` ~ 4.9, but
+    not in its derivative: the JVP of ``l_scale / integral`` multiplies ``l_scale`` by the
+    integral's tangent before it divides, and that overflows above about -7. The solar decades
+    stay out of the exponent on purpose: a float32 exponent of ~34 dex resolves only ~4e-6
+    of a decade, an error of ~1e-5 in :math:`L_\nu`; the offset left is
+    ``agn_log_lbol - log10(integral)``. Each branch reads ``agn_log_lbol`` clamped to its own
+    side of the switch, so the branch not taken stays finite and contributes a zero, not a
+    NaN, to the gradient.
+    """
+    switch = _FLOAT32_LINEAR_MAX_LOG_LBOL
+    log_lbol = jnp.asarray(agn_log_lbol)
+    use_offset = log_lbol > switch
+    low = jnp.where(use_offset, switch, log_lbol)
+    high = jnp.where(use_offset, log_lbol, switch)
+    below = linear(10.0**low * _LSUN_ERG * agn_torus_frac)
+    above = apply_log10_scale(agn_torus_frac * sed, high - jnp.log10(integral)) * _LSUN_ERG
+    return jnp.where(use_offset, above, below)
+
+
+def scale_by_torus_power(sed, integral, agn_log_lbol, agn_torus_frac):
+    r"""Scale a template by :math:`f L_{\rm bol}` over its frequency integral, range-safe.
+
+    .. math::
+
+        L_\nu(\lambda) = f\,10^{\rm agn\_log\_lbol}\,L_\odot\,
+            \frac{T_\nu(\lambda)}{\int T_\nu\,\mathrm{d}\nu},
+
+    where :math:`T_\nu` is the template [any units per Hz], :math:`f` the torus fraction
+    [dimensionless] and :math:`L_\odot` [erg/s].
+
+    Parameters
+    ----------
+    sed : array_like, shape (n_wave,)
+        The template on the caller's grid [template units].
+    integral : array_like, shape ()
+        Its frequency integral [template units x Hz], positive.
+    agn_log_lbol : float
+        :math:`\log_{10}(L_{\rm bol}/L_\odot)`, the accretion power [dex].
+    agn_torus_frac : float
+        Fraction of :math:`L_{\rm bol}` the template carries [dimensionless].
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        :math:`L_\nu` [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: yes.
+
+    In float64 this is the linear product ``10**agn_log_lbol * L_sun * f * sed / integral``,
+    evaluated in that order. In float32 the power ``10**agn_log_lbol * L_sun`` passes
+    float32's 3.4e38 at ``agn_log_lbol`` of about 4.9 and the product is ``inf`` (#3084);
+    see :func:`_float32_torus_power` for how it is carried there.
+    """
+    if jnp.asarray(sed).dtype == jnp.float32:
+        return _float32_torus_power(
+            lambda l_scale: l_scale * sed / integral, sed, integral, agn_log_lbol, agn_torus_frac
+        )
+    l_scale = 10.0**agn_log_lbol * _LSUN_ERG * agn_torus_frac
+    return l_scale * sed / integral
+
+
+def scale_to_torus_power_native(
+    template_native: jnp.ndarray,
+    wave_native: jnp.ndarray,
+    sed: jnp.ndarray,
+    agn_log_lbol: float,
+    agn_torus_frac: float,
+) -> jnp.ndarray:
+    r""":func:`scale_to_lbol_native` with the power given as ``agn_log_lbol`` and a fraction.
+
+    Parameters
+    ----------
+    template_native : array_like, shape (n_native,)
+        Interpolated template on ``wave_native`` [shape only; any scale].
+    wave_native : array_like, shape (n_native,)
+        Template wavelength grid [Angstrom].
+    sed : array_like, shape (n_wave,)
+        The same template resampled onto the caller's grid [same units as
+        ``template_native``].
+    agn_log_lbol : float
+        :math:`\log_{10}(L_{\rm bol}/L_\odot)`, the accretion power [dex].
+    agn_torus_frac : float
+        Fraction of :math:`L_{\rm bol}` the template carries [dimensionless].
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        :math:`L_\nu` [erg/s/Hz], integrating to :math:`f L_{\rm bol}` over the template's
+        native grid.
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: yes.
+
+    Float64 is :func:`scale_to_lbol_native` with ``l_scale = 10**agn_log_lbol * L_sun * f``,
+    operation for operation. In float32 the template is divided by its (stop-gradient) peak
+    before it is integrated, as there; at ``agn_log_lbol <= -12`` the result is then that
+    function's float32 value, and above it the power is applied as a ``log10`` offset
+    (:func:`_float32_torus_power`), so no erg/s-scale linear value is formed (#3084).
+    """
+    if sed.dtype != jnp.float32:
+        l_scale = 10.0**agn_log_lbol * _LSUN_ERG * agn_torus_frac
+        return scale_to_lbol_native(template_native, wave_native, sed, l_scale)
+    template_native = jnp.asarray(template_native)
+    peak = jax.lax.stop_gradient(jnp.max(jnp.abs(template_native)))
+    peak = jnp.where(peak > 0.0, peak, 1.0)
+    hat_int = native_bolometric_nu(template_native / peak, wave_native, floor=1e-30)
+    unit = sed / peak
+    return _float32_torus_power(
+        lambda l_scale: (l_scale / hat_int) * unit, unit, hat_int, agn_log_lbol, agn_torus_frac
+    )
+
+
 def analytic_bolometric_nu(
     shape_fn: Callable[[jnp.ndarray], jnp.ndarray],
     wave_lo: float,
@@ -356,5 +595,4 @@ def torus_lnu_from_grid(
     )
     wave_native = device_table(grid.wave_grid)
     sed = resample_template(wavelength, wave_native, template, left=0.0, right=0.0)
-    l_scale = 10.0**agn_log_lbol * _LSUN_ERG * agn_torus_frac
-    return scale_to_lbol_native(template, wave_native, sed, l_scale)
+    return scale_to_torus_power_native(template, wave_native, sed, agn_log_lbol, agn_torus_frac)

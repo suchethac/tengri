@@ -5,7 +5,14 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from tengri.inference.backends.mcmc.chain_program import (
+        Adaptation,
+        ChainProgram,
+        CompilePlan,
+    )
 
 
 @dataclass(frozen=True)
@@ -76,6 +83,48 @@ class BackendEntry:
     # Returns True if this backend can run for the given target's spec/dims/dtypes.
     # Default ``None`` means "no compatibility constraint" (always usable).
     is_compatible: Callable[[Any], bool] | None = None
+    # The adapted-chain program for MCMC families; None for the rest.
+    chain_program: ChainProgram | None = None
+    # Maps the runner's kwargs to the Adaptation the run path (``run()``) executes;
+    # None when no program is registered.
+    adaptation_rule: Callable[[dict], Adaptation] | None = None
+    # Maps the kwargs to the Adaptation ``compile()`` warms, when it differs from the run
+    # path (GHMC: window for compile, MEADS for run). None means the run rule serves both.
+    compile_adaptation_rule: Callable[[dict], Adaptation] | None = None
+    # Builds the statics ``compile()`` warms, from (entry, n_dim, spec). None when
+    # the entry has no compile plan, and ``compile()`` then refuses it by name.
+    compile_plan: Callable[[Any, int, Any], CompilePlan] | None = None
+
+    def adaptation_for(self, kwargs: dict, *, path: str = "run") -> Adaptation | None:
+        """Return the adaptation this entry runs on ``path`` for ``kwargs``.
+
+        Parameters
+        ----------
+        kwargs : dict
+            The resolved runner kwargs; ``dense_mass_matrix`` already a bool where a rule
+            needs it.
+        path : {"run", "compile"}
+            ``"run"`` for the fit, ``"compile"`` for the precompilation pass. The compile
+            path falls back to the run rule when no compile rule is registered.
+
+        Returns
+        -------
+        Adaptation or None
+            None when the entry registers no adaptation rule.
+
+        Raises
+        ------
+        ValueError
+            If ``path`` is neither ``"run"`` nor ``"compile"``.
+        """
+        if path not in ("run", "compile"):
+            raise ValueError(f"path must be 'run' or 'compile', got {path!r}")
+        rule = self.adaptation_rule
+        if path == "compile" and self.compile_adaptation_rule is not None:
+            rule = self.compile_adaptation_rule
+        if rule is None:
+            return None
+        return rule(kwargs)
 
 
 #: The tiers a backend may declare.
@@ -124,6 +173,10 @@ def register_backend(
     is_compatible: Callable[[Any], bool] | None = None,
     accepts_precondition: bool = False,
     self_whitening: bool = False,
+    chain_program=None,
+    adaptation_rule=None,
+    compile_adaptation_rule=None,
+    compile_plan=None,
 ):
     """Decorator to register an inference backend.
 
@@ -173,6 +226,10 @@ def register_backend(
             is_compatible=is_compatible,
             accepts_precondition=accepts_precondition,
             self_whitening=self_whitening,
+            chain_program=chain_program,
+            adaptation_rule=adaptation_rule,
+            compile_adaptation_rule=compile_adaptation_rule,
+            compile_plan=compile_plan,
         )
         _BACKENDS[name] = entry
         for a in aliases:
@@ -214,6 +271,20 @@ def get_backend(name: str) -> BackendEntry:
     return _BACKENDS[name]
 
 
+_PIP_EXTRA: dict[str, str] = {
+    "blackjax": 'pip install "tengri[blackjax]"  (or:  pip install blackjax)',
+    "nifty8": "pip install nifty8.re",
+    "optax": "pip install optax",
+    "jaxopt": "pip install jaxopt",
+    "dynesty": "pip install dynesty",
+}
+
+
+def pip_hint(pkg: str) -> str:
+    """Return the install command that provides the optional dependency ``pkg``."""
+    return _PIP_EXTRA.get(pkg, f"pip install {pkg}")
+
+
 def check_requires(entry: BackendEntry) -> None:
     """Verify the backend's optional dependencies are importable.
 
@@ -233,18 +304,11 @@ def check_requires(entry: BackendEntry) -> None:
     """
     import importlib
 
-    _PIP_EXTRA: dict[str, str] = {
-        "blackjax": 'pip install "tengri[blackjax]"  (or:  pip install blackjax)',
-        "nifty8": "pip install nifty8.re",
-        "optax": "pip install optax",
-        "jaxopt": "pip install jaxopt",
-        "dynesty": "pip install dynesty",
-    }
     for pkg in entry.requires:
         try:
             importlib.import_module(pkg)
         except ImportError as exc:
-            hint = _PIP_EXTRA.get(pkg, f"pip install {pkg}")
+            hint = pip_hint(pkg)
             raise ImportError(
                 f"Inference method '{entry.name}' requires {pkg!r}, "
                 f"which is not installed.  Install it with:\n    {hint}"

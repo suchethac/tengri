@@ -123,10 +123,15 @@ def test_ionizing_shape_gradient_wrt_sfh_is_nonzero_and_exact():
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         g_ad = float(jax.grad(shape_metric)(jnp.asarray(t0)))
-        h = 1e-5 * t0
-        g_fd = (
-            float(shape_metric(jnp.asarray(t0 + h))) - float(shape_metric(jnp.asarray(t0 - h)))
-        ) / (2 * h)
+        # Five-point stencil at h = 1e-2 t0. The shape is a ratio of ~1e-68 values
+        # with cancellation, so float64 rounding in the value is ~1e-14 relative: a
+        # central difference at 1e-5 t0 is rounding-dominated (2% off), and the
+        # truncation error at this step is ~1e-4 (measured, not a tolerance change).
+        h = 1e-2 * t0
+        f_m2, f_m1, f_p1, f_p2 = (
+            float(shape_metric(jnp.asarray(t0 + k * h))) for k in (-2, -1, 1, 2)
+        )
+        g_fd = (-f_p2 + 8.0 * f_p1 - 8.0 * f_m1 + f_m2) / (12.0 * h)
 
     assert abs(g_ad) > 0.0, "d(shape)/d(SFH) is zero — argmax shape selection regressed"
     assert abs(g_ad / g_fd - 1.0) < 1e-3, f"gradient wrong: autodiff {g_ad:.6e} vs FD {g_fd:.6e}"

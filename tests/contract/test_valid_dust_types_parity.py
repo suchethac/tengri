@@ -201,3 +201,25 @@ def test_build_refuses_a_building_block_and_says_why(synthetic_ssp_wide) -> None
     assert "dale2014" in message
     # A ParameterError is a ValueError, so the existing grammar handlers catch it.
     assert isinstance(excinfo.value, ValueError)
+
+
+def test_foreground_grammar_accepts_exactly_the_dispatch_table() -> None:
+    """The MW foreground grammar accepts the laws FOREGROUND_LAWS dispatches, and no others."""
+    from tengri.components.dust.foreground import FOREGROUND_LAWS
+    from tengri.parameters.groups import _VALID_FOREGROUND_LAWS, _translate_foreground
+
+    assert set(_VALID_FOREGROUND_LAWS) == set(FOREGROUND_LAWS)
+    for law in FOREGROUND_LAWS:
+        _translate_foreground({"law": law}, {})
+    with pytest.raises(ValueError, match="foreground law"):
+        _translate_foreground({"law": "calzetti"}, {})
+
+
+def test_blr_grammar_menu_matches_registry_lister() -> None:
+    """The AGN BLR grammar menu equals ``list_agn_blocks(category='blr')``, qsogen included."""
+    import tengri
+    from tengri.parameters.groups import _VALID_AGN_BLR_TYPES
+
+    listed = set(tengri.list_agn_blocks(category="blr").names())
+    assert set(_VALID_AGN_BLR_TYPES) == listed
+    assert "qsogen" in listed

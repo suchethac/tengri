@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """MCMC backends: NUTS, Ray Tracing, HMC variants, elliptical slice."""
 
+from tengri.inference.backends.mcmc.chain_program import ChainProgram
 from tengri.inference.backends.mcmc.chees import run_chees
 from tengri.inference.backends.mcmc.dynamic_hmc import run_dynamic_hmc
 from tengri.inference.backends.mcmc.elliptical_slice import run_elliptical_slice
@@ -19,6 +20,7 @@ from tengri.inference.backends.mcmc.raytrace import run_raytrace, sample_raytrac
 from tengri.inference.backends.mcmc.smc import run_smc
 
 __all__ = [
+    "ChainProgram",
     "run_adjusted_mclmc",
     "run_barker",
     "run_chees",

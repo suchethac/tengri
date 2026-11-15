@@ -325,15 +325,15 @@ class DustSEDComponentConfig(SEDComponentConfig):
         ``tengri.components.dust._params.DUST_PARAMETERIZATIONS``. Static.
     age_mixture : str
         How the per-node mixture of the two populations' transmissions is
-        evaluated; the same model either way. ``"per_node"`` (default)
-        attenuates every SSP node, ``sum_a L(a) [y(a) T_young + (1 - y(a))
-        T_old]``. ``"grouped"`` takes the sum in the other order, ``T_young
-        L_young + T_old L_old`` with ``L_young = sum_a y(a) L(a)`` and
-        ``L_old = sum_a (1 - y(a)) L(a)`` formed by the stellar component
-        (``lnu_interval``): two attenuated spectra instead of ``n_age``, equal
-        to floating-point reassociation, including the soft boundary and the
-        Lyman-continuum branch. Grammar key ``dust_attenuation={'age_mixture':
-        ...}``. Static; enters ``compile_signature``.
+        evaluated; the same model either way. ``"grouped"`` (default) takes
+        the sum in the order ``T_young L_young + T_old L_old`` with ``L_young =
+        sum_a y(a) L(a)`` and ``L_old = sum_a (1 - y(a)) L(a)`` formed by the
+        stellar component (``lnu_interval``): two attenuated spectra instead of
+        ``n_age``, equal to floating-point reassociation, including the soft
+        boundary and the Lyman-continuum branch. ``"per_node"`` attenuates every
+        SSP node, ``sum_a L(a) [y(a) T_young + (1 - y(a)) T_old]``, and stays
+        selectable. Grammar key ``dust_attenuation={'age_mixture': ...}``.
+        Static; enters ``compile_signature``.
     """
 
     # Defaults are a low-level construction convenience only (component
@@ -457,7 +457,7 @@ class DustSEDComponentConfig(SEDComponentConfig):
     #: with no spec to ask) keeps the smooth combine, unchanged.
     fdust_credit_active: bool = True
     #: ``"per_node"`` or ``"grouped"``: see the class docstring.
-    age_mixture: str = "per_node"
+    age_mixture: str = "grouped"
     #: Screen-depth parameterization (#3176); see :class:`DustSEDComponent`.
     parameterization: str = "tau_bc_diff"
 
@@ -1737,7 +1737,7 @@ class DustSEDComponent(TemplateThreading):
             _dir = template_data.get("dust_ir")
             if isinstance(_dir, dict):
                 eb_lut = _dir.get("energy_balance_lut")
-        jw = state.derived.get("joint_weights")
+        jw = state.derived.get("met_exact_joint")
         # The log10 offset, not the linear ~1e43 scale: the latter is ``inf``
         # in pure float32 for any galaxy above ~9e4 Msun, and logging it here
         # would recover ``inf`` rather than the finite value the producer
@@ -1755,10 +1755,20 @@ class DustSEDComponent(TemplateThreading):
             # signed ∫(L_intrinsic - L_attenuated) dν, then abs(); when the
             # full cube is not otherwise needed XLA dead-code-eliminates it.
             from tengri.components.dust.energy_balance_precompute import (
+                collapse_lut_alpha,
                 lut_l_absorbed_stellar_log10,
+                read_lut_met,
             )
             from tengri.forward.energy_balance import bolometric_absorbed_log10
             from tengri.utils.scale import log10_add, log10_add_signed
+
+            # A table built from a 4D [alpha/Fe] grid collapses its alpha axis at the
+            # stellar component's bracket (absent on a 3D grid), before the contraction.
+            _alpha_ia = state.derived.get("stellar_alpha_bracket_index")
+            if _alpha_ia is not None:
+                eb_lut = collapse_lut_alpha(
+                    eb_lut, _alpha_ia, state.derived["stellar_alpha_bracket_fraction"]
+                )
 
             # ``lut_l_absorbed_stellar_log10``'s own ``fesc`` combine is a
             # no-op unless the LUT was BUILT with the A_0/A_1 fesc-exact
@@ -1766,6 +1776,9 @@ class DustSEDComponent(TemplateThreading):
             # when lyc_in_energy_balance=True and a live photoionized nebular
             # component is in the chain): passing ``lyc_fesc`` here is always
             # safe, it is simply ignored otherwise.
+            eb_lut, jw = read_lut_met(
+                eb_lut, jw, state.derived["met_exact_z"], state.derived["met_exact_lgmet"]
+            )
             log_stellar, sign_stellar = lut_l_absorbed_stellar_log10(
                 eb_lut,
                 jnp.asarray(jw),

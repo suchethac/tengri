@@ -20,8 +20,9 @@ from tengri.inference.catalog_fitter import (
     _CatalogFitterOriginal as CatalogFitter,
 )
 from tengri.inference.catalog_ingest import ingest_catalog
-from tengri.inference.history_ingest import ingest_histories
+from tengri.inference.history_ingest import ingest_histories, refuse_history_past_obs_time
 from tengri.parameters.resolve import refuse_fixed_overrides
+from tengri.utils.batching import GALAXY_CHUNK_SIZE
 
 __all__ = ["Catalog"]
 
@@ -154,6 +155,28 @@ def _stellar_config(fwd):
     return None if stellar is None else stellar.config
 
 
+def _history_redshifts(fwd, redshift, params, n_galaxies):
+    """Per-galaxy redshift the histories are evaluated at, or None when it is free (#3468).
+
+    The redshift is read from the ``redshift=`` argument, else a ``redshift``
+    column in ``params``, else the model's Fixed value. A free redshift with
+    neither is set only at predict time, so there is nothing to check yet.
+    """
+    if redshift is not None:
+        return np.broadcast_to(np.asarray(redshift, dtype=float), (n_galaxies,))
+    if params and "redshift" in params:
+        return np.broadcast_to(np.asarray(params["redshift"], dtype=float), (n_galaxies,))
+    from tengri.parameters.priors import Fixed
+
+    try:
+        dist = fwd.spec.get_distribution("redshift")
+    except (KeyError, AttributeError):
+        return None
+    if not isinstance(dist, Fixed):
+        return None
+    return np.full(n_galaxies, float(dist.value))
+
+
 def _warn_gas_left_at_default(fwd, hist, params):
     """Flag enriched stars sitting in gas that never enriched with them (#1677).
 
@@ -221,8 +244,9 @@ def _nebular_backend(fwd):
     neb = next((c for c in chain if isinstance(c, NebularSEDComponent)), None)
     if neb is None:
         return None
-    backend = getattr(neb.config, "backend", None)
-    return None if backend in (None, "none", "baked_in") else backend
+    if not neb.backend_class.additive:
+        return None
+    return neb.config.backend
 
 
 def _has_build_time_met(cfg):
@@ -318,6 +342,18 @@ class Catalog:
     missing : {"error", "mask"}, default "error"
         Policy for NaN flux values. ``"error"`` raises with guidance on
         ``missing="mask"``; ``"mask"`` sets presence to False for that cell.
+    default_relative_error : float, optional
+        Relative error [dimensionless] that fills the error of any band whose
+        error column is absent, as CIGALE's ``defaulterror``. See
+        :func:`~tengri.inference.catalog_ingest.ingest_catalog`.
+    lim_flag : {"none", "noscaling", "full"}, optional
+        CIGALE's ``lim_flag`` convention for limits and invalid bands in the
+        error column. See :func:`~tengri.inference.catalog_ingest.ingest_catalog`.
+    observed_relative_error : float, optional
+        Relative model error [dimensionless] added in quadrature, scaled by the
+        observed flux, to every detected band, as CIGALE's ``additionalerror``.
+        ``None`` adds nothing. See
+        :func:`~tengri.inference.catalog_ingest.ingest_catalog`.
 
     Raises
     ------
@@ -330,11 +366,11 @@ class Catalog:
 
     Examples
     --------
-    >>> cat = Catalog(fwd, table, flux_unit="cgs_fnu", redshift_col="z")
-    >>> post = cat.fit(key=jax.random.PRNGKey(0))
-    >>> post.n_galaxies
+    >>> cat = Catalog(fwd, table, flux_unit="cgs_fnu", redshift_col="z")  # doctest: +SKIP
+    >>> post = cat.fit(key=jax.random.PRNGKey(0))  # doctest: +SKIP
+    >>> post.n_galaxies  # doctest: +SKIP
     100
-    >>> stellar_masses = post.properties["stellar_mass"]  # (100,)
+    >>> stellar_masses = post.properties["stellar_mass"]  # (100,)  # doctest: +SKIP
     """
 
     def __init__(
@@ -351,6 +387,9 @@ class Catalog:
         line_err_cols=None,
         line_censor_cols=None,
         missing="error",
+        default_relative_error=None,
+        lim_flag=None,
+        observed_relative_error=None,
     ):
         """Initialize a Catalog with eager ingestion and validation.
 
@@ -374,6 +413,9 @@ class Catalog:
                 line_err_cols=line_err_cols,
                 line_censor_cols=line_censor_cols,
                 missing=missing,
+                default_relative_error=default_relative_error,
+                lim_flag=lim_flag,
+                observed_relative_error=observed_relative_error,
             )
             self._catalog_arrays = ca
 
@@ -729,16 +771,16 @@ class Catalog:
 
         Examples
         --------
-        >>> cat = Catalog.from_histories(
+        >>> cat = Catalog.from_histories(  # doctest: +SKIP
         ...     fwd, t_gyr=t, sfr=sfr, redshift=z, params={"dust_tau_diff": tau}
         ... )
-        >>> flux = cat.predict()
+        >>> flux = cat.predict()  # doctest: +SKIP
 
         Straight from a snapshot, where metallicity is a mass fraction. The
         stellar history and the gas-phase value are separate knobs and do not
         track each other, so a snapshot that stores both passes both:
 
-        >>> cat = Catalog.from_histories(
+        >>> cat = Catalog.from_histories(  # doctest: +SKIP
         ...     fwd, t_gyr=t, sfr=sfr, met=Z_star, met_gas=Z_gas, met_unit="z_mass_fraction"
         ... )
         """
@@ -791,6 +833,10 @@ class Catalog:
             on_out_of_grid=on_out_of_grid,
             ssp_lgmet=_ssp_lgmet(fwd),
             top_z=_ssp_top_z(fwd),
+        )
+
+        refuse_history_past_obs_time(
+            hist.t_gyr, _history_redshifts(fwd, redshift, params, hist.t_gyr.shape[0])
         )
 
         columns = {"sfh_t_gyr": hist.t_gyr, "sfh_sfr": hist.sfr}
@@ -847,7 +893,7 @@ class Catalog:
         *,
         lines=None,
         properties=None,
-        chunk_size=1024,
+        chunk_size=GALAXY_CHUNK_SIZE,
         n_pad=None,
         noise=None,
         key=None,
@@ -867,7 +913,7 @@ class Catalog:
             path, which since #1396 serves tabulated histories.
         properties : sequence of str, optional
             Derived quantities to evaluate, e.g. ``("stellar_mass",)``.
-        chunk_size : int, default 1024
+        chunk_size : int, default 32
             Galaxies per vmapped batch. Chunks are padded to a uniform width,
             so each channel costs one compile for the whole catalog.
         n_pad : int, optional
@@ -894,8 +940,8 @@ class Catalog:
 
         Examples
         --------
-        >>> mock = cat.simulate(lines=("Halpha",), properties=("stellar_mass",))
-        >>> mock.lines["Halpha"].shape
+        >>> mock = cat.simulate(lines=("Halpha",), properties=("stellar_mass",))  # doctest: +SKIP
+        >>> mock.lines["Halpha"].shape  # doctest: +SKIP
         (100,)
         """
         if noise is not None or key is not None:
@@ -1161,7 +1207,7 @@ class Catalog:
 
         return columns, next(iter(lengths.values()))
 
-    def predict(self, param_table=None, *, chunk_size=1024, n_pad=None) -> np.ndarray:
+    def predict(self, param_table=None, *, chunk_size=GALAXY_CHUNK_SIZE, n_pad=None) -> np.ndarray:
         """Predict photometry for a catalog of parameters or histories.
 
         Evaluates the forward model on a table of per-galaxy columns, returning
@@ -1181,7 +1227,7 @@ class Catalog:
             model with that parameter ``FREE`` instead. Omit ``param_table``
             entirely on a catalog built by :meth:`from_histories`, which
             already carries its columns.
-        chunk_size : int, default 1024
+        chunk_size : int, default 32
             Galaxies evaluated per vmapped batch. Larger batches are faster
             but use more memory. Chunks are padded to a uniform width, so the
             whole catalog costs **one** compile regardless of how it divides.
@@ -1205,14 +1251,14 @@ class Catalog:
 
         Examples
         --------
-        >>> params = {"stellar_mass": np.linspace(9, 12, 100), ...}
-        >>> flux = cat.predict(params, chunk_size=64)
-        >>> flux.shape
+        >>> params = {"stellar_mass": np.linspace(9, 12, 100)}  # doctest: +SKIP
+        >>> flux = cat.predict(params, chunk_size=64)  # doctest: +SKIP
+        >>> flux.shape  # doctest: +SKIP
         (100, 3)
 
         Driving a catalog from tabulated histories:
 
-        >>> flux = cat.predict(
+        >>> flux = cat.predict(  # doctest: +SKIP
         ...     {
         ...         "dust_tau_diff": tau,  # (N,)
         ...         "sfh_t_gyr": t_gyr,  # (N, n_t)

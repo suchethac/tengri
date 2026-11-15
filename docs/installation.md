@@ -32,7 +32,7 @@ pip install -e ".[all]"
 
 ## Requirements
 
-- Python ≥ 3.11
+- Python ≥ 3.12
 - JAX ≥ 0.4.20 and jaxlib ≥ 0.4.20
 - DSPS 0.4.6–0.4.7 (0.4.8 excluded: its PyPI sdist breaks at install time)
 - NumPy ≥ 1.24
@@ -74,7 +74,7 @@ wget https://halos.as.arizona.edu/suchethacooray/ssp-spectra/fsps_prsc_miles_cha
 The full catalog of pre-formatted grids (BC03, BPASS, FSPS,
 ProGeny) lives at the
 [public mirror](https://halos.as.arizona.edu/suchethacooray/ssp-spectra/).
-Use `tengri.list_known_ssps()` to see all 38 available SSP grids.
+Use `tengri.list_known_ssps()` to list the hosted SSP grids.
 
 ## Verify your install
 

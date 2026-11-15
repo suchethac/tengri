@@ -61,7 +61,6 @@ MUST_BE_FINITE = {
 #: float64 convenience. Each MUST have a finite log companion — a linear key
 #: with no log form would leave a pure-float32 consumer with nothing to read.
 KNOWN_NOT_FLOAT32 = {
-    "stellar_mass_scale": "log_stellar_mass_scale",
     "nion": "log_nion",
     "L_ir": "log_L_ir",
     "L_absorbed": "log_L_ir",

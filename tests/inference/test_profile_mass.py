@@ -485,6 +485,14 @@ class TestSamplerParity:
             z = abs(a.mean() - b.mean()) / se if se > 0 else 0.0
             assert z < 3.0, f"{name}: off_mean={a.mean():.4g} on_mean={b.mean():.4g} z={z:.2f}"
 
+    # Two NUTS runs (2 chains, 400 warmup steps, dense mass matrix) of the joint
+    # photometry+spectrum model. Measured on a GitHub runner at 3,652 s (run
+    # 41294360604, before #3224's ~10 % cut), against 83 s for the photometry
+    # sibling: the spectrum stays on the exact pixel-integral path by design. Too
+    # long for the nightly legs, so it carries `weekly` and runs only in the
+    # `slow-weekly` job (`-m weekly`, --timeout=4500).
+    @pytest.mark.weekly
+    @pytest.mark.timeout(4500)
     def test_nuts_posterior_means_agree_joint(self, ssp_data_fsps):
         """Joint photometry+spectrum posterior means agree with and without profiling.
 

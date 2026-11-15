@@ -23,9 +23,6 @@ from jax.flatten_util import ravel_pytree
 
 pytestmark = pytest.mark.contract
 
-#: Flat log-density at the probe position for the fixture below, recorded from the
-#: closure-captured build before the shared inputs became arguments.
-_RECORDED_LOGDENSITY = -662.9685350810653
 _PROBE_SEED = 7
 
 
@@ -92,6 +89,16 @@ def test_engine_program_holds_no_shared_array_as_a_constant(catalog_engine_input
 
 
 def test_log_density_is_bit_identical_with_shared_arrays_as_arguments(catalog_engine_inputs):
+    """Passing the shared tables as arguments leaves the log-density unchanged.
+
+    The argument path is compared exactly with the eager evaluation, which takes the
+    same tables as its argument. The closure path embeds the tables as constants, and
+    XLA folds those differently: on the probe it lands one ulp (about 2e-16 relative)
+    away, deterministically. That is a compiler rounding difference, not a change of
+    value, so it is bounded at a few ulp rather than pinned exactly. No frozen constant
+    is recorded: its value depends on the platform's libm and BLAS, and a pin recorded
+    on one machine failed on the CI runners.
+    """
     from tengri.inference.backends.mcmc._shared import _get_flat_logdensity
 
     fitter, galaxy, _shared, _ssp = catalog_engine_inputs
@@ -99,10 +106,12 @@ def test_log_density_is_bit_identical_with_shared_arrays_as_arguments(catalog_en
     log_post, _unravel, _init, template = _get_flat_logdensity(
         fitter, fitter._initialize_unbounded(jax.random.PRNGKey(0))
     )
-    closure_value = float(log_post(init_flat, template))
+    eager_value = float(log_post(init_flat, template))
     argument_value = float(jax.jit(log_post)(init_flat, template))
-    assert argument_value == closure_value
-    assert argument_value == _RECORDED_LOGDENSITY
+    closure_value = float(jax.jit(lambda x: log_post(x, template))(init_flat))
+    assert np.isfinite(argument_value)
+    assert argument_value == eager_value
+    np.testing.assert_allclose(closure_value, argument_value, rtol=4 * np.finfo(float).eps)
 
 
 def _all_consts(jaxpr) -> list:
@@ -141,7 +150,13 @@ def test_jitted_map_program_holds_no_shared_array_as_a_constant(
         compiled = real_jit(fn, *args, **kwargs)
 
         def call(*call_args):
-            recorded["fn"], recorded["args"] = fn, call_args
+            # ``jax.jit`` is patched process-wide, so JAX's own jitted helpers run during
+            # the map's trace are routed here too. Keep only the outermost call, the
+            # first one: its arguments are concrete, while the inner calls receive tracers
+            # that escape the trace, and which inner call comes last depends on JAX's
+            # warm caches (so the test passed locally and failed on a cold CI worker).
+            recorded.setdefault("fn", fn)
+            recorded.setdefault("args", call_args)
             return compiled(*call_args)
 
         return call
@@ -150,6 +165,9 @@ def test_jitted_map_program_holds_no_shared_array_as_a_constant(
     map_with_shared(run_one, xs, shared, batch_size=2)
     monkeypatch.undo()
 
+    # The jitted map is the inner ``mapped`` of ``_mapped_program`` (cached per fn and
+    # batch_size) or of ``map_with_shared``; the name is not the contract, the recording is.
+    assert recorded["fn"].__qualname__.endswith(".<locals>.mapped"), recorded["fn"].__qualname__
     jaxpr = jax.make_jaxpr(recorded["fn"])(*recorded["args"])
     ssp_nbytes = np.asarray(ssp.ssp_flux).nbytes
     big = [

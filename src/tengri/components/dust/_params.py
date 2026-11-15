@@ -488,6 +488,7 @@ ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
         "Birth cloud optical depth",
         lambda lo, hi: lo >= 0,
         "must have lo >= 0",
+        internal_name="tau_bc",
     ),
     ParamDeclaration(
         "dust_tau_diff",
@@ -496,6 +497,7 @@ ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
         "Diffuse ISM optical depth",
         lambda lo, hi: lo >= 0,
         "must have lo >= 0",
+        internal_name="tau_diff",
     ),
     ParamDeclaration(
         "dust_tau_neb",
@@ -519,6 +521,7 @@ ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
         # ``dust_bump_strength`` for why that scoping is what makes it
         # declarable.
         free_prior=Uniform(-1.5, -0.3, "Dust power-law index", default=-0.7),
+        internal_name="dust_slope",
     ),
     ParamDeclaration(
         "dust_f_obscuration",
@@ -526,6 +529,7 @@ ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
         "Fraction of unobscured sightlines (Lower 2022)",
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
+        internal_name="f_obscuration",
         # Deliberately NO free_prior. The reason is recorded once, in the REFUSED
         # ledger of tools/check_param_free_priors.py ("explicit-only"); do not
         # restate it here so the two cannot drift again. Explicit priors work.
@@ -568,6 +572,7 @@ ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
         # ``Gaussian`` (``components/dust/priors.py``) bypasses this
         # ``free_prior`` entirely; only FREE/wildcard callers see the ceiling.
         free_prior=Uniform(0.0, 4.0, "UV bump strength at 2175A", default=0.0),
+        internal_name="dust_bump_strength",
     ),
     ParamDeclaration(
         "dust_delta",
@@ -582,6 +587,7 @@ ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
         # delta = 0.447 -- an inverted bump -- so 0.4 is where the bump
         # amplitude stays positive across the whole range.
         free_prior=Uniform(-1.0, 0.4, "Attenuation curve slope modification", default=0.0),
+        internal_name="dust_delta",
     ),
     ParamDeclaration(
         "dust_Rv",
@@ -598,6 +604,7 @@ ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
         # Mathis 1989) and sightline-to-sightline variation spans roughly 2-6,
         # dense clouds at the high end.
         free_prior=Uniform(2.0, 6.0, "Total-to-selective extinction R_V", default=3.1),
+        internal_name="dust_Rv",
     ),
     # ── Per-screen dust law shape parameters (#2428) ──────────────────────────
     # The 12 per-screen variants (slope, delta, bump_strength, Rv) x (bc, diff, neb)

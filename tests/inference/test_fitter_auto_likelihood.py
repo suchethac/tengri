@@ -73,8 +73,12 @@ def _make_helper_only_fitter(
         _eline_marginalize=has_eline,
         _eline_fitted=False,
         _eline_prior_type=None,
+        _eline_prior_sigma=None,
+        _eline_prior_width_dex=None,
         _eline_wavelengths=None,
+        _eline_independent_wavelengths=None,
         _eline_constraint_matrix=None,
+        _eline_amplitude_names=None,
         _cal_n_poly=3,
         _cal_prior_sigma=1.0,
         _fixed_values={},
@@ -211,6 +215,7 @@ def test_eline_cloudy_prior_auto_builds_cloudy_likelihood():
         has_eline=True,
     )
     fitter._eline_prior_type = "cloudy"
+    fitter.spec = SimpleNamespace(all_params=["met_logzsol", "neb_logU"], free_params=[])
     fitter._eline_wavelengths = jnp.array([6564.6, 4861.3])
     fitter._eline_independent_wavelengths = jnp.array([6564.6, 4861.3])
     fitter._eline_constraint_matrix = jnp.eye(2)
@@ -405,6 +410,7 @@ def test_cal_marg_plus_eline_cloudy_auto_builds_combined_adapter_cloudy():
         has_eline=True,
     )
     fitter._eline_prior_type = "cloudy"
+    fitter.spec = SimpleNamespace(all_params=["met_logzsol", "neb_logU"], free_params=[])
     fitter._eline_prior_sigma = 1e10
     fitter._eline_wavelengths = jnp.array([6564.6, 4861.3])
     fitter._eline_independent_wavelengths = jnp.array([6564.6, 4861.3])

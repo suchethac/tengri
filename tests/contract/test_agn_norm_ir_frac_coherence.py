@@ -1,38 +1,39 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""R65 + R67: an active fracAGN outside ``agn_norm='cigale_joint'`` is refused.
+"""R65: an active fracAGN beside ``agn_norm='independent'`` is refused; ``'conserving'`` admits it.
 
-``agn_ir_frac`` (fracAGN) is the CIGALE ``skirtor2016`` coupling: it derives
-the AGN power from the **dust-absorbed stellar** luminosity,
-``agn_power = L_absorbed x f/(1 - f)``, and every ``agn_norm`` policy routes
-the torus through that derived power. Only ``'cigale_joint'`` routes the DISC
-through it too, through the SKIRTOR template ratio ``R``. The other two put
-the disc back on ``10**agn_log_lbol`` -- verbatim under ``'independent'``,
-debited by ``(1 - agn_torus_frac)`` under ``'conserving'`` -- so the two
+``agn_ir_frac`` (fracAGN) sets the torus from the **dust-absorbed stellar**
+luminosity. Under ``'cigale_joint'`` (the CIGALE ``skirtor2016`` coupling) the
+AGN power becomes ``agn_power = L_absorbed x f/(1 - f)`` and the disc follows
+it through the SKIRTOR template ratio ``R``. Under ``'conserving'`` the AGN
+power stays the accretion power and fracAGN sets only the covering factor
+``agn_torus_frac`` (owner ruling on #2320, which replaced the R67 refusal):
+the disc keeps the rest of the power, so the pieces close on
+``agn_log_lbol``. ``'independent'`` puts the disc back on
+``10**agn_log_lbol`` verbatim while the torus follows the host, so the two
 components' absolute scales are set by two unrelated quantities and their
 ratio is not modeled at all.
 
-Measured on this branch (composable ``disc='schartmann2005'`` +
-``torus='skirtor'``, ``sfh='delayed'``, ``dust_emission='dale2014_cigale'``,
-``agn_log_lbol`` at its registry default), sweeping ONLY the stellar mass and
-reading ``int(sed_agn_disc) / int(sed_agn_torus)`` over frequency:
+Measured (composable ``disc='schartmann2005'`` + ``torus='skirtor'``,
+``sfh='delayed'``, ``dust_emission='dale2014_cigale'``, ``agn_log_lbol`` at
+its registry default), sweeping ONLY the stellar mass and reading
+``int(sed_agn_disc) / int(sed_agn_torus)`` over frequency:
 
-============  ==================  ==================  =================  ==================
-``log M*``    independent, f=.3   conserving, f=.3    independent, no f  cigale_joint, f=.3
-============  ==================  ==================  =================  ==================
-0.0            5.004902e+10        5.004902e+10        2.001533           2.838156
-7.0            5.004902e+03        5.003901e+03        2.001533           2.838156
-10.0           5.004902e+00        4.004135e+00        2.001533           2.838156
-12.0           5.004902e-02        0.000000e+00        2.001533           2.838156
-============  ==================  ==================  =================  ==================
+============  ==================  =================  ==================
+``log M*``    independent, f=.3   independent, no f  cigale_joint, f=.3
+============  ==================  =================  ==================
+0.0            5.004902e+10        2.001533           2.838156
+7.0            5.004902e+03        2.001533           2.838156
+10.0           5.004902e+00        2.001533           2.838156
+12.0           5.004902e-02        2.001533           2.838156
+============  ==================  =================  ==================
 
-Twelve orders of magnitude across the stellar-mass prior in both refused
-columns, and constant in both legal ones: the disc/torus ratio there is a
-readout of ``M*``, not of any AGN parameter. The torus integral is identical
-to six digits under all three policies (``7.626100e+42`` at ``log M* = 10``),
-which places the mechanism on the disc side. Nothing raised and nothing
+Twelve orders of magnitude across the stellar-mass prior in the refused
+column, and constant in both legal ones: the disc/torus ratio there is a
+readout of ``M*``, not of any AGN parameter. Nothing raised and nothing
 warned, and the four components still summed to ``sed_agn`` exactly
 (1.000000), so the accounting stayed intact while the configuration meant
-nothing.
+nothing. The ``'conserving'`` behavior is measured in
+``tests/regression/bug/test_bug_2320_conserving_under_fracagn.py``.
 
 References
 ----------
@@ -114,26 +115,19 @@ class TestIndependentNormRefusesActiveFracAgn:
         """The message must name what to switch to, and only legal things.
 
         A guard that recommends a configuration it also refuses is the #1364
-        defect, so each of the two remedies named here is exercised by a test
-        below. This test used to be
-        ``test_refusal_names_both_joint_policies_and_the_zero_way_out`` and
-        required ``'conserving'`` to appear as a third remedy; R67 refuses
-        that build too (see :class:`TestConservingNormRefusesActiveFracAgn`
-        for the sweep), so the remedy list is now ``'cigale_joint'`` and
-        ``Fixed(0.0)`` only.
+        defect, so each of the three remedies named here is exercised by a
+        test: ``'cigale_joint'`` and ``Fixed(0.0)`` below, ``'conserving'`` in
+        :class:`TestConservingNormAdmitsActiveFracAgn`.
         """
         from tengri.config.exceptions import ConfigError
 
         with pytest.raises(ConfigError) as exc:
             _build(synthetic_ssp_wide, norm="independent", ir_frac=Fixed(0.3))
         msg = str(exc.value)
-        for token in ("agn_ir_frac", "independent", "cigale_joint"):
+        for token in ("agn_ir_frac", "independent", "cigale_joint", "conserving"):
             assert token in msg, f"the refusal does not name {token!r}: {msg}"
         assert "L_absorbed" in msg, (
             f"the refusal must say where the AGN power comes from under the coupling: {msg}"
-        )
-        assert "the energy-ledger policy, which debits" not in msg, (
-            f"the refusal must not offer 'conserving', which R67 also refuses: {msg}"
         )
 
     # ── every neighboring configuration must keep building ─────────
@@ -158,82 +152,33 @@ class TestIndependentNormRefusesActiveFracAgn:
         assert model.spec.agn_model == "composable"
 
 
-class TestConservingNormRefusesActiveFracAgn:
-    """R67: ``'conserving'`` beside an active fracAGN has the same pathology.
+class TestConservingNormAdmitsActiveFracAgn:
+    """``'conserving'`` beside an active fracAGN builds (owner ruling on #2320).
 
-    R65 offered ``'conserving'`` as one of its remedies. The stellar-mass sweep
-    says it is not one. With the coupling active, ``agn_power`` becomes
-    ``L_absorbed x f/(1 - f)`` for **every** policy -- measured, the torus
-    integral is identical to six digits under ``'conserving'`` and
-    ``'cigale_joint'`` (``7.626100e+42`` at ``log M* = 10``) -- while
-    ``'conserving'`` leaves the disc on ``10**agn_log_lbol`` debited by
-    ``(1 - agn_torus_frac)``, a second and unrelated reference. So the ratio
-    scales as ``1/M*`` exactly as the refused ``'independent'`` case does, and
-    at ``log M* = 12`` the derived ``agn_torus_frac`` clips to 1 and the disc
-    is debited to **exactly zero**:
-
-    ============  ====================  ====================
-    ``log M*``    conserving, f=0.3     cigale_joint, f=0.3
-    ============  ====================  ====================
-    0.0            5.004902e+10          2.838156
-    7.0            5.003901e+03          2.838156
-    10.0           4.004135e+00          2.838156
-    12.0           **0.000000e+00**      2.838156
-    ============  ====================  ====================
-
-    That is why R67 leaves ``'cigale_joint'`` as the single remedy the refusal
-    names: it is the only policy under which the disc is tied to the same
-    ``agn_power`` reference the coupling sets. This class replaces
-    ``test_conserving_with_ir_frac_builds``, which asserted the build R67 now
-    refuses; the measurement it stood on is the table above.
+    fracAGN sets only the covering factor there; the AGN power stays
+    ``agn_log_lbol``. The realized dust fraction, the ledger closure and the
+    gradients are measured in
+    ``tests/regression/bug/test_bug_2320_conserving_under_fracagn.py``.
     """
 
-    def test_fixed_positive_ir_frac_raises(self, synthetic_ssp_wide):
-        """``Fixed(0.3)`` fracAGN beside ``'conserving'``: refused."""
-        from tengri.config.exceptions import ConfigError
+    def test_fixed_positive_ir_frac_builds(self, synthetic_ssp_wide):
+        """``Fixed(0.3)`` fracAGN beside ``'conserving'``: built, not refused."""
+        model = _build(synthetic_ssp_wide, norm="conserving", ir_frac=Fixed(0.3))
+        assert model.spec.agn_norm == "conserving"
 
-        with pytest.raises(ConfigError, match=r"agn_norm='conserving'"):
-            _build(synthetic_ssp_wide, norm="conserving", ir_frac=Fixed(0.3))
-
-    def test_free_ir_frac_raises(self, synthetic_ssp_wide):
-        """A FREE fracAGN is active by construction, so it is refused too."""
-        from tengri.config.exceptions import ConfigError
-
-        with pytest.raises(ConfigError, match=r"agn_norm='conserving'"):
-            _build(synthetic_ssp_wide, norm="conserving", ir_frac=FREE)
-
-    def test_refusal_names_cigale_joint_as_the_single_remedy(self, synthetic_ssp_wide):
-        """The message must name the mechanism and only legal advice (#1364).
-
-        R65's message named ``'conserving'`` as a way out. R67 refuses that
-        build, so the message must not still recommend it: the token may
-        appear only where the message says it is refused, never in the
-        remedies.
-        """
-        from tengri.config.exceptions import ConfigError
-
-        with pytest.raises(ConfigError) as exc:
-            _build(synthetic_ssp_wide, norm="conserving", ir_frac=Fixed(0.3))
-        msg = str(exc.value)
-        for token in ("agn_ir_frac", "conserving", "cigale_joint", "L_absorbed", "1/M*"):
-            assert token in msg, f"the refusal does not name {token!r}: {msg}"
-        assert "the energy-ledger policy, which debits" not in msg, (
-            f"the refusal still offers 'conserving' as a remedy it also refuses: {msg}"
-        )
+    def test_free_ir_frac_builds(self, synthetic_ssp_wide):
+        """A FREE fracAGN builds too, and stays a free parameter."""
+        model = _build(synthetic_ssp_wide, norm="conserving", ir_frac=FREE)
+        assert "agn_ir_frac" in model.spec.free_params
 
     def test_conserving_without_ir_frac_builds(self, synthetic_ssp_wide):
-        """The policy itself is untouched: no fracAGN, no coupling, no refusal."""
+        """The policy itself is untouched: no fracAGN, no coupling."""
         model = _build(synthetic_ssp_wide, norm="conserving")
         assert model.spec.agn_model == "composable"
 
     def test_conserving_with_explicitly_zero_ir_frac_builds(self, synthetic_ssp_wide):
         """``Fixed(0.0)`` states "no coupling" -- inert, and legal."""
         model = _build(synthetic_ssp_wide, norm="conserving", ir_frac=Fixed(0.0))
-        assert model.spec.agn_model == "composable"
-
-    def test_cigale_joint_with_ir_frac_still_builds(self, synthetic_ssp_wide):
-        """The single remedy R67's message names, exercised so it stays legal."""
-        model = _build(synthetic_ssp_wide, norm="cigale_joint", ir_frac=Fixed(0.3))
         assert model.spec.agn_model == "composable"
 
 

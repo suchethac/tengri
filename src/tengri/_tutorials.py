@@ -718,8 +718,8 @@ _COMPARE_MODELS = _Tutorial(
     code=textwrap.dedent(
         """
         # Same data, vary one structural choice (here: AGN model).
-        # Compare via Bayesian evidence (nested sampling) or out-of-sample
-        # WAIC / LOO if you have arviz.
+        # Compare via Bayesian evidence (nested sampling) or by predictive
+        # accuracy (PSIS-LOO or WAIC).
 
         import tengri
         results = {}
@@ -744,10 +744,11 @@ _COMPARE_MODELS = _Tutorial(
             print(f"  {name!r:25s}  log Z = {post.log_evidence:7.2f}  "
                   f"ΔlogBF vs no-AGN = {log_BF:+5.2f}")
 
-        # Or via WAIC (if posterior samples available: needs arviz)
-        for name, post in results.items():
-            idata = post.to_arviz()
-            print(f"  {name!r:25s}  WAIC = {idata.waic:.2f}")
+        # Or by predictive accuracy: elpd differences with paired standard errors.
+        # criterion="waic" gives WAIC; "loo" also reports unreliable points (n_bad_k).
+        for row in tengri.inference.compare_models(results, criterion="loo"):
+            print(f"  {row['name']!r:25s}  elpd = {row['elpd']:8.2f}  "
+                  f"Δelpd = {row['delta_elpd']:+7.2f} ± {row['delta_se']:.2f}")
 
         # See:
         #   tengri.describe('skirtor')  →  param details for each candidate
@@ -869,10 +870,14 @@ _PROPERTIES = _Tutorial(
         import jax
         params_batch = spec.sample_batch(jax.random.PRNGKey(0), n=10_000)
 
-        # vmap-compatible; returns shape (10000,) arrays
-        props = jax.vmap(model.predict_properties,
-                        in_axes=(0, None),  # params_batch, names
-                        )(params_batch, ("stellar_mass", "sfr_100myr"))
+        # Chunked map: one compiled kernel per chunk, bounded peak memory.
+        # Returns shape (10000,) arrays.
+        from tengri import vmap_chunked
+
+        props = vmap_chunked(
+            lambda p: model.predict_properties(p, names=("stellar_mass", "sfr_100myr")),
+            chunk_size=256,
+        )(params_batch)
         props["stellar_mass"]  # shape (10_000,)
 
         # 5. FULL PROPERTY DICT: export names='all' or unspecified
@@ -955,10 +960,13 @@ _APPROX_VS_EXACT = _Tutorial(
 
         # ── VMAP BATCH (MOCK CATALOG) ──
 
-        # For many parameter sets on build-time filters, approx is right:
+        # For many parameter sets on build-time filters, approx is right.
+        # vmap_chunked bounds peak memory over the 10,000 draws.
+        from tengri import vmap_chunked
+
         params_batch = spec.sample_batch(jax.random.PRNGKey(0), n=10_000)
-        fn_fast = jax.vmap(
-            lambda p: model_fast.predict(p).photometry(approx=True)
+        fn_fast = vmap_chunked(
+            lambda p: model_fast.predict(p).photometry(approx=True), chunk_size=256
         )
         batch_photos = fn_fast(params_batch)  # shape (10000, n_filters)
 
@@ -1032,22 +1040,26 @@ _MOCK_CATALOG = _Tutorial(
         key = jax.random.PRNGKey(42)
         params_batch = spec.sample_batch(key, n=1_000)
 
-        # 3. VMAP OVER PHOTOMETRY
-        fn_phot = jax.vmap(
-            lambda p: model.predict(p).photometry(approx=False)
+        # Every batch below goes through vmap_chunked: one compiled kernel per chunk,
+        # bounded peak memory. The same call works for 1,000 or 10,000 draws.
+        from tengri import vmap_chunked
+
+        # 3. MAP OVER PHOTOMETRY
+        fn_phot = vmap_chunked(
+            lambda p: model.predict(p).photometry(approx=False), chunk_size=256
         )
         batch_photos = fn_phot(params_batch)  # shape (n_params, n_filters)
 
-        # 4. VMAP OVER PROPERTIES: jit-compatible subset
-        fn_props = jax.vmap(
-            lambda p: model.predict_properties(p)
+        # 4. MAP OVER PROPERTIES: jit-compatible subset
+        fn_props = vmap_chunked(
+            lambda p: model.predict_properties(p), chunk_size=256
         )
         batch_props = fn_props(params_batch)  # dict of shape (n_params,)
         batch_props["stellar_mass"]  # shape (1000,)
 
-        # 5. VMAP OVER REST-FRAME SED (mock spectroscopy)
-        fn_sed = jax.vmap(
-            lambda p: model.predict(p).rest_sed()
+        # 5. MAP OVER REST-FRAME SED (mock spectroscopy)
+        fn_sed = vmap_chunked(
+            lambda p: model.predict(p).rest_sed(), chunk_size=256
         )
         batch_seds = fn_sed(params_batch)  # shape (n_params, n_wave)
 

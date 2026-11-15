@@ -154,18 +154,25 @@ def test_absolute_mode_compares_gas_logno_directly():
 #: ``wave <= 911.76`` mask dropped (the stellar ``nion`` already had it, #537,
 #: and is unchanged). Every line at both metallicities moves by the same
 #: factor, 1.0173561: the Q_H normalization, with no change in the ratios.
+#: Re-pinned after the Cue float64 move (#3253): Cue now runs in float64 under x64, so every
+#: line moves by the float32-to-float64 weight rounding, +5.6e-7 to +6.7e-7 relative at the
+#: cut (values before: 75.18923406031823, 28.4730570167633 at 0.0; 74.0586722765041,
+#: 19.449401607798606 at 0.3). Measured on this tree; the non-Cue paths are unchanged.
 _CUT_DEFAULT_FLUXES = {
-    0.0: [75.18923406031823, 28.4730570167633],
-    math.log10(0.3): [74.0586722765041, 19.449401607798606],
+    0.0: [75.18929410578725, 28.47307308760556],
+    math.log10(0.3): [74.0587312723305, 19.449414612749163],
 }
 
 #: The same fluxes with every stellar age counted (the default). This SFH forms stars
 #: from 1 Gyr ago, and the FSPS/Padova bins between 100 Myr and 1 Gyr carry about 1e-8
 #: of the population's photon rate, so [H-beta] moves by 6e-9 (relative) and [N II] by
 #: 1.2e-7 at 0.3 Zsun (their shape pulls it): measured, and removed by the cut above.
+#: Re-pinned with the Cue float64 move (#3253). The default-minus-cut difference at 0.3 Zsun
+#: is 6e-9 relative on the float32 Cue and 2e-7 on float64. The float64 value is recorded
+#: as measured; it is not separately attributed to the old-star photon share above.
 _ALL_AGES_DEFAULT_FLUXES = {
-    0.0: [75.18923449162212, 28.47306128523541],
-    math.log10(0.3): [74.05867272183987, 19.449403852584325],
+    0.0: [75.18930949034029, 28.47308156964249],
+    math.log10(0.3): [74.05874646246772, 19.449420016537523],
 }
 
 

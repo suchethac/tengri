@@ -56,12 +56,20 @@ from collections.abc import Callable
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.agn._params import DEFAULT_AGN_COS_INC, DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn._params import (
+    DEFAULT_AGN_COS_INC,
+    DEFAULT_AGN_LOG_LBOL,
+    DEFAULT_AGN_TORUS_FRAC,
+)
 from tengri.components.agn._skirtor_agnfitter_sightline import (
     accepts_retired_incl_skirtor,
     skirtor_incl_from_cos_inc,
 )
-from tengri.components.agn._template_grid import TorusTemplateGrid
+from tengri.components.agn._template_grid import (
+    TorusTemplateGrid,
+    cache_per_float_dtype,
+    loaded_template,
+)
 from tengri.components.agn._torus_inclination import (
     TorusInclination,
     anisotropy_values,
@@ -108,7 +116,7 @@ def _load_skirtor_agnfitter_1p_arrays(grid_path: str) -> dict:
         }
 
 
-@functools.cache
+@cache_per_float_dtype
 def load_skirtor_agnfitter_1p_grid(grid_path: str) -> TorusTemplateGrid:
     """Load a ``SKIRTOR_mean_1p`` grid HDF5 into a :class:`TorusTemplateGrid` pytree.
 
@@ -139,7 +147,7 @@ def load_skirtor_agnfitter_1p_grid(grid_path: str) -> TorusTemplateGrid:
     raw = _load_skirtor_agnfitter_1p_arrays(grid_path)
     axes = (np.asarray(raw["incl_axis"]),)
     return TorusTemplateGrid(
-        template=np.asarray(raw["template"]),
+        template=loaded_template(raw["template"]),
         axes=axes,
         wave_grid=np.asarray(raw["wavelength"]),
         anisotropy=anisotropy_values(raw["template"], raw["wavelength"], axes, TORUS_INCLINATION),
@@ -152,7 +160,7 @@ def skirtor_agnfitter_1p_sed_from_grid(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
-    agn_torus_frac: float = 0.5,
+    agn_torus_frac: float = DEFAULT_AGN_TORUS_FRAC,
     **_kwargs,
 ) -> jnp.ndarray:
     r"""``SKIRTOR_mean_1p`` torus SED at a single inclination.
@@ -268,7 +276,7 @@ def load_skirtor_agnfitter_1p_default_grid() -> TorusTemplateGrid:
     return load_skirtor_agnfitter_1p_grid(_find_skirtor_agnfitter_1p_grid())
 
 
-@functools.cache
+@cache_per_float_dtype
 def _load_skirtor_agnfitter_1p_default() -> Callable:
     return create_skirtor_agnfitter_1p_from_grid(_find_skirtor_agnfitter_1p_grid())
 

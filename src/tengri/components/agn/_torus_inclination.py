@@ -46,6 +46,7 @@ from tengri.components.agn._template_grid import (
     float32_safe_template,
     native_bolometric_nu,
     native_bolometric_nu_np,
+    process_float_dtype,
     torus_lnu_from_grid,
 )
 from tengri.utils.grid_interp import interp_nd_pchip
@@ -189,11 +190,12 @@ class AnisotropyGrid(NamedTuple):
 
 
 def _mu_of(x, variable: str):
-    """``cos i`` at the inclination coordinate ``x``."""
+    """``cos i`` at the inclination coordinate ``x``, as NumPy for a NumPy ``x``."""
     if variable == "cos_inc":
         return x
-    rad = jnp.pi / 180.0
-    return jnp.cos(x * rad) if variable == "incl_deg" else jnp.sin(x * rad)
+    xp = np if isinstance(x, np.ndarray) else jnp
+    rad = np.pi / 180.0
+    return xp.cos(x * rad) if variable == "incl_deg" else xp.sin(x * rad)
 
 
 def anisotropy_grid(powers, axes, inc: TorusInclination) -> AnisotropyGrid:
@@ -229,6 +231,14 @@ def anisotropy_grid(powers, axes, inc: TorusInclination) -> AnisotropyGrid:
     )
 
 
+def _host_record_powers(template, wave) -> np.ndarray:
+    """Each record's frequency integral on its own nodes, float64 on the host, leading shape."""
+    t = np.asarray(template, dtype=np.float64)
+    flat = t.reshape(-1, t.shape[-1])
+    powers = np.array([native_bolometric_nu_np(row, wave, floor=0.0) for row in flat])
+    return powers.reshape(t.shape[:-1])
+
+
 def anisotropy_values(template, wave, axes, inc: TorusInclination) -> np.ndarray:
     r"""Host (float64) :class:`AnisotropyGrid` values of a library, for caching at load.
 
@@ -247,12 +257,23 @@ def anisotropy_values(template, wave, axes, inc: TorusInclination) -> np.ndarray
     -------
     ndarray, shape (n_ax1, ..., n_axk)
         Each record's frequency integral (``native_bolometric_nu_np``) over its model's
-        trapezoid mean in :math:`\mu`, O(1) and float32-representable.
+        trapezoid mean in :math:`\mu`, O(1) and float32-representable, float64 in either
+        precision mode.
+
+    Notes
+    -----
+    The record powers are tiny (1e-55 for ``NK0_mean_2p``, 1e-57 for ``SKIRTOR_mean_1p``),
+    below float32's smallest normal, so the ratio is formed in float64 before anything is
+    cast: through :func:`anisotropy_grid` when JAX runs in float64, with NumPy's float64
+    trapezoid when it runs in float32. Cast first, the powers flushed to zero and the table
+    was 0/0 (#3101).
     """
-    t = np.asarray(template, dtype=np.float64)
-    flat = t.reshape(-1, t.shape[-1])
-    powers = np.array([native_bolometric_nu_np(row, wave, floor=0.0) for row in flat])
-    return np.asarray(anisotropy_grid(powers.reshape(t.shape[:-1]), axes, inc).values)
+    powers = _host_record_powers(template, wave)
+    if process_float_dtype() == np.float64:
+        return np.asarray(anisotropy_grid(powers, axes, inc).values)
+    mu = np.asarray(_mu_of(np.asarray(axes[inc.axis], dtype=np.float64), inc.variable))
+    mean = np.trapezoid(powers, mu, axis=inc.axis) / (mu[-1] - mu[0])
+    return powers / np.expand_dims(mean, inc.axis)
 
 
 def library_anisotropy(grid: TorusTemplateGrid, inc: TorusInclination, dtype) -> AnisotropyGrid:
@@ -393,8 +414,17 @@ def node_power_scale(grid: TorusTemplateGrid, inc: TorusInclination) -> np.ndarr
     ndarray, shape (n_ax1, ..., n_axk)
         :math:`(a/\bar a) / P` at each node, float64: a build-time table multiplied by it
         and by :math:`f L_{\rm bol}` equals :func:`torus_lnu_anisotropic` at that node.
+
+    Notes
+    -----
+    When JAX runs in float32 the powers :math:`P` (~1e-55, below float32's smallest normal)
+    are taken with ``native_bolometric_nu_np`` in float64, since the in-graph integral would
+    flush them to zero and the table to ``inf`` (#3101).
     """
-    powers = np.asarray(_record_powers(grid, jnp.float64))
+    if process_float_dtype() == np.float64:
+        powers = np.asarray(_record_powers(grid, jnp.float64))
+    else:
+        powers = _host_record_powers(grid.template, grid.wave_grid)
     ratio = anisotropy_at_nodes(library_anisotropy(grid, inc, jnp.float64), inc)
     return ratio / powers
 

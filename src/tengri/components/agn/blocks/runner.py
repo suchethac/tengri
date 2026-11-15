@@ -60,6 +60,17 @@ from tengri.components.agn._lbol_reference import (
     reference_evaluation,
     rescale,
 )
+from tengri.components.agn._params import (
+    DEFAULT_AGN_A_SPIN,
+    DEFAULT_AGN_EBV_DISC,
+    DEFAULT_AGN_IR_FRAC,
+    DEFAULT_AGN_P_SKIRTOR,
+    DEFAULT_AGN_POLAR_OA,
+    DEFAULT_AGN_Q_SKIRTOR,
+    DEFAULT_AGN_RADIUS_RATIO,
+    DEFAULT_AGN_TORUS_FRAC,
+    POLAR_EBV_OFF,
+)
 from tengri.components.agn._phys import COS_INC_ISOTROPIC_REFERENCE
 from tengri.components.agn._publication import log10_emitted_bolometric
 from tengri.components.agn._skirtor_agnfitter_sightline import resolve_retired_incl_skirtor
@@ -104,6 +115,7 @@ from tengri.components.agn.blocks.torus_screen import (
     torus_screen_geometry,
     torus_screen_transmission,
 )
+from tengri.components.agn.disc import kubota_done_unemitted_fraction
 from tengri.components.agn.fritz import (
     FritzGrid,
     fritz_disc_dust_ratio,
@@ -120,6 +132,7 @@ from tengri.components.agn.skirtor import (
 from tengri.config.exceptions import AdvisoryWarning
 from tengri.utils.grid_interp import loglog_integral, resample_template
 from tengri.utils.scale import (
+    log10_add,
     log10_magnitude,
     log10_weighted_sum,
     representable_denominator,
@@ -152,6 +165,10 @@ _BUDGET_WAVE = np.geomspace(1.0e-3, 1.0e10, 13001)
 DIRECT_LOS_LOG_LUMINOSITY_KEY = "log_L_agn_direct_los"
 #: Key of the ledger's emitted line-of-sight sum, the integral of ``sed_agn`` (#3076).
 LOS_LOG_LUMINOSITY_KEY = "log_L_agn_los"
+#: Key of the torus fraction the runner applied [dimensionless]: ``agn_torus_frac`` clipped to
+#: ``[0, 1]`` and, under ``agn_norm='conserving'`` with a line block, bounded by
+#: ``1 - E_lines/E_disc``. A scalar, not an SED; not scaled by ``agn_lum_ratio``.
+TORUS_FRAC_APPLIED_KEY = "agn_torus_frac_applied"
 _LINE_BUDGET_WAVE = np.geomspace(9.0e2, 3.0e5, 30001)
 
 
@@ -323,6 +340,7 @@ _DISCS_WITH_5100A_CONTINUUM = _DISCS_WITH_5100A_CONTINUUM | frozenset(
 from tengri.components.agn._params import (
     DEFAULT_AGN_COS_INC,
     DEFAULT_AGN_LOG_LBOL,
+    DEFAULT_AGN_LOG_MBH,
     DEFAULT_AGN_LUM_RATIO,
     DEFAULT_AGN_OA_SKIRTOR,
     DEFAULT_AGN_TAU_SKIRTOR,
@@ -536,7 +554,7 @@ agn_torus_block, agn_attenuation_block : str
     # any caller even though the forward pass no longer invokes it.
     if selectors["attenuation"] == "polar_dust" and params is not None:
         try:
-            ebv_is_zero = float(params.get("agn_polar_ebv", 0.0)) == 0.0
+            ebv_is_zero = float(params.get("agn_polar_ebv", POLAR_EBV_OFF)) == 0.0
         except (TypeError, ValueError):
             ebv_is_zero = False
         if ebv_is_zero:
@@ -932,7 +950,9 @@ agn_torus_block, agn_attenuation_block : str
     # silently ignored agn_ebv_disc (#916). No-op at the default agn_ebv_disc=0.
     # The intrinsic L_2500/L_4400 below recompute from the un-reddened disc block,
     # so the X-ray/radio anchors stay obscuration-independent.
-    L_lambda_disc = redden_disc(wave, L_lambda_disc, jnp.asarray(params.get("agn_ebv_disc", 0.0)))
+    L_lambda_disc = redden_disc(
+        wave, L_lambda_disc, jnp.asarray(params.get("agn_ebv_disc", DEFAULT_AGN_EBV_DISC))
+    )
 
     # Capture L_2500_intrinsic and L_4400_intrinsic: the un-reddened,
     # agn_log_lbol-normalized disc monochromatic luminosities [erg/s/Hz] that
@@ -1013,7 +1033,7 @@ agn_torus_block, agn_attenuation_block : str
     # ``polar_dust`` attenuation block, downstream of this R-tie), so the
     # reddening factor ``skirtor_disc_dust_ratio`` takes is always the
     # identity now.
-    _agn_fracAGN = jnp.asarray(params.get("agn_ir_frac", 0.0))
+    _agn_fracAGN = jnp.asarray(params.get("agn_ir_frac", DEFAULT_AGN_IR_FRAC))
     _cos_inc = jnp.asarray(params.get("agn_cos_inc", DEFAULT_AGN_COS_INC))
     _disc_R = None
     _disc_incl = None
@@ -1033,27 +1053,36 @@ agn_torus_block, agn_attenuation_block : str
     # agn_torus_frac clipped to [0, 1] once and reused by both the conserving
     # disc debit and the cigale_joint SKIRTOR R-tie fallback, so the default
     # (0.5) can never drift between the sites that debit the disc.
-    _torus_frac = jnp.clip(jnp.asarray(params.get("agn_torus_frac", 0.5)), 0.0, 1.0)
+    _torus_frac = jnp.clip(
+        jnp.asarray(params.get("agn_torus_frac", DEFAULT_AGN_TORUS_FRAC)), 0.0, 1.0
+    )
     _tie_wave = None
     _tie_disc = None
+    # The tie disc before any reddening: the anchors' unit-area shape is normalized on it (#3407).
+    _tie_disc_intrinsic = None
     _tie_incl_native = None
     # The ledger's unobscured angle-integrated disc under the tie, and the polar-dust share the
     # tie takes off the disc (set below; only the ledger reads them).
     _tie_intrinsic = None
     _ledger_polar_norm = 1.0
     _tie_active = _agn_norm == "cigale_joint" and agn_torus_block in _TIE_TORI
+    # The Fritz torus's library anisotropy stays on the untied path; where the tie is on the
+    # torus + polar dust carry ``agn_power`` at every inclination, as CIGALE's ``fritz2006``.
+    _fritz_tied_flat = _tie_active and agn_torus_block == "fritz"
     # A disc with a corona registers its disc/corona split; the tie normalizes the disc part
     # and carries the corona on top (see ``_disc_parts``). A corona-less disc takes the
     # whole spectrum as its disc part, exactly as before.
     _split_fn = DISC_SPLIT_BLOCKS.get(agn_disc_block) if _tie_active else None
     _corona_fraction = None
 
+    def _disc_parts_raw(w):
+        """Disc part, corona and the corona's power share on ``w``, before any reddening."""
+        return _split_fn(w, agn_log_lbol=agn_log_lbol_eval, templates=disc_templates, **params)
+
     def _disc_parts(w):
         """Disc part, corona and the corona's power share on ``w``, reddened like the disc."""
-        _d, _h, _f = _split_fn(
-            w, agn_log_lbol=agn_log_lbol_eval, templates=disc_templates, **params
-        )
-        _ebv = jnp.asarray(params.get("agn_ebv_disc", 0.0))
+        _d, _h, _f = _disc_parts_raw(w)
+        _ebv = jnp.asarray(params.get("agn_ebv_disc", DEFAULT_AGN_EBV_DISC))
         return redden_disc(w, _d, _ebv), redden_disc(w, _h, _ebv), _f
 
     if _tie_active:
@@ -1069,27 +1098,31 @@ agn_torus_block, agn_attenuation_block : str
         # axis, not resampled from the caller's grid, whose start would otherwise cut
         # the corona and move R. Without a library the tie degenerates onto the caller's
         # grid.
+        _ebv_disc = jnp.asarray(params.get("agn_ebv_disc", DEFAULT_AGN_EBV_DISC))
         if _library_wave is None:
             _tie_wave = wave
             if _split_fn is None:
+                _tie_disc_intrinsic = _disc_block_lambda
                 _tie_disc = L_lambda_disc
             else:
-                _tie_disc, _, _corona_fraction = _disc_parts(wave)
+                _d_raw, _, _corona_fraction = _disc_parts_raw(wave)
+                _tie_disc_intrinsic = _d_raw
+                _tie_disc = redden_disc(wave, _d_raw, _ebv_disc)
         else:
             _tie_wave = jnp.asarray(_library_wave, dtype=wave.dtype)
             if _split_fn is None:
-                _tie_disc = redden_disc(
+                _d_raw = disc_fn(
                     _tie_wave,
-                    disc_fn(
-                        _tie_wave,
-                        agn_log_lbol=agn_log_lbol_eval,
-                        templates=disc_templates,
-                        **params,
-                    ),
-                    jnp.asarray(params.get("agn_ebv_disc", 0.0)),
+                    agn_log_lbol=agn_log_lbol_eval,
+                    templates=disc_templates,
+                    **params,
                 )
+                _tie_disc_intrinsic = _d_raw
+                _tie_disc = redden_disc(_tie_wave, _d_raw, _ebv_disc)
             else:
-                _tie_disc, _, _corona_fraction = _disc_parts(_tie_wave)
+                _d_raw, _, _corona_fraction = _disc_parts_raw(_tie_wave)
+                _tie_disc_intrinsic = _d_raw
+                _tie_disc = redden_disc(_tie_wave, _d_raw, _ebv_disc)
         if agn_torus_block == "skirtor":
             _disc_tie = skirtor_disc_dust_ratio(
                 _tie_wave,
@@ -1098,8 +1131,8 @@ agn_torus_block, agn_attenuation_block : str
                 incl_wave=wave,
                 _template=_library,
                 agn_tau_skirtor=params.get("agn_tau_skirtor", DEFAULT_AGN_TAU_SKIRTOR),
-                agn_p_skirtor=params.get("agn_p_skirtor", 1.0),
-                agn_q_skirtor=params.get("agn_q_skirtor", 1.0),
+                agn_p_skirtor=params.get("agn_p_skirtor", DEFAULT_AGN_P_SKIRTOR),
+                agn_q_skirtor=params.get("agn_q_skirtor", DEFAULT_AGN_Q_SKIRTOR),
                 agn_oa_skirtor=params.get("agn_oa_skirtor", DEFAULT_AGN_OA_SKIRTOR),
                 # R70: the grid's third geometry axis. Left out, the tie
                 # interpolated the SKIRTOR templates at the signature default
@@ -1109,7 +1142,7 @@ agn_torus_block, agn_attenuation_block : str
                 # into R_faceon that also picked the wrong normalization: the
                 # factor is R-dependent (2.896205 / 3.172626 / 3.338009 at i=80
                 # for R = 10 / 20 / 30, a 15% spread).
-                agn_radius_ratio=params.get("agn_radius_ratio", 20.0),
+                agn_radius_ratio=params.get("agn_radius_ratio", DEFAULT_AGN_RADIUS_RATIO),
                 agn_cos_inc=_cos_inc,
             )
         else:
@@ -1157,7 +1190,7 @@ agn_torus_block, agn_attenuation_block : str
                 templates=disc_templates,
                 **{**params, "agn_cos_inc": COS_INC_ISOTROPIC_REFERENCE},
             ),
-            jnp.asarray(params.get("agn_ebv_disc", 0.0)),
+            jnp.asarray(params.get("agn_ebv_disc", DEFAULT_AGN_EBV_DISC)),
         )[0]
         * 5100.0
     )
@@ -1204,6 +1237,8 @@ agn_torus_block, agn_attenuation_block : str
     if _conserve_via_debit:
         L_lambda_disc = L_lambda_disc * (1.0 - _torus_frac)
         _disc_scalar = 1.0 - _torus_frac
+    # The torus debit alone: the unemitted K&D remainder takes no line-energy debit (#3015).
+    _disc_torus_share = _disc_scalar
 
     _budget_cache: dict = {}
 
@@ -1236,7 +1271,7 @@ agn_torus_block, agn_attenuation_block : str
                     templates=disc_templates,
                     **{**params, "agn_cos_inc": COS_INC_ISOTROPIC_REFERENCE},
                 ),
-                jnp.asarray(params.get("agn_ebv_disc", 0.0)),
+                jnp.asarray(params.get("agn_ebv_disc", DEFAULT_AGN_EBV_DISC)),
             )
         return _budget_cache["disc"]
 
@@ -1292,6 +1327,39 @@ agn_torus_block, agn_attenuation_block : str
                 _power = jnp.abs(loglog_integral(_axis, _on_axis))
             _budget_cache["torus_power"] = _power
         return _budget_cache["torus_power"]
+
+    def _tied_log_anisotropy():
+        """``log10(a(mu)/a_bar)`` of the Fritz library at ``agn_cos_inc``, 0 where untied [dex].
+
+        pCIGALE's ``fritz2006`` divides the dust (torus + polar blackbody) by its own integral
+        at every ``psy`` and scales it by ``agn_power``, so under the ``agn_ir_frac`` tie the
+        total dust power does not depend on the viewing angle (Fritz et al. 2006's per-record
+        ``norm`` only sets the disc). The library's ``a/a_bar`` is therefore held out of the
+        tied torus; the untied (``agn_ir_frac = 0``) path keeps it (#2851).
+        """
+        _aniso = TORUS_ANISOTROPY_BLOCKS[agn_torus_block]
+        _log = _aniso(_templates_for("torus", agn_torus_block), wave.dtype, **params)
+        return jnp.where(_agn_fracAGN > 0.0, _log, 0.0)
+
+    def _angle_integrated_torus_budget(sightline_power):
+        """The torus power the polar-dust split budgets on, over every direction [erg/s].
+
+        A library torus that keeps its anisotropy ``a(mu)`` (``TORUS_ANISOTROPY_BLOCKS``) emits
+        ``f L_bol a(mu)/a_bar`` along the sightline, so its angle-integrated power is the sightline
+        power divided by ``a(mu)/a_bar`` at ``agn_cos_inc``. Any other torus carries the same power
+        along every sightline and passes through unchanged. The polar re-emission is isotropic and
+        observer-independent, so only the angle-integrated budget closes the energy (#3100).
+        """
+        _aniso = TORUS_ANISOTROPY_BLOCKS.get(agn_torus_block)
+        if _aniso is None:
+            return sightline_power
+        _log_ratio = _aniso(_templates_for("torus", agn_torus_block), wave.dtype, **params)
+        _angle_integrated = sightline_power / jnp.power(10.0, _log_ratio)
+        if not _fritz_tied_flat:
+            return _angle_integrated
+        # A tied Fritz torus carries ``agn_power`` along every sightline (owner 2026-11-13);
+        # untied (``agn_ir_frac = 0``) it keeps the library's anisotropy, so the budget divides.
+        return jnp.where(_agn_fracAGN > 0.0, sightline_power, _angle_integrated)
 
     # Stage 2a: narrow-line region.
     nlr_fn = resolve_agn_block("nlr", agn_nlr_block)
@@ -1422,11 +1490,34 @@ agn_torus_block, agn_attenuation_block : str
             1e-30,
         )
         _line_fraction = _e_lines / _e_disc
-        L_lambda_disc = L_lambda_disc - _line_fraction * _disc_intrinsic
-        _disc_scalar = _disc_scalar - _line_fraction
+        if _conserve_via_debit:
+            # The torus and the lines both take their power from the disc, so their shares
+            # cannot add up to more than the disc has: ``t <= 1 - E_lines/E_disc``. Without
+            # this bound the disc share ``1 - t - E_lines/E_disc`` went negative as t -> 1 and
+            # the ledger counted the negative disc as emitted power (C2 = +1.3e-2 at t = 1
+            # with the analytic NLR). The torus block and every stage below see the bounded
+            # fraction, which the runner publishes (``TORUS_FRAC_APPLIED_KEY``).
+            _torus_frac = jnp.minimum(_torus_frac, jnp.maximum(1.0 - _line_fraction, 0.0))
+            params = {**params, "agn_torus_frac": _torus_frac}
+            # Lines brighter than the disc (E_lines > E_disc, reachable with an NLR and a BLR
+            # near their prior maxima) leave the disc nothing: its share stops at 0, the pieces
+            # exceed the accretion power, and the ledger publishes agn_ledger_closed = 0.
+            _disc_scalar = jnp.maximum(1.0 - _torus_frac - _line_fraction, 0.0)
+            L_lambda_disc = _disc_intrinsic * _disc_scalar
+        else:
+            L_lambda_disc = L_lambda_disc - _line_fraction * _disc_intrinsic
+            _disc_scalar = _disc_scalar - _line_fraction
 
     # Stage 4: IR torus.
-    torus_fn = resolve_agn_block("torus", agn_torus_block)
+    _torus_block_fn = resolve_agn_block("torus", agn_torus_block)
+
+    def torus_fn(*args, **kwargs):
+        """The torus block; a tied Fritz torus has its library anisotropy removed (2026-11-13)."""
+        _out = _torus_block_fn(*args, **kwargs)
+        if _fritz_tied_flat:
+            _out = _out / jnp.power(10.0, _tied_log_anisotropy())
+        return _out
+
     L_lambda_torus = torus_fn(
         wave,
         agn_log_lbol=agn_log_lbol_eval,
@@ -1470,8 +1561,9 @@ agn_torus_block, agn_attenuation_block : str
         else:
             _disc_part, _corona_part, _ = _disc_parts(wave)
         # Below the library's first node the tabulated ratio is zero, which would silence the
-        # tied disc in the X-rays; there it takes the library sightline's absorbed factor, the
-        # same Morrison & McCammon column as the untied path (owner ruling 10, #2760).
+        # tied disc in the X-rays; there it takes the library sightline's Morrison & McCammon
+        # column: the held library ratio times T_X for every tied library torus (#3062,
+        # extended to SKIRTOR).
         _tie_sight = _library_sightline()
         _disc_incl_tied = (
             _disc_incl
@@ -1495,7 +1587,7 @@ agn_torus_block, agn_attenuation_block : str
                     disc_fn(
                         _fine, agn_log_lbol=agn_log_lbol_eval, templates=disc_templates, **params
                     ),
-                    jnp.asarray(params.get("agn_ebv_disc", 0.0)),
+                    jnp.asarray(params.get("agn_ebv_disc", DEFAULT_AGN_EBV_DISC)),
                 )
             else:
                 _disc_fine = _disc_parts(_fine)[0]
@@ -1516,10 +1608,26 @@ agn_torus_block, agn_attenuation_block : str
             # with the X-rays photoelectrically absorbed below its grid), the same transmission
             # any source behind the torus takes, unity face-on. The analytic screen remains only
             # for a torus without a disc column.
-            _p_disc_model = (1.0 - _corona_fraction) * (10.0**agn_log_lbol_eval * L_SUN_ERG)
-            _corona_scale = (
-                _TIE_HEMISPHERE_MEAN[agn_torus_block] * _agn_power * _disc_R_faceon
-            ) / _p_disc_model
+            # The model's disc and warm zones carry their own dissipation, ``(1 - f - R_unem/L)``
+            # of the accretion power: the K&D disc does not emit what it dissipates beyond
+            # ``R_out`` (#3015).
+            _r_unem_tie = kubota_done_unemitted_fraction(
+                params.get("agn_log_mbh", DEFAULT_AGN_LOG_MBH),
+                agn_log_lbol,
+                params.get("agn_a_spin", DEFAULT_AGN_A_SPIN),
+            )
+            _l_acc_eval = 10.0**agn_log_lbol_eval * L_SUN_ERG
+            _p_disc_model = (1.0 - _corona_fraction - _r_unem_tie) * _l_acc_eval
+            # Where the hot flow fills the disc (``R_hot = R_out``) the model has no disc or warm
+            # zone, ``P_D,model`` is 0 and the ratio of the tied disc power to it has no meaning:
+            # the corona then keeps its own scale (RELQSO, #3015).
+            _has_disc = _p_disc_model > 1e-9 * _l_acc_eval
+            _corona_scale = jnp.where(
+                _has_disc,
+                (_TIE_HEMISPHERE_MEAN[agn_torus_block] * _agn_power * _disc_R_faceon)
+                / jnp.where(_has_disc, _p_disc_model, _l_acc_eval),
+                1.0,
+            )
             _corona_sight = _library_sightline()
             if _corona_sight is None:
                 _corona_oa, _corona_tau_v, _ = torus_screen_geometry(agn_torus_block, params)
@@ -1536,6 +1644,7 @@ agn_torus_block, agn_attenuation_block : str
         L_lambda_disc = jnp.where(_agn_fracAGN > 0.0, _disc_scaled, _disc_debited)
         # Where the tie is inactive (fracAGN = 0) the disc is the debited one.
         _disc_scalar = 1.0 - _torus_frac
+        _disc_torus_share = _disc_scalar
         if return_ledger:
             # The tied disc before the torus hides any of it, integrated over all directions:
             # the face-on library power ``agn_power x R_faceon`` times the library disc's
@@ -1566,8 +1675,10 @@ agn_torus_block, agn_attenuation_block : str
             _a_disc, _a_corona, _ = _split_fn(
                 _anchor_wave, agn_log_lbol=agn_log_lbol_eval, templates=disc_templates, **params
             )
+        # The unit-area shape is normalized on the un-reddened tie disc: a reddened integral would
+        # carry 1/T(agn_ebv_disc) into the anchors (#3407).
         _tie_native_integral = jnp.maximum(
-            jnp.trapezoid(_tie_disc, _tie_wave), representable_denominator(1e-30)
+            jnp.trapezoid(_tie_disc_intrinsic, _tie_wave), representable_denominator(1e-30)
         )
         _anchor_tied = (
             _a_disc
@@ -1639,7 +1750,7 @@ agn_torus_block, agn_attenuation_block : str
                 # combined factor in place of (its own law x T); a corona stays isotropic and
                 # takes T.
                 _ref = {**params, "agn_cos_inc": COS_INC_ISOTROPIC_REFERENCE}
-                _ebv = jnp.asarray(params.get("agn_ebv_disc", 0.0))
+                _ebv = jnp.asarray(params.get("agn_ebv_disc", DEFAULT_AGN_EBV_DISC))
                 _split_ref = DISC_SPLIT_BLOCKS.get(agn_disc_block)
                 if _split_ref is None:
                     _d_ref = disc_fn(
@@ -1689,7 +1800,7 @@ agn_torus_block, agn_attenuation_block : str
         _atten_params = {
             **params,
             "agn_polar_oa": resolve_polar_opening_angle(
-                params.get("agn_polar_oa", 0.0),
+                params.get("agn_polar_oa", DEFAULT_AGN_POLAR_OA),
                 polar_follow_opening_angle(agn_torus_block, params),
             ),
             "agn_polar_geometry": "fritz" if agn_torus_block == "fritz" else "skirtor",
@@ -1841,6 +1952,8 @@ agn_torus_block, agn_attenuation_block : str
                 )
             else:
                 _agn_dust_budget = _torus_power_on_budget()
+            # The split budgets on the angle-integrated torus power, not the sightline (#3100).
+            _agn_dust_budget = _angle_integrated_torus_budget(_agn_dust_budget)
             _polar_power = jnp.abs(_l_absorbed)
             # Degenerate case: BOTH budgets are zero -- no torus emission and
             # no polar re-emission on this grid (agn_polar_ebv = 0 with a
@@ -1977,6 +2090,9 @@ agn_torus_block, agn_attenuation_block : str
     # the quantity to compare with a catalog L_bol from a bolometric correction;
     # ``agn_log_lbol`` is the angle-integrated accretion power. Held in log10 (an erg/s scalar
     # overflows float32) and not scaled by ``agn_lum_ratio``, like ``L_agn_bol``.
+    if return_components:
+        components_final = {**components_final, TORUS_FRAC_APPLIED_KEY: _torus_frac}
+
     if return_components and not _ledger_row:
         _los_wave = _los_budget_wave(agn_disc_block == "kubota_done", wave.dtype)
         _direct_lambda = disc_fn(
@@ -2053,13 +2169,37 @@ agn_torus_block, agn_attenuation_block : str
         else:
             _log_disc_intr = _row_mean("_disc_block") + log10_magnitude(_disc_scalar)
             _log_disc_unem = log10_signed_sphere_mean(_evals["_disc_hidden"][1:], _w_l, _w_q)
+            if agn_disc_block == "kubota_done":
+                # The K&D disc stops at R_out and does not emit the dissipation beyond it (#3015).
+                # That share of the disc's budget is unemitted, and joins the screened light.
+                _r_unem = kubota_done_unemitted_fraction(
+                    params.get("agn_log_mbh", DEFAULT_AGN_LOG_MBH),
+                    agn_log_lbol,
+                    params.get("agn_a_spin", DEFAULT_AGN_A_SPIN),
+                )
+                _log_disc_unem = log10_add(
+                    _log_disc_unem,
+                    jnp.log10(jnp.maximum(_r_unem, representable_floor(1e-100)))
+                    + jnp.asarray(agn_log_lbol)
+                    + np.log10(L_SUN_ERG)
+                    + log10_magnitude(_disc_torus_share),
+                )
         if _tie_intrinsic is not None:
             # Under the active tie the disc is rebuilt from the library: its unemitted share is
             # the difference from the tie's intrinsic disc.
             _offset = _log_scale_offset if _use_ref else 0.0
             _log_tie_intr = log10_magnitude(_tie_intrinsic * _ledger_polar_norm) + _offset
             _log_disc_intr = jnp.where(_agn_fracAGN > 0.0, _log_tie_intr, _log_disc_intr)
-            _log_disc_unem = None
+            # Active tie: the unemitted share is the tie's intrinsic disc less its emitted disc,
+            # the ledger's own difference (the K&D remainder is left out, as ruled). Inactive tie
+            # (fracAGN = 0): the disc is the plain one, with its screened and remainder share.
+            _tie_emitted = _row_mean("disc")
+            _tie_gap = log10_add(_log_tie_intr, _tie_emitted, sign_b=-1.0)
+            _log_tie_unem = jnp.where(
+                _log_tie_intr > _tie_emitted, _tie_gap, jnp.asarray(-jnp.inf)
+            )
+            if _log_disc_unem is not None:
+                _log_disc_unem = jnp.where(_agn_fracAGN > 0.0, _log_tie_unem, _log_disc_unem)
         _log_lines_intr = _row_mean("_lines_raw") if _has_lines else jnp.asarray(-jnp.inf)
         _log_lines_unem = (
             log10_signed_sphere_mean(_evals["_lines_hidden"][1:], _w_l, _w_q)
@@ -2072,6 +2212,9 @@ agn_torus_block, agn_attenuation_block : str
             if _aniso_fn is None
             else _aniso_fn(_templates_for("torus", agn_torus_block), wave.dtype, **params)
         )
+        if _fritz_tied_flat:
+            # Where the tie is on the torus is flat: nothing to divide out (owner 2026-11-13).
+            _log_aniso = jnp.where(_agn_fracAGN > 0.0, 0.0, _log_aniso)
         # A foreground attenuation block screens the torus as well; its power before the screen
         # is the torus block's own emission (``polar_dust`` leaves the torus unscreened).
         _log_torus_intr = None
@@ -2106,6 +2249,9 @@ agn_torus_block, agn_attenuation_block : str
                 log_torus_anisotropy=_log_aniso,
                 log_power=_log_power,
                 closed=_flag,
+                # The flag is 1 only where the pieces add up to the accretion power, not only
+                # where the recipe's policy says they should.
+                log_budget=jnp.asarray(agn_log_lbol) + np.log10(L_SUN_ERG),
             ),
         }
 
@@ -2132,7 +2278,7 @@ def _scale_components(components: dict, agn_lum_ratio: Array | float) -> dict:
     log_ratio = log10_magnitude(jnp.asarray(agn_lum_ratio))
     scaled = {}
     for k, v in components.items():
-        if k in (DIRECT_LOS_LOG_LUMINOSITY_KEY, LEDGER_CLOSED_KEY):
+        if k in (DIRECT_LOS_LOG_LUMINOSITY_KEY, LEDGER_CLOSED_KEY, TORUS_FRAC_APPLIED_KEY):
             scaled[k] = v
         elif k.startswith("log_L_agn_"):
             scaled[k] = v + log_ratio

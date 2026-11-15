@@ -99,4 +99,9 @@ def test_rebuild_matches_tracked(tmp_path):
             if a.dtype.kind in "OSU":
                 a = np.array([x.decode() if isinstance(x, bytes) else x for x in a])
                 b = np.array([x.decode() if isinstance(x, bytes) else x for x in b])
-            assert np.array_equal(a, b), key
+            if a.dtype.kind == "f":
+                # The builder's Q_H uses Python float ``**`` (the platform libm ``pow``), which
+                # differs between macOS and glibc in the last bit; a few ulp is the same table.
+                np.testing.assert_allclose(b, a, rtol=1e-13, atol=0.0, equal_nan=True, err_msg=key)
+            else:
+                assert np.array_equal(a, b), key

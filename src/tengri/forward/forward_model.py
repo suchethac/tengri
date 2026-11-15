@@ -1395,12 +1395,9 @@ class ForwardModel:
         # shape does not silently reuse it (wrong mass matrix → degraded sampling,
         # divergence risk). The XLA compile persists in the JAX cache; only the
         # value-dependent adaptation half is dropped.
-        try:
-            from tengri.inference._model_cache import _default_owner
+        from tengri.inference._model_cache import _default_owner
 
-            _default_owner.get_or_compile_model(self).get("adaptation", {}).clear()
-        except Exception:
-            pass
+        _default_owner.get_or_compile_model(self).get("adaptation", {}).clear()
 
     def _params_for_population(
         self,

@@ -95,4 +95,4 @@ def test_an_engaged_band_response_records_no_decline(synthetic_tophat_obs, ssp_d
     model = _model(ssp_data_wne, synthetic_tophat_obs, "dale2014")
     report = precompute_engagement_report(model)
     assert report.dust_band_response.state == "engaged"
-    assert getattr(model, "_dust_band_response_decline", None) is None
+    assert model.band_table_decline("dust_emission", "emission_band_response") is None

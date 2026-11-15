@@ -43,7 +43,11 @@ SHARE_TOL = {
 WINDOWS = {"past_oldest": (13.5, 0.001), "inside_grid": (12.0, 0.5)}
 #: Photometry of the PARSEC z = 0 constant history after / before the fix, same
 #: units (measured with main's source and data): FUV x0.9325, r x0.9499.
-PHOT_RATIO = {"galex_fuv": 0.9325, "sdss_r": 0.9499}
+# Re-pinned 2026-11-15 after #3434 (in #3462): the undeclared metallicity read moves the FUV
+# photometry of this model by +0.153% and the r photometry by -0.038% (the pinned ``before``
+# values are unchanged); 8aff37cb3 reproduces the previous ratios to 3e-5 and 5e-5 (the 4-digit
+# pins).
+PHOT_RATIO = {"galex_fuv": 0.9339610923910742, "sdss_r": 0.9494880648446871}
 
 
 @pytest.fixture(scope="module")
@@ -138,7 +142,7 @@ def test_no_uniform_rescale_of_the_younger_nodes(ssp_data_fsps, obs, kernel):
 
 
 def test_photometry_of_the_constant_history_changes_by_the_stated_amount(ssp_data_fsps, obs):
-    """FUV x0.9325 and r x0.9499 against the dropped-and-rescaled weights.
+    """FUV x0.9340 and r x0.9495 against the dropped-and-rescaled weights.
 
     The dropped 6.75 % of the mass was re-added as young and intermediate nodes
     (bluer than a 12.6 Gyr population); it now sits on the oldest node.

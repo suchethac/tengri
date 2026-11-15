@@ -20,7 +20,7 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
-_BACKENDS = ("baked_in", "cloudy_grid", "cb19", "mappings", "cue", "shock")
+_BACKENDS = ("baked_in", "cloudy_grid", "cb19", "gutkin16", "mappings", "cue")
 
 
 class _MockSSP:

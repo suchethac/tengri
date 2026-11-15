@@ -46,11 +46,19 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri._deprecated import deprecated_alias
-from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
-from tengri.components.agn._template_grid import float32_safe_template, scale_to_lbol_native
+from tengri.components.agn._params import (
+    DEFAULT_AGN_LOG_LBOL,
+    DEFAULT_AGN_LOG_NH_SILVA,
+    DEFAULT_AGN_TORUS_FRAC,
+)
+from tengri.components.agn._template_grid import (
+    cache_per_float_dtype,
+    float32_safe_template,
+    loaded_template,
+    scale_to_torus_power_native,
+)
 from tengri.utils.grid_interp import interp_nd_pchip, resample_template
 from tengri.utils.host_array import device_table
-from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
 __all__ = [
     "Silva04Grid",
@@ -160,7 +168,7 @@ def create_silva04_from_grid(grid_path: str) -> Callable:
     return sed_fn
 
 
-@functools.cache
+@cache_per_float_dtype
 def load_silva04_grid(grid_path: str) -> Silva04Grid:
     """Load a Silva+04 grid HDF5 into a :class:`Silva04Grid` pytree.
 
@@ -188,7 +196,7 @@ def load_silva04_grid(grid_path: str) -> Silva04Grid:
     """
     raw = _load_silva04_arrays(grid_path)
     return Silva04Grid(
-        template=np.asarray(raw["template"], dtype=np.float64),
+        template=loaded_template(np.asarray(raw["template"], dtype=np.float64)),
         log_nh_axis=np.asarray(raw["log_nh_axis"], dtype=np.float64),
         wave_grid=np.asarray(raw["wavelength"], dtype=np.float64),
     )
@@ -198,8 +206,8 @@ def silva04_sed_from_grid(
     grid: Silva04Grid,
     wavelength: jnp.ndarray,
     agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
-    agn_log_nh_silva: float = 23.0,
-    agn_torus_frac: float = 0.5,
+    agn_log_nh_silva: float = DEFAULT_AGN_LOG_NH_SILVA,
+    agn_torus_frac: float = DEFAULT_AGN_TORUS_FRAC,
     **_kwargs,
 ) -> jnp.ndarray:
     r"""Silva+04 torus SED at a single ``log10(N_H)``.
@@ -267,10 +275,9 @@ def silva04_sed_from_grid(
     )
     wave_native = device_table(grid.wave_grid)
     sed = resample_template(wavelength, wave_native, template, left=0.0, right=0.0)
-    l_scale = 10.0**agn_log_lbol * _LSUN_ERG * agn_torus_frac
     # Normalized once (#2851): the Silva et al. (2004) templates have no inclination axis,
     # so there is no anisotropy to restore and the sightline power is f L_bol.
-    return scale_to_lbol_native(template, wave_native, sed, l_scale)
+    return scale_to_torus_power_native(template, wave_native, sed, agn_log_lbol, agn_torus_frac)
 
 
 _GRID_SEARCH_PATHS: tuple[str, ...] = (
@@ -294,7 +301,7 @@ def _find_silva04_grid() -> str:
     return require_data(_GRID_SEARCH_PATHS[-1], _NOT_FOUND_MSG)
 
 
-@functools.cache
+@cache_per_float_dtype
 def _load_silva04_default() -> Callable:
     return create_silva04_from_grid(_find_silva04_grid())
 

@@ -119,8 +119,11 @@ from tengri.utils.physics_constants import V_BAND_ANGSTROM
 def power_law(
     wavelength: jnp.ndarray,
     dust_slope: float = DEFAULT_DUST_SLOPE,
+    dust_bump_strength: float = DEFAULT_DUST_BUMP_STRENGTH,
+    dust_bump_x0: float = DEFAULT_DUST_BUMP_X0,
+    dust_bump_gamma: float = DEFAULT_DUST_BUMP_GAMMA,
 ) -> jnp.ndarray:
-    r"""Power-law dust attenuation curve following Charlot & Fall (2000).
+    r"""Power-law dust attenuation curve following Charlot & Fall (2000), with an optional UV bump.
 
     Parameters
     ----------
@@ -128,6 +131,13 @@ def power_law(
         Wavelength grid. [Å]
     dust_slope : float, optional
         Power-law slope. Default: -0.7 (standard Charlot & Fall). [dimensionless]
+    dust_bump_strength : float, optional
+        Amplitude of the Drude UV bump relative to the power law. [dimensionless]
+        Default: 0.0 (no bump), which returns the bare power law.
+    dust_bump_x0 : float, optional
+        Central wavelength of the UV bump. [μm] Default: 0.2175.
+    dust_bump_gamma : float, optional
+        FWHM of the UV bump. [μm] Default: 0.035.
 
     Returns
     -------
@@ -138,22 +148,44 @@ def power_law(
     -----
     **JIT-compatible**: yes, all operations are ``jnp`` primitives.
 
-    The attenuation is:
+    The unnormalized curve is the Charlot & Fall power law plus a Drude bump, in the
+    functional form of CIGALE's ``dustatt_powerlaw`` module [2]_, with the bump
+    amplitude :math:`E_b` written as ``dust_bump_strength``:
 
     .. math::
 
-        k(\lambda) = \left(\frac{\lambda}{5500 \, \text{\AA}}\right)^n
+        a(\lambda) = \left(\frac{\lambda}{5500 \, \text{\AA}}\right)^n
+        + E_b \, D(\lambda; \lambda_0, \gamma)
 
-    where :math:`n = -0.7` produces the standard Charlot & Fall (2000) wavelength
-    dependence. Negative slopes make dust redder (stronger attenuation at short wavelengths).
+    where :math:`n` is ``dust_slope``, :math:`D` is the Drude profile
+    :math:`(\lambda\gamma)^2 / [(\lambda^2 - \lambda_0^2)^2 + (\lambda\gamma)^2]`,
+    and :math:`\lambda_0`, :math:`\gamma` are ``dust_bump_x0`` and ``dust_bump_gamma``.
+    The returned curve is normalized so that :math:`k(\lambda) = a(\lambda)/a(5500 \, \text{\AA})`,
+    which keeps :math:`\tau_V` the optical depth at 5500 Å. The normalization is a
+    scalar, so the bump's shape is unchanged.
+
+    With ``dust_bump_strength = 0`` the bump term is exactly zero and the normalization
+    divides by one, so the result is the bare power law bit for bit.
 
     References
     ----------
     .. [1] S. Charlot and S. M. Fall, "A Simple Model for the Absorption of Starlight by
        Dust in Galaxies," ApJ, 539, 718 (2000).
        https://doi.org/10.1086/309250
+    .. [2] Boquien, M. et al. 2019, "CIGALE: a python Code Investigating GALaxy Emission",
+       A&A 622, A103, arXiv:1811.03094, doi:10.1051/0004-6361/201834156. The power law
+       with a UV bump is the pcigale ``dustatt_powerlaw`` module (``alambda_av``,
+       ``uv_bump``), which this curve reproduces up to the normalization above.
     """
-    return (wavelength / V_BAND_ANGSTROM) ** dust_slope
+    wave_um = wavelength / 1e4
+    power = (wavelength / V_BAND_ANGSTROM) ** dust_slope
+    bump_scale = dust_bump_strength * _drude_profile(
+        wave_um, x0=dust_bump_x0, gamma=dust_bump_gamma
+    )
+    bump_v = dust_bump_strength * _drude_profile(
+        jnp.asarray(V_BAND_ANGSTROM / 1e4), x0=dust_bump_x0, gamma=dust_bump_gamma
+    )
+    return (power + bump_scale) / (1.0 + bump_v)
 
 
 @register_dust_law(
@@ -275,6 +307,7 @@ _C13_PIVOT_UM = 0.55
     "chevallard13",
     citation="Chevallard et al. 2013 (MNRAS 432, 2061)",
     short_doc="Chevallard+13 optical-depth-dependent diffuse ISM curve",
+    diffuse_only=True,
 )
 def chevallard13(
     wavelength: jnp.ndarray,

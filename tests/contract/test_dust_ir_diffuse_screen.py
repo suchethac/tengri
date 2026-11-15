@@ -322,7 +322,8 @@ class TestWavePrecompAgreesWithExact:
         be silently invisible to any photometry that hits that fast path.
         """
         m_lut = _build_emitting(synthetic_ssp_wide, True, WavePrecomp())
-        decline = getattr(m_lut, "_dust_band_response_decline", None)
+        entry = m_lut.band_table_decline("dust_emission", "emission_band_response")
+        decline = entry.reason if entry is not None else None
         assert decline is not None, "diffuse_screen=True must decline the band-response LUT"
         assert "diffuse" in decline.lower() or "screen" in decline.lower(), decline
 

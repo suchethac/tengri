@@ -40,7 +40,7 @@ import pytest
 from tengri.components.agn.blocks import _protocol as protocol, runner as runner_module
 from tengri.components.agn.blocks._protocol import LINE_ENERGY_BLOCKS, resolve_agn_block
 from tengri.components.agn.blocks.runner import compose_l_nu as _compose_l_nu
-from tengri.components.agn.disc import kubota_done_disc
+from tengri.components.agn.disc import kubota_done_disc, kubota_done_unemitted_fraction
 from tengri.utils.grid_interp import loglog_integral, resample_template
 from tengri.utils.physics_constants import C_AA, L_SUN
 from tests._data_skip import DATA_DIR
@@ -55,6 +55,17 @@ _COS30 = float(np.cos(np.radians(30.0)))
 _TORUS_FRAC = 0.5
 _WAVE = jnp.asarray(np.geomspace(8.0, 1.0e8, 40000))  # [A] covers the library axis
 _L_ACC = 10.0**_LOG_LBOL * L_SUN  # [erg/s]
+
+
+def _unemitted(mbh=8.0):
+    """``R_unem / L_acc`` of the K&D disc at this file's ``agn_log_lbol`` [dimensionless].
+
+    The disc stops at R_out and does not emit the dissipation beyond it (Kubota & Done 2018
+    Sec. 2.2; #3015).
+    """
+    return float(kubota_done_unemitted_fraction(mbh, _LOG_LBOL))
+
+
 _SKIRTOR_CELL = (
     ("tau_97", 7),
     ("p", 1),
@@ -266,7 +277,10 @@ def _decompose(tied_nu, disc_part, corona, incl):
     return float(coef[0]), float(coef[1]), float(resid)
 
 
-@pytest.mark.parametrize("mbh", [6.0, 8.0, 10.0])
+# log M_BH 10 is outside these tests' domain at ``agn_log_lbol = 11`` (#3015): lambda_Edd = 3e-4
+# puts the hot flow past its switch (R_hot = R_out = 21 R_g), so the disc and warm zones have
+# no width and there is no ``D`` part to decompose (RELQSO, Kubota & Done 2018 Sec. 2.2).
+@pytest.mark.parametrize("mbh", [6.0, 8.0])
 def test_tied_kubota_disc_part_carries_the_library_disc_power(mbh, library):
     """The disc and warm zone carry ``agn_power x R``; the corona is no part of that budget.
 
@@ -303,7 +317,10 @@ def _corona_coefficients(mbh, i_deg):
     return a, b, resid, lib
 
 
-@pytest.mark.parametrize("mbh", [6.0, 8.0, 10.0])
+# log M_BH 10 is outside these tests' domain at ``agn_log_lbol = 11`` (#3015): lambda_Edd = 3e-4
+# puts the hot flow past its switch (R_hot = R_out = 21 R_g), so the disc and warm zones have
+# no width and there is no ``D`` part to decompose (RELQSO, Kubota & Done 2018 Sec. 2.2).
+@pytest.mark.parametrize("mbh", [6.0, 8.0])
 def test_tied_corona_carries_the_model_share_of_the_angle_integrated_disc_power(mbh):
     """``int H d nu = f / (1 - f) x P_D,tied`` in angle-integrated powers, to 1e-5.
 
@@ -323,7 +340,11 @@ def test_tied_corona_carries_the_model_share_of_the_angle_integrated_disc_power(
     i_d = _fine_integral(lib, lambda w: _kubota_parts(w, mbh)[0])
     ratio = _tie_ratio(lib, lambda w: _kubota_parts(w, mbh)[0])
     expected = (
-        a * i_d * (7.0 / 18.0) * (lib["R_faceon"] / ratio) / ((1.0 - float(f_corona)) * _L_ACC)
+        a
+        * i_d
+        * (7.0 / 18.0)
+        * (lib["R_faceon"] / ratio)
+        / ((1.0 - float(f_corona) - _unemitted(mbh)) * _L_ACC)
     )
     assert _host(b) == pytest.approx(_host(expected), rel=1e-5)
 
@@ -347,7 +368,11 @@ def test_tied_corona_per_unit_intrinsic_disc_power_is_the_same_at_every_type_1_i
     i_d = _fine_integral(lib, lambda w: _kubota_parts(w, 8.0)[0])
     ratio = _tie_ratio(lib, lambda w: _kubota_parts(w, 8.0)[0])
     expected = (
-        a * i_d * (7.0 / 18.0) * (lib["R_faceon"] / ratio) / ((1.0 - float(f_corona)) * _L_ACC)
+        a
+        * i_d
+        * (7.0 / 18.0)
+        * (lib["R_faceon"] / ratio)
+        / ((1.0 - float(f_corona) - _unemitted()) * _L_ACC)
     )
     assert _host(b) == pytest.approx(_host(expected), rel=1e-9)
 
@@ -365,15 +390,18 @@ def test_type_2_corona_is_screened_like_any_source_behind_the_torus():
 
 @pytest.mark.parametrize("mbh", [6.0, 8.0, 10.0])
 def test_closed_form_corona_share_matches_the_spectrum(mbh):
-    """``f = P_H / (P_D + P_H)`` from the radial integrals equals the spectra's powers (3e-3)."""
+    """``f = P_H / L_acc`` from the radial integrals equals the spectra's powers (3e-3).
+
+    The zones emit their own dissipation, so ``P_D + P_H = L_acc (1 - R_unem / L_acc)`` (#3015).
+    """
     wide = np.geomspace(1.0e-3, 1.0e10, 400001)
     d_lam, h_lam = _kubota_parts(wide, mbh)
     p_d, p_h = np.trapezoid(d_lam, wide), np.trapezoid(h_lam, wide)
     _, _, f_corona = protocol.DISC_SPLIT_BLOCKS["kubota_done"](
         jnp.asarray(wide), _LOG_LBOL, agn_log_mbh=mbh
     )
-    assert float(f_corona) == pytest.approx(_host(p_h / (p_d + p_h)), rel=3e-3)
-    assert (p_d + p_h) / _L_ACC == pytest.approx(1.0, abs=2e-3)
+    assert float(f_corona) == pytest.approx(_host(p_h / _L_ACC), rel=3e-3)
+    assert (p_d + p_h) / _L_ACC == pytest.approx(1.0 - _unemitted(mbh), abs=2e-3)
 
 
 @pytest.mark.parametrize("disc", ["schartmann2005", "skirtor", "multicolor"])
@@ -657,7 +685,10 @@ def test_fritz_anchor_is_cigale_value_at_every_viewing_angle(psy):
     assert _host(l2500 / power / anchor_cigale) == pytest.approx(_host(interpolation), rel=2e-5)
 
 
-@pytest.mark.parametrize("disc_mbh", [6.0, 8.0, 10.0])
+# log M_BH 10 is outside these tests' domain at ``agn_log_lbol = 11`` (#3015): lambda_Edd = 3e-4
+# puts the hot flow past its switch (R_hot = R_out = 21 R_g), so the disc and warm zones have
+# no width and there is no ``D`` part to decompose (RELQSO, Kubota & Done 2018 Sec. 2.2).
+@pytest.mark.parametrize("disc_mbh", [6.0, 8.0])
 def test_tied_corona_behind_a_fritz_torus_carries_the_model_share_of_the_disc_power(disc_mbh):
     """``int H d nu = f/(1 - f) x P_D,tied`` behind a Fritz torus, ``P_D,tied`` from CIGALE.
 
@@ -692,7 +723,11 @@ def test_tied_corona_behind_a_fritz_torus_carries_the_model_share_of_the_disc_po
     _, _, f_corona = protocol.DISC_SPLIT_BLOCKS["kubota_done"](
         _WAVE, _LOG_LBOL, agn_log_mbh=disc_mbh
     )
-    expected = accretion * _power(comps["torus"]) / ((1.0 - float(f_corona)) * _L_ACC)
+    expected = (
+        accretion
+        * _power(comps["torus"])
+        / ((1.0 - float(f_corona) - _unemitted(disc_mbh)) * _L_ACC)
+    )
     assert _host(b_corona) == pytest.approx(_host(expected), rel=1e-4)
 
 
@@ -889,10 +924,14 @@ def _debit_fraction(disc):
 
 @pytest.mark.parametrize("disc", ["kubota_done", "multicolor"])
 def test_line_debit_is_lines_over_the_closed_form_disc_power(disc):
-    """``1 - disc_sed / disc_block`` = ``E_lines / L_acc`` to 1e-12."""
+    """``1 - disc_sed / disc_block`` = ``E_lines`` over the disc's emitted power to 1e-12.
+
+    The emitted power is ``L_acc`` less the K&D disc's unemitted share (#3015).
+    """
     assert disc in protocol.DISC_POWER_BLOCKS
+    emitted = _L_ACC * (1.0 - (_unemitted() if disc == "kubota_done" else 0.0))
     assert _host(_debit_fraction(disc)) == pytest.approx(
-        _host(_line_power(disc) / _L_ACC), rel=1e-12
+        _host(_line_power(disc) / emitted), rel=1e-12
     )
 
 
@@ -925,7 +964,8 @@ def test_closed_form_power_differs_from_the_grid_integral_by_the_measured_amount
     lam = resolve_agn_block("disc", disc)(
         jnp.asarray(grid), agn_log_lbol=_LOG_LBOL, agn_cos_inc=0.5, agn_log_mbh=8.0
     )
-    shortfall = 1.0 - float(np.trapezoid(np.asarray(lam), grid)) / _L_ACC
+    emitted = _L_ACC * (1.0 - (_unemitted() if disc == "kubota_done" else 0.0))
+    shortfall = 1.0 - float(np.trapezoid(np.asarray(lam), grid)) / emitted
     assert shortfall == pytest.approx(bound, rel=0.2)
 
 

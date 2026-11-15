@@ -341,8 +341,6 @@ effective metallicities.
 
 .. autofunction:: tengri.load_ssp_data
 
-.. autofunction:: tengri.effective_metallicity
-
 .. autofunction:: tengri.compute_mass_remaining_fraction
 
 Acquiring an SSP grid

@@ -432,6 +432,15 @@ def _usage_hint(name: str, kind: str) -> str:
             return f"SEDModel.build(..., dust_attenuation={{'type': '{name}', 'law': 'calzetti'}})"
         return f"SEDModel.build(..., dust_attenuation={{'type': '{name}'}})"
     if kind == "dust_attenuation":
+        from tengri.components.dust.laws._registry import is_diffuse_only_law
+
+        if is_diffuse_only_law(name):
+            # Declared diffuse-screen only: the single-screen spelling is refused,
+            # so the copy-paste hint is the two-screen form that carries it as law_diff.
+            return (
+                f"SEDModel.build(..., dust_attenuation={{'type': 'two_component', "
+                f"'law_bc': 'calzetti', 'law_diff': '{name}'}})"
+            )
         return (
             f"SEDModel.build(..., dust_attenuation={{'type': 'single_component', "
             f"'law': '{name}'}})"
@@ -1251,10 +1260,11 @@ def list_sfh_models(*, status: str | None = None) -> _RegistryTable:
         ctype = getattr(SFH_REGISTRY[m["name"]], "composition_type", "additive")
         if ctype in ("mixture", "modulator"):
             m["use"] = f"SEDModel.build(..., sfh={{'type': ['const', '{m['name']}']}})"
-        # A current episode (#3177) is spliced over a smooth member, so its
-        # composed form names ``delayed`` beside it.
+        # A current episode (#3177) is spliced over a smooth member; its composed
+        # form names the base its registry entry declares (``smooth_base``).
         elif ctype == "current":
-            m["use"] = f"SEDModel.build(..., sfh={{'type': ['delayed', '{m['name']}']}})"
+            base = SFH_REGISTRY[m["name"]].smooth_base
+            m["use"] = f"SEDModel.build(..., sfh={{'type': ['{base}', '{m['name']}']}})"
     out = _filter_menu(out, "status", status, listing="list_sfh_models")
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 

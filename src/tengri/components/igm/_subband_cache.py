@@ -364,12 +364,44 @@ def clear_memo() -> None:
     _MEMO.clear()
 
 
-def load(key: str, *, prefix: str = "igm_subband"):
-    """Load a cached table from disk, or ``None`` on any miss.
+def _shape_matches(shape: tuple, expected: tuple) -> bool:
+    """Whether ``shape`` matches ``expected``, where ``None`` in ``expected`` is a wildcard."""
+    return len(shape) == len(expected) and all(
+        e is None or int(e) == int(s) for s, e in zip(shape, expected, strict=True)
+    )
 
-    Fails soft on a corrupt or unreadable entry: a cache is an optimization,
-    and a bad file must degrade to recomputation rather than take the build
-    down.
+
+def load(key: str, *, prefix: str = "igm_subband", expected_shape: tuple | None = None):
+    """Load a cached table from disk; ``None`` means the entry is absent.
+
+    ``None`` is returned only on a miss: the cache is disabled, or no entry
+    exists under ``key``. An entry that exists but cannot be read raises
+    :class:`RuntimeError` rather than being recomputed silently (#3285): the
+    file is then either corrupt or not written by this code, and either way
+    the user should know which file to delete.
+
+    Parameters
+    ----------
+    key : str
+        Content hash from one of the key functions in this module.
+    prefix : str, optional
+        File prefix selecting the table family.
+    expected_shape : tuple, optional
+        Shape the table must have, derived by the caller from the redshift
+        grid and node layout. ``None`` entries are wildcards. A mismatch
+        raises :class:`ValueError`.
+
+    Returns
+    -------
+    ndarray or None
+        The stored table, or ``None`` on a miss.
+
+    Raises
+    ------
+    RuntimeError
+        If the entry exists but cannot be read as a table.
+    ValueError
+        If the stored table's shape differs from ``expected_shape``.
     """
     directory = cache_dir()
     if directory is None:
@@ -379,9 +411,19 @@ def load(key: str, *, prefix: str = "igm_subband"):
         return None
     try:
         with np.load(path) as data:
-            return data["table"]
-    except Exception:
-        return None
+            table = np.asarray(data["table"])
+    except Exception as exc:
+        raise RuntimeError(
+            f"IGM cache entry {path} exists but cannot be read ({exc!r}). "
+            "It is corrupt or was not written by tengri; delete it to recompute."
+        ) from exc
+    if expected_shape is not None and not _shape_matches(table.shape, expected_shape):
+        raise ValueError(
+            f"IGM cache entry {path} holds a table of shape {table.shape}, but the "
+            f"redshift grid and node layout require {expected_shape} (None = any). "
+            "Delete the entry to recompute."
+        )
+    return table
 
 
 def store(key: str, table, *, prefix: str = "igm_subband") -> None:

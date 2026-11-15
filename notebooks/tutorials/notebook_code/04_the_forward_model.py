@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.19.5
+#       jupytext_version: 1.19.1
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -37,6 +37,7 @@ from tengri import (
     Fixed,
     SEDModel,
     Observation,
+    Spectroscopy,
     Parameters,
     Photometry,
     Uniform,
@@ -73,7 +74,11 @@ setup_style()
 ssp_data = load_ssp_data(
     "data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 )
-obs = Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]))
+WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)  # SDSS-like, 200 pixels
+obs = Observation(
+    photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]),
+    spectroscopy=Spectroscopy(wave_obs=WAVE_OBS),
+)
 
 # %% [markdown]
 # ## SSP Building Blocks
@@ -137,8 +142,6 @@ spec = Parameters(
     mean_sfh_type="tsnorm",
 )
 model = SEDModel(spec, ssp_data, observation=obs)
-WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)
-model.precompute_spectroscopy(WAVE_OBS)
 
 params = spec.sample(jax.random.PRNGKey(42))
 # Override tsnorm to a typical star-forming galaxy (still forming stars now)

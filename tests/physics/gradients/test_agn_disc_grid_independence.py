@@ -20,6 +20,7 @@ import pytest
 
 from tengri.components.agn.disc import (
     kubota_done_disc,
+    kubota_done_unemitted_fraction,
     multicolor_disc,
     powerlaw_disc,
 )
@@ -67,6 +68,19 @@ def test_sed_at_a_wavelength_is_independent_of_the_grid(disc, log_mbh):
     assert rel.max() < 1e-6, f"{disc} logM={log_mbh}: worst grid dependence {rel.max():.3e}"
 
 
+def _unemitted(disc, log_lbol=11.5, log_mbh=8.0):
+    """Share of ``L_acc`` the disc does not emit [dimensionless].
+
+    The K&D disc stops at its self-gravity radius R_out and the Page-Thorne dissipation beyond it
+    is not emitted (Kubota & Done 2018, Sec. 2.2; the RELQSO source of Hagen & Done 2023,
+    arXiv:2304.01253, ends the disc at ``r_out`` the same way): the closed form of
+    ``kubota_done_unemitted_fraction``. The multicolor disc emits all of ``L_acc``.
+    """
+    if disc != "kubota_done":
+        return 0.0
+    return float(kubota_done_unemitted_fraction(log_mbh, log_lbol))
+
+
 def _integrated_power(disc, cos_inc, log_lbol=11.5):
     """``int L_nu dnu`` [erg/s] on a dense 0.01 A - 1e8 A log grid."""
     wave = np.geomspace(0.01, 1.0e8, 40001)
@@ -85,7 +99,7 @@ def _integrated_power(disc, cos_inc, log_lbol=11.5):
 
 @pytest.mark.parametrize("disc", ["kubota_done", "multicolor"])
 def test_integrated_lbol_equals_the_declared_target(disc):
-    """At cos i = 0.5 the SED integrates to the accretion power ``L_acc``.
+    """At cos i = 0.5 the SED integrates to the accretion power ``L_acc`` less the unemitted share.
 
     ``L_nu(i) = 2 cos i D_nu + H_nu`` with ``int (D_nu + H_nu) dnu = L_acc``, so the power
     equals ``10**agn_log_lbol L_sun`` at ``cos i = 0.5``. A dense 0.01 A - 1e8 A log grid; the
@@ -93,7 +107,7 @@ def test_integrated_lbol_equals_the_declared_target(disc):
     from the SED itself.
     """
     total = _integrated_power(disc, 0.5)
-    np.testing.assert_allclose(total / (10.0**11.5 * _LSUN), 1.0, atol=2e-3)
+    np.testing.assert_allclose(total / (10.0**11.5 * _LSUN), 1.0 - _unemitted(disc), atol=2e-3)
 
 
 def test_multicolor_power_at_the_default_inclination_is_two_cos_i_lacc():
@@ -104,10 +118,13 @@ def test_multicolor_power_at_the_default_inclination_is_two_cos_i_lacc():
 
 
 def test_kubota_done_power_is_two_cos_i_disc_plus_corona():
-    """``P(c) = 2 c D + H``: ``P(1) - P(0) = 2 D``, ``P(0) = H``, ``D + H = L_acc``."""
+    """``P(c) = 2 c D + H``: ``P(1) - P(0) = 2 D``, ``P(0) = H``,
+    ``D + H = L_acc`` less the unemitted share."""
     p0, p1, p_half = (_integrated_power("kubota_done", c) for c in (0.0, 1.0, 0.5))
     d_disc, h_corona = 0.5 * (p1 - p0), p0
-    np.testing.assert_allclose((d_disc + h_corona) / (10.0**11.5 * _LSUN), 1.0, atol=2e-3)
+    np.testing.assert_allclose(
+        (d_disc + h_corona) / (10.0**11.5 * _LSUN), 1.0 - _unemitted("kubota_done"), atol=2e-3
+    )
     np.testing.assert_allclose(p_half, d_disc + h_corona, rtol=1e-9)
     cos_i = 0.866
     p_i = _integrated_power("kubota_done", cos_i)

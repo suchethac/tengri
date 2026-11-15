@@ -82,21 +82,7 @@ def run_nifty_fast_vi(
     fitter = context.fitter
     refuse_unsupported_censoring(fitter, f"vi (sample_mode={sample_mode!r})")
 
-    try:
-        import nifty8.re as jft
-    except ImportError:
-        return run_nifty_vi(
-            context,
-            key=key,
-            init_from=init_from,
-            n_iterations=n_iterations,
-            n_samples=n_samples,
-            n_posterior_samples=n_posterior_samples,
-            sample_mode=sample_mode,
-            vi_config=vi_config,
-            posterior_method=posterior_method,
-            verbose=verbose,
-        )
+    import nifty8.re as jft
 
     cfg = vi_config or VIConfig()
 

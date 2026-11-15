@@ -61,7 +61,7 @@ import numpy as np
 import pytest
 
 from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, SSPData
-from tengri.components.dust.laws._registry import list_laws
+from tengri.components.dust.laws._registry import is_diffuse_only_law, list_laws
 from tengri.observation.photometry import FilterCurve
 
 pytestmark = pytest.mark.regression_bug
@@ -179,11 +179,16 @@ def test_the_fixture_can_see_dust_at_all(dust_ssp, uv_obs):
 def test_both_dust_geometries_agree_on_every_law(law, dust_ssp, uv_obs):
     """``single_component(tau_v=t)`` == ``two_component(tau_bc=0, tau_diff=t)``.
 
+    A law declared diffuse-only has no single-screen build to compare with, so
+    the comparison does not exist for it and the case is skipped.
+
     At ``tau_bc = 0`` the birth-cloud screen contributes nothing, so the two
     are the same model and the same law must give the same curve. Which of the
     two is *right* is asserted separately below -- this only pins that one name
     cannot mean two curves.
     """
+    if is_diffuse_only_law(law):
+        pytest.skip(f"{law} is legal only as law_diff: no single_component build to compare")
     a = _sed(_build(dust_ssp, uv_obs, _single(law)))
     b = _sed(_build(dust_ssp, uv_obs, _two(law)))
     diff = _rel(a, b)

@@ -135,11 +135,10 @@ model = SEDModel.build(
 
 ```python
 # The remedy depends on the parameter -- it is not always "add a prior".
-# met_alpha_fe is declared but not yet part of the released model, and no sweep
-# has freed it end to end, so its effect on the SED is unconfirmed. For this
-# parameter, drop the wildcard rather than free it: an explicit prior on an axis
-# nobody has confirmed does anything is the inert-parameter failure this guard
-# exists to catch.
+# met_alpha_fe acts only on an SSP grid with an [alpha/Fe] axis (a 4-D `_afe`
+# grid). On a 3-D grid it has no effect, and the build refuses it (see below).
+# For this parameter, drop the wildcard rather than free it on a grid you have
+# not confirmed carries the axis.
 model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'type': 'dpl'}, met={'type': 'delta'}, redshift=Fixed(0.1))
 
 # CORRECT (general case): an explicit prior on a parameter you genuinely
@@ -154,27 +153,37 @@ model = SEDModel.build(
 
 A partial free (where some parameters have a declared range and some do not) warns with `WildcardPartialFreeWarning` rather than raising, naming which ones stay pinned. See the docstring of `_check_wildcard_freed_something` for the full four-outcome table.
 
-The same refusal applies to an **explicitly named per-parameter `FREE`**, not just the wildcard. Naming one specific parameter as `FREE` must free it or refuse, never silently leave it pinned. `met_alpha_fe` is the worked refusal example: the declared but not yet released alpha-enhancement axis has no `free_prior` (a wildcard cannot know whether the loaded SSP grid even carries an alpha-enhanced axis), so naming it `FREE` raises rather than quietly building a model with it pinned:
+The same refusal applies to an **explicitly named per-parameter `FREE`**, not just the wildcard. Naming one specific parameter as `FREE` must free it or refuse, never silently leave it pinned. `met_alpha_fe` is the worked refusal example: its declaration has no `free_prior`, so naming it `FREE` raises rather than quietly building a model with it pinned. Run on a 3-D grid, the message is:
 
 <!-- raises: ParameterError -->
 ```python
 model = SEDModel.build(
-    ssp_data=ssp, observation=obs, sfh={'type': 'dpl'},
+    ssp_data=ssp, sfh={'type': 'dpl'},
     met={'type': 'delta', 'alpha_fe': FREE}, redshift=Fixed(0.1),
 )
 # Raises ParameterError:
 # "'alpha_fe': FREE cannot be honored -- 'met_alpha_fe' has no declared
-#  free prior (its registry default is Fixed(0.0)). Pass an explicit
-#  prior instead, e.g. alpha_fe: Uniform(lo, hi)."
+#  free prior (its registry default is Fixed(0.0)). Pass an explicit prior
+#  instead, e.g. alpha_fe: Uniform(lo, hi)."
 ```
 
+An explicit prior does not help on a 3-D grid. A grid with no [alpha/Fe] axis has one metallicity node per total Z and no alpha-enhanced templates, so `met_alpha_fe` would not change the SED, and the build refuses any non-zero value, free or fixed. Run on the same 3-D grid, `Uniform(-0.2, 0.4)` raises:
+
+<!-- raises: ParameterError -->
 ```python
-# CORRECT: an explicit prior for a parameter you genuinely mean to vary
 model = SEDModel.build(
-    ssp_data=ssp, observation=obs, sfh={'type': 'dpl'},
+    ssp_data=ssp, sfh={'type': 'dpl'},
     met={'type': 'delta', 'alpha_fe': Uniform(-0.2, 0.4)}, redshift=Fixed(0.1),
 )
+# Raises ParameterError:
+# "met_alpha_fe is free, but the SSP grid 'fsps_prsc_miles_chabrier' has no
+#  [alpha/Fe] axis (it is a 3-D grid). Its metallicity nodes are total Z and
+#  carry no alpha-enhanced templates, so met_alpha_fe would not change the SED.
+#  Use an alpha-enhanced 4-D grid (a name containing '_afe'; see
+#  tengri.list_remote_ssps()), or remove met_alpha_fe, or hold it at Fixed(0.0)."
 ```
+
+To vary [alpha/Fe], pass an alpha-enhanced 4-D grid (a name containing `_afe`, listed by `tengri.list_remote_ssps()`) as `ssp_data`, then give `met_alpha_fe` an explicit prior. The prior is checked against the grid's [alpha/Fe] nodes: one with no overlap is refused, and one that extends past them is kept with a `GridSupportWarning`, since the lookup clips at the edge nodes. On such a grid the `FREE` refusal above also names the node range, e.g. `For this grid: alpha_fe: Uniform(-0.2, 0.6)`. `Fixed(0.0)`, the declared default, builds on any grid and is what every build uses unless a prior is given.
 
 `redshift` is the worked example of the opposite outcome: a parameter **with** a declared default free prior. It declares `free_prior=Uniform(0.0, 20.0)`, an interval chosen to span and exceed every shipped recipe's redshift prior (photoz `Uniform(0.01, 6.0)`, high_z `Uniform(3.5, 10.0)`, stochastic/JWST `Uniform(0.01, 12.0)`), so `redshift=FREE` frees it over that range rather than raising:
 
@@ -252,12 +261,14 @@ sfh={'type': 'dpl', 'all_params': FREE, 'beta': Uniform(1, 3), 'age_kernel': 'ci
 - `'type'`: Metallicity model (`'table'` for per-age SSP indexing, `'ramp'` for a linear Z(t) history, etc.). Menu: `tengri.list_metallicity_modes()`.
 - `'all_params'`: Wildcard: sets every parameter in the group to `FREE` or `Fixed(DEFAULT)`. Exact synonym: `'other_params'` (reads best written last, after explicit per-param entries). Not `'*'` (retired).
 - `'met_bin_edges_log_yr'`: Lookback-time bin edges [log₁₀ yr] for metallicity-history modes (`'bins'` or `'bins_continuity'`). Default spans 1 Myr to 13.8 Gyr. Accepts an array of strictly increasing edge values (at least 2 edges). Mirroring `sfh={'bin_edges_gyr': [...]}` for non-parametric star formation histories.
+- `'alpha_fe_evolving'`: `True` replaces the single `alpha_fe` by a linear ramp in lookback time between `alpha_fe_young` (today) and `alpha_fe_old` (the oldest stars). Needs an SSP grid with an [α/Fe] axis; `alpha_fe` and `alpha_fe_evolving` cannot be given together. Both ends are fixed at 0.0 unless given explicit priors, which follow the same rule as `alpha_fe`. Default `False`.
 
 **Minimal example:**
 ```python
 met={'type': 'table'}  # all_params defaults to Fixed(DEFAULT)
 met={'type': 'ramp', 'logzsol_0': Fixed(-0.3), 'logzsol_1': Free}  # two-knot ramp
 met={'type': 'bins', 'all_params': Fixed(DEFAULT), 'met_bin_edges_log_yr': [6.0, 8.0, 9.5]}  # custom ladder
+met={'alpha_fe_evolving': True, 'alpha_fe_old': Uniform(0.0, 0.6), 'alpha_fe_young': Fixed(0.0)}  # [α/Fe] ramp, 4-D grid
 ```
 
 **Gotchas:**
@@ -323,7 +334,7 @@ agb_dust={'type': 'fsps_shell', 'weight': Fixed(2.0)}  # fixed at a non-default 
 - `'lyc_in_energy_balance'`: Include ionizing luminosity in the dust energy-balance integral (FSPS/Prospector parity). Default false.
   (See also `'diffuse_screen'` under `dust_emission` below: an analogous opt-in single-pass toggle, applied to the *escaping* re-emitted IR through this group's diffuse screen rather than to the absorbed budget.)
 - `'screens'`: `type='age_binned'` only (#2528). A list of `{'law': <law name>, 'window_log_yr': (lo, hi)}` dicts, one per screen; `lo`/`hi` are `log10(age/yr)` edges, either or both `None` for unbounded. N independent screens generalize the birth-cloud/diffuse pair to any N; windows need not partition the age axis. Optical depths add over every screen whose window contains a star's age: nested windows (each `(None, hi_i)` with increasing `hi_i`, the last unbounded) cascade as the birth cloud and diffuse medium do in `'two_component'`, and `tau_i` is the depth screen `i` adds; windows that tile the age axis give each age a single screen, and `tau_i` is the total depth of that age bin. Per-screen parameters are indexed from the screen count: `'tau_0'`, `'tau_1'`, ... (full name `dust_tau_i`), plus one `'<lawparam>_i'` for every shape parameter that screen's own law declares (e.g. `'slope_0'`, `'Rv_2'`), defaulting to that law's own published value. `screens = [{'law': law_bc, 'window_log_yr': (None, log10(t_birth))}, {'law': law_diff, 'window_log_yr': (None, None)}]` reproduces `'two_component'` bit-identically. Not supported under `approx=WavePrecomp()`/`SpectrumPrecomp()` (raises at construction; a fit's `approx="auto"` resolves to the exact path instead). Nebular continuum and the line catalog are attenuated only by screens whose window is unbounded below (the `t -> 0` limit, the same convention `'two_component'` applies to lines); a finite lower edge must sit at least five transition widths above the loaded SSP grid's youngest node or the build raises `ConfigError`, naming the screen, the edge, the grid's youngest node, and the two fixes.
-- `'age_mixture'`: How the two-component mixture of young and old transmissions is evaluated; the model is the same either way. `'per_node'` (default) attenuates every SSP age node, `Σ_a L(a)·[y(a)·T_young + (1 − y(a))·T_old]`. `'grouped'` takes the sum in the other order, `T_young·L_young + T_old·L_old` with `L_young = Σ_a y(a)·L(a)` and `L_old = Σ_a (1 − y(a))·L(a)` formed by the stellar component: two attenuated spectra instead of `n_age`, equal to floating-point reassociation (soft boundary and Lyman-continuum branch included), with much less memory under `vmap(value_and_grad)`. Two-component only. Static: the two choices compile separately.
+- `'age_mixture'`: How the two-component mixture of young and old transmissions is evaluated; the model is the same either way. `'grouped'` (default) takes the sum in this order, `T_young·L_young + T_old·L_old` with `L_young = Σ_a y(a)·L(a)` and `L_old = Σ_a (1 − y(a))·L(a)` formed by the stellar component: two attenuated spectra instead of `n_age`, equal to floating-point reassociation (soft boundary and Lyman-continuum branch included), with much less memory under `vmap(value_and_grad)`. `'per_node'` attenuates every SSP age node, `Σ_a L(a)·[y(a)·T_young + (1 − y(a))·T_old]`, and stays selectable. Two-component only. Static: the two choices compile separately.
 - `'lyc_escape_geometry'`: Whether the escaping fraction (`neb_fesc`) bypasses the birth-cloud screen through a geometric hole, instead of only skipping nebular reprocessing. `'screened'` (default): the escaping fraction never touches the dust screen, only the nebular budget — unchanged from every model built without this key. `'birth_cloud_holes'`: a covering fraction `neb_fesc` of the young population's light bypasses the birth-cloud screen but still crosses the diffuse ISM (FSPS `frac_obrun`-style: an OB star outside its birth cloud still sees the general dust). `'clear'`: that same fraction sees no dust at all (Synthesizer `fesc`-style: a fully clear sightline). Applies at every wavelength, not only below the Lyman limit — a hole in a birth cloud is geometric, not wavelength-selective. Two-component only (an attenuator needs a birth-cloud screen distinct from the diffuse screen for a hole to be in); incompatible with `'lyc_reprocessed_by': 'all'` (both would reduce the young population's escaping light from the same `neb_fesc`, double-counting it).
 
 Each of the 12 per-screen keys above (`'slope_bc'`, `'bump_strength_bc'`,

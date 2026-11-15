@@ -6,6 +6,7 @@ Extracted from fitter.py.
 
 from __future__ import annotations
 
+import math
 import time
 
 import jax
@@ -13,9 +14,79 @@ import jax.numpy as jnp
 import numpy as np
 from scipy.special import logsumexp
 
+from tengri.config.exceptions import DeadFitError, warn_measured
 from tengri.inference._model_cache import _default_owner as _model_cache_owner
+from tengri.inference._walls import _wall_value
 
 _N_VOLUME_REALIZATIONS = 100  # simulated prior-volume sequences for H and log Z scatter
+_NSS_ESS_WARN_BELOW = 10.0  # weight ESS under this is reported, never padded
+
+
+def _validate_explicit_draws(n_posterior_samples):
+    """Raise unless an explicit posterior draw count is a positive integer."""
+    is_int = isinstance(n_posterior_samples, (int, np.integer))
+    if isinstance(n_posterior_samples, bool) or not is_int or n_posterior_samples < 1:
+        raise ValueError(
+            f"n_posterior_samples must be None or a positive integer, got {n_posterior_samples!r}."
+        )
+
+
+def _resolve_posterior_draws(n_posterior_samples, ess):
+    r"""Number of posterior draws NSS resamples from the dead points.
+
+    Parameters
+    ----------
+    n_posterior_samples : int or None
+        Explicit draw count, used exactly. ``None`` draws ``ceil(ess)``.
+    ess : float
+        Kish effective sample size of the normalized dead-point weights,
+        dimensionless. Used only when ``n_posterior_samples`` is None.
+
+    Returns
+    -------
+    int
+        Number of posterior draws.
+
+    Raises
+    ------
+    ValueError
+        If an explicit count is not a positive integer, or the default is
+        requested with a non-finite or non-positive ESS.
+
+    Warns
+    -----
+    UserWarning
+        When the default is used and the ESS is below 10. The count is still
+        ``ceil(ess)``; nothing is padded to a minimum.
+
+    Notes
+    -----
+    The Kish effective sample size of normalized weights :math:`w_i` is
+
+    .. math::
+
+        n_{\mathrm{eff}} = \frac{\left(\sum_i w_i\right)^2}{\sum_i w_i^2},
+
+    where :math:`w_i` are the dead-point importance weights, dimensionless.
+    Drawing more than :math:`n_{\mathrm{eff}}` rows from the weighted set
+    repeats particles without adding information. The ESS is computed by
+    :func:`tengri.inference.backends.nested.utils.ess`.
+    """
+    if n_posterior_samples is not None:
+        _validate_explicit_draws(n_posterior_samples)
+        return int(n_posterior_samples)
+    if not math.isfinite(ess) or ess <= 0.0:
+        raise ValueError(f"Weight ESS must be finite and positive to set the draws, got {ess!r}.")
+    n_draws = math.ceil(ess)
+    if ess < _NSS_ESS_WARN_BELOW:
+        warn_measured(
+            f"NSS weight ESS = {ess:.3g} is below {_NSS_ESS_WARN_BELOW:g}; drawing "
+            f"{n_draws} posterior sample(s) (not padded). Posterior summaries are unreliable.",
+            UserWarning,
+            stacklevel=2,
+            weight_ess=float(ess),
+        )
+    return n_draws
 
 
 def _nss_information_and_error(log_w, logL, n_live, num_delete):
@@ -158,6 +229,43 @@ def _resolve_nss_settings(preset, n_live, num_delete, log_evidence_tol, max_shri
     )
 
 
+def _require_converged_evidence(n_iter, max_iterations, remaining, tol, method):
+    """Refuse a nested run that hit its iteration cap before the evidence converged.
+
+    Terminating while ``log(Z_live/Z)`` still exceeds tolerance means the
+    live set still holds unintegrated posterior mass; resampling then returns
+    a silently truncated (therefore biased) sample set, which is precisely
+    the failure that kept this name refused (the blind-rejection stand-in
+    terminated at iteration 147 of a requested 200 and handed back a
+    plausible-looking answer, #1429). Same state, different road, same loud
+    refusal.
+    """
+    if remaining < tol:
+        return
+    raise RuntimeError(
+        f"{method}: nested sampling hit nss_max_iterations={max_iterations} "
+        f"(n_iter={n_iter}) while the unintegrated evidence fraction "
+        f"log(Z_live/Z) = {remaining:.2f} still exceeds "
+        f"nss_log_evidence_tol={tol}. The live set still holds posterior "
+        f"mass, so resampling now would return the silently truncated, "
+        f"biased sample set that kept this name refused (#1429). Raise "
+        f"nss_max_iterations, or raise nss_num_delete to retire more points "
+        f"per iteration."
+    )
+
+
+def _require_finite_live_set(n_finite, n_live):
+    """Refuse a nested run whose initial live set is mostly non-finite."""
+    if n_finite >= 0.1 * n_live:
+        return
+    raise DeadFitError(
+        f"nested sampling: {n_finite} of {n_live} initial live points have a finite "
+        f"log-likelihood (at least 10% are needed). The likelihood is non-finite across "
+        f"most of the prior, so there is no posterior mass to integrate. Check the "
+        f"parameters' prior ranges against the support of the model."
+    )
+
+
 def _get_nss_fns(
     fitter,
     *,
@@ -189,7 +297,11 @@ def _get_nss_fns(
         from tengri.inference.backends.nested.nss import as_top_level_api
 
         logprior_fn = fitter._build_logprior_fn()
-        loglikelihood_fn = fitter._get_or_build_loglikelihood_fn()
+        raw_loglikelihood_fn = fitter._get_or_build_loglikelihood_fn()
+
+        def loglikelihood_fn(params, data_args):
+            """Return the log-likelihood with non-finite values walled to -inf."""
+            return _wall_value(raw_loglikelihood_fn(params, data_args))
 
         # Build algo *inside* the JIT-traced function so that data_args is
         # abstract (traced) rather than a Python constant.  JAX traces these
@@ -245,7 +357,7 @@ def run_nss(
     num_inner_steps=None,
     log_evidence_tol=None,
     max_iterations=10000,
-    n_posterior_samples=1000,
+    n_posterior_samples=None,
     max_steps=10,
     max_shrinkage=None,
     verbose=True,
@@ -283,8 +395,12 @@ def run_nss(
         Overrides preset if not None.
     max_iterations : int
         Safety limit on iterations.
-    n_posterior_samples : int
-        Number of posterior samples to draw after convergence.
+    n_posterior_samples : int or None
+        Posterior draws resampled from the dead points after convergence.
+        ``None`` (default) draws ``ceil(ESS)``, where ESS is the Kish effective
+        sample size of the normalized dead-point weights (reported as
+        ``diagnostics["ess"]``). An explicit integer is used exactly. A
+        weight ESS below 10 warns with its value and is not padded.
     max_steps : int
         Maximum stepping-out steps in slice sampling.
     max_shrinkage : int or None
@@ -332,6 +448,8 @@ def run_nss(
     from tengri.inference.context import InferenceContext
     from tengri.inference.posterior import Posterior
 
+    if n_posterior_samples is not None:
+        _validate_explicit_draws(n_posterior_samples)
     context = InferenceContext.from_target(context)
     # ``_get_nss_fns`` and the spec/fixed-values dict still live on the Fitter.
     fitter = context.fitter
@@ -375,6 +493,9 @@ def run_nss(
     all_samples = context.spec.sample_batch(init_key, n_live)
     particles = {name: all_samples[name] for name in context.free_names}
     live = init_jit(particles, data_args)
+    _require_finite_live_set(
+        int(np.isfinite(np.asarray(live.particles.loglikelihood)).sum()), n_live
+    )
 
     # Collect only dead particles, not the full NSInfo (update_info is MCMC internals
     # of the replacement step, 3-4× larger than particles but unused by ns_sample/ns_ess).
@@ -399,26 +520,29 @@ def run_nss(
                 f"elapsed={elapsed:.1f}s"
             )
 
-        if remaining < log_evidence_tol:
-            break
-        if n_iter >= max_iterations:
-            if verbose:
-                print("  NSS: max iterations reached")
+        if remaining < log_evidence_tol or n_iter >= max_iterations:
             break
 
+    _require_converged_evidence(n_iter, max_iterations, remaining, log_evidence_tol, "nss")
+
     wall_time = time.time() - t0
+    # The sampler integrates the χ²-form likelihood; the published ln Z adds the Gaussian
+    # normalization it omits, so it is the evidence of the exact density (#3427).
     logZ = float(jnp.logaddexp(live.integrator.logZ, live.integrator.logZ_live))
+    logZ += context.log_evidence_normalization
 
     all_ps = [*dead_particles_list, live.particles]
     del dead_particles_list
     final_particles = jax.tree_util.tree_map(lambda *xs: jnp.concatenate(xs, axis=0), *all_ps)
     ns_run = _NSInfo(final_particles, None)
 
+    # Same split order as before the draw count depended on the ESS, so an
+    # explicit n_posterior_samples reproduces its earlier draws.
     key, sample_key = jax.random.split(key)
-    resampled = ns_sample(sample_key, ns_run, n_posterior_samples)
-
     key, ess_key = jax.random.split(key)
     ess_val = float(ns_ess(ess_key, ns_run))
+    n_draws = _resolve_posterior_draws(n_posterior_samples, ess_val)
+    resampled = ns_sample(sample_key, ns_run, n_draws)
 
     key, weight_key = jax.random.split(key)
     information_nats, log_evidence_err, n_live_effective = _nss_information_and_error(
@@ -430,12 +554,15 @@ def run_nss(
 
     samples_phys = {name: resampled.position[name] for name in context.free_names}
     for name, val in fitter._fixed_values.items():
-        samples_phys[name] = jnp.full(n_posterior_samples, val)
+        samples_phys[name] = jnp.full(n_draws, val)
 
     best_params = {k: jnp.median(v, axis=0) for k, v in samples_phys.items()}
 
     if verbose:
-        print(f"  NSS complete in {wall_time:.1f}s. log Z = {logZ:.2f}, ESS = {ess_val:.0f}")
+        print(
+            f"  NSS complete in {wall_time:.1f}s. log Z = {logZ:.2f}, ESS = {ess_val:.0f}, "
+            f"posterior draws = {n_draws}"
+        )
 
     return Posterior(
         samples=samples_phys,
@@ -453,6 +580,7 @@ def run_nss(
             "information_nats": information_nats,
             "n_live_effective": n_live_effective,
             "ess": ess_val,
+            "n_posterior_draws": n_draws,
         },
         log_evidence=logZ,
         _model=context.model,

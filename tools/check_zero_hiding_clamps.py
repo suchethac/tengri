@@ -238,7 +238,26 @@ from collections.abc import Sequence
 #: 79 -> 78 (#2806): the Schreiber CMB boost and the analytic closures now share one
 #: closed-form ``cmb_luminosity_boost``, which takes ``jnp.maximum(T_dust, 1.0)`` once. The
 #: old helper's clamped division is gone; the floor is unchanged.
-EXPECTED_SITES = 78
+#:
+#: 78 -> 77 (#3232, kubota_done zones): ``components/agn/kd_precompute.py`` no longer rescales
+#: the disc by ``l_bol_unit * |1 - f_hot| / jnp.maximum(l_disc_unnorm, ...)``. The zones carry
+#: their own Page-Thorne dissipation (#3015), so there is no denominator left to clamp. A removal
+#: with no clamp moved elsewhere; ``--list`` at fdeaee1a3 differs from ``--list`` at 0c751bdb5
+#: only by that one site and by line shifts.
+#:
+#: 77 -> 74 (#1404): ``_measure_slope`` (``observation/spectral_indices.py``) selects
+#: its window-fit denominators before dividing, via ``utils/scale.ratio_or_nan``, so a
+#: one-point window gives NaN instead of a fitted slope of -2.0. Three divisions retired,
+#: no clamp moved. Not converted, on purpose: ``compute_dn4000``, ``compute_balmer_break``,
+#: ``_break_from_means`` and ``_ew_from_means``. A NaN at a zero denominator severs the
+#: gradient there (zero, not finite-nonzero), which the #2100 precision tests reject.
+#: 74 -> 75 (#3462, Gunn-Peterson blue side in ``components/igm/igm.py``): one clamp per
+#: mask, both ``jnp.maximum(x_bubble * 0.1, 1e-8)``, mirroring the red-side ``bubble_mask``.
+#: The blue one is a case where zero is legitimate (R_bubble = 0 is a valid input); the floor
+#: only keeps the sigmoid width finite. Its sibling, ``dsps_wrapper._native_joint``'s
+#: normalization, was added with a clamp and converted in the same PR to the NaN-propagating
+#: form (the joint is normalized to 1, so a vanishing sum is an upstream bug), netting zero.
+EXPECTED_SITES = 75
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 

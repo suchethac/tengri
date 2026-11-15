@@ -47,8 +47,16 @@ from collections.abc import Callable
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.agn._params import DEFAULT_AGN_COS_INC, DEFAULT_AGN_LOG_LBOL
-from tengri.components.agn._template_grid import TorusTemplateGrid
+from tengri.components.agn._params import (
+    DEFAULT_AGN_COS_INC,
+    DEFAULT_AGN_LOG_LBOL,
+    DEFAULT_AGN_TORUS_FRAC,
+)
+from tengri.components.agn._template_grid import (
+    TorusTemplateGrid,
+    cache_per_float_dtype,
+    loaded_template,
+)
 from tengri.components.agn._torus_inclination import (
     TorusInclination,
     anisotropy_values,
@@ -97,7 +105,7 @@ def _load_nenkova_agnfitter_arrays(grid_path: str) -> dict:
         }
 
 
-@functools.cache
+@cache_per_float_dtype
 def load_nenkova_agnfitter_grid(grid_path: str) -> TorusTemplateGrid:
     """Load a Nenkova AGNfitter grid HDF5 into a :class:`TorusTemplateGrid` pytree.
 
@@ -137,7 +145,7 @@ def load_nenkova_agnfitter_grid(grid_path: str) -> TorusTemplateGrid:
     cos_inc_axis_np = cos_inc_axis_np[order]
     template_reordered_np = grid_np[order]
     return TorusTemplateGrid(
-        template=template_reordered_np,
+        template=loaded_template(template_reordered_np),
         axes=(cos_inc_axis_np,),
         wave_grid=wave_np,
         anisotropy=anisotropy_values(
@@ -151,7 +159,7 @@ def nenkova_agnfitter_sed_from_grid(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
-    agn_torus_frac: float = 0.5,
+    agn_torus_frac: float = DEFAULT_AGN_TORUS_FRAC,
     **_kwargs,
 ) -> jnp.ndarray:
     r"""Nenkova+08 (AGNfitter-rX) torus SED at a single inclination.
@@ -272,7 +280,7 @@ def load_nenkova_agnfitter_default_grid() -> TorusTemplateGrid:
     return load_nenkova_agnfitter_grid(_find_nenkova_agnfitter_grid())
 
 
-@functools.cache
+@cache_per_float_dtype
 def _load_nenkova_agnfitter_default() -> Callable:
     return create_nenkova_agnfitter_from_grid(_find_nenkova_agnfitter_grid())
 

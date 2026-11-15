@@ -329,7 +329,10 @@ def build_components(
     field: bool = False,
     metallicity_model: str = "delta",
     n_grid: int = 256,
-    lgmet_scatter: float = 0.2,
+    lgmet_scatter: float = 0.1,
+    lgmet_scatter_declared: bool = False,
+    # Per-age [alpha/Fe] ramp (#2250): True makes the alpha bracket per SSP age.
+    alpha_fe_evolving: bool = False,
     # SFH -> SSP age-weight kernel: "cic" (dense cloud-in-cell integrand),
     # "dsps" (DSPS's histogram kernel, 8x refined table), or None to auto-select.
     age_kernel: str | None = None,
@@ -414,8 +417,8 @@ def build_components(
     dust_lyc_reprocessed_by: str = "young",
     dust_lyc_in_energy_balance: bool = False,
     dust_lyc_escape_geometry: str = "screened",
-    # Evaluation order of the two-component age mixture ("per_node" | "grouped").
-    dust_age_mixture: str = "per_node",
+    # Evaluation order of the two-component age mixture ("grouped" | "per_node").
+    dust_age_mixture: str = "grouped",
     # Birth-cloud dispersal age [yr] (two_component) and the dispersal width
     # [dex] of every age edge (two_component and age_binned); 0 is the hard step.
     dust_t_birth_yr: float = 1e7,
@@ -536,7 +539,9 @@ def build_components(
     n_grid : int
         SFH lookback-time grid resolution.
     lgmet_scatter : float
-        Gaussian σ in log10(Z) for the DSPS triweight kernel [dex].
+        Gaussian σ in log10(Z) for the lognormal metallicity kernel [dex].
+    lgmet_scatter_declared : bool
+        True only when the user declared ``met_logzsol_scatter`` (#3434).
     age_kernel : str or None
         SFH→SSP age-weight kernel: ``"cic"`` (dense cloud-in-cell integrand),
         ``"dsps"`` (the same integration under its historical name, #2683), or
@@ -694,7 +699,9 @@ def build_components(
                 field=field,
                 metallicity_model=metallicity_model,
                 n_grid=n_grid,
+                alpha_fe_evolving=alpha_fe_evolving,
                 lgmet_scatter=lgmet_scatter,
+                lgmet_scatter_declared=lgmet_scatter_declared,
                 age_kernel=age_kernel,
                 field_centering=field_centering,
                 sfh_bin_edges_gyr=sfh_bin_edges_gyr,
@@ -851,6 +858,7 @@ def build_components(
                     agn_norm=agn_norm,
                     agn_polar_law=agn_polar_law,
                     agn_ir_frac_window=agn_ir_frac_window,
+                    agn_screened=dust_agn_screen != "none",
                 ),
             )
         )
@@ -1353,7 +1361,7 @@ def state_to_radio_quantities(state: Any) -> RadioQuantities:
     # Delvecchio+2021; NVSS surveys). NOT the 21 cm HI line (1.4204 GHz).
     l_1p4ghz = jnp.interp(WAVE_1P4GHZ_AA, wave, L_radio)
 
-    log_nion = jnp.asarray(derived.get("log_nion", -jnp.inf))
+    log_nion = jnp.asarray(derived["log_nion"])
     l_thermal = compute_l_radio_thermal_from_log_qh(log_nion)
     l_nonthermal = l_1p4ghz - l_thermal
 
@@ -1433,7 +1441,7 @@ def state_to_ionizing_quantities(state: Any) -> IonizingQuantities:
     if sed is None:
         xi_ion = nan_scalar
     else:
-        log_nion = jnp.asarray(derived.get("log_nion", -jnp.inf))
+        log_nion = jnp.asarray(derived["log_nion"])
         xi_ion = compute_xi_ion_from_log_qh(log_nion, sed, state.wave)
 
     return IonizingQuantities(xi_ion=xi_ion)
@@ -1496,8 +1504,8 @@ def state_to_sed_components(state: Any) -> dict:
 
     # Stellar pre-attenuation: sum the per-age cube. Always present
     # because StellarSEDComponent is mandatory in every chain.
-    lnu_age = derived.get("lnu_age")
-    sed_intrinsic_stellar = jnp.sum(jnp.asarray(lnu_age), axis=0) if lnu_age is not None else zeros
+    lnu_age = derived["lnu_age"]
+    sed_intrinsic_stellar = jnp.sum(jnp.asarray(lnu_age), axis=0)
 
     # Stellar post-attenuation. ``sed_dust_attenuated`` is the canonical
     # key (DustSEDComponent); fall back to stellar intrinsic when no

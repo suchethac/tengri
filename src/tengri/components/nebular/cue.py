@@ -117,13 +117,26 @@ from jax.scipy.special import logsumexp
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri.components.lyc import lyc_shares
+from tengri.components.nebular._component_params import NEBULAR_STANDARD_PARAMS
 from tengri.components.nebular._constants import _LOG10_ZSUN
 from tengri.components.nebular._default_nitrogen import NITROGEN_MODES, relation_offset
 from tengri.components.nebular._line_ingest import (
     cloudy_labels_to_vacuum,
 )
+from tengri.components.nebular._params import (
+    CUE_GAS_EXTRA_PARAMS,
+    CUE_IONSPEC_PARAMS,
+    DEFAULT_GAS_LOGCO,
+    DEFAULT_GAS_LOGN,
+    DEFAULT_GAS_LOGNO,
+    DEFAULT_NEB_FDUST_FRAC,
+    DEFAULT_NEB_FESC,
+    DEFAULT_NEB_FESC_LYA,
+    DEFAULT_NEB_LOGU,
+)
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import (
+    NebularBackendDefaults,
     apply_lya_escape,
     interp_continuum_with_freefree_tail,
     render_nebular_lines,
@@ -529,7 +542,16 @@ def _load_cue_weights_eager(npz_path: str) -> CueWeights:
     caller. The docstring above already promised ``JIT-compatible: no``; this
     enforces it instead of trusting every call site to honor it.
     """
-    npz = dict(np.load(npz_path, allow_pickle=True))
+    npz = dict(np.load(npz_path, allow_pickle=False))
+    # The file stores the emulator in float32. Widen those arrays once, here, to float64:
+    # the widening is exact, and the process dtype is applied at the device boundary,
+    # so a float64 trace runs the network in float64 and an x64-off process narrows back
+    # to the same float32 values it always used. The per-line sigma is a host output,
+    # cast by its own loader.
+    npz = {
+        k: (np.asarray(v, dtype=np.float64) if v.dtype == np.float32 else v)
+        for k, v in npz.items()
+    }
 
     # Line sub-networks
     line_nets = []
@@ -728,17 +750,38 @@ def _speculator_log_spectrum(
 CUE_NITROGEN_MODES: tuple[str, ...] = NITROGEN_MODES
 
 
+def _param_input(value) -> jnp.ndarray:
+    """A Cue input in the dtype of its parameter.
+
+    ``jnp.result_type`` canonicalizes to the process dtype, so a Python float or a
+    float64 array becomes float64 under x64 and float32 with x64 off, exactly as the
+    former hard ``float32`` cast did in the x64-off process. A float32 parameter
+    stays float32 under x64. The dtype is strong, so it promotes nothing.
+
+    Parameters
+    ----------
+    value : array_like
+        One Cue input parameter, scalar or array.
+
+    Returns
+    -------
+    jnp.ndarray
+        ``value`` as a strongly typed array in its own (canonical) dtype.
+    """
+    return jnp.asarray(value, dtype=jnp.result_type(value))
+
+
 def _effective_gas_logno(p: dict, nitrogen: str = "absolute") -> jnp.ndarray:
     """The absolute [N/O] fed to the network (#2693).
 
     ``"absolute"``: ``gas_logno`` itself, untouched (Li+2025's parameterization).
     A relation name: that relation at ``gas_logz`` plus ``gas_logno``.
     """
-    gas_logno = jnp.asarray(p["gas_logno"], dtype=jnp.float32)
+    gas_logno = _param_input(p["gas_logno"])
     if nitrogen == "absolute":
         return gas_logno
-    gas_logz = jnp.asarray(p["gas_logz"], dtype=jnp.float32)
-    return relation_offset(nitrogen, gas_logz).astype(jnp.float32) + gas_logno
+    gas_logz = _param_input(p["gas_logz"])
+    return relation_offset(nitrogen, gas_logz).astype(gas_logno.dtype) + gas_logno
 
 
 def _logq_from_logu(
@@ -1133,7 +1176,22 @@ def _build_balmer_extension(sorted_wav: np.ndarray, n_max: int | None) -> _Balme
     )
 
 
-class CueBackend:
+#: Cue's ionizing-spectrum and gas overrides, forwarded when a caller sets them in ``params``.
+_CUE_PARAM_OVERRIDE_KEYS: tuple[str, ...] = (
+    "ionspec_index1",
+    "ionspec_index2",
+    "ionspec_index3",
+    "ionspec_index4",
+    "ionspec_logLratio1",
+    "ionspec_logLratio2",
+    "ionspec_logLratio3",
+    "gas_logn",
+    "gas_logno",
+    "gas_logco",
+)
+
+
+class CueBackend(NebularBackendDefaults):
     """Cue neural net emulator backend for nebular emission.
 
     Loads pre-trained Speculator network weights and predicts nebular
@@ -1226,6 +1284,87 @@ class CueBackend:
 
     """
 
+    config_name: ClassVar[str] = "cue"
+    supports_split_sed: ClassVar[bool] = True
+    line_fraction_policy: ClassVar[bool] = True
+    reads: ClassVar[tuple[str, ...]] = ("lnu_age", "ssp_ages_yr")
+    carries_freefree: ClassVar[bool] = True
+    additive: ClassVar[bool] = True
+    requires_instance: ClassVar[bool] = True
+    caches_filters: ClassVar[bool] = True
+
+    def call_kwargs(self, state, params, common: dict) -> dict:
+        """Cue's keyword surface for one evaluation: shared kwargs, stellar population, overrides.
+
+        The population is SSP-derived when upstream publishes ``age_weights`` and
+        ``ssp_ages_yr``, so the ionizing-spectrum shape and Q_H both follow the
+        stellar population (the legacy ``predict_line_fluxes`` parity). Otherwise
+        it falls back to the ``gas_logqion`` shortcut, or to Cue's own defaults
+        when neither is published. ``ionspec_*`` and ``gas_*`` values in ``params``
+        are forwarded. ``common`` is never mutated.
+
+        Parameters
+        ----------
+        state : ForwardState
+            Current pipeline state (age weights, ages and ``log_nion``).
+        params : Mapping
+            Prefix-sliced parameter dict this component sees.
+        common : dict
+            The component's shared kwargs.
+
+        Returns
+        -------
+        dict
+            Keyword arguments for :meth:`predict_nebular_sed`,
+            :meth:`predict_nebular_line_luminosities` and :meth:`predict_nebular_split`.
+        """
+        age_weights = state.derived.get("age_weights")
+        ssp_ages_yr = state.derived.get("ssp_ages_yr")
+        population: dict = {}
+        if "gas_logqion" in params:
+            population["gas_logqion"] = jnp.asarray(params["gas_logqion"])
+        elif age_weights is not None and ssp_ages_yr is not None:
+            population["ssp_weights"] = jnp.asarray(age_weights)
+            population["ssp_log_ages_yr"] = jnp.log10(jnp.asarray(ssp_ages_yr))
+        else:
+            log_nion = state.derived.get("log_nion")
+            if log_nion is not None:
+                population["gas_logqion"] = jnp.maximum(log_nion, 0.0)
+        overrides = {
+            key: jnp.asarray(params[key]) for key in _CUE_PARAM_OVERRIDE_KEYS if key in params
+        }
+        call = dict(common)
+        # Cue's low-level path defaults; ``mix_dig_emission`` names them explicitly.
+        call.setdefault("ssp_weights", None)
+        call.setdefault("ssp_log_ages_yr", None)
+        call.update(population)
+        call.update(overrides)
+        return call
+
+    @classmethod
+    def line_catalog_kwargs(cls, *, full_catalog: bool) -> dict:
+        """The 128-line Cloudy/FSPS subset, or the full ~271-species catalog on request (#303)."""
+        return {"cloudyfsps_only": not full_catalog}
+
+    def extra_derived(self, common: dict, params) -> dict:
+        """Publish ``neb_log_no``: the absolute [N/O] Cue is fed (#2693)."""
+        return {
+            "neb_log_no": self.effective_log_no(
+                neb_logZ_gas=common["neb_logZ_gas"],
+                gas_logno=jnp.asarray(params.get("gas_logno", DEFAULT_GAS_LOGNO)),
+                **({"gas_logz": jnp.asarray(params["gas_logz"])} if "gas_logz" in params else {}),
+            )
+        }
+
+    def split_nebular(self, call: dict, template_data):
+        """Return ``(continuum, line_wave, line_lum)`` from :meth:`predict_nebular_split`."""
+        return self.predict_nebular_split(**call, template_data=template_data)
+
+    @classmethod
+    def parameters(cls) -> list:
+        """Free-parameter declarations this backend contributes [see class docs]."""
+        return [*NEBULAR_STANDARD_PARAMS, *CUE_IONSPEC_PARAMS, *CUE_GAS_EXTRA_PARAMS]
+
     #: erg/s per [Lsun] for **this backend's** line catalog, read by
     #: :class:`~tengri.components.nebular.component.NebularSEDComponent` at the
     #: one seam that publishes ``line_lums`` in erg/s (#1559).
@@ -1236,6 +1375,33 @@ class CueBackend:
     #: line by +0.287%: systematic, and far too small for a units test to see,
     #: which is exactly the kind of error that survives.
     lsun_erg: float = _LSUN_ERG
+
+    @classmethod
+    def from_spec(cls, spec, ssp_data):
+        """Build the Cue backend that a model spec selects.
+
+        Parameters
+        ----------
+        spec : Parameters
+            Model spec. Reads ``cue_weights_path`` and the optional ``cue_nitrogen``,
+            ``cue_lyc_max_age_yr`` and ``cue_balmer_series_n_max`` values.
+        ssp_data : SSPData
+            Stellar grid the emulator is evaluated on.
+
+        Returns
+        -------
+        CueBackend
+            The backend instance.
+        """
+        return cls(
+            spec.cue_weights_path,
+            ssp_data=ssp_data,
+            nitrogen=getattr(spec, "cue_nitrogen", "absolute"),
+            lyc_max_age_yr=getattr(spec, "cue_lyc_max_age_yr", "all"),
+            balmer_series_n_max=getattr(
+                spec, "cue_balmer_series_n_max", BALMER_SERIES_N_MAX_DEFAULT
+            ),
+        )
 
     def __init__(
         self,
@@ -1290,7 +1456,14 @@ class CueBackend:
         """Precompute ionizing spectrum parameters for all SSP (met, age)."""
         import numpy as np
 
-        from tengri.components.nebular.ionizing_spectrum import precompute_ionizing_params_table
+        from tengri.components.nebular.ionizing_spectrum import (
+            precompute_ionizing_params_table,
+            require_ionizing_coverage,
+        )
+
+        # Coverage check (#3417, shared helper #3444), first so that no table or cache work
+        # runs on a grid that cannot give one. A truncated grid is refused, not read as dark.
+        require_ionizing_coverage(ssp_data.ssp_wave, backend="cue (CueBackend)")
 
         # Metadata check (#1014): a grid flagged nebular-included is refused
         # outright, BEFORE the Q_H heuristic below: the retained-LyC wNE
@@ -1529,13 +1702,13 @@ class CueBackend:
         ssp_weights=None,
         ssp_log_ages_yr=None,
         log_z=None,
-        neb_logU=-3.0,
+        neb_logU=DEFAULT_NEB_LOGU,
         neb_logZ_gas=None,
         gas_logu=None,
-        gas_logn=2.0,
+        gas_logn=DEFAULT_GAS_LOGN,
         gas_logz=None,
-        gas_logno=0.0,
-        gas_logco=0.0,
+        gas_logno=DEFAULT_GAS_LOGNO,
+        gas_logco=DEFAULT_GAS_LOGCO,
         gas_logqion=None,
         ionspec_index1=None,
         ionspec_index2=None,
@@ -1646,36 +1819,36 @@ class CueBackend:
         # explicitly. Matches ``predict_nebular_line_luminosities``'s own
         # default below.
         cloudyfsps_only=not CUE_FULL_CATALOG_DEFAULT,
-        neb_fesc=0.0,
-        neb_fesc_lya=1.0,
-        neb_fdust_frac=0.0,
+        neb_fesc=DEFAULT_NEB_FESC,
+        neb_fesc_lya=DEFAULT_NEB_FESC_LYA,
+        neb_fdust_frac=DEFAULT_NEB_FDUST_FRAC,
         template_data=None,
     ):
         """Low-level line prediction from resolved param dict."""
         weights = template_data if template_data is not None else self.weights
         nn_params = _prepare_nn_params(
-            jnp.asarray(p["ionspec_index1"], dtype=jnp.float32),
-            jnp.asarray(p["ionspec_index2"], dtype=jnp.float32),
-            jnp.asarray(p["ionspec_index3"], dtype=jnp.float32),
-            jnp.asarray(p["ionspec_index4"], dtype=jnp.float32),
-            jnp.asarray(p["ionspec_logLratio1"], dtype=jnp.float32),
-            jnp.asarray(p["ionspec_logLratio2"], dtype=jnp.float32),
-            jnp.asarray(p["ionspec_logLratio3"], dtype=jnp.float32),
-            jnp.asarray(p["gas_logu"], dtype=jnp.float32),
-            jnp.asarray(p["gas_logn"], dtype=jnp.float32),
-            jnp.asarray(p["gas_logz"], dtype=jnp.float32),
+            _param_input(p["ionspec_index1"]),
+            _param_input(p["ionspec_index2"]),
+            _param_input(p["ionspec_index3"]),
+            _param_input(p["ionspec_index4"]),
+            _param_input(p["ionspec_logLratio1"]),
+            _param_input(p["ionspec_logLratio2"]),
+            _param_input(p["ionspec_logLratio3"]),
+            _param_input(p["gas_logu"]),
+            _param_input(p["gas_logn"]),
+            _param_input(p["gas_logz"]),
             _effective_gas_logno(p, self.nitrogen),
-            jnp.asarray(p["gas_logco"], dtype=jnp.float32),
+            _param_input(p["gas_logco"]),
         )
         gas_logq = _logq_from_logu(
-            jnp.asarray(p["gas_logu"], dtype=jnp.float32),
-            jnp.asarray(p["gas_logn"], dtype=jnp.float32),
+            _param_input(p["gas_logu"]),
+            _param_input(p["gas_logn"]),
         )
         wav, lum = predict_all_lines(
             nn_params,
             weights,
             gas_logq,
-            jnp.asarray(p["gas_logqion"], dtype=jnp.float32),
+            _param_input(p["gas_logqion"]),
         )
         # Apply nebular emission scaling from ionizing photon loss.
         # Following CIGALE nebular.py, use the k-factor (Inoue 2011) which
@@ -1814,28 +1987,28 @@ class CueBackend:
         """Low-level continuum prediction from resolved param dict."""
         weights = template_data if template_data is not None else self.weights
         nn_params = _prepare_nn_params(
-            jnp.asarray(p["ionspec_index1"], dtype=jnp.float32),
-            jnp.asarray(p["ionspec_index2"], dtype=jnp.float32),
-            jnp.asarray(p["ionspec_index3"], dtype=jnp.float32),
-            jnp.asarray(p["ionspec_index4"], dtype=jnp.float32),
-            jnp.asarray(p["ionspec_logLratio1"], dtype=jnp.float32),
-            jnp.asarray(p["ionspec_logLratio2"], dtype=jnp.float32),
-            jnp.asarray(p["ionspec_logLratio3"], dtype=jnp.float32),
-            jnp.asarray(p["gas_logu"], dtype=jnp.float32),
-            jnp.asarray(p["gas_logn"], dtype=jnp.float32),
-            jnp.asarray(p["gas_logz"], dtype=jnp.float32),
+            _param_input(p["ionspec_index1"]),
+            _param_input(p["ionspec_index2"]),
+            _param_input(p["ionspec_index3"]),
+            _param_input(p["ionspec_index4"]),
+            _param_input(p["ionspec_logLratio1"]),
+            _param_input(p["ionspec_logLratio2"]),
+            _param_input(p["ionspec_logLratio3"]),
+            _param_input(p["gas_logu"]),
+            _param_input(p["gas_logn"]),
+            _param_input(p["gas_logz"]),
             _effective_gas_logno(p, self.nitrogen),
-            jnp.asarray(p["gas_logco"], dtype=jnp.float32),
+            _param_input(p["gas_logco"]),
         )
         gas_logq = _logq_from_logu(
-            jnp.asarray(p["gas_logu"], dtype=jnp.float32),
-            jnp.asarray(p["gas_logn"], dtype=jnp.float32),
+            _param_input(p["gas_logu"]),
+            _param_input(p["gas_logn"]),
         )
         return predict_continuum(
             nn_params,
             weights,
             gas_logq,
-            jnp.asarray(p["gas_logqion"], dtype=jnp.float32),
+            _param_input(p["gas_logqion"]),
         )
 
     def _compute_weighted_cue_params(
@@ -1843,11 +2016,11 @@ class CueBackend:
         ssp_weights: jnp.ndarray,
         ssp_log_ages_yr: jnp.ndarray,
         log_z: float,
-        neb_logU: float = -3.0,
+        neb_logU: float = DEFAULT_NEB_LOGU,
         neb_logZ_gas: float | None = None,
-        gas_logn: float = 2.0,
-        gas_logno: float = 0.0,
-        gas_logco: float = 0.0,
+        gas_logn: float = DEFAULT_GAS_LOGN,
+        gas_logno: float = DEFAULT_GAS_LOGNO,
+        gas_logco: float = DEFAULT_GAS_LOGCO,
     ) -> dict:
         """Derive Cue parameters from SSP weights, shape clamped to the trained box.
 
@@ -2037,18 +2210,18 @@ class CueBackend:
         ssp_weights: jnp.ndarray | None = None,
         ssp_log_ages_yr: jnp.ndarray | None = None,
         log_z: float | None = None,
-        neb_logU: float = -3.0,
+        neb_logU: float = DEFAULT_NEB_LOGU,
         neb_logZ_gas: float | None = None,
-        neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 1.0,
-        neb_fdust_frac: float = 0.0,
+        neb_fesc: float = DEFAULT_NEB_FESC,
+        neb_fesc_lya: float = DEFAULT_NEB_FESC_LYA,
+        neb_fdust_frac: float = DEFAULT_NEB_FDUST_FRAC,
         cloudyfsps_only: bool = not CUE_FULL_CATALOG_DEFAULT,
         # Cue-specific overrides (bypass SSP-derived params)
         gas_logu: float | None = None,
-        gas_logn: float = 2.0,
+        gas_logn: float = DEFAULT_GAS_LOGN,
         gas_logz: float | None = None,
-        gas_logno: float = 0.0,
-        gas_logco: float = 0.0,
+        gas_logno: float = DEFAULT_GAS_LOGNO,
+        gas_logco: float = DEFAULT_GAS_LOGCO,
         gas_logqion: float | None = None,
         ionspec_index1: float | None = None,
         ionspec_index2: float | None = None,
@@ -2176,15 +2349,15 @@ class CueBackend:
         ssp_weights: jnp.ndarray | None = None,
         ssp_log_ages_yr: jnp.ndarray | None = None,
         log_z: float | None = None,
-        neb_logU: float = -3.0,
+        neb_logU: float = DEFAULT_NEB_LOGU,
         neb_logZ_gas: float | None = None,
-        neb_fesc: float = 0.0,
-        neb_fdust_frac: float = 0.0,
+        neb_fesc: float = DEFAULT_NEB_FESC,
+        neb_fdust_frac: float = DEFAULT_NEB_FDUST_FRAC,
         gas_logu: float | None = None,
-        gas_logn: float = 2.0,
+        gas_logn: float = DEFAULT_GAS_LOGN,
         gas_logz: float | None = None,
-        gas_logno: float = 0.0,
-        gas_logco: float = 0.0,
+        gas_logno: float = DEFAULT_GAS_LOGNO,
+        gas_logco: float = DEFAULT_GAS_LOGCO,
         gas_logqion: float | None = None,
         ionspec_index1: float | None = None,
         ionspec_index2: float | None = None,
@@ -2288,11 +2461,11 @@ class CueBackend:
         ssp_weights: jnp.ndarray | None = None,
         ssp_log_ages_yr: jnp.ndarray | None = None,
         log_z: float | None = None,
-        neb_logU: float = -3.0,
+        neb_logU: float = DEFAULT_NEB_LOGU,
         neb_logZ_gas: float | None = None,
-        neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 1.0,
-        neb_fdust_frac: float = 0.0,
+        neb_fesc: float = DEFAULT_NEB_FESC,
+        neb_fesc_lya: float = DEFAULT_NEB_FESC_LYA,
+        neb_fdust_frac: float = DEFAULT_NEB_FDUST_FRAC,
         line_sigma_aa: float = 0.0,
         line_sigma_kms: float = 0.0,
         template_data: Any | None = None,
@@ -2398,11 +2571,11 @@ class CueBackend:
         ssp_weights: jnp.ndarray | None = None,
         ssp_log_ages_yr: jnp.ndarray | None = None,
         log_z: float | None = None,
-        neb_logU: float = -3.0,
+        neb_logU: float = DEFAULT_NEB_LOGU,
         neb_logZ_gas: float | None = None,
-        neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 1.0,
-        neb_fdust_frac: float = 0.0,
+        neb_fesc: float = DEFAULT_NEB_FESC,
+        neb_fesc_lya: float = DEFAULT_NEB_FESC_LYA,
+        neb_fdust_frac: float = DEFAULT_NEB_FDUST_FRAC,
         template_data: Any | None = None,
         **neb_params,
     ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:

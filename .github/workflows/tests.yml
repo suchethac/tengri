@@ -70,6 +70,9 @@ on:
     - cron: "0 4 * * *"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 # Supersede stale runs -- but never on `main`.
 #
 # **Every push to `main` runs the FULL suite, and no push run is cancelled.**
@@ -257,16 +260,34 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: pyproject.toml
-      - run: pip install "ruff==0.15.6" "jupytext>=1.16"
+          cache-dependency-path: |
+            pyproject.toml
+            .github/ci-constraints.txt
+      - run: pip install ruff jupytext
       - run: ruff check src/ tests/
       - run: ruff format --check src/ tests/
+      # BLE001 (blind except), ERA001 (commented-out code) and T201 (stray print) are not in
+      # ruff's select yet: the codebase still breaks them. This ratchet records the count per
+      # file in tools/lint_ratchet_baseline.txt and fails on any rise, or on a fall that the
+      # baseline has not recorded. Stdlib-only; it runs the ruff installed above.
+      - run: python tools/check_lint_ratchet.py ruff
+      # Loose relative tolerances (rel=/rtol= of 1e-2 or more) in tests/. Shrink-only
+      # per-file baseline (tools/test_tolerance_baseline.txt); stdlib-only.
+      - run: python tools/check_test_tolerances.py
+      # Broad `except` in src/tengri that falls through without keeping the exception.
+      # Shrink-only baseline (tools/src_silent_fallback_baseline.txt); stdlib-only.
+      - run: python tools/check_src_silent_fallback.py
+      # A test gated on a data file that is neither tracked in git nor named by a workflow
+      # download skips on every runner and never says so. Shrink-only baseline
+      # (tools/untracked_data_gates_baseline.txt); stdlib-only.
+      - run: python tools/check_untracked_data_gates.py
       - run: python tools/add_spdx_headers.py --check
       - run: python tools/check_british_spelling.py
       # CLAUDE.md says its instructions OVERRIDE default behavior and must be
@@ -333,6 +354,12 @@ jobs:
       # twenty of which made data/filters/ unreachable for the gallery (#1857).
       # Stdlib-only.
       - run: python tools/check_tracked_not_ignored.py
+      # Python keeps the second of two same-scope `def`s and drops the first, so
+      # an edit to the dropped copy changes nothing and every test still passes.
+      # SEDModel carried `_additive_term_shape_table` twice (#2819 and #2824 each
+      # added a copy). F811 misses it when the first binding is unused in
+      # between, which is always the case for a method. Stdlib-only.
+      - run: python tools/check_duplicate_defs.py
       # tengri implements published models and validates against the reference
       # codes; it does not port or copy their source. The wording drifted back
       # twice after being swept by hand, so it is pinned here. Stdlib-only.
@@ -600,13 +627,16 @@ jobs:
   # that finds nothing.
   security:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: pyproject.toml
+          cache-dependency-path: |
+            pyproject.toml
+            .github/ci-constraints.txt
       - run: pip install bandit pip-audit
       - name: Static security scan (bandit, medium+ severity)
         run: bandit -r src/ -ll
@@ -744,8 +774,8 @@ jobs:
           # owe it). `scopes` is stripped before the matrix is emitted.
           table=$(cat <<'JSON'
           [
-            {"shard":"contract","paths":"tests/contract","bug_half":"","nproc":2,"timeout":180,"cache_gb":"1.55","scopes":["docs","cheap-docs","all"]},
-            {"shard":"components","paths":"tests/components tests/unit","bug_half":"","nproc":2,"timeout":50,"cache_gb":"0.6","scopes":["docs","cheap-docs","all"]},
+            {"shard":"contract","paths":"tests/contract","bug_half":"","nproc":2,"timeout":240,"cache_gb":"1.55","scopes":["docs","cheap-docs","all"]},
+            {"shard":"components","paths":"tests/components tests/unit","bug_half":"","nproc":2,"timeout":70,"cache_gb":"0.6","scopes":["docs","cheap-docs","all"]},
             {"shard":"regression-a1","paths":"tests/regression/synthesizer_parity tests/regression/precision/test_agn_disc_float32.py tests/regression/precision/test_agn_disc_float32_inventory.py tests/regression/precision/test_agn_lbol_shape_dependence.py tests/regression/precision/test_bolometric_scale.py tests/regression/precision/test_bug_1859_flux_scale_log_domain.py tests/regression/precision/test_bug_2178_spectrum_precomp_mass_scale.py tests/regression/precision/test_dust_ir_float32.py tests/regression/precision/test_energy_balance_fail_open.py tests/regression/precision/test_energy_balance_galaxies.py tests/regression/precision/test_energy_balance_log_domain.py tests/regression/precision/test_fisher_float32.py tests/regression/precision/test_float32_boundary_inventory.py tests/regression/precision/test_float32_derived_properties.py tests/regression/precision/test_float32_end_to_end_spectroscopic.py tests/regression/precision/test_float32_grad_bolometric_seams.py tests/regression/precision/test_float32_grad_sed_path.py tests/regression/precision/test_float32_gradient_accuracy.py tests/regression/precision/test_float32_parity.py tests/regression/precision/test_float32_photometry_grad_seams.py tests/regression/precision/test_float32_scale_seam_sweep.py tests/regression/precision/test_forward_dtype_knob.py tests/regression/precision/test_geovi_metric_float32.py tests/regression/precision/test_graybody_grad_float32.py tests/regression/precision/test_inference_grad_float32.py tests/regression/precision/test_interp_dtype_float32.py tests/regression/precision/test_ionizing_log_domain.py tests/regression/precision/test_ionizing_scale.py tests/regression/precision/test_likelihood_float32.py tests/regression/precision/test_line_fluxes_float32_parity.py tests/regression/precision/test_log_companion_is_upstream.py tests/regression/precision/test_log_domain_corrupt_contract.py tests/regression/precision/test_log_line_properties.py tests/regression/precision/test_log_q_h_property.py tests/regression/precision/test_matmul_precision_default.py","bug_half":"","nproc":1,"timeout":70,"cache_gb":"0.5","scopes":["docs","cheap-docs","all"]},
             {"shard":"regression-a2","paths":"tests/regression/precision --ignore=tests/regression/precision/test_agn_disc_float32.py --ignore=tests/regression/precision/test_agn_disc_float32_inventory.py --ignore=tests/regression/precision/test_agn_lbol_shape_dependence.py --ignore=tests/regression/precision/test_bolometric_scale.py --ignore=tests/regression/precision/test_bug_1859_flux_scale_log_domain.py --ignore=tests/regression/precision/test_bug_2178_spectrum_precomp_mass_scale.py --ignore=tests/regression/precision/test_dust_ir_float32.py --ignore=tests/regression/precision/test_energy_balance_fail_open.py --ignore=tests/regression/precision/test_energy_balance_galaxies.py --ignore=tests/regression/precision/test_energy_balance_log_domain.py --ignore=tests/regression/precision/test_fisher_float32.py --ignore=tests/regression/precision/test_float32_boundary_inventory.py --ignore=tests/regression/precision/test_float32_derived_properties.py --ignore=tests/regression/precision/test_float32_end_to_end_spectroscopic.py --ignore=tests/regression/precision/test_float32_grad_bolometric_seams.py --ignore=tests/regression/precision/test_float32_grad_sed_path.py --ignore=tests/regression/precision/test_float32_gradient_accuracy.py --ignore=tests/regression/precision/test_float32_parity.py --ignore=tests/regression/precision/test_float32_photometry_grad_seams.py --ignore=tests/regression/precision/test_float32_scale_seam_sweep.py --ignore=tests/regression/precision/test_forward_dtype_knob.py --ignore=tests/regression/precision/test_geovi_metric_float32.py --ignore=tests/regression/precision/test_graybody_grad_float32.py --ignore=tests/regression/precision/test_inference_grad_float32.py --ignore=tests/regression/precision/test_interp_dtype_float32.py --ignore=tests/regression/precision/test_ionizing_log_domain.py --ignore=tests/regression/precision/test_ionizing_scale.py --ignore=tests/regression/precision/test_likelihood_float32.py --ignore=tests/regression/precision/test_line_fluxes_float32_parity.py --ignore=tests/regression/precision/test_log_companion_is_upstream.py --ignore=tests/regression/precision/test_log_domain_corrupt_contract.py --ignore=tests/regression/precision/test_log_line_properties.py --ignore=tests/regression/precision/test_log_q_h_property.py --ignore=tests/regression/precision/test_matmul_precision_default.py --ignore=tests/regression/precision/test_float32_fitting_path_seams.py","bug_half":"","nproc":1,"timeout":45,"cache_gb":"0.5","scopes":["docs","cheap-docs","all"]},
             {"shard":"regression-a3","paths":"tests/regression/precision/test_float32_fitting_path_seams.py","bug_half":"","nproc":1,"timeout":70,"cache_gb":"0.6","scopes":["docs","cheap-docs","all"]},
@@ -813,8 +843,10 @@ jobs:
           # computed by this very machinery, so a PR that edits it cannot be
           # trusted to have been routed by the old rules.
           # tools/ci_bug_durations.json is the ledger that splits regression/bug
-          # across the three b-shards: a change to it moves tests between shards.
-          force_re='^(\.github/workflows/|tools/ci_ok\.py$|tools/ci_split_paths\.py$|tools/ci_bug_durations\.json$|pyproject\.toml$|(.*/)?conftest\.py$)'
+          # across the three b-shards, and tools/ci_inference_durations.json the one
+          # that splits tests/inference across the three slow legs: a change to
+          # either moves tests between shards.
+          force_re='^(\.github/workflows/|tools/ci_ok\.py$|tools/ci_split_paths\.py$|tools/ci_(bug|inference)_durations\.json$|pyproject\.toml$|(.*/)?conftest\.py$)'
 
           # schedule and workflow_dispatch always run everything. The nightly is
           # the backstop that catches drift a per-PR filter cannot see.
@@ -950,16 +982,18 @@ jobs:
       matrix:
         shard: [1, 2, 3, 4]
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: pyproject.toml
+          cache-dependency-path: |
+            pyproject.toml
+            .github/ci-constraints.txt
       - run: pip install -e ".[dev]"
       # Every grid the examples need is committed (#1146), so there is no download
       # step and a fresh clone behaves exactly like CI.
-      - uses: actions/cache/restore@v6
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: gallery_jax_cache
         with:
           path: ~/.cache/tengri_jax_cache
@@ -970,7 +1004,7 @@ jobs:
           JAX_PLATFORMS: cpu
           MPLBACKEND: Agg
         run: python tools/run_gallery_examples.py --shard ${{ matrix.shard }}/4
-      - uses: actions/cache/save@v6
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         # `actions/cache` skips its implicit post-save when a job fails, so a cache
         # can never warm on a job that is ever red (the trap from #1055). Save
         # explicitly, and always.
@@ -989,12 +1023,14 @@ jobs:
     # own timeout under load reports as a failure of the thing it guards.
     timeout-minutes: 8
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: pyproject.toml
+          cache-dependency-path: |
+            pyproject.toml
+            .github/ci-constraints.txt
       - run: pip install -e ".[dev]"
       # Validate that all grammar blocks in documentation are complete and consistent.
       - run: python tools/check_doc_grammar_keys.py
@@ -1125,6 +1161,12 @@ jobs:
       # `--strict-markers`: an unregistered mark is a collection error here rather
       # than a warning nobody reads — `-m unit` matched 0 tests while 157 files
       # declared it.
+      # Pyright in basic mode over observation/ and inference/ (the include list in
+      # [tool.pyright]), ratcheted per file: the error count may only shrink against
+      # tools/pyright_ratchet_baseline.txt. Pinned in ci-constraints.txt. Measured
+      # locally at ~12 s of pyright wall time on 127 files.
+      - run: pip install pyright
+      - run: python tools/check_lint_ratchet.py pyright
       - run: pytest --collect-only -q -m "" tests/ > /dev/null
       - run: pytest tests/components/sps/test_alpha_fe.py tests/components/stellar/test_stellar_skeleton.py -q --no-header
       # The `benchmark` tier: four tests that assert a wall-clock RATIO (fast path
@@ -1233,26 +1275,30 @@ jobs:
       #     went dark; `tools/check_test_paths_covered.py` fails the build if any
       #     test tree escapes the table again.
       #   * budgets are above measured wall clock under runner-pool congestion
-      #     (+60%): contract 180 (re-measured 2026-10-21: cut at 120 min at 86 % with no
-      #     failure on two runs, so ~140 min complete; one worker holding a case marked
-      #     `timeout(1800)` needs the room), regression-a1 70 (re-measured 2026-10-31:
+      #     (+60%): contract 240 (re-measured 2026-11-02: run 41413375153 ran all 11,814
+      #     tests and was cut at 180 min while printing the summary, against 154 min on
+      #     2026-10-30 and ~140 min on 2026-10-21; the tree grows by a few hundred tests a
+      #     day, so splitting the shard is the lasting fix), regression-a1 70 (re-measured 2026-10-31:
       #     warm pytest max 39.1 min, job 119154441970; 50 left 28 % headroom),
       #     regression-a2 45, regression-a3 70 (a2/a3 unchanged until a cold-cache run
       #     is measured: every run 2026-10-21..30 restored its JAX cache),
       #     regression-b1/b2/b3 120 (re-measured 2026-10-21 once their #2748-era tests
       #     stopped failing in seconds: over two runs of the same tree the three shards
       #     took 48-72 min each, and each was cut at the old 70 at least once), the rest
-      #     50. The per-test `--timeout=600` below
+      #     50 except components 70 (re-measured 2026-11-05: run 42071436204 was cut at 50 min at
+      #     99 % with no failure; run 42036817533 took 50.5 min). The per-test `--timeout=600` below
       #     still catches a real hang, so a budget bounds total wall clock only.
       #     Re-measure from a completed run's job durations before changing one.
       matrix: ${{ fromJSON(needs.gallery-changes.outputs.shards) }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: pyproject.toml
+          cache-dependency-path: |
+            pyproject.toml
+            .github/ci-constraints.txt
       - run: pip install -e ".[dev]"
       # Persist the XLA compile cache. Measured locally at -n 2: 468 s cold vs 307 s
       # warm -- a ~1.5x saving.
@@ -1282,7 +1328,7 @@ jobs:
       # again and the snapshot went stale for as long as neither changed.
       - id: week
         run: echo "w=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache/restore@v6
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: jax_cache
         with:
           path: ~/.cache/tengri_jax_cache
@@ -1369,7 +1415,7 @@ jobs:
         # It bounds total wall clock; the per-test `--timeout=600` above is what
         # catches a real hang.
         timeout-minutes: ${{ matrix.timeout }}
-      - uses: actions/cache/save@v6
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         if: always() && steps.jax_cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
         with:
           path: ~/.cache/tengri_jax_cache
@@ -1435,7 +1481,7 @@ jobs:
       contents: read
       actions: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # The `test (<shard>)` jobs of THIS run, latest attempt. A failure to list
       # them leaves the file absent and `ci_ok.py` reports it; it is never read
       # as "no shard ran".
@@ -1573,15 +1619,16 @@ jobs:
         # regression-a (before #2908's split) at 18m40s vs 40m00s with coverage on the same SHA).
         # The matrix literal is required: GitHub expressions have no arithmetic.
         include:
-          # 70, not 50, for the same reason as the test job's contract row
-          # above: pool congestion alone moved the same-SHA contract shard
-          # ~25m -> 40m34s (2026-09-05), and this copy carries `--cov` on
-          # top. The per-test `--timeout=600` still catches real hangs.
+          # The test job's contract budget (180), for the same reason as its row
+          # in the shard table: `test (contract)` completed in 154 min on main
+          # b4035f64f (2026-10-30), and this copy, which carries `--cov` on top,
+          # was cut at its old 105 min budget on every nightly 2026-10-23..30.
+          # The per-test `--timeout=600` still catches real hangs.
           - shard: contract
             paths: tests/contract
             nproc: 2
-            budget: 70
-            coverage_budget: 105
+            budget: 180
+            coverage_budget: 270
           # `tests/unit` rides along here (2026-07-26). It was in NO shard: the
           # #148 rehome emptied the tree and the matrix was rewritten around the
           # physics-first trees without it, so anything landing back in
@@ -1638,7 +1685,10 @@ jobs:
             nproc: 1
             budget: 70
             coverage_budget: 105
-          # bug/ is ~20 min with no hotspot to extract (its heaviest single file is
+          # Budgets match the test job's regression-b rows (120): over the
+          # 2026-10-23..30 nightlies these coverage shards were cut at their old
+          # 75 min on 13 of 24 runs, and the ones that completed took 56-75 min.
+          # bug/ has no hotspot to extract (its heaviest single file is
           # 9.5% of the subtree), so it is split into thirds by FILE COUNT at runtime rather
           # than by a hardcoded list. `bug_half` triggers that in the run step;
           # new test files are absorbed automatically instead of silently landing
@@ -1647,20 +1697,20 @@ jobs:
             paths: ""
             bug_half: "1"
             nproc: 1
-            budget: 50
-            coverage_budget: 75
+            budget: 120
+            coverage_budget: 180
           - shard: regression-b2
             paths: ""
             bug_half: "2"
             nproc: 1
-            budget: 50
-            coverage_budget: 75
+            budget: 120
+            coverage_budget: 180
           - shard: regression-b3
             paths: ""
             bug_half: "3"
             nproc: 1
-            budget: 50
-            coverage_budget: 75
+            budget: 120
+            coverage_budget: 180
           - shard: regression-c
             paths: tests/regression/paper tests/regression/agn
             nproc: 1
@@ -1686,12 +1736,14 @@ jobs:
             budget: 50
             coverage_budget: 75
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: pyproject.toml
+          cache-dependency-path: |
+            pyproject.toml
+            .github/ci-constraints.txt
       - run: pip install -e ".[dev]"
       # `${{ matrix.nproc }}` (not `-n auto`): `--cov` adds ~30–50 % memory on top of
       # the test job, so this job OOM-killed the runner even more often than `test`
@@ -1730,7 +1782,7 @@ jobs:
         # combined regression-a shard had.
         timeout-minutes: ${{ matrix.coverage_budget }}
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v7
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           files: ./coverage.xml
           flags: ${{ matrix.shard }}
@@ -1763,9 +1815,13 @@ jobs:
       fail-fast: false
       matrix:
         # Measured serial inference ≈ 51 min on a full run; the tier has died
-        # before its summary line (#2363). Three contiguous file legs at 45 min
-        # each print `--durations=30` so the legs are rebalanced from measured
-        # durations, not static counts. integration still single-leg (114–118 min).
+        # before its summary line (#2363). Three file legs at 45 min each, split
+        # by the measured per-file seconds in tools/ci_inference_durations.json
+        # (greedy longest-processing-time), because the contiguous split put the
+        # whole test_profile_mass* cluster on leg 3, which was cut at 45 min on
+        # every nightly 2026-10-23..31 (legs 1 and 2 took 20-25 and 4-9 min).
+        # Each leg runs `-v --timeout=600` so a cut leg still shows per-test
+        # progress and a hang is named. integration still single-leg (114–118 min).
         include:
           - suite: inference
             part: 1
@@ -1821,17 +1877,21 @@ jobs:
           && (!contains(fromJSON('["labeled","unlabeled"]'), github.event.action)
               || github.event.label.name == 'run-slow-tests'))
     # Bound this job's JAX cache entries so the repo's cached set fits the GitHub 10 GB quota.
-    # Sizes from warm working sets; see CHANGELOG.md.
+    # Sizes from warm working sets; see CHANGELOG.md. The three inference caps (total 1.05,
+    # as before) are provisional: they follow the ledger split (leg 1 is test_profile_mass.py
+    # alone) and are to be re-measured from the next nightly's warm cache.
     env:
-      TENGRI_JAX_CACHE_MAX_GB: ${{ fromJSON('{"inference-1":"0.2","inference-2":"0.2","inference-3":"0.65","integration-all":"0.5","components-unit-regression-contract-physics-all":"0.12","agn-wildcard-liveness-all":"0.15"}')[format('{0}-{1}', matrix.suite, matrix.part || 'all')] }}
+      TENGRI_JAX_CACHE_MAX_GB: ${{ fromJSON('{"inference-1":"0.4","inference-2":"0.4","inference-3":"0.25","integration-all":"0.5","components-unit-regression-contract-physics-all":"0.12","agn-wildcard-liveness-all":"0.15"}')[format('{0}-{1}', matrix.suite, matrix.part || 'all')] }}
     timeout-minutes: 185
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: pyproject.toml
+          cache-dependency-path: |
+            pyproject.toml
+            .github/ci-constraints.txt
       - run: pip install -e ".[dev]"
       # Persist the JAX/XLA compilation cache across slow-tier runs.
       # `import tengri` auto-enables the on-disk cache
@@ -1856,7 +1916,7 @@ jobs:
       # depended only on pyproject.toml and JAX left the snapshot stale.
       - id: week
         run: echo "w=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache/restore@v6
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: jax_cache
         with:
           path: ~/.cache/tengri_jax_cache
@@ -1884,11 +1944,11 @@ jobs:
       # of silent kills at interpreter teardown (the 139 exit code from slow leg 2).
       - run: |
           if [ -n "${{ matrix.of }}" ]; then
-            python -X faulthandler -m pytest $(python tools/ci_split_paths.py --root tests/inference --part ${{ matrix.part }} --of ${{ matrix.of }} --join) -q --ignore=tests/crossval -m 'not crossval and not population_fit' -n 0 --durations=30
+            python -X faulthandler -m pytest $(python tools/ci_split_paths.py --root tests/inference --part ${{ matrix.part }} --of ${{ matrix.of }} --join --durations tools/ci_inference_durations.json) -v --ignore=tests/crossval -m 'not crossval and not population_fit and not weekly' -n 0 --timeout=600 --timeout-method=signal --durations=30
           elif [ -n "${{ matrix.paths }}" ]; then
-            python -X faulthandler -m pytest ${{ matrix.paths }} -q -m 'slow and not population_fit' -n 0 ${{ matrix.ignore }}
+            python -X faulthandler -m pytest ${{ matrix.paths }} -q -m 'slow and not population_fit and not weekly' -n 0 ${{ matrix.ignore }}
           else
-            python -X faulthandler -m pytest tests/${{ matrix.suite }} -q --ignore=tests/crossval -m 'not crossval and not population_fit' -n 0 --durations=30
+            python -X faulthandler -m pytest tests/${{ matrix.suite }} -q --ignore=tests/crossval -m 'not crossval and not population_fit and not weekly' -n 0 --durations=30
           fi
         timeout-minutes: ${{ matrix.timeout }}
       # Marker-scoped, not tree-scoped: `slow` outside tests/inference and
@@ -1909,9 +1969,9 @@ jobs:
       # only to avoid redundant execution. The condition keeps working if the
       # split is ever removed.
       - if: ${{ !cancelled() && matrix.suite == 'inference' && (matrix.part == null || matrix.part == 1) }}
-        run: python -X faulthandler -m pytest tests/contract -q -m 'slow and not crossval and not population_fit' -n 0 --durations=30
+        run: python -X faulthandler -m pytest tests/contract -q -m 'slow and not crossval and not population_fit and not weekly' -n 0 --durations=30
         timeout-minutes: 30
-      - uses: actions/cache/save@v6
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         if: always() && steps.jax_cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
         with:
           path: ~/.cache/tengri_jax_cache
@@ -1956,12 +2016,14 @@ jobs:
       TENGRI_JAX_CACHE_MAX_GB: "0.05"
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: pyproject.toml
+          cache-dependency-path: |
+            pyproject.toml
+            .github/ci-constraints.txt
       - run: pip install -e ".[dev]"
       # Persist the JAX compile cache (same pattern as the `test` job).
       - id: jaxver
@@ -1970,7 +2032,7 @@ jobs:
       # the nightly re-saves the snapshot.
       - id: week
         run: echo "w=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache/restore@v6
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: jax_cache
         with:
           path: ~/.cache/tengri_jax_cache
@@ -2046,11 +2108,11 @@ jobs:
           fi
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: crossval-test-results
           path: crossval-results/
-      - uses: actions/cache/save@v6
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         if: always() && steps.jax_cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
         with:
           path: ~/.cache/tengri_jax_cache

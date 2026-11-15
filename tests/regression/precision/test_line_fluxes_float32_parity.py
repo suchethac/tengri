@@ -121,23 +121,28 @@ _DUST_FREE = {
 #: share of Q_H and the line fluxes move by up to 4.4e-7 relative. The previous
 #: values are kept as ``_CUE_F64_REF_100MYR_CUT`` and are reproduced exactly with
 #: ``neb={'lyc_max_age_yr': 1e8}``.
+#: Re-pinned after the Cue float64 move (#3253): float64 Cue no longer rounds its weights
+#: to float32, so every line moves by -8e-8 to -2.9e-7 relative (values before:
+#: 4.895990747024662e-16, 5.986024961156531e-16, 1.7280498511462056e-15, 5.406742570472271e-16).
 _CUE_F64_REF = np.array(
     [
-        4.895990747024662e-16,
-        5.986024961156531e-16,
-        1.7280498511462056e-15,
-        5.406742570472271e-16,
+        4.895990319599183e-16,
+        5.986023216024387e-16,
+        1.728049709748532e-15,
+        5.406741105192729e-16,
     ]
 )
 
 #: The 100 Myr-cut reference: ``_CUE_F64_REF`` as captured before Cue counted every
-#: stellar age. ``lyc_max_age_yr=1e8`` must reproduce it exactly.
+#: stellar age. ``lyc_max_age_yr=1e8`` must reproduce it exactly. Re-pinned after the Cue
+#: float64 move (#3253): -3e-7 to -5e-7 relative (values before: 4.895990718894339e-16,
+#: 5.986027602596631e-16, 1.7280498380004032e-15, 5.406742978989404e-16).
 _CUE_F64_REF_100MYR_CUT = np.array(
     [
-        4.895990718894339e-16,
-        5.986027602596631e-16,
-        1.7280498380004032e-15,
-        5.406742978989404e-16,
+        4.895989211624023e-16,
+        5.986024530552999e-16,
+        1.7280493151633745e-15,
+        5.406740404021367e-16,
     ]
 )
 
@@ -165,12 +170,14 @@ _CUE_F64_REF_100MYR_CUT = np.array(
 # -3.363701233348562e-17 -> -3.3636346467589785e-17 (-2.0e-5 of a sign-flipped
 # noise-level line). The #2694 shift is the young-sliver integral; the #2802 shift
 # from the pre-merge main pin (-0.56 % Hbeta) is recorded above. CUE pins unchanged.
+# Re-pinned 2026-11-15 after #3434 (in #3462): no metallicity scatter at fixed Z
+# moves this by +2.265% (Hbeta), +2.329% ([O III] 5007), +1.581% (Halpha), +2.623% ([N II]).
 _WNE_F64_REF = np.array(
     [
-        2.7541036805062576e-16,
-        4.075921813562496e-16,
-        1.3443733651475604e-15,
-        -3.3636346467589785e-17,
+        2.816484033477791e-16,
+        4.17083282763222e-16,
+        1.3656333593051479e-15,
+        -3.451857217911404e-17,
     ]
 )
 

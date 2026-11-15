@@ -40,7 +40,12 @@ from tengri.utils.physics_constants import LOG10_ZSUN
 pytestmark = pytest.mark.regression_paper
 
 _ROOT = pathlib.Path(tengri.__file__).resolve().parents[2]
-_SSP_FILE = _ROOT / "data" / "bc03_pdva_stelib_chabrier.h5"
+#: The real bare-stellar grid when it is downloaded; otherwise the schema-faithful synthetic
+#: bare-stellar grid tests/conftest.py writes for every session (#2183), so these structural
+#: checks run in CI instead of skipping the whole file (the inert-coverage guard fails that).
+_SSP_FILE_REAL = _ROOT / "data" / "bc03_pdva_stelib_chabrier.h5"
+_SSP_FILE_SYNTHETIC_BARE = _ROOT / "data" / "ssp_prsc_bc03_chabrier.h5"
+_SSP_FILE = _SSP_FILE_REAL if _SSP_FILE_REAL.is_file() else _SSP_FILE_SYNTHETIC_BARE
 
 # Absolute log10 Z, log10 U_S, xi_d, log10 n_H, C/O: exact nodes of the table.
 _LOG_Z_NODE = -2.0

@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """WavePrecomp tabulates a component through the registry when its shape parameters are free.
 
-The exact band-response tables (``_dust_emission_band_response``,
-``_additive_term_band_response``) need every shape parameter fixed. With a shape parameter free
+The exact band-response tables (``_emission_band_response``,
+``additive_term_band_response``) need every shape parameter fixed. With a shape parameter free
 (the usual fit) the component used to integrate the filters on every call. The registry
 adapters tabulate the band fluxes over those shape axes at build, so WavePrecomp reads a table
 there instead. Three things are pinned per family:

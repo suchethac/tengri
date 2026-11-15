@@ -16,6 +16,30 @@ import jax.numpy as jnp
 from jax import Array
 
 from tengri.components.agn._nthcomp import load_nthcomp_table
+from tengri.components.agn._params import (
+    DEFAULT_AGN_A_SPIN,
+    DEFAULT_AGN_ADAF_ALPHA,
+    DEFAULT_AGN_ADAF_BETA,
+    DEFAULT_AGN_ADAF_DELTA,
+    DEFAULT_AGN_ASTAR,
+    DEFAULT_AGN_CIGALE_ADAF_DELTA,
+    DEFAULT_AGN_CIGALE_DISK_DELTA,
+    DEFAULT_AGN_COS_INC,
+    DEFAULT_AGN_F_HARD,
+    DEFAULT_AGN_GAMMA_HARD,
+    DEFAULT_AGN_GAMMA_WARM,
+    DEFAULT_AGN_KT_HOT,
+    DEFAULT_AGN_KT_WARM,
+    DEFAULT_AGN_LOG_LEDD,
+    DEFAULT_AGN_LOG_MDOT,
+    DEFAULT_AGN_OA_SKIRTOR,
+    DEFAULT_AGN_P_SKIRTOR,
+    DEFAULT_AGN_Q_SKIRTOR,
+    DEFAULT_AGN_R_WARM_RATIO,
+    DEFAULT_AGN_TAU_SKIRTOR,
+    SN12_LOG_LEDD_ON_GRID,
+    SN12_LOG_MBH_GRID_CENTER,
+)
 from tengri.components.agn.adaf import (
     adaf_scalar_state,
     adaf_spectrum_from_state,
@@ -29,6 +53,7 @@ from tengri.components.agn.blocks._protocol import (
 from tengri.components.agn.disc import (
     kubota_done_disc,
     kubota_done_disc_split,
+    kubota_done_unemitted_fraction,
     load_relagn_default_grid,
     multicolor_disc,
 )
@@ -53,6 +78,7 @@ __all__ = [
     "adaf_disc_block",
     "adaf_disc_power",
     "cigale_adaf_disc_block",
+    "cigale_disc_power",
     "cigale_schartmann_disc_block",
     "cigale_schartmann_skirtor_attenuated_disc_block",
     "cigale_skirtor_disc_block",
@@ -68,7 +94,7 @@ __all__ = [
     "slone_netzer_disc_block",
 ]
 
-from tengri.components.agn._params import DEFAULT_AGN_COS_INC, DEFAULT_AGN_LOG_MBH
+from tengri.components.agn._params import DEFAULT_AGN_LOG_MBH
 from tengri.utils.physics_constants import C_AA as _C_AA_PER_S
 
 _L_SUN_ERG: float = L_SUN
@@ -118,9 +144,9 @@ def adaf_disc_state(
     *,
     dtype=None,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
-    agn_adaf_alpha: float = 0.3,
-    agn_adaf_beta: float = 0.5,
-    agn_adaf_delta: float = 0.1,
+    agn_adaf_alpha: float = DEFAULT_AGN_ADAF_ALPHA,
+    agn_adaf_beta: float = DEFAULT_AGN_ADAF_BETA,
+    agn_adaf_delta: float = DEFAULT_AGN_ADAF_DELTA,
     agn_log_lbol_shape: float | None = None,
     **_params,
 ):
@@ -162,9 +188,9 @@ def adaf_disc_block(
     agn_log_lbol: float,
     *,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
-    agn_adaf_alpha: float = 0.3,
-    agn_adaf_beta: float = 0.5,
-    agn_adaf_delta: float = 0.1,
+    agn_adaf_alpha: float = DEFAULT_AGN_ADAF_ALPHA,
+    agn_adaf_beta: float = DEFAULT_AGN_ADAF_BETA,
+    agn_adaf_delta: float = DEFAULT_AGN_ADAF_DELTA,
     agn_log_lbol_shape: float | None = None,
     disc_state=None,
     **_params,
@@ -275,7 +301,7 @@ def cigale_adaf_disc_block(
     wavelength: Array,
     agn_log_lbol: float,
     *,
-    agn_cigale_adaf_delta: float = 0.0,
+    agn_cigale_adaf_delta: float = DEFAULT_AGN_CIGALE_ADAF_DELTA,
     **_params,
 ) -> Array:
     r"""CIGALE ``skirtor2016`` ADAF↔thin-disc transitional spectrum.
@@ -338,7 +364,7 @@ def cigale_schartmann_disc_block(
     wavelength: Array,
     agn_log_lbol: float,
     *,
-    agn_cigale_disk_delta: float = 0.0,
+    agn_cigale_disk_delta: float = DEFAULT_AGN_CIGALE_DISK_DELTA,
     **_params,
 ) -> Array:
     r"""CIGALE ``skirtor2016`` Schartmann (2005) disc spectrum.
@@ -405,12 +431,12 @@ def cigale_schartmann_skirtor_attenuated_disc_block(
     wavelength: Array,
     agn_log_lbol: float,
     *,
-    agn_cigale_disk_delta: float = 0.0,
-    agn_tau_skirtor: float = 7.0,
-    agn_p_skirtor: float = 1.0,
-    agn_q_skirtor: float = 1.0,
-    agn_oa_skirtor: float = 40.0,
-    agn_cos_inc: float = 0.86602540378443864,  # cos(30°), CIGALE i=30 default
+    agn_cigale_disk_delta: float = DEFAULT_AGN_CIGALE_DISK_DELTA,
+    agn_tau_skirtor: float = DEFAULT_AGN_TAU_SKIRTOR,
+    agn_p_skirtor: float = DEFAULT_AGN_P_SKIRTOR,
+    agn_q_skirtor: float = DEFAULT_AGN_Q_SKIRTOR,
+    agn_oa_skirtor: float = DEFAULT_AGN_OA_SKIRTOR,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,  # cos(30°), CIGALE i=30 default
     templates=None,
     **_params,
 ) -> Array:
@@ -502,7 +528,7 @@ def cigale_skirtor_disc_block(
     wavelength: Array,
     agn_log_lbol: float,
     *,
-    agn_cigale_disk_delta: float = 0.0,
+    agn_cigale_disk_delta: float = DEFAULT_AGN_CIGALE_DISK_DELTA,
     **_params,
 ) -> Array:
     r"""CIGALE ``skirtor2016`` empirical disc spectrum.
@@ -573,15 +599,15 @@ def kubota_done_disc_block(
     agn_log_lbol: float,
     *,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
-    agn_log_ledd: float = -1.0,
-    agn_a_spin: float = 0.0,
+    agn_log_ledd: float = DEFAULT_AGN_LOG_LEDD,
+    agn_a_spin: float = DEFAULT_AGN_A_SPIN,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
-    agn_f_hard: float = 0.02,
-    agn_gamma_warm: float = 2.5,
-    agn_kt_warm: float = 0.2,
-    agn_gamma_hard: float = 1.8,
-    agn_kt_hot: float = 100.0,
-    agn_r_warm_ratio: float = 2.0,
+    agn_f_hard: float = DEFAULT_AGN_F_HARD,
+    agn_gamma_warm: float = DEFAULT_AGN_GAMMA_WARM,
+    agn_kt_warm: float = DEFAULT_AGN_KT_WARM,
+    agn_gamma_hard: float = DEFAULT_AGN_GAMMA_HARD,
+    agn_kt_hot: float = DEFAULT_AGN_KT_HOT,
+    agn_r_warm_ratio: float = DEFAULT_AGN_R_WARM_RATIO,
     agn_log_lbol_shape: float | None = None,
     templates=None,
     **_params,
@@ -643,15 +669,15 @@ def kubota_done_disc_split_block(
     agn_log_lbol: float,
     *,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
-    agn_log_ledd: float = -1.0,
-    agn_a_spin: float = 0.0,
+    agn_log_ledd: float = DEFAULT_AGN_LOG_LEDD,
+    agn_a_spin: float = DEFAULT_AGN_A_SPIN,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
-    agn_f_hard: float = 0.02,
-    agn_gamma_warm: float = 2.5,
-    agn_kt_warm: float = 0.2,
-    agn_gamma_hard: float = 1.8,
-    agn_kt_hot: float = 100.0,
-    agn_r_warm_ratio: float = 2.0,
+    agn_f_hard: float = DEFAULT_AGN_F_HARD,
+    agn_gamma_warm: float = DEFAULT_AGN_GAMMA_WARM,
+    agn_kt_warm: float = DEFAULT_AGN_KT_WARM,
+    agn_gamma_hard: float = DEFAULT_AGN_GAMMA_HARD,
+    agn_kt_hot: float = DEFAULT_AGN_KT_HOT,
+    agn_r_warm_ratio: float = DEFAULT_AGN_R_WARM_RATIO,
     agn_log_lbol_shape: float | None = None,
     templates=None,
     **_params,
@@ -712,32 +738,40 @@ def kubota_done_disc_split_block(
 
 @register_disc_power("kubota_done")
 def kubota_done_disc_power(agn_log_lbol: float, **_params) -> Array:
-    r"""Power of :func:`kubota_done_disc_block` at ``cos i = 0.5``, in units of ``L_acc``.
+    r"""Emitted power of :func:`kubota_done_disc_block`, in units of ``L_acc`` (#3015).
 
-    The disc is normalized so that its angle-integrated power is
-    :math:`L_{\rm acc} = 10^{\mathtt{agn\_log\_lbol}} L_\odot` (Kubota & Done 2018,
-    Sects. 2.1-2.2), and at
-    :math:`\cos i = 0.5` the line-of-sight spectrum :math:`2\cos i\,D_\nu`
-    (plus the corona) has exactly that power.
+    The zones emit their own Page-Thorne dissipation (corona, disc and warm zones inside
+    ``R_out``). The dissipation beyond ``R_out`` is not emitted, so the emitted power is
+    :math:`(1 - R_{\rm unem}/L_{\rm acc})\,L_{\rm acc}`, the closed form of
+    :func:`~tengri.components.agn.disc.kubota_done_unemitted_fraction`. A line-energy debit
+    divides by this power, so it must be the power the disc spectrum carries.
 
     Parameters
     ----------
     agn_log_lbol : float
-        :math:`\log_{10}(L_{\rm acc}/L_\odot)`, as the block receives it (unused: the
-        fraction does not depend on it).
+        :math:`\log_{10}(L_{\rm acc}/L_\odot)`, as the block receives it.
+    agn_log_mbh : float, optional
+        :math:`\log_{10}(M_{\rm BH}/M_\odot)` in ``_params`` [dex]; the default when absent.
+    agn_a_spin : float, optional
+        Dimensionless spin in ``_params`` [dimensionless]; 0 when absent.
 
     Returns
     -------
     ndarray
-        1.0 [dimensionless]; the power is this times :math:`L_{\rm acc}`. A grid integral of
-        the spectrum on a dense grid gives 0.99927 of it at log M_BH = 8 (the cut corona tail).
+        Emitted disc power over ``L_acc`` [dimensionless], in ``(0, 1]``.
 
     Notes
     -----
     **JIT-compatible**: yes, pure ``jnp``.
     """
-    del agn_log_lbol
-    return jnp.asarray(1.0)
+    # On the float32 path ``agn_log_lbol`` is the reference magnitude and the shape (hence R_out,
+    # which follows the Eddington ratio) is set by ``agn_log_lbol_shape``, the true L_acc.
+    shape_log_lbol = _params.get("agn_log_lbol_shape")
+    return 1.0 - kubota_done_unemitted_fraction(
+        _params.get("agn_log_mbh", DEFAULT_AGN_LOG_MBH),
+        agn_log_lbol if shape_log_lbol is None else shape_log_lbol,
+        _params.get("agn_a_spin", DEFAULT_AGN_A_SPIN),
+    )
 
 
 @register_agn_block(
@@ -752,8 +786,8 @@ def multicolor_disc_block(
     agn_log_lbol: float,
     *,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
-    agn_log_ledd: float = -1.0,
-    agn_a_spin: float = 0.0,
+    agn_log_ledd: float = DEFAULT_AGN_LOG_LEDD,
+    agn_a_spin: float = DEFAULT_AGN_A_SPIN,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     euv_tail: str | float | None = "powerlaw",
     agn_log_lbol_shape: float | None = None,
@@ -808,6 +842,43 @@ def multicolor_disc_block(
     return L_nu * _C_AA_PER_S / wave_aa**2
 
 
+def cigale_disc_power(agn_log_lbol: float, **_params) -> Array:
+    r"""Power of the CIGALE piecewise-power-law discs, in units of ``L_bol``.
+
+    :func:`cigale_schartmann_disc_block`, :func:`cigale_skirtor_disc_block` and
+    :func:`cigale_adaf_disc_block` scale a unit-area spectrum by
+    :math:`L_{\rm bol} = 10^{\mathtt{agn\_log\_lbol}} L_\odot`: the area is normalized by the
+    closed-form integral of the power-law segments (:func:`piecewise_powerlaw_disk`; the ADAF
+    blend is ``(1 - delta)`` and ``delta`` times two unit-area parts), so the power is exactly
+    :math:`L_{\rm bol}`.
+
+    Parameters
+    ----------
+    agn_log_lbol : float
+        :math:`\log_{10}(L_{\rm bol}/L_\odot)`, as the block receives it (unused: the fraction
+        does not depend on it).
+
+    Returns
+    -------
+    ndarray
+        1.0 [dimensionless]; the power is this times :math:`L_{\rm bol}`. A trapezoid of the
+        spectrum on the runner's fixed budget grid gives 3.2e-6 less, a quadrature artifact of
+        the segment breaks that the line debit would carry into C2 in proportion to the line
+        fraction.
+
+    Notes
+    -----
+    **JIT-compatible**: yes, pure ``jnp``.
+    """
+    del agn_log_lbol
+    return jnp.asarray(1.0)
+
+
+for _name in ("schartmann2005", "skirtor", "adaf_lopez2024"):
+    register_disc_power(_name)(cigale_disc_power)
+del _name
+
+
 @register_disc_power("multicolor")
 def multicolor_disc_power(agn_log_lbol: float, **_params) -> Array:
     r"""Power of :func:`multicolor_disc_block` at ``cos i = 0.5``, in units of ``L_acc``.
@@ -851,8 +922,8 @@ def relagn_disc_block(
     agn_log_lbol: float,
     *,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
-    agn_log_mdot: float = -1.0,
-    agn_astar: float = 0.0,
+    agn_log_mdot: float = DEFAULT_AGN_LOG_MDOT,
+    agn_astar: float = DEFAULT_AGN_ASTAR,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     templates=None,
     **_params,
@@ -1007,8 +1078,8 @@ def slone_netzer_disc_block(
     # center; -2.0 is the on-grid counterpart for log_edd (#1578, #1586).
     # A caller that supplies these explicitly overrides the pins, which is why
     # Rule 9 of validate_block_recipe checks the active support at composition.
-    agn_log_mbh: float = 8.6,
-    agn_log_ledd: float = -2.0,
+    agn_log_mbh: float = SN12_LOG_MBH_GRID_CENTER,
+    agn_log_ledd: float = SN12_LOG_LEDD_ON_GRID,
     templates=None,
     **_params,
 ) -> Array:
@@ -1066,7 +1137,7 @@ def kd18_agnfitter_disc_block(
     agn_log_lbol: float,
     *,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
-    agn_log_ledd: float = -1.0,
+    agn_log_ledd: float = DEFAULT_AGN_LOG_LEDD,
     templates=None,
     **_params,
 ) -> Array:
@@ -1132,8 +1203,8 @@ def kd18_agnfitter_warmindex_disc_block(
     agn_log_lbol: float,
     *,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
-    agn_log_ledd: float = -1.0,
-    agn_gamma_warm: float = 2.5,
+    agn_log_ledd: float = DEFAULT_AGN_LOG_LEDD,
+    agn_gamma_warm: float = DEFAULT_AGN_GAMMA_WARM,
     templates=None,
     **_params,
 ) -> Array:

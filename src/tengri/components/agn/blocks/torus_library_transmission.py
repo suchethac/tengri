@@ -63,6 +63,18 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components.agn._params import (
+    DEFAULT_AGN_FRITZ_BETA,
+    DEFAULT_AGN_FRITZ_GAMMA,
+    DEFAULT_AGN_FRITZ_OA,
+    DEFAULT_AGN_FRITZ_R_RATIO,
+    DEFAULT_AGN_FRITZ_TAU,
+    DEFAULT_AGN_OA_SKIRTOR,
+    DEFAULT_AGN_P_SKIRTOR,
+    DEFAULT_AGN_Q_SKIRTOR,
+    DEFAULT_AGN_RADIUS_RATIO,
+    DEFAULT_AGN_TAU_SKIRTOR,
+)
 from tengri.components.agn.fritz import (
     FritzGrid,
     fritz_psy_from_cos_inc,
@@ -445,11 +457,11 @@ def _library_sightline(
         ratio, live = skirtor_line_of_sight_ratio(
             grid,
             wavelength,
-            tau=params.get("agn_tau_skirtor", 7.0),
-            p=params.get("agn_p_skirtor", 1.0),
-            q=params.get("agn_q_skirtor", 1.0),
-            oa=params.get("agn_oa_skirtor", 40.0),
-            radius=params.get("agn_radius_ratio", 20.0),
+            tau=params.get("agn_tau_skirtor", DEFAULT_AGN_TAU_SKIRTOR),
+            p=params.get("agn_p_skirtor", DEFAULT_AGN_P_SKIRTOR),
+            q=params.get("agn_q_skirtor", DEFAULT_AGN_Q_SKIRTOR),
+            oa=params.get("agn_oa_skirtor", DEFAULT_AGN_OA_SKIRTOR),
+            radius=params.get("agn_radius_ratio", DEFAULT_AGN_RADIUS_RATIO),
             cos_inc=cos_inc,
         )
         transmission = ratio / _skirtor_anisotropy(_floored_cos(c))
@@ -462,11 +474,11 @@ def _library_sightline(
         ratio, live = fritz_line_of_sight_ratio(
             fgrid,
             wavelength,
-            r_ratio=params.get("agn_fritz_r_ratio", 60.0),
-            tau=params.get("agn_fritz_tau", 1.0),
-            beta=params.get("agn_fritz_beta", -0.5),
-            gamma=params.get("agn_fritz_gamma", 4.0),
-            oa=params.get("agn_fritz_oa", 60.0),
+            r_ratio=params.get("agn_fritz_r_ratio", DEFAULT_AGN_FRITZ_R_RATIO),
+            tau=params.get("agn_fritz_tau", DEFAULT_AGN_FRITZ_TAU),
+            beta=params.get("agn_fritz_beta", DEFAULT_AGN_FRITZ_BETA),
+            gamma=params.get("agn_fritz_gamma", DEFAULT_AGN_FRITZ_GAMMA),
+            oa=params.get("agn_fritz_oa", DEFAULT_AGN_FRITZ_OA),
             cos_inc=cos_inc,
         )
         transmission = ratio
@@ -652,9 +664,23 @@ def tied_incl_with_library_edge(incl_ratio, wavelength, sight: LibrarySightline,
 
     The tied disc takes the library ratio :math:`{\rm disk}_i/{\rm disk}_0` on the caller's grid,
     which the library holds at zero below its first node, so the tied disc would emit nothing in
-    the X-rays. Shortward of that node the untied path's factor :math:`2\cos i\,T_X` is taken
-    instead (:attr:`LibrarySightline.disc_factor`, the Morrison & McCammon (1983) column of
-    :func:`library_torus_sightline`); every other sample keeps ``incl_ratio``.
+    the X-rays. Shortward of that node the tied disc takes the ratio held at the library's first
+    node times the Morrison & McCammon (1983) X-ray transmission :math:`T_X` of
+    :func:`library_torus_sightline` (:attr:`LibrarySightline.ratio` times
+    :attr:`LibrarySightline.transmission`); every other sample keeps ``incl_ratio``. The angular
+    law is therefore the library's on both sides of the edge and the disc is continuous there
+    up to :math:`T_X`. For Fritz et al. (2006) the library disc is isotropic, and CIGALE's
+    ``fritz2006`` (``sed_modules/fritz2006.py``, ``AGN1.disk * norm`` reweighted by
+    :math:`{\rm disk}(\psi)/{\rm disk}(89.99^\circ)`) applies no :math:`2\cos i` factor anywhere;
+    the repository's Lambertian :math:`2\cos i` belongs to the untied disc only (owner ruling,
+    #3062, 2026-11-12, option B; it replaces the :math:`2\cos i\,T_X` of #2760 for the tied
+    Fritz disc). The same holds for every tied library torus: for SKIRTOR the library disc is
+    anisotropic, :math:`\eta\propto\cos i\,(1+2\cos i)/3` (Stalevski et al. 2016, MNRAS 458,
+    2288), and CIGALE's ``skirtor2016`` (``sed_modules/skirtor2016.py``) forms the disc as the
+    new disc spectrum times :math:`{\rm disk}_i/{\rm disk}_0` of the library and ``nan_to_num``
+    sets the ratio to zero below the library's first node, so it carries no :math:`2\cos i`
+    and no disc there; the tied disc keeps the library's angular law on both sides of the edge
+    (owner ruling extended to SKIRTOR, 2026-11-12, after #3062).
 
     Parameters
     ----------
@@ -679,7 +705,8 @@ def tied_incl_with_library_edge(incl_ratio, wavelength, sight: LibrarySightline,
     """
     edge = library_edge_wavelength(torus_block)
     wave = jnp.asarray(wavelength)
-    return jnp.where(wave < edge, sight.disc_factor, jnp.asarray(incl_ratio))
+    below = sight.ratio * sight.transmission
+    return jnp.where(wave < edge, below, jnp.asarray(incl_ratio))
 
 
 def library_torus_transmission(

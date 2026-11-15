@@ -12,7 +12,7 @@ that table instead of integrating. Five things are pinned:
 (c) ``agn['axis_grids']`` (``agn_axis_grids``) sets the table's axes (#2471);
 (d) exact mode is unchanged: no table, no registry call, the per-filter integrals run;
 (e) the build measures its own table at the cell centers and declines one that misses
-    ``SEDModel._AGN_TABLE_RTOL``: the kubota_done disc over its whole luminosity prior (a jump
+    ``_AGN_TABLE_RTOL``: the kubota_done disc over its whole luminosity prior (a jump
     of the disc flux near agn_log_lbol 9.8) and SKIRTOR's inclination (the disc passing behind
     the torus) are declined, with the measured error as the reason.
 
@@ -32,9 +32,9 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri.components.agn.blocks.composable_precompute import UNWIRED_BLOCKS
+from tengri.components.agn.blocks.composable_precompute import _AGN_TABLE_RTOL, UNWIRED_BLOCKS
 from tengri.config.exceptions import TengriIOError
-from tengri.forward.sed_model import SEDModel
+from tengri.forward.precompute.band_table import Decline
 
 pytestmark = pytest.mark.contract
 
@@ -42,7 +42,7 @@ pytestmark = pytest.mark.contract
 _KEY = "composable_agn"
 
 #: The bound the build holds every kept table to, at its cell centers.
-_AGN_RTOL = SEDModel._AGN_TABLE_RTOL
+_AGN_RTOL = _AGN_TABLE_RTOL
 
 
 def _ssp():
@@ -103,7 +103,7 @@ def _atten_ebv():
 
 # Accuracy: the AGN band fluxes of the table against the exact model's AGN SED integrated
 # through the same filters, z = 0.1, six bands from 3000 A to 800 um. The build's cell-center
-# gate holds every table it keeps to ``SEDModel._AGN_TABLE_RTOL`` (1e-3), so that is each rtol.
+# gate holds every table it keeps to ``_AGN_TABLE_RTOL`` (1e-3), so that is each rtol.
 # Measured at the cell centers (the build's own probe): kubota_done over lbol (10.5, 14) passes
 # at the 129 one-axis nodes (1.06e-3 at 65, 1.13e-3 at 33); powerlaw+simple with the SMC
 # E(B-V) axis passes. powerlaw+simple over lbol alone is rank-1, so the exact term response
@@ -195,6 +195,12 @@ def _band_table(model) -> dict | None:
     return data.get("agn", {}).get("band_table")
 
 
+def _decline_reason(model) -> str | None:
+    """The reason the AGN band table of ``model`` is declined, or None when it is built."""
+    declined = model.band_table_decline("agn", "band_table")
+    return None if declined is None else declined.reason
+
+
 #: Built models shared by the tests of this module, keyed by (role, case). A build (for the
 #: kubota_done families, a 129-node table plus its cell-center check) dominates the run time, and
 #: most tests only read a model, so each is built once per worker. Tests that observe the build
@@ -213,7 +219,7 @@ def _shared(role: str, case, build):
             warnings.simplefilter("ignore")
             model = build()
         if role == "per_call":
-            model._agn_band_table_cache = None
+            model._band_tables["agn"]["band_table"] = Decline("test")
         _SHARED[(role, case)] = model
     return _SHARED[(role, case)]
 
@@ -247,7 +253,7 @@ def _table_row(model, params) -> np.ndarray:
 def _per_call_row(model, params) -> np.ndarray:
     """Observed-band AGN L_nu [erg/s/Hz] the component integrates per call.
 
-    ``model`` must have no table (``_agn_band_table_cache = None``), so this is the per-call
+    ``model`` must have no table (its memo entry is a ``Decline``), so this is the per-call
     WavePrecomp integral the table replaces, whichever chain the state runs.
     """
     assert _band_table(model) is None, "the per-call reference model still holds a table"
@@ -292,7 +298,7 @@ def test_table_is_built_through_the_registry_and_predict_does_not_integrate(
         warnings.simplefilter("ignore")
         model = _model(FAMILIES[key], _wavepre())
     assert _KEY in resolve_spy, "WavePrecomp never asked the registry for the composable AGN"
-    assert _band_table(model) is not None, model._agn_band_table_decline
+    assert _band_table(model) is not None, _decline_reason(model)
     params = dict(model.spec.sample(jax.random.PRNGKey(0)))
     before = len(integral_spy)
     jax.block_until_ready(model.predict_photometry(params))
@@ -318,7 +324,7 @@ def test_table_matches_exact_and_has_finite_gradients(key):
     family = FAMILIES[key]
     table_model = _family_model("table", key)
     exact_model = _family_model("exact", key)
-    assert _band_table(table_model) is not None, table_model._agn_band_table_decline
+    assert _band_table(table_model) is not None, _decline_reason(table_model)
     for seed in (11, 12, 13):
         params = dict(exact_model.spec.sample(jax.random.PRNGKey(seed)))
         np.testing.assert_allclose(
@@ -387,7 +393,7 @@ def test_table_matches_the_per_call_integral_path(key):
     """
     table = _family_model("table", key)
     per_call = _family_model("per_call", key)
-    assert _band_table(table) is not None, table._agn_band_table_decline
+    assert _band_table(table) is not None, _decline_reason(table)
     params = dict(table.spec.sample(jax.random.PRNGKey(0)))
     np.testing.assert_allclose(
         _table_row(table, params), _per_call_row(per_call, params), rtol=_AGN_RTOL
@@ -413,9 +419,9 @@ def test_a_declined_gate_leaves_the_exact_path_bit_for_bit(key):
         warnings.simplefilter("ignore")
         declined = _model(family, _wavepre(), redshift={"prior": Uniform(0.05, 0.2)})
         per_call = _model(family, _wavepre(), redshift={"prior": Uniform(0.05, 0.2)})
-    per_call._agn_band_table_cache = None
+    per_call._band_tables["agn"]["band_table"] = Decline("test")
     assert _band_table(declined) is None
-    assert "not Fixed" in declined._agn_band_table_decline
+    assert "not Fixed" in _decline_reason(declined)
     params = dict(declined.spec.sample(jax.random.PRNGKey(5)))
     # The reference is the same WavePrecomp model with no table: a declined gate must leave that
     # path unchanged. (Against approx=None the WavePrecomp stellar floor, ~5e-5, is not 1e-6.)
@@ -442,9 +448,9 @@ def test_family_is_engaged_unless_recorded_unwired(key):
     if key in UNWIRED:
         prefix, why = UNWIRED[key]
         assert _band_table(model) is None, f"{key} is recorded as unwired: {why}"
-        assert model._agn_band_table_decline.startswith(prefix), model._agn_band_table_decline
+        assert _decline_reason(model).startswith(prefix), _decline_reason(model)
     else:
-        assert _band_table(model) is not None, model._agn_band_table_decline
+        assert _band_table(model) is not None, _decline_reason(model)
 
 
 def _fixed_model(approx, *, agn_extra=None):
@@ -495,7 +501,7 @@ def test_fully_fixed_agn_is_a_constant_band_row(lum_ratio, integral_spy):
     per_call = _shared(
         "per_call", ("fixed", lum_ratio), lambda: _fixed_model(_wavepre(), agn_extra=extra)
     )
-    assert _band_table(table) is not None, table._agn_band_table_decline
+    assert _band_table(table) is not None, _decline_reason(table)
     params = dict(table.spec.sample(jax.random.PRNGKey(0)))
     before = len(integral_spy)
     jax.block_until_ready(table.predict_photometry(params))
@@ -537,9 +543,7 @@ def _assert_kept_tables_match_exact(table, exact):
     carries the gate's measured reason (the build never keeps a table it has not measured)."""
 
     if _band_table(table) is None:
-        assert table._agn_band_table_decline.startswith((_MISSES, _RANK1)), (
-            table._agn_band_table_decline
-        )
+        assert _decline_reason(table).startswith((_MISSES, _RANK1)), _decline_reason(table)
         return False
     for seed in (0, 1, 2):
         params = dict(table.spec.sample(jax.random.PRNGKey(seed)))
@@ -648,7 +652,7 @@ def test_torus_axis_table_matches_exact_or_is_declined(torus, param):
         pytest.skip(f"{torus}: model needs data absent from this checkout ({exc})")
     kept = _assert_kept_tables_match_exact(table, exact)
     if (torus, param) in _KEPT_TORUS_AXES:
-        assert kept, table._agn_band_table_decline
+        assert kept, _decline_reason(table)
 
 
 #: Every disc, nlr, blr, feii, torus and attenuation block that loads a library or a grid,
@@ -710,7 +714,7 @@ def test_template_block_table_matches_exact_or_is_declined(key):
         pytest.skip(f"{key}: model needs data absent from this checkout ({exc})")
     kept = _assert_kept_tables_match_exact(table, exact)
     if key in _KEPT_BLOCKS:
-        assert kept, table._agn_band_table_decline
+        assert kept, _decline_reason(table)
 
 
 @pytest.mark.parametrize("key", sorted(UNWIRED_BLOCKS))
@@ -726,7 +730,7 @@ def test_unwired_block_is_declined_with_its_reason(key):
     except (FileNotFoundError, TengriIOError) as exc:
         pytest.skip(f"{key}: model needs data absent from this checkout ({exc})")
     assert _band_table(model) is None
-    assert model._agn_band_table_decline == f"{key} is not tabulated: {UNWIRED_BLOCKS[key]}"
+    assert _decline_reason(model) == f"{key} is not tabulated: {UNWIRED_BLOCKS[key]}"
 
 
 def _agn_model(agn: dict, approx):
@@ -768,7 +772,7 @@ def test_preset_table_is_built_and_matches_exact_when_fixed(name, integral_spy):
     agn = {"type": name, "all_params": Fixed(DEFAULT)}
     table = _agn_model(agn, _wavepre())
     exact = _agn_model(agn, None)
-    assert _band_table(table) is not None, table._agn_band_table_decline
+    assert _band_table(table) is not None, _decline_reason(table)
     params = dict(table.spec.sample(jax.random.PRNGKey(0)))
     before = len(integral_spy)
     jax.block_until_ready(table.predict_photometry(params))
@@ -784,7 +788,7 @@ def test_preset_with_one_free_axis_matches_exact_off_node(name):
     agn = {"type": name, "all_params": Fixed(DEFAULT), "agn_log_lbol": Uniform(10.5, 12.0)}
     table = _agn_model(agn, _wavepre())
     exact = _agn_model(agn, None)
-    assert _band_table(table) is not None, table._agn_band_table_decline
+    assert _band_table(table) is not None, _decline_reason(table)
     assert list(_band_table(table)["axes"]) == ["agn_log_lbol"]
     # Off the node grid (the axis spacing is 1.5 / 128): none of these is a node.
     for lbol in (10.87, 11.31, 11.73):
@@ -801,7 +805,7 @@ def test_self_contained_models_are_declined_as_not_composable(name):
 
     model = _agn_model({"type": name, "all_params": Fixed(DEFAULT)}, _wavepre())
     assert _band_table(model) is None
-    assert model._agn_band_table_decline == "the AGN is not a composable recipe"
+    assert _decline_reason(model) == "the AGN is not a composable recipe"
 
 
 @pytest.mark.parametrize("name", ["silva04", "kubota_done"])
@@ -815,6 +819,6 @@ def test_conserving_preset_is_declined_by_the_norm_rule(name):
 
     model = _agn_model({"type": name, "all_params": Fixed(DEFAULT)}, _wavepre())
     assert _band_table(model) is None
-    assert model._agn_band_table_decline.startswith(
+    assert _decline_reason(model).startswith(
         "the table is evaluated under agn_norm='cigale_joint'"
-    ), model._agn_band_table_decline
+    ), _decline_reason(model)
