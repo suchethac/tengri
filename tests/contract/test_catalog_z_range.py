@@ -214,3 +214,49 @@ def test_promotion_is_cached_per_model_and_span_and_leaves_the_user_model(
     promoted = promote_to_runtime_redshift(exact, [0.05, 0.2, 0.4])
     assert promoted._catalog_z_range is None and promoted._z_runtime
     assert not promoted._approx["wave_precomp"], "an exact model stays exact"
+
+
+def test_caches_do_not_keep_the_model_alive(synthetic_ssp, simple_observation, monkeypatch):
+    """The promotion caches and fit_batch's forward-model cache are freed with their model.
+
+    The engine's own kernel caches (outside this change) keep a *fitted* model, so the fit
+    itself is stubbed out: what is measured is what promotion and ``fit_batch`` cache.
+    """
+    import gc
+    import weakref
+
+    from tengri import Fixed, SEDModel
+    from tengri.forward import convenience
+    from tengri.forward.forward_model import ForwardModel
+    from tengri.inference.fitter import promote_to_runtime_redshift
+
+    def build():
+        return SEDModel.build(
+            ssp_data=synthetic_ssp,
+            observation=simple_observation,
+            sfh={"type": "dpl"},
+            redshift=Fixed(0.1),
+            approx=WavePrecomp(),
+        )
+
+    model = build()
+    forward = ForwardModel.build(sed=build())
+    promoted = promote_to_runtime_redshift(model, [0.05, 0.2])
+    promoted_forward = promote_to_runtime_redshift(forward, [0.05, 0.2])
+    names = [f"flux_{i}" for i in range(3)]
+    errs = [f"err_{i}" for i in range(3)]
+    rows = [{"z": 0.05, **{n: 1.0 for n in names}, **{e: 0.1 for e in errs}}]
+    from tengri.inference.catalog import Catalog
+
+    class _Stub:
+        posteriors = ()
+
+    monkeypatch.setattr(Catalog, "fit", lambda self, *a, **k: _Stub())
+    convenience.fit_batch(
+        model, rows, flux_cols=names, err_cols=errs, redshift_col="z", method="map",
+        n_steps=1, verbose=False,
+    )  # fmt: skip
+    refs = [weakref.ref(x) for x in (model, forward, promoted, promoted_forward)]
+    del model, forward, promoted, promoted_forward
+    gc.collect()
+    assert [r() is None for r in refs] == [True] * 4, "a cache holds a model strongly"

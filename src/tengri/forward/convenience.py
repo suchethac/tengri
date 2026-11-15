@@ -7,8 +7,6 @@ Each function takes (model, ...) where model is an SEDModel instance.
 
 from __future__ import annotations
 
-import contextlib
-import weakref
 from typing import TYPE_CHECKING
 
 import jax
@@ -25,10 +23,6 @@ if TYPE_CHECKING:
 
 
 # ── Mock data generation ──────────────────────────────────────────
-
-
-#: ``ForwardModel`` wrapping each SED :func:`fit_batch` has fitted, so repeated calls reuse it.
-_FIT_BATCH_FORWARD: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 
 
 def _assemble_mock(params, flux_true, noise, key) -> MockData:
@@ -644,14 +638,11 @@ def fit_batch(
 
         # One forward model per source SED: the compile caches key on model identity, so
         # a repeated fit_batch on the same model must hand the engine the same object.
-        try:
-            fwd = _FIT_BATCH_FORWARD.get(model)
-        except TypeError:
-            fwd = None
+        # The wrapper lives on the model itself, so it is freed with the model.
+        fwd = model.__dict__.get("_fit_batch_forward")
         if fwd is None:
             fwd = ForwardModel.build(sed=model)
-            with contextlib.suppress(TypeError):
-                _FIT_BATCH_FORWARD[model] = fwd
+            model.__dict__["_fit_batch_forward"] = fwd
         # Forward an explicit approx= (the legacy loop passed it to every Fitter).
         # "auto" is the default and Catalog/Fitter already resolve it, so only a
         # non-default value needs applying, dropping it would silently change the
