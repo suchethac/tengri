@@ -2532,6 +2532,8 @@ class Posterior:
 
         - ``samples``: posterior samples (if available)
         - ``params``: best-fit or MAP parameters
+        - ``runtime_values``: this galaxy's runtime values, e.g. its redshift
+          (if any); restored into ``_runtime_values`` by ``load()``
         - ``loss_history``: optimization loss over iterations (if available)
         - ``diagnostics``: method-specific convergence metrics
         - ``eline``: emission line fluxes, covariances, names, wavelengths
@@ -2573,6 +2575,16 @@ class Posterior:
             grp = f.create_group("params")
             for name, val in self.params.items():
                 grp.create_dataset(name, data=np.asarray(val))
+
+            # This galaxy's runtime values (its redshift), the model's runtime keys
+            # only. Without them a reloaded posterior evaluates the model at the
+            # build-time placeholder. Absent when there are none, so files without
+            # the group load exactly as before.
+            runtime = self.runtime_values
+            if runtime:
+                rt_grp = f.create_group("runtime_values")
+                for name, val in runtime.items():
+                    rt_grp.create_dataset(name, data=np.asarray(val))
 
             if self.loss_history is not None:
                 f.create_dataset("loss_history", data=np.asarray(self.loss_history))
@@ -2724,6 +2736,13 @@ class Posterior:
 
             params = {name: _read_ds(ds) for name, ds in f["params"].items()}
 
+            # Absent in files written before runtime values were saved; those load
+            # with none, exactly as they did before.
+            runtime_values = None
+            rt_grp = f.get("runtime_values")
+            if isinstance(rt_grp, h5py.Group):
+                runtime_values = {name: _read_ds(ds) for name, ds in rt_grp.items()} or None
+
             loss_history = None
             if "loss_history" in f:
                 loss_history = jnp.asarray(f["loss_history"][:])
@@ -2753,6 +2772,7 @@ class Posterior:
             loss_history=loss_history,
             log_evidence=log_evidence,
             _model=model,
+            _runtime_values=runtime_values,
             eline_fluxes=eline_fluxes,
             eline_flux_cov=eline_flux_cov,
             eline_names=eline_names,
