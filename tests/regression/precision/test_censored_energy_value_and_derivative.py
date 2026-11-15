@@ -145,3 +145,33 @@ def test_zero_uncertainty_has_a_non_finite_derivative_and_a_finite_value():
         theta = jnp.asarray([0.9, 1.1])
         assert np.isfinite(float(energy(theta)))
         assert not np.all(np.isfinite(np.asarray(jax.grad(energy)(theta))))
+
+
+@pytest.mark.parametrize("mask", [[0, 0, 0, 0], [1, 0, -1, 0]])
+@pytest.mark.parametrize("f_cal", [0.0, 0.02])
+def test_float32_gradient_is_finite_when_the_noise_is_a_compile_time_constant(mask, f_cal):
+    """A fit closes over its data: XLA folds ``(x / sigma) / sigma`` into ``1 / sigma^2``.
+
+    The eager gradient is finite and the jitted one, with ``sigma ~ 1e-27`` baked in as a
+    constant, was NaN (every MAP solution of a float32 censored fit), so the test jits.
+    """
+    with jax.enable_x64(False):
+        data = np.asarray([1.0, 2.0, 3.0, 4.0], np.float32) * 1e-26
+        noise = data * 0.03
+        mask_arr = np.asarray(mask, np.int32)
+
+        @jax.jit
+        def grad_of(theta):
+            def energy(t):
+                return censored_neg_log_likelihood(
+                    jnp.asarray(data),
+                    jnp.asarray(noise),
+                    jnp.asarray(data) * t,
+                    jnp.asarray(mask_arr),
+                    f_cal,
+                )
+
+            return jax.grad(energy)(theta)
+
+        theta = jnp.asarray([1.05, 0.97, 1.0, 1.02], jnp.float32)
+        assert np.all(np.isfinite(np.asarray(grad_of(theta))))

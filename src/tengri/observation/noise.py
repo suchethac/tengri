@@ -456,9 +456,11 @@ def censored_neg_log_likelihood(
                 f_cal * model_term if not has_msf else hypot(f_cal * model_term, msf * model_term)
             )
             floor_lim = jnp.zeros_like(model_term) if not has_msf else msf * model_term
-            shrink_eff = hypot(1.0, floor_eff / noise_obs)
-            shrink_lim = hypot(1.0, floor_lim / noise_obs)
-            residual = (data - predicted) / noise_obs
+            # ``whiten``, not ``/``: with ``noise_obs`` a compile-time constant XLA
+            # re-associates the divide-before-square into 1 / sigma^2 and folds it to inf.
+            shrink_eff = hypot(1.0, whiten(floor_eff, noise_obs))
+            shrink_lim = hypot(1.0, whiten(floor_lim, noise_obs))
+            residual = whiten(data - predicted, noise_obs)
             r = residual / shrink_eff
             log_sigma_eff = jnp.log(noise_obs) + jnp.log(shrink_eff)
             z_upper, z_lower = residual / shrink_lim, -residual / shrink_lim
@@ -571,8 +573,8 @@ def variable_noise_hamiltonian(
         if safe:
             # Divide by the data noise alone: sigma_eff = sigma_obs hypot(1, q) with q =
             # f_cal |m| / sigma_obs, so no derivative carries 1 / sigma^2 (#3505).
-            shrink = hypot(1.0, f_cal * jnp.abs(predicted) / noise_obs)
-            r = ((data - predicted) / noise_obs) / shrink
+            shrink = hypot(1.0, whiten(f_cal * jnp.abs(predicted), noise_obs))
+            r = whiten(data - predicted, noise_obs) / shrink
             logdet = jnp.sum(jnp.log(noise_obs) + jnp.log(shrink))
         else:
             sigma_eff = compute_effective_noise(noise_obs, predicted, f_cal)
