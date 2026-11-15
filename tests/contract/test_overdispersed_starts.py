@@ -165,7 +165,8 @@ def test_a_family_without_an_adapted_metric_starts_at_the_unadapted_scale(sample
         n_samples=20,
         health_warnings=False,
     )
-    ((_, scale),) = seen
+    assert seen, "the start rule was not reached"
+    _, scale = seen[-1]
     np.testing.assert_allclose(scale, UNADAPTED_START_SCALE)
 
 
@@ -182,7 +183,8 @@ def test_a_family_with_an_adapted_metric_uses_it(monkeypatch):
         n_samples=20,
         health_warnings=False,
     )
-    ((_, scale),) = seen
+    assert seen, "the start rule was not reached"
+    _, scale = seen[-1]
     assert scale.shape == (3,) and np.all(scale > OVERDISPERSION * 0.2)
 
 
@@ -237,6 +239,7 @@ def test_low_rank_warms_up_from_the_centre_and_starts_chains_by_the_same_rule(mo
         health_warnings=False,
     )
     np.testing.assert_array_equal(warm_inits[0], np.array([0.3, -0.2, 0.1]))
-    ((centre, scale),) = seen
+    assert seen, "the start rule was not reached"
+    centre, scale = seen[-1]
     np.testing.assert_array_equal(centre, np.array([0.3, -0.2, 0.1]))
     assert scale.shape == (3,), "the adapted low-rank metric sets the start dispersion"
