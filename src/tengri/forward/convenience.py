@@ -681,15 +681,15 @@ def fit_batch(
     n_skipped = 0
     t0 = time.time()
 
-    # Warn loudly once if redshift_col is set but catalog_z_range is not
-    if redshift_col is not None and getattr(model, "_catalog_z_range", None) is None:
-        warnings.warn(
-            "fit_batch(redshift_col=...) without WavePrecomp(catalog_z_range=...) "
-            "recompiles the forward model for EVERY row (one compile per galaxy). "
-            "Build the model with approx=WavePrecomp(catalog_z_range=(zmin, zmax)) "
-            "to compile once. See #1316.",
-            UserWarning,
-            stacklevel=2,
+    # Per-galaxy redshift runs through one tabulated model: the range covers every row
+    # and each row's z is a runtime override, so the forward model compiles once rather
+    # than once per distinct redshift.
+    range_model = model
+    if redshift_col is not None:
+        from tengri.inference.fitter import with_derived_catalog_z_range
+
+        range_model = with_derived_catalog_z_range(
+            model, [float(row[redshift_col]) for row in rows]
         )
 
     for i, row in enumerate(rows):
@@ -713,11 +713,14 @@ def fit_batch(
         noise_i = jnp.array([float(row[c]) for c in err_cols])
 
         if redshift_col is not None:
-            # A fixed redshift is a compile constant: the tables, the component
-            # chain and the compile signature are all built at it, so the row
-            # needs a model rebuilt there (memoized per distinct redshift).
-            row_model = model.with_fixed_redshift(float(row[redshift_col]))
-            fitter_i = Fitter(row_model, flux_i, noise_i, approx=approx)
+            # The row's redshift is a runtime input of the tabulated model, not a rebuild.
+            fitter_i = Fitter(
+                range_model,
+                flux_i,
+                noise_i,
+                approx=approx,
+                params_override={"redshift": float(row[redshift_col])},
+            )
         else:
             fitter_i = Fitter(model, flux_i, noise_i, approx=approx)
 

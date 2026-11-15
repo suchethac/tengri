@@ -57,6 +57,7 @@ import weakref
 
 import jax
 import jax.numpy as jnp
+import jax.scipy.linalg
 
 from tengri.config.exceptions import ConfigError
 from tengri.inference._backend_registry import get_backend
@@ -117,6 +118,11 @@ _PRECOND_LOGDENSITY_CACHE: dict = {}
 #: This is a **default, not a cap**: pass ``n_ensemble=`` to ``run`` to raise it,
 #: and expect the VRAM to scale with ``K * n_ensemble``.
 CATALOG_CHEES_ENSEMBLE = 8
+
+#: Weight of the diagonal target in the shrunk pilot covariance of ``chees_dense``:
+#: ``Sigma = (1 - a) S + a diag(S)`` with ``a = CATALOG_DENSE_SHRINKAGE``. It keeps the
+#: metric positive definite when the pilot has few effectively independent draws.
+CATALOG_DENSE_SHRINKAGE = 0.1
 
 #: ADAM steps for the per-galaxy MAP warm start. 300 matches the single-fit
 #: default in :func:`~tengri.inference.backends.map_dispatch.run_map`.
@@ -553,6 +559,65 @@ def _catalog_live_chains(sampler: str, *, n_chains: int, n_ensemble: int | str) 
     return max(1, int(n_chains))
 
 
+def _masked_covariance(draws, mask):
+    """Sample covariance of the rows of ``draws`` selected by ``mask``, with unbiased scaling.
+
+    Rows outside ``mask`` are excluded even when non-finite, so a divergent or NaN pilot
+    draw cannot reach the covariance. With fewer than two selected rows the result is
+    NaN, which the caller's Cholesky finiteness check then refuses.
+
+    Parameters
+    ----------
+    draws : ndarray, shape (n, D)
+        Pilot positions in the sampled coordinates.
+    mask : ndarray, shape (n,), bool
+        True for the rows that may enter the covariance.
+
+    Returns
+    -------
+    ndarray, shape (D, D)
+        Covariance of the selected rows.
+    """
+    weight = mask.astype(draws.dtype)
+    count = jnp.sum(weight)
+    kept = jnp.where(mask[:, None], draws, 0.0)
+    mean = jnp.where(
+        count > 0.5,
+        jnp.sum(weight[:, None] * kept, axis=0) / jnp.maximum(count, 1.0),
+        jnp.nan,
+    )
+    centered = jnp.where(mask[:, None], draws - mean, 0.0)
+    return jnp.where(
+        count > 1.5,
+        (centered.T @ centered) / jnp.maximum(count - 1.0, 1.0),
+        jnp.nan,
+    )
+
+
+def _dense_metric_factor(draws, mask, shrinkage=CATALOG_DENSE_SHRINKAGE):
+    """Lower Cholesky factor ``L`` with ``L L^T = Sigma``, the shrunk covariance of the pilot.
+
+    Parameters
+    ----------
+    draws : ndarray, shape (n, D)
+        Pilot positions in the sampled coordinates.
+    mask : ndarray, shape (n,), bool
+        Rows that may enter the covariance (finite and not divergent).
+    shrinkage : float
+        Weight ``a`` of the diagonal target in ``Sigma = (1 - a) S + a diag(S)``.
+
+    Returns
+    -------
+    factor : ndarray, shape (D, D)
+        Lower Cholesky factor of ``Sigma``; non-finite when ``Sigma`` is not positive
+        definite (a stuck pilot has ``S = 0``), which the caller reports.
+    """
+    dim = draws.shape[-1]
+    cov = _masked_covariance(draws, mask).reshape(dim, dim)
+    shrunk = (1.0 - shrinkage) * cov + shrinkage * jnp.diag(jnp.diag(cov))
+    return jnp.linalg.cholesky(0.5 * (shrunk + shrunk.T))
+
+
 def build_catalog_mcmc_engine(
     fitter,
     sampler: str,
@@ -575,6 +640,7 @@ def build_catalog_mcmc_engine(
     chain_jitter: float | None = None,
     max_leapfrog_steps: int = 200,
     chees_learning_rate: float = _CHEES_LEARNING_RATE,
+    chees_dense: bool = False,
     mass_matrix_estimation=None,
     precondition: bool | float | None = None,
     precondition_floor: float = PRIOR_METRIC_FLOOR,
@@ -661,6 +727,11 @@ def build_catalog_mcmc_engine(
         states. A float seeds them independently and overdispersed, which is
         what makes a per-galaxy split R-hat a real test rather than a
         consistency check.
+    chees_dense : bool, default False
+        ChEES only. Samples with a dense metric instead of the diagonal one: a pilot ChEES
+        run per galaxy estimates the shrunk covariance of its draws (see
+        ``CATALOG_DENSE_SHRINKAGE``), and the final run samples in its whitened
+        coordinates. Costs two ChEES adaptations per galaxy.
     max_leapfrog_steps : int, default 200
         Hard cap on ChEES's adapted trajectory length. **This is the parameter
         that keeps a vmapped ChEES batch bounded**: lanes with different adapted
@@ -732,14 +803,6 @@ def build_catalog_mcmc_engine(
         raise ValueError(f"sampler must be one of {_SAMPLERS}, got {sampler!r}")
 
     n_chains = max(1, int(n_chains))
-    if sampler not in ("chees", "ghmc") and n_chains != 1:
-        raise ValueError(
-            f"sampler={sampler!r} runs exactly one chain per galaxy in the catalog "
-            f"path, got n_chains={n_chains}. Window adaptation is per galaxy here, so "
-            "a second chain would have to re-run it; only the ChEES path adapts once "
-            "over an ensemble and can then sample several chains from it. Use "
-            "method='mcmc_chees' for a per-galaxy multi-chain R-hat."
-        )
     if sampler == "ghmc":
         _check_ghmc_counts(n_chains, int(n_superchains), int(n_folds))
         if not 0.0 <= float(rewhiten_at) < 1.0:
@@ -796,6 +859,11 @@ def build_catalog_mcmc_engine(
         else _preconditioned_logdensity(log_posterior_flat_2arg, strength)
     )
 
+    def _dense_logdensity(zeta, args):
+        """Log-density in the pilot's whitened coordinates: ``y = L zeta`` is the sampled one."""
+        factor, inner = args
+        return sample_logdensity(factor @ zeta, inner)
+
     def run_one(
         init_flat, gal_key, data, noise, presence, redshift, line_flux_obs, line_flux_err, shared
     ):
@@ -822,7 +890,13 @@ def build_catalog_mcmc_engine(
             sample_init = precond.to_latent(init_flat)
 
         warmup_key, chain_key = jax.random.split(gal_key)
-        chain_keys = jax.random.split(chain_key, n_chain)
+        if n_chains == 1:
+            chain_keys = jax.random.split(chain_key, n_chain)
+        else:
+            # Window adaptation runs once per galaxy; each chain gets its own key stream.
+            chain_keys = jax.random.split(chain_key, n_chains * n_chain).reshape(
+                n_chains, n_chain, 2
+            )
 
         def restore(positions):
             """Map draws out of the whitened coordinates. Identity when off.
@@ -877,27 +951,61 @@ def build_catalog_mcmc_engine(
             # ``_chees_scan`` wants. Splitting per chain here rather than inside
             # keeps the key stream identical in shape to the NUTS/HMC lanes.
             ck = jax.random.split(chain_key, n_chains * n_chain).reshape(n_chains, n_chain, 2)
-            positions, divergent, _step_size, _inv_mass, _n_leapfrog = _chees_scan(
-                sample_init,
-                warmup_key,
-                ck,
-                sample_logdensity,
-                sample_args,
-                n_warmup,
-                ensemble_size,
-                n_chains,
-                n_chain,
-                float(ensemble_scale),
-                1.0,  # jitter_amount: BlackJAX's full Halton jitter
-                target_accept_rate,
-                max_leapfrog_steps,
-                float(chees_learning_rate),
-                mass_matrix_estimation,
-                None if chain_jitter is None else float(chain_jitter),
-            )
-            # Burn-in is per chain (the ``_vmap_chains`` contract), so it is
-            # sliced BEFORE the chains are flattened together. Slicing after
-            # would drop the head of chain 0 and nothing from the rest.
+
+            def chees_pass(init, logdensity, args, keys):
+                """One ChEES adaptation over the galaxy's ensemble; draws keep burn-in."""
+                positions, divergent, _step_size, _inv_mass, _n_leapfrog = _chees_scan(
+                    init,
+                    warmup_key,
+                    keys,
+                    logdensity,
+                    args,
+                    n_warmup,
+                    ensemble_size,
+                    n_chains,
+                    n_chain,
+                    float(ensemble_scale),
+                    1.0,  # jitter_amount: BlackJAX's full Halton jitter
+                    target_accept_rate,
+                    max_leapfrog_steps,
+                    float(chees_learning_rate),
+                    mass_matrix_estimation,
+                    None if chain_jitter is None else float(chain_jitter),
+                )
+                return positions, divergent
+
+            positions, divergent = chees_pass(sample_init, sample_logdensity, sample_args, ck)
+            if chees_dense:
+                # A dense metric from a pilot: the diagonal ChEES above runs over this
+                # galaxy's own ensemble, and its post-burn-in, non-divergent draws give
+                # the covariance Sigma. The final pass samples zeta with y = L zeta,
+                # L L^T = Sigma, so y has the dense inverse mass matrix Sigma. No
+                # BlackJAX mass-matrix path is entered, so the trajectory floor stays on.
+                dim = sample_init.shape[-1]
+                pilot_burn = max(n_burnin, n_chain // 2)
+                pilot = positions[:, pilot_burn:].reshape(-1, dim)
+                usable = ~divergent[:, pilot_burn:].reshape(-1) & jnp.all(
+                    jnp.isfinite(pilot), axis=-1
+                )
+                factor = _dense_metric_factor(pilot, usable)
+                # A pilot with fewer than D+1 usable draws, or a covariance that is not
+                # positive definite (a stuck pilot), cannot define a metric. That galaxy
+                # keeps the pilot's own draws, the diagonal run it already has.
+                metric_ok = (jnp.sum(usable) >= dim + 1) & jnp.all(jnp.isfinite(factor))
+                factor = jnp.where(metric_ok, factor, jnp.eye(dim, dtype=factor.dtype))
+                final_keys = jax.random.split(
+                    jax.random.fold_in(warmup_key, 1), n_chains * n_chain
+                ).reshape(n_chains, n_chain, 2)
+                dense_positions, dense_divergent = chees_pass(
+                    jax.scipy.linalg.solve_triangular(factor, sample_init, lower=True),
+                    _dense_logdensity,
+                    (factor, sample_args),
+                    final_keys,
+                )
+                # Back to the sampled coordinates y, then restore() maps them out.
+                dense_positions = dense_positions @ factor.T
+                positions = jnp.where(metric_ok, dense_positions, positions)
+                divergent = jnp.where(metric_ok, dense_divergent, divergent)
             positions = restore(positions[:, n_burnin:])
             divergent = divergent[:, n_burnin:]
             return positions.reshape(-1, positions.shape[-1]), divergent.reshape(-1)
@@ -920,6 +1028,24 @@ def build_catalog_mcmc_engine(
                 use_dense=use_dense,
                 target_accept_rate=target_accept_rate,
             )
+        if n_chains == 1:
+            draws, _ = run_chain(
+                entry.chain_program,
+                adaptation,
+                sample_init,
+                warmup_key,
+                None,
+                chain_keys,
+                sample_logdensity,
+                sample_args,
+                n_warmup,
+                cfg,
+            )
+            positions, divergent = draws.position, draws.divergent
+
+            # Discard per-galaxy burn-in (n_burnin is static -> uniform shape).
+            return restore(positions[n_burnin:]), divergent[n_burnin:]
+
         draws, _ = run_chain(
             entry.chain_program,
             adaptation,
@@ -931,10 +1057,11 @@ def build_catalog_mcmc_engine(
             sample_args,
             n_warmup,
             cfg,
+            float(ensemble_scale if chain_jitter is None else chain_jitter),
         )
-        positions, divergent = draws.position, draws.divergent
-
-        # Discard per-galaxy burn-in (n_burnin is static -> uniform shape).
-        return restore(positions[n_burnin:]), divergent[n_burnin:]
+        # Burn-in is per chain, so it is sliced before the chains are flattened together.
+        positions = restore(draws.position[:, n_burnin:])
+        divergent = draws.divergent[:, n_burnin:]
+        return positions.reshape(-1, positions.shape[-1]), divergent.reshape(-1)
 
     return run_one, unravel_fn

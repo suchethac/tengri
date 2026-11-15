@@ -7,7 +7,6 @@ ingestion and validation happen at construction (fail fast, before any compile).
 
 from __future__ import annotations
 
-import warnings
 import weakref
 
 import jax
@@ -301,10 +300,12 @@ class Catalog:
         is never ingested under a guessed unit. One of: ``"cgs_fnu"``
         [erg/s/cm²/Hz], ``"mJy"``, ``"uJy"``, ``"maggies"``, ``"ab_mag"``.
     redshift_col : str, optional
-        Column name for per-galaxy redshifts. If given, the model must have
-        a ``Fixed`` redshift and a ``catalog_z_range`` that covers the
-        redshift span in the table. If not given, the model must have a
-        free redshift parameter. Exactly one of the two conditions is required.
+        Column name for per-galaxy redshifts. If given, the model's redshift must be
+        ``Fixed`` (a placeholder: each row's value is used at fit time). A model without
+        a ``catalog_z_range`` gets one derived from the table (1% of the span on each
+        side, at least 1e-3, clipped at z=0), set on a configured copy that uses the
+        tabulated ``WavePrecomp`` path; the model passed in is not changed. Without
+        ``redshift_col`` the model must have a free redshift parameter.
     flux_cols : list[str], optional
         Flux column names **in your table**, they need not resemble the band
         names. If None, use ``"{name}"`` for each band in the model's
@@ -431,30 +432,20 @@ class Catalog:
                         "redshift=Fixed(...) with a catalog_z_range."
                     )
 
-                # A catalog_z_range lets per-galaxy redshift flow as a runtime
-                # input so the program compiles ONCE. Without it, each distinct
-                # redshift recompiles the fit (correct, just slow), warn loudly
-                # rather than refuse, so ``fit_batch``-style catalogs still run.
-                z_range = fwd.populations[0].sed._catalog_z_range
-                if z_range is None:
-                    warnings.warn(
-                        "redshift_col was provided but the model has no "
-                        "catalog_z_range, so the forward model recompiles for EVERY "
-                        "distinct redshift (one compile per galaxy). Build the model "
-                        "with approx=WavePrecomp(catalog_z_range=(zmin, zmax)) to "
-                        "compile once. See #1316.",
-                        UserWarning,
-                        stacklevel=2,
+                # A catalog_z_range lets per-galaxy redshift flow as a runtime input so
+                # the program compiles ONCE. A model without one gets a configured clone
+                # whose range covers this table; the caller's model is not touched.
+                from tengri.inference.fitter import with_derived_catalog_z_range
+
+                fwd = with_derived_catalog_z_range(fwd, ca.redshift)
+                z_lo, z_hi = fwd.populations[0].sed._catalog_z_range
+                z_min, z_max = ca.redshift.min(), ca.redshift.max()
+                if z_min < z_lo or z_max > z_hi:
+                    raise ValueError(
+                        f"Redshift span [{z_min:.3f}, {z_max:.3f}] exceeds model's "
+                        f"catalog_z_range=[{z_lo:.3f}, {z_hi:.3f}]. "
+                        f"Widen catalog_z_range at model build time or filter the table."
                     )
-                else:
-                    z_lo, z_hi = z_range
-                    z_min, z_max = ca.redshift.min(), ca.redshift.max()
-                    if z_min < z_lo or z_max > z_hi:
-                        raise ValueError(
-                            f"Redshift span [{z_min:.3f}, {z_max:.3f}] exceeds model's "
-                            f"catalog_z_range=[{z_lo:.3f}, {z_hi:.3f}]. "
-                            f"Widen catalog_z_range at model build time or filter the table."
-                        )
             else:
                 # Condition 2: no redshift_col. A free redshift is fit per galaxy;
                 # a Fixed redshift is legitimate too, every galaxy is fit at the
