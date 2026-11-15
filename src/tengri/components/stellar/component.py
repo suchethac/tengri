@@ -2628,18 +2628,6 @@ class _CompositePopulation(NamedTuple):
     met_read: Any = None
 
 
-# Photometry LUT fields that carry the [alpha/Fe] axis on a 4D grid, shaped
-# (n_met, n_alpha, n_age, ...). The alpha axis sits at position 1.
-_FIXED_Z_LUT_ALPHA_FIELDS = (
-    "ssp_phot",
-    "ssp_phot_moment",
-    "ssp_subband_phot",
-    "ssp_subband_waves_rest",
-    "ssp_subband_phot_igm",
-    "ssp_subband_waves_rest_igm",
-    "ssp_phot_lyc",
-    "ssp_phot_nolyc",
-)
 # Free-z table fields, shaped (n_z, n_met, n_alpha, n_age, ...): the alpha axis is at 2.
 _FREE_Z_TABLE_ALPHA_FIELDS = (
     "ssp_phot_table",
@@ -2650,12 +2638,6 @@ _FREE_Z_TABLE_ALPHA_FIELDS = (
     "subband_waves_rest_igm_table",
     "ssp_phot_lyc_table",
     "ssp_phot_nolyc_table",
-)
-# Rest-band LUT fields, shaped (n_met, n_alpha, n_age, ...).
-_RESTBAND_ALPHA_FIELDS = (
-    "ssp_restband_phot",
-    "ssp_restband_subband_phot",
-    "ssp_restband_subband_waves",
 )
 
 
@@ -2698,20 +2680,23 @@ def _alpha_fe_at_ages(params, ssp, *, evolving: bool, t_universe_gyr):
     )
 
 
-def _collapse_alpha_plane(x, alpha_bracket, axis: int = 1):
-    """Collapse one 4D [alpha/Fe] array at the model's bracket; a 3D array passes through.
+def _collapse_met_then_alpha(table, collapse, alpha_bracket):
+    """Per-SSP read of a table with an [alpha/Fe] axis: metallicity first, then alpha (#3434).
 
-    Linear, so collapsing a template cube before a metallicity contraction gives the
-    same spectrum as contracting each alpha node and interpolating the results.
+    ``collapse`` is the metallicity read of :func:`_met_read_ops`, called as
+    ``collapse(table, age_axis=2)``. Each (alpha, age) SSP column is read across its
+    metallicity nodes first; only then are the two alpha nodes that bracket the model
+    mixed linearly. Alpha first and PCHIP second is a different number whenever the alpha
+    dependence varies with Z, so the owner ruling "PCHIP each SSP" fixes this order.
+    ``alpha_bracket`` None (no alpha axis), or a table below 4-D, returns ``collapse(table)``.
+    The table is ``(n_met, n_alpha, n_age, ...)``.
     """
-    if x.ndim < 4:
-        return x
-    if alpha_bracket is None:
-        raise ValueError("a 4D [alpha/Fe] array reached the spectrum tables without a bracket")
+    if alpha_bracket is None or table.ndim < 4:
+        return collapse(table)
     from tengri.components.stellar.sps.dsps_wrapper import collapse_alpha_axis
 
     ia, fa = alpha_bracket
-    return collapse_alpha_axis(x, ia, fa, axis=axis)
+    return collapse_alpha_axis(collapse(table, age_axis=2), ia, fa, axis=1)
 
 
 def _collapse_alpha_fields(tables, names, alpha_bracket, axis: int):
@@ -3534,19 +3519,22 @@ class StellarSEDComponent:
         # compute stellar_phot_lnu_precomp and publish it to derived.
         if self._state is not None and self._state.ssp_phot_lut is not None:
             phot_lut = self._threaded_lut(template_data, "ssp_phot_lut")
+            # 4D grid: the LUT keeps its [alpha/Fe] axis (position 1), and every contraction
+            # below reads it per SSP, metallicity by PCHIP and then the alpha bracket (#3434).
             if alpha_bracket is not None:
-                # 4D grid: the LUT carries the [alpha/Fe] axis at position 1. Collapse it at
-                # the model's bracket, so every contraction below sees the 3D layout.
-                phot_lut = _collapse_alpha_fields(
-                    phot_lut, _FIXED_Z_LUT_ALPHA_FIELDS, alpha_bracket, axis=1
-                )
+
+                def read(table):
+                    return _collapse_met_then_alpha(table, collapse, alpha_bracket)
+
+            else:
+                read = collapse
             # Fixed-z path; LUT built at source's z in precompute()
             ssp_phot = phot_lut.ssp_phot
             # (n_met, n_age, n_filt) in Lsun/Hz/Msun; sum over metallicity and
             # age axes weighted by joint distribution × total mass.
             # Convert to erg/s/Hz to match sed_intrinsic units.
             stellar_phot_lnu_precomp_rest = _mass_scale_lnu(
-                jnp.einsum("ma,maf->f", joint_x, collapse(ssp_phot)), total_mass
+                jnp.einsum("ma,maf->f", joint_x, read(ssp_phot)), total_mass
             )
             derived_overrides["stellar_phot_lnu_precomp"] = stellar_phot_lnu_precomp_rest
             # Lyman continuum photometry: rest λ < 912 Å. Used by the nebular
@@ -3554,14 +3542,14 @@ class StellarSEDComponent:
             ssp_phot_lyc = phot_lut.ssp_phot_lyc
             if ssp_phot_lyc is not None:
                 stellar_phot_lnu_precomp_lyc = _mass_scale_lnu(
-                    jnp.einsum("ma,maf->f", joint_x, collapse(ssp_phot_lyc)), total_mass
+                    jnp.einsum("ma,maf->f", joint_x, read(ssp_phot_lyc)), total_mass
                 )
                 derived_overrides["stellar_phot_lnu_precomp_lyc"] = stellar_phot_lnu_precomp_lyc
                 # The other half of the split, built from the same cumulative
                 # integral: the escape-fraction mask adds to it rather than
                 # subtracting from the whole (see ``PhotometricPrecomputation``).
                 derived_overrides["stellar_phot_lnu_precomp_nolyc"] = _mass_scale_lnu(
-                    jnp.einsum("ma,maf->f", joint_x, collapse(phot_lut.ssp_phot_nolyc)),
+                    jnp.einsum("ma,maf->f", joint_x, read(phot_lut.ssp_phot_nolyc)),
                     total_mass,
                 )
             # Age-resolved per-filter LUT for two-component
@@ -3569,7 +3557,7 @@ class StellarSEDComponent:
             # the age axis. Shape (n_age, n_filter). Sum over age == the
             # marginalized stellar_phot_lnu_precomp above.
             stellar_phot_lnu_per_age = _mass_scale_lnu(
-                jnp.einsum("ma,maf->af", joint_x, collapse(ssp_phot)), total_mass
+                jnp.einsum("ma,maf->af", joint_x, read(ssp_phot)), total_mass
             )
             derived_overrides["stellar_phot_lnu_per_age_precomp"] = stellar_phot_lnu_per_age
             # Per-age twin of stellar_phot_lnu_precomp_lyc above (R3d, #2439,
@@ -3583,24 +3571,24 @@ class StellarSEDComponent:
             # per-age) silently disagree with the marginalized one.
             if ssp_phot_lyc is not None:
                 stellar_phot_lnu_per_age_lyc = _mass_scale_lnu(
-                    jnp.einsum("ma,maf->af", joint_x, collapse(ssp_phot_lyc)), total_mass
+                    jnp.einsum("ma,maf->af", joint_x, read(ssp_phot_lyc)), total_mass
                 )
                 derived_overrides["stellar_phot_lnu_per_age_precomp_lyc"] = (
                     stellar_phot_lnu_per_age_lyc
                 )
                 derived_overrides["stellar_phot_lnu_per_age_precomp_nolyc"] = _mass_scale_lnu(
-                    jnp.einsum("ma,maf->af", joint_x, collapse(phot_lut.ssp_phot_nolyc)),
+                    jnp.einsum("ma,maf->af", joint_x, read(phot_lut.ssp_phot_nolyc)),
                     total_mass,
                 )
             # Taylor moment Ψ: same einsum, units erg/s/Hz × Å.
             ssp_phot_moment = phot_lut.ssp_phot_moment
             if ssp_phot_moment is not None:
                 stellar_phot_moment_precomp = _mass_scale_lnu(
-                    jnp.einsum("ma,maf->f", joint_x, collapse(ssp_phot_moment)), total_mass
+                    jnp.einsum("ma,maf->f", joint_x, read(ssp_phot_moment)), total_mass
                 )
                 derived_overrides["stellar_phot_moment_precomp"] = stellar_phot_moment_precomp
                 stellar_phot_moment_per_age = _mass_scale_lnu(
-                    jnp.einsum("ma,maf->af", joint_x, collapse(ssp_phot_moment)), total_mass
+                    jnp.einsum("ma,maf->af", joint_x, read(ssp_phot_moment)), total_mass
                 )
                 derived_overrides["stellar_phot_moment_per_age_precomp"] = (
                     stellar_phot_moment_per_age
@@ -3611,10 +3599,8 @@ class StellarSEDComponent:
             ssp_sub_phot = phot_lut.ssp_subband_phot
             if ssp_sub_phot is not None:
                 ssp_sub_waves = phot_lut.ssp_subband_waves_rest
-                sub_phi = jnp.einsum("ma,mafk->afk", joint_x, collapse(ssp_sub_phot))
-                sub_num = jnp.einsum(
-                    "ma,mafk->afk", joint_x, collapse(ssp_sub_waves * ssp_sub_phot)
-                )
+                sub_phi = jnp.einsum("ma,mafk->afk", joint_x, read(ssp_sub_phot))
+                sub_num = jnp.einsum("ma,mafk->afk", joint_x, read(ssp_sub_waves * ssp_sub_phot))
                 derived_overrides["stellar_phot_lnu_per_age_subband_precomp"] = _mass_scale_lnu(
                     sub_phi, total_mass
                 )
@@ -3638,18 +3624,18 @@ class StellarSEDComponent:
                 if ssp_sub_phot_igm is not None:
                     derived_overrides["stellar_phot_lnu_per_age_subband_igm_precomp"] = (
                         _mass_scale_lnu(
-                            jnp.einsum("ma,mafk->afk", joint_x, collapse(ssp_sub_phot_igm)),
+                            jnp.einsum("ma,mafk->afk", joint_x, read(ssp_sub_phot_igm)),
                             total_mass,
                         )
                     )
                     waves_igm = phot_lut.ssp_subband_waves_rest_igm
                     _publish_igm_nodes(
                         derived_overrides,
-                        jnp.einsum("ma,mafk->afk", joint_x, collapse(ssp_sub_phot_igm)),
+                        jnp.einsum("ma,mafk->afk", joint_x, read(ssp_sub_phot_igm)),
                         None
                         if waves_igm is None
                         else jnp.einsum(
-                            "ma,mafk->afk", joint_x, collapse(waves_igm * ssp_sub_phot_igm)
+                            "ma,mafk->afk", joint_x, read(waves_igm * ssp_sub_phot_igm)
                         ),
                     )
             # Publish filter pivot wavelengths so the dust LUT
@@ -3815,20 +3801,24 @@ class StellarSEDComponent:
         # rest band does not move with redshift, so there is nothing to interpolate.
         if self._state is not None and self._state.restband_lut is not None:
             rb = self._state.restband_lut
+            # 4D grid: the restband tables keep their [alpha/Fe] axis and read per SSP (#3434).
             if alpha_bracket is not None:
-                rb = _collapse_alpha_fields(rb, _RESTBAND_ALPHA_FIELDS, alpha_bracket, axis=1)
+
+                def read(table):
+                    return _collapse_met_then_alpha(table, collapse, alpha_bracket)
+
+            else:
+                read = collapse
             derived_overrides["stellar_restband_lnu_precomp"] = _mass_scale_lnu(
-                jnp.einsum("ma,maf->f", joint_x, collapse(rb.ssp_restband_phot)), total_mass
+                jnp.einsum("ma,maf->f", joint_x, read(rb.ssp_restband_phot)), total_mass
             )
             derived_overrides["filter_restband_eff_waves"] = jnp.asarray(rb.restband_eff_waves)
             if rb.ssp_restband_subband_phot is not None:
-                rb_phi = jnp.einsum(
-                    "ma,mafk->afk", joint_x, collapse(rb.ssp_restband_subband_phot)
-                )
+                rb_phi = jnp.einsum("ma,mafk->afk", joint_x, read(rb.ssp_restband_subband_phot))
                 rb_num = jnp.einsum(
                     "ma,mafk->afk",
                     joint_x,
-                    collapse(rb.ssp_restband_subband_waves * rb.ssp_restband_subband_phot),
+                    read(rb.ssp_restband_subband_waves * rb.ssp_restband_subband_phot),
                 )
                 derived_overrides["stellar_restband_lnu_per_age_subband_precomp"] = (
                     _mass_scale_lnu(rb_phi, total_mass)
@@ -4960,8 +4950,8 @@ class StellarSEDComponent:
                     f"the draw has {float(seeded)}; rebuild the model."
                 )
             # (n_met, n_age, n_pix), broadened at build; (n_met, n_alpha, n_age, n_pix) on a
-            # 4D grid, collapsed at the bracket before the metallicity contraction.
-            on_pix = collapse(_collapse_alpha_plane(lut.ssp_on_pixels, alpha_bracket))
+            # 4D grid: each SSP is read across Z, then the alpha bracket (#3434).
+            on_pix = _collapse_met_then_alpha(lut.ssp_on_pixels, collapse, alpha_bracket)
             return {
                 "stellar_spec_lnu_precomp": _mass_scale_lnu(
                     jnp.einsum("ma,map->p", joint_x, on_pix), total_mass
@@ -4972,9 +4962,8 @@ class StellarSEDComponent:
                 "spec_eff_waves": jnp.asarray(lut.wave_rest_pixels),
             }
 
-        # A 4D [alpha/Fe] cube is collapsed at the bracket first: the per-draw families below
-        # are linear in the cube, so this equals contracting each alpha node and interpolating.
-        ssp_flux_for_csp = _collapse_alpha_plane(ssp_flux_for_csp, alpha_bracket)
+        # A 4D [alpha/Fe] cube stays 4D until the metallicity read: each SSP is read across Z
+        # first, then the alpha bracket is applied (#3434, "PCHIP each SSP").
         if lut is not None:
             spec_eff = jnp.asarray(lut.wave_rest_pixels)
         else:
@@ -4990,9 +4979,9 @@ class StellarSEDComponent:
             # Free redshift, fixed sigma_v: the cube was broadened once at build, so the
             # per-draw work is the weighted sum and the interpolation, as before sigma_v
             # was applied.
-            # On a grid with an [alpha/Fe] axis the broadened cube carries it; collapse it
-            # at the model's bracket first (broadening and the collapse are both linear).
-            cube = collapse(_collapse_alpha_plane(spec_state.spec_ssp_broadened, alpha_bracket))
+            # On a grid with an [alpha/Fe] axis the broadened cube carries it; each SSP is read
+            # across Z, then the model's alpha bracket is applied (#3434).
+            cube = _collapse_met_then_alpha(spec_state.spec_ssp_broadened, collapse, alpha_bracket)
             tot_b = jnp.einsum("ma,maw->w", joint_x, cube)
             age_b = jnp.einsum("ma,maw->aw", joint_x, cube)
             return {
@@ -5023,7 +5012,7 @@ class StellarSEDComponent:
         def _broadened_at_pixels(row):
             return _at_pixels(_broaden(row))
 
-        flux_x = collapse(ssp_flux_for_csp)
+        flux_x = _collapse_met_then_alpha(ssp_flux_for_csp, collapse, alpha_bracket)
         total = jnp.einsum("ma,maw->w", joint_x, flux_x)
         per_age = jnp.einsum("ma,maw->aw", joint_x, flux_x)
         return {
