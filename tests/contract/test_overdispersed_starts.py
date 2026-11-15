@@ -47,13 +47,15 @@ def test_the_start_covariance_is_the_stated_rule():
 def test_the_starts_spread_matches_the_rule():
     inverse_mass = jnp.array([1e-6, 0.04, 1.0])
     iso = np.array([0.003, 0.6, 1.0])
+    # The sample sd of n draws errs by about 1 / sqrt(2 n) = 0.0016 at n = 200000; the largest
+    # error measured at this key is 0.0017, so rtol = 0.005 is about three times that.
     starts = jittered_starts(
-        jnp.zeros(3), jax.random.PRNGKey(0), 20000, start_scale(inverse_mass, 1.0)
+        jnp.zeros(3), jax.random.PRNGKey(0), 200000, start_scale(inverse_mass, 1.0)
     )
     np.testing.assert_allclose(
         np.asarray(starts).std(0),
         np.sqrt(OVERDISPERSION**2 * np.asarray(inverse_mass) + iso**2),
-        rtol=0.03,
+        rtol=0.005,
     )
 
 

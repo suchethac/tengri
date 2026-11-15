@@ -13,12 +13,12 @@ VI), and importance-sampled HMC over the target.
 from __future__ import annotations
 
 import functools
-import warnings
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.config.exceptions import warn_measured
 from tengri.inference.sampling import guards
 from tengri.inference.sampling.chains import (
     OVERDISPERSION,
@@ -135,11 +135,13 @@ def _warn_footprint(label: str, nbytes: float, cfg: dict) -> None:
     """Warn, never refuse, when an estimated footprint exceeds ``memory_budget_gb``."""
     gb = nbytes / 1e9
     if gb > cfg["memory_budget_gb"]:
-        warnings.warn(
+        warn_measured(
             f"{label}: estimated memory footprint {gb:.1f} GB exceeds memory_budget_gb="
             f"{cfg['memory_budget_gb']:.1f}; running as requested.",
             UserWarning,
             stacklevel=3,
+            footprint_gb=gb,
+            memory_budget_gb=cfg["memory_budget_gb"],
         )
 
 

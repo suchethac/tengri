@@ -128,7 +128,10 @@ def test_prior_aware_samplers_keep_the_posterior_when_whitened():
         draws = result.draws.reshape(-1, 3)
         assert result.diagnostics["metric_applied"] == "pilot"
         np.testing.assert_allclose(draws.mean(0), reference.mean(0), atol=0.05, err_msg=name)
-        np.testing.assert_allclose(draws.std(0), reference.std(0), rtol=0.15, err_msg=name)
+        # The posterior sd is 0.41 and 2000 draws from these samplers fix it to about 0.02: the
+        # largest gap to the NUTS reference measured at these keys is 0.023 (ESS), 0.017 (SMC)
+        # and 0.008 (NSS), so atol = 0.05 is about twice the worst of them.
+        np.testing.assert_allclose(draws.std(0), reference.std(0), atol=0.05, err_msg=name)
 
 
 @pytest.fixture
