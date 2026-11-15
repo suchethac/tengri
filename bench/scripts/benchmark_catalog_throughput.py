@@ -84,10 +84,6 @@ import warnings
 
 import numpy as np
 
-#: Kept identical to ``CatalogFitter._MCMC_VMAPPABLE`` by a contract test
-#: (``tests/contract/test_catalog_throughput_bench.py``), so a sampler that
-#: reaches the batched path cannot go unmeasured here.
-METHODS = ("mcmc_nuts", "mcmc_hmc", "mcmc_chees")
 DTYPES = ("f64", "f32")
 
 
@@ -141,6 +137,11 @@ import jax.numpy as jnp
 #: bar has to be the same object as the galaxy-level one or a row can pass a bar
 #: its own galaxies failed.
 from tengri.inference.catalog_convergence import CATALOG_MAX_RHAT as MAX_RHAT
+from tengri.inference.catalog_fitter import CatalogFitter
+
+#: Read from the sampler registry through ``CatalogFitter._MCMC_VMAPPABLE``, so a
+#: sampler that reaches the batched path cannot go unmeasured here.
+METHODS = tuple(sorted(CatalogFitter._MCMC_VMAPPABLE))
 
 
 def set_precision(dtype: str) -> dict:
@@ -724,8 +725,6 @@ def main(argv=None):
         # tengri warns once that it is honoring the float32 request.
         warnings.filterwarnings("ignore", message=".*Explicitly requested dtype float64.*")
         warnings.filterwarnings("ignore", message=".*JAX_ENABLE_X64=.*")
-        from tengri.inference.catalog_fitter import CatalogFitter
-
         # AFTER the import, which is the step that would silently undo a
         # float32 request, and BEFORE the model is built.
         flags = set_precision(args.dtype)
