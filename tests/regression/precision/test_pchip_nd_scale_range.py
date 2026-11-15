@@ -70,9 +70,12 @@ def test_float64_read_is_scale_free_to_the_largest_float(kind, peak):
     ref_value, ref_coord, ref_grid = _reference(kind)
     with jax.enable_x64(True):
         value, coord, grid_grad = _read(_base(kind) * peak, jnp.float64)
-    assert np.isfinite(value) and np.all(np.isfinite(grid_grad))
+    # grad-assert: finite-only — the 'zeros' table reads exactly 0
+    assert np.isfinite(value)
+    assert np.all(np.isfinite(grid_grad)) and np.any(grid_grad != 0.0)
     assert abs(value / peak - ref_value) <= 1e-12 * max(abs(ref_value), 1e-300)
     if peak <= _COORD_GRAD_CEILING_F64:
+        # grad-assert: finite-only — the 'zeros' table has a 0 coordinate gradient
         assert np.all(np.isfinite(coord))
         assert np.max(np.abs(coord / peak - ref_coord)) <= 1e-10 * max(
             np.max(np.abs(ref_coord)), 1e-300
@@ -86,9 +89,12 @@ def test_float32_read_is_scale_free_to_the_largest_float(kind, peak):
     ref_value, ref_coord, ref_grid = _reference(kind)
     with jax.enable_x64(False):
         value, coord, grid_grad = _read(_base(kind) * peak, jnp.float32)
-    assert np.isfinite(value) and np.all(np.isfinite(grid_grad))
+    # grad-assert: finite-only — the 'zeros' table reads exactly 0
+    assert np.isfinite(value)
+    assert np.all(np.isfinite(grid_grad)) and np.any(grid_grad != 0.0)
     assert abs(value / peak - ref_value) <= 2e-5 * max(abs(ref_value), 1e-30)
     if _COORD_GRAD_FLOOR_F32 <= peak <= _COORD_GRAD_CEILING_F32:
+        # grad-assert: finite-only — the 'zeros' table has a 0 coordinate gradient
         assert np.all(np.isfinite(coord))
         assert np.max(np.abs(coord / peak - ref_coord)) <= 2e-4 * max(
             np.max(np.abs(ref_coord)), 1e-30
@@ -100,7 +106,10 @@ def test_float32_read_is_scale_free_to_the_largest_float(kind, peak):
 def test_float32_subnormal_tables_stay_finite(peak):
     with jax.enable_x64(False):
         value, coord, grid_grad = _read(_base("positive") * peak, jnp.float32)
-    assert np.isfinite(value) and np.all(np.isfinite(coord)) and np.all(np.isfinite(grid_grad))
+    # grad-assert: finite-only — a subnormal table may flush its read and slope to 0;
+    # the claim here is that nothing turns into inf or NaN
+    assert np.isfinite(value) and np.all(np.isfinite(coord))
+    assert np.all(np.isfinite(grid_grad)) and np.any(grid_grad != 0.0)
 
 
 @pytest.mark.parametrize("bad", [np.inf, -np.inf, np.nan])

@@ -45,6 +45,7 @@ def test_float32_read_and_gradients_match_float64_at_every_table_scale(scale):
     with jax.enable_x64(False):
         v32, c32, g32 = _derivatives(scale, jnp.float32)
     assert np.isfinite(v32) and np.all(np.isfinite(c32)) and np.all(np.isfinite(g32))
+    assert v32 != 0.0 and np.any(c32 != 0.0) and np.any(g32 != 0.0)
     assert abs(v32 - v64) <= 1e-5 * abs(v64)
     assert np.max(np.abs(c32 - c64)) <= 1e-4 * np.max(np.abs(c64))
     assert np.max(np.abs(g32 - g64)) <= 1e-4 * np.max(np.abs(g64))
