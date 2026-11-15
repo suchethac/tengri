@@ -910,8 +910,8 @@ HA_I, HB_I, O3_I = GK_LABELS.index("Ha"), GK_LABELS.index("Hb"), GK_LABELS.index
 
 def episode_model(*, log_sfr, timescale_myr, dust=None, fesc=None):
     """tengri gutkin16 build: 1 Gyr delayed history plus a current episode, at BEAGLE's Z, log U and xi_d."""
-    neb = {"type": "gutkin16", "logU": Fixed(-2.5), "xi_d": Fixed(0.3), "log_nH": Fixed(2.0),
-           "co_ratio": Fixed(1.0), "other_params": Fixed(DEFAULT)}
+    neb = {"type": "gutkin16", "logU": Fixed(-2.5), "logZ_gas": Fixed(TENGRI_LOG_ZSOL_NEB),
+           "xi_d": Fixed(0.3), "log_nH": Fixed(2.0), "co_ratio": Fixed(1.0), "other_params": Fixed(DEFAULT)}
     if fesc is not None:
         neb["fesc"] = Fixed(fesc)  # the grammar short key of neb_fesc
     return SEDModel.build(
@@ -1028,17 +1028,16 @@ save_fig("beagle_08e_spectra.png")
 plt.show()
 
 # %% [markdown]
-# The H-alpha EW ratio tengri/BEAGLE is 0.82 to 0.86 on the rows where BEAGLE's EW exceeds 10 Å. On the
-# log SFR 1, 10 Myr row the line luminosity ratio is 0.875 and the continuum ratio at H-alpha is 1.027, so the
-# EW gap is the line part: the ionizing output of CB16 (BEAGLE) against BC03 STELIB (tengri), the library
-# bracket that §8c measures per SFR (0.73). On the log SFR -1 row BEAGLE's EW is 1.3 Å and tengri's is 1.41
-# times larger; this row is at the continuum-dominated limit and is not classified beyond that.
+# The H-alpha EW ratio tengri/BEAGLE is 0.68 to 0.73 on the rows where BEAGLE's EW exceeds 10 Å. On the
+# log SFR 1, 10 Myr row the H-alpha luminosity ratio is 0.718 and the continuum L_λ at H-alpha ratio is 1.027,
+# so the EW gap sits in the line. The line ratio matches the per-SFR ratio of §8c (0.73): the ionizing output
+# of CB16 (BEAGLE) against BC03 STELIB (tengri), a library bracket. On the log SFR -1 row BEAGLE's EW is 1.3 Å
+# and tengri's is 1.5 Å; this row is at the continuum-dominated limit and is not classified beyond that.
 #
-# The [O III]/H-beta ratio does not change with the episode rate in either code. BEAGLE's stays at
-# 3.649 to 3.651, and the constant-history reference at the same log U, Z and xi_d (§8a) is 3.651. tengri's
-# constant reference is 3.327, and with the episode it is 5.189, so the episode raises tengri's ratio by
-# 0.19 dex while BEAGLE's is unchanged. This is not isolated in this lane; the candidate is tengri's
-# episode ionizing spectrum, which is model physics on the tengri side.
+# The [O III]/H-beta ratio does not depend on the episode rate in either code. BEAGLE's stays at 3.649 to
+# 3.651, and tengri's is 3.327 on every row, the same value as its constant-history reference at the same
+# log U, Z and xi_d (§8a). The -0.04 dex gap is therefore the one §8a measures for the constant history, not
+# an episode effect; its source is not isolated here, and the §8a table is the record.
 
 # %% [markdown]
 # ### §8f Dust inside H II regions
@@ -1097,13 +1096,19 @@ print(f"§8f spectrum ratio at tauV_eff 1, 3600-7000 A (20 A bins): BEAGLE on/of
 
 # %% [markdown]
 # BEAGLE's on run has the lower Balmer decrement at every tauV_eff (3.11 against 3.26 at 0.3, 3.87 against 4.05
-# at 1, 5.27 against 5.52 at 2), the opposite of what extra dust on the Balmer lines would give. The sign is
-# a BEAGLE convention for the H II term and is not explained in this lane. The [O III]/H-beta on-off gap is
-# under 1 % at every depth, so its fraction is not defined. tengri sits between the two BEAGLE runs at
-# fractions 0.42, 0.46 and 0.59 of the way from off to on in the Balmer decrement. tengri applies the
-# birth-cloud screen to the nebular light and has no H II-internal term, so it cannot match either BEAGLE run
-# exactly; the 3600–7000 Å spectra agree to a median of 1.4 % with BEAGLE on and 0.5 % with BEAGLE off. The
-# [O III]/H-beta gap to BEAGLE (about 0.15 dex, §8e) is the same gap as in the episode rows, not a new one.
+# at 1, 5.27 against 5.52 at 2). This is BEAGLE's documented convention and not a physical effect: since v0.27
+# BEAGLE splits the birth-cloud optical depth into an H II part and an H I part. With `ACCOUNT FOR HII DUST = T`
+# only the H I part is applied as an external screen to stars younger than 10 Myr and their lines, because the
+# H II templates already carry their own dust through xi_d; with `F` the full birth-cloud depth is applied
+# externally, so the off run puts more external dust on the lines. The mechanism is the convention as stated
+# by the owner; the local BEAGLE tree does not document it, so it is not checked against BEAGLE source.
+#
+# tengri's Balmer decrement sits at the off end of that bracket: 3.262 against 3.260 at tauV 0.3, and 4.045 against
+# 4.050 at 1. At 2 it lies 16 per cent of the way from off to on (5.484 against 5.523 and 5.273). tengri applies
+# the full birth-cloud screen to the nebular light, which is consistent with matching the off run. The
+# [O III]/H-beta on-off gap is under 1 %, so its fraction is not defined; tengri's ratio sits 0.04 dex below
+# BEAGLE in both runs, the §8e gap. The spectrum ratio over 3600–7000 Å has BEAGLE on/off median 1.008 and
+# tengri/BEAGLE median 0.994 against the off run and 0.986 against the on run.
 
 # %% [markdown]
 # ### §8g LyC escape
@@ -1162,15 +1167,21 @@ plt.show()
 
 # %% [markdown]
 # BEAGLE's H-beta and H-alpha fall exactly as 1 - f_esc (0.900, 0.700, 0.400). tengri's fall as
-# (1 - f_esc) / (1 + 0.597 f_esc), the form stated in `docs/model_reference/nebular.md`, and its printed
-# values match that form to 0.001 at every escape fraction. This is a convention: BEAGLE removes photons from
-# the lines, while tengri applies one factor that also scales the continuum, so its line ratios leave the
-# Balmer decrement unchanged and fall to 0.849, 0.594 and 0.295 instead.
+# (1 - f_esc) / (1 + 0.597 f_esc), the form stated in `docs/model_reference/nebular.md`, and its printed values
+# match that form to 0.001 at each escape fraction (0.849, 0.594, 0.295). This is a convention: BEAGLE removes
+# photons from the lines, while tengri applies one factor that also scales the continuum, so its line ratios
+# leave the Balmer decrement unchanged.
 #
-# Below 912 Å the two codes carry the escaping light. At f_esc 0.1, 0.3 and 0.6 the continuum ratio
-# tengri/BEAGLE is 0.585, 0.612 and 0.619, which sits near the 0.73 per-SFR ratio of §8c, so it is a library
-# bracket candidate and is not isolated. At f_esc 0 the two codes differ by six orders of magnitude (BEAGLE
-# 1.98e26, tengri 2.18e20 erg/s/Hz). That residual is not isolated in this lane.
+# Below 912 Å the two codes keep different light at f_esc = 0. In tengri's gutkin16 build without dust the
+# nebular budget absorbs the Lyman continuum of every stellar age: the mean L_ν at 800–900 Å falls from 1.76e28
+# erg/s/Hz with the nebular emission off to 2.18e20 with gutkin16 at f_esc = 0. The docs give `'young'` as the
+# gutkin16 default for `lyc_reprocessed_by`, which applies only to two-component dust, and this model has none,
+# so the key does not appear in its summary. BEAGLE keeps 1.98e26 erg/s/Hz in the same window. Its treatment of
+# the Lyman continuum is an owner statement: the picket fence acts only on stars younger than 10 Myr, so older
+# stars keep theirs. The local BEAGLE tree does not document this, so it is not checked against BEAGLE source.
+# The difference is which ages' ionizing photons are reprocessed: a convention. At f_esc 0.1, 0.3 and 0.6 the
+# escaping continuum ratio tengri/BEAGLE is 0.585, 0.612 and 0.619, close to the 0.72 line ratio of §8e and
+# the 0.73 per-SFR ratio of §8c; the ionizing-output class, not isolated.
 
 # %% [markdown]
 # ## 9. AGN narrow-line region
