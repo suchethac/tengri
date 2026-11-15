@@ -33,6 +33,8 @@ import pytest
 import tengri
 from tengri import DEFAULT, SEDModel, WavePrecomp
 from tengri.parameters import Fixed
+from tengri.utils.band_projection import BandSpec
+from tengri.utils.filter_convention import FilterConvention
 
 pytestmark = pytest.mark.contract
 
@@ -388,6 +390,14 @@ def test_the_refusals_and_the_fall_back_read_one_list_of_preconditions():
     )
 
 
+_BANDS = BandSpec(
+    filters=([np.array([4000.0, 5000.0])], [np.array([0.5, 0.5])]),
+    convention=FilterConvention.BESSELL,
+    n_subbands=3,
+    lyc_gate=False,
+)
+
+
 def test_auto_falls_back_when_the_exact_fold_would_do_nothing_at_all():
     """The second reason to fall back, and the one no exception announces.
 
@@ -404,9 +414,9 @@ def test_auto_falls_back_when_the_exact_fold_would_do_nothing_at_all():
 
     comp, state = _NoBlocker(), object()
 
-    assert _resolve_igm_fold("auto", comp, state, ssp_data=object(), filters=("f",)) == "exact"
-    assert _resolve_igm_fold("auto", comp, state, ssp_data=None, filters=("f",)) == "node"
-    assert _resolve_igm_fold("auto", comp, state, ssp_data=object(), filters=()) == "node"
+    assert _resolve_igm_fold("auto", comp, state, ssp_data=object(), bands=_BANDS) == "exact"
+    assert _resolve_igm_fold("auto", comp, state, ssp_data=None, bands=_BANDS) == "node"
+    assert _resolve_igm_fold("auto", comp, state, ssp_data=object(), bands=None) == "node"
 
 
 def test_a_named_fold_is_never_downgraded_by_the_resolver():
@@ -425,5 +435,5 @@ def test_a_named_fold_is_never_downgraded_by_the_resolver():
 
     comp, state = _Blocked(), object()
 
-    assert _resolve_igm_fold("exact", comp, state, ssp_data=None, filters=()) == "exact"
-    assert _resolve_igm_fold("node", comp, state, ssp_data=object(), filters=("f",)) == "node"
+    assert _resolve_igm_fold("exact", comp, state, ssp_data=None, bands=None) == "exact"
+    assert _resolve_igm_fold("node", comp, state, ssp_data=object(), bands=_BANDS) == "node"

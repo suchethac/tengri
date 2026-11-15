@@ -776,23 +776,16 @@ class ZTableRequest:
     ssp_wave: tuple
     #: Array key for SSP flux grid (n_met, n_age, n_wave)
     ssp_flux: tuple
-    #: Tuple of (wave_key, trans_key) per filter, in order
-    filters: tuple
+    #: ``BandSpec.key()``: the filter curves (in order), the convention, the sub-band count
+    #: and the Lyman-continuum gate in one digest, so a field added to the spec reaches the key
+    #: without an edit here.
+    bands: str
     #: Array key for redshift grid
     z_grid: tuple
     #: Whether to apply IGM absorption
     apply_igm: bool
     #: Whether to apply Taylor expansion correction
     taylor_correction: bool
-    #: Filter convolution convention (str)
-    convention: str
-    #: Number of sub-band quadrature nodes
-    n_subbands: int
-    #: Whether this model has a live nebular Lyman-continuum mask (#2439,
-    #: #2427): gates the LyC whole-band split and the sub-band forced edge.
-    #: Part of the key so a lyc_gate=True request can never be served an
-    #: entry a lyc_gate=False (or pre-#2439) build wrote.
-    lyc_gate: bool
     #: Cosmology parameters (baked DEFAULT_COSMO or equivalent)
     cosmology: tuple
     #: Whether JAX X64 mode is enabled
@@ -846,7 +839,7 @@ class ZTableRequest:
 # the term scale on ``ssp_phot_moment_table`` (lyc_gate). The interpolation fold
 # that preceded it (#2769) changed the same tables the same way, so a version-8
 # entry is not mixed with new output.
-_ZTABLE_CACHE_VERSION = 9
+_ZTABLE_CACHE_VERSION = 10
 
 
 def _ztable_cache_dir():
@@ -865,17 +858,7 @@ def _ztable_cache_dir():
     return Path(custom) if custom else Path.home() / ".cache" / "tengri_precomp"
 
 
-def _ztable_cache_key(
-    ssp_data,
-    filter_waves,
-    filter_trans,
-    z_grid,
-    apply_igm,
-    taylor_correction,
-    convention,
-    n_subbands=0,
-    lyc_gate=False,
-) -> str:
+def _ztable_cache_key(ssp_data, bands, z_grid, apply_igm, taylor_correction) -> str:
     """Content hash over everything the table depends on.
 
     Includes session precision (jax_enable_x64) and JAX backend since stored
@@ -888,11 +871,6 @@ def _ztable_cache_key(
     input dimension is represented: omitting a field cannot be a silent bug
     because the dataclass has every field explicitly listed and type-annotated.
     """
-    # Convert filter arrays to array_key tuples
-    filters_keyed = tuple(
-        (array_key(fw), array_key(ft)) for fw, ft in zip(filter_waves, filter_trans)
-    )
-
     # cosmology is a hardcoded module default on this path today (#2145);
     # this row is the tripwire: the day a per-model cosmology is threaded
     # through, it must reach this request
@@ -900,13 +878,10 @@ def _ztable_cache_key(
         version=_ZTABLE_CACHE_VERSION,
         ssp_wave=array_key(ssp_data.ssp_wave),
         ssp_flux=array_key(ssp_data.ssp_flux),
-        filters=filters_keyed,
+        bands=bands.key(),
         z_grid=array_key(z_grid),
         apply_igm=bool(apply_igm),
         taylor_correction=bool(taylor_correction),
-        convention=str(convention),
-        n_subbands=int(n_subbands),
-        lyc_gate=bool(lyc_gate),
         cosmology=baked(DEFAULT_COSMO),
         x64=bool(jax.config.jax_enable_x64),
         backend=jax.default_backend(),
@@ -966,14 +941,15 @@ def precompute_photometry_ztable(
     if cache_dir is not None:
         key = _ztable_cache_key(
             ssp_data,
-            filter_waves,
-            filter_trans,
+            BandSpec(
+                filters=(list(filter_waves), list(filter_trans)),
+                convention=convention,
+                n_subbands=n_subbands,
+                lyc_gate=lyc_gate,
+            ),
             z_grid,
             apply_igm,
             taylor_correction,
-            convention,
-            n_subbands,
-            lyc_gate,
         )
         cache_path = cache_dir / f"ztable_{key}.npz"
         if cache_path.is_file():

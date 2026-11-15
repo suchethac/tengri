@@ -2415,11 +2415,8 @@ def _fold_igm_exact_into_subbands(
     igm_comp,
     stellar_state,
     ssp_data,
-    filters,
+    bands,
     redshift_spec,
-    *,
-    lyc_gate=False,
-    convention,
 ):
     r"""Rebuild the sub-band weights with IGM transmission inside the integrand.
 
@@ -2457,17 +2454,12 @@ def _fold_igm_exact_into_subbands(
         Carrying either the fixed-z photometry LUT or the free-z z-table.
     ssp_data : SSPData
         Template grid, shape ``(n_met, n_age, n_wave)`` [erg/s/Hz/Msun].
-    filters : sequence of (wave, trans) pairs
-        Filter curves [Angstrom], [dimensionless].
+    bands : BandSpec
+        The spec the sub-band tensors were built with (filter curves, bandpass weight and the
+        Lyman-limit gate, so the ratio is taken over the partition of the tensor it multiplies).
     redshift_spec : dict or None
         Redshift specification; supplies the redshift of a fixed-z LUT. A free
         redshift is folded on every node of the z-table's own grid.
-    lyc_gate : bool, optional
-        Whether the sub-band tensors were built with the forced Lyman-limit edge
-        (``K + 1`` chunks). Must match the build, or the ratio is taken over a
-        different partition from the tensor it multiplies.
-    convention : FilterConvention, optional
-        Bandpass weight the tensors were built with; same reason.
 
     Returns
     -------
@@ -2489,7 +2481,7 @@ def _fold_igm_exact_into_subbands(
 
     import numpy as np
 
-    if stellar_state is None or ssp_data is None or not filters:
+    if stellar_state is None or ssp_data is None or bands is None or bands.n_filters == 0:
         return stellar_state
 
     blocker = _exact_fold_blocker(igm_comp, stellar_state)
@@ -2498,14 +2490,12 @@ def _fold_igm_exact_into_subbands(
 
     from tengri.components.igm import exact_fold
 
-    def _partition(tensor):
+    igm_model = getattr(getattr(igm_comp, "config", None), "igm_model", None)
+
+    def _spec_of(tensor):
+        # The partition the tensor was built with: its chunk count fixes K.
         n_chunks = int(np.shape(tensor)[-1])
-        return {
-            "igm_model": getattr(getattr(igm_comp, "config", None), "igm_model", None),
-            "n_subbands": n_chunks - 1 if lyc_gate else n_chunks,
-            "lyc_gate": lyc_gate,
-            "convention": convention,
-        }
+        return bands.replace(n_subbands=n_chunks - 1 if bands.lyc_gate else n_chunks)
 
     lut = getattr(stellar_state, "ssp_phot_lut", None)
     if lut is not None and lut.ssp_subband_phot is not None:
@@ -2513,7 +2503,7 @@ def _fold_igm_exact_into_subbands(
         if subband.shape[-1] <= 0:
             return stellar_state
         z = _fixed_redshift_value(redshift_spec) if redshift_spec else float(lut.redshift)
-        fold = exact_fold.subband_fold(ssp_data, filters, z, **_partition(subband))
+        fold = exact_fold.subband_fold(ssp_data, _spec_of(subband), z, igm_model=igm_model)
         bare_nodes = np.asarray(lut.ssp_subband_waves_rest)
         return _replace(
             stellar_state,
@@ -2531,7 +2521,7 @@ def _fold_igm_exact_into_subbands(
         if table.shape[-1] <= 0:
             return stellar_state
         fold = exact_fold.subband_fold_table(
-            ssp_data, filters, np.asarray(ztable.z_grid), **_partition(table)
+            ssp_data, _spec_of(table), np.asarray(ztable.z_grid), igm_model=igm_model
         )
         bare_nodes = np.asarray(ztable.subband_waves_rest_table)
         return _replace(
@@ -2590,7 +2580,7 @@ def _exact_fold_blocker(igm_comp, stellar_state):
     return None
 
 
-def _resolve_igm_fold(igm_fold, igm_comp, stellar_state, ssp_data=None, filters=None) -> str:
+def _resolve_igm_fold(igm_fold, igm_comp, stellar_state, ssp_data=None, bands=None) -> str:
     """Resolve ``"auto"`` to the fold that can actually be built here.
 
     ``"exact"`` cannot be the default: it raises for a transmission carrying
@@ -2613,8 +2603,8 @@ def _resolve_igm_fold(igm_fold, igm_comp, stellar_state, ssp_data=None, filters=
     ssp_data : SSPData, optional
         Template grid. The exact fold needs it and returns the state untouched
         without it.
-    filters : sequence, optional
-        Filter curves, on the same footing as ``ssp_data``.
+    bands : BandSpec, optional
+        The observation's band spec, on the same footing as ``ssp_data``.
 
     Returns
     -------
@@ -2633,7 +2623,7 @@ def _resolve_igm_fold(igm_fold, igm_comp, stellar_state, ssp_data=None, filters=
     if igm_fold != "auto":
         return igm_fold
 
-    if ssp_data is None or not filters:
+    if ssp_data is None or bands is None or bands.n_filters == 0:
         return "node"
 
     return "node" if _exact_fold_blocker(igm_comp, stellar_state) is not None else "exact"
@@ -2644,11 +2634,8 @@ def _fold_igm_into_subbands(
     stellar_state,
     igm_fold="node",
     ssp_data=None,
-    filters=None,
+    bands=None,
     redshift_spec=None,
-    *,
-    lyc_gate=False,
-    convention,
 ):
     r"""Fold the IGM transmission into the stellar sub-band quadrature weights.
 
@@ -2683,13 +2670,10 @@ def _fold_igm_into_subbands(
         integral), or "auto" ("exact" where it can be built, "node" elsewhere).
     ssp_data : SSPData, optional
         SSP templates, required for "exact" fold.
-    filters : tuple, optional
-        Filter data, required for "exact" fold.
+    bands : BandSpec, optional
+        The spec the tensors were built with, required for "exact" fold.
     redshift_spec : dict, optional
         Redshift specification, required for "exact" fold.
-    lyc_gate, convention : optional
-        The sub-band partition the tensors were built with; passed to the exact
-        fold (see :func:`_fold_igm_exact_into_subbands`).
 
     Returns
     -------
@@ -2711,18 +2695,12 @@ def _fold_igm_into_subbands(
     if stellar_state is None:
         return stellar_state
 
-    igm_fold = _resolve_igm_fold(igm_fold, igm_comp, stellar_state, ssp_data, filters)
+    igm_fold = _resolve_igm_fold(igm_fold, igm_comp, stellar_state, ssp_data, bands)
 
     # Dispatch to node or exact fold
     if igm_fold == "exact":
         result = _fold_igm_exact_into_subbands(
-            igm_comp,
-            stellar_state,
-            ssp_data,
-            filters,
-            redshift_spec,
-            lyc_gate=lyc_gate,
-            convention=convention,
+            igm_comp, stellar_state, ssp_data, bands, redshift_spec
         )
         built = result is not stellar_state
         return _replace(result, igm_fold_resolved=igm_fold if built else None)
@@ -13244,10 +13222,8 @@ class SEDModel:
                                 chain[0]._state,
                                 igm_fold=igm_fold_mode,
                                 ssp_data=chain[0].ssp_data,
-                                filters=filters,
+                                bands=bands,
                                 redshift_spec=redshift_spec,
-                                lyc_gate=lyc_mask_live,
-                                convention=bands.convention,
                             ),
                         )
 

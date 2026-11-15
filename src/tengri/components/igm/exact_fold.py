@@ -171,13 +171,10 @@ def _host_inputs(ssp_data, filters):
 
 def subband_fold(
     ssp_data,
-    filters,
+    bands,
     z,
     *,
     igm_model,
-    n_subbands,
-    lyc_gate,
-    convention,
     transmission=None,
     wave_rest=None,
     templates_T=None,
@@ -189,19 +186,15 @@ def subband_fold(
     ----------
     ssp_data : SSPData
         Template grid, ``ssp_flux`` shape ``(n_met, n_age, n_wave)`` [erg/s/Hz/Msun].
-    filters : sequence of (wave, trans) pairs
-        Filter curves, observed frame [Angstrom], [dimensionless].
+    bands : BandSpec
+        The spec of the table the ratio multiplies: filter curves (observed frame
+        [Angstrom], [dimensionless]), bandpass weight, base sub-band count ``K`` (without
+        the extra chunk the Lyman gate adds) and whether that table carries the forced
+        Lyman-limit edge (``K + 1`` chunks).
     z : float
         Redshift [dimensionless].
     igm_model : str
         Transmission law passed to :func:`igm_absorption`.
-    n_subbands : int
-        Base sub-band count ``K`` of the table the ratio multiplies (without
-        the extra chunk ``lyc_gate`` adds).
-    lyc_gate : bool
-        Whether that table carries the forced Lyman-limit edge (``K + 1`` chunks).
-    convention : FilterConvention
-        Bandpass weight of that table.
     transmission : array_like, shape (n_wave,), optional
         IGM transmission on ``ssp_data.ssp_wave`` at ``z`` [dimensionless]. When
         None it is evaluated here; :func:`subband_fold_table` passes precomputed
@@ -222,6 +215,8 @@ def subband_fold(
         integral is zero (no flux either way) and exactly one for filters the
         IGM cannot reach.
     """
+    filters = list(zip(*bands.filters, strict=True))
+    n_subbands, lyc_gate, convention = bands.subbands, bands.lyc_gate, bands.convention
     if wave_rest is None or templates_T is None or filter_arrays is None:
         wave_rest, templates_T, filter_arrays = _host_inputs(ssp_data, filters)
     filter_waves = [fw for fw, _ in filter_arrays]
@@ -268,9 +263,7 @@ def subband_fold(
     return SubbandFold(ratio, nodes)
 
 
-def subband_fold_table(
-    ssp_data, filters, z_grid, *, igm_model, n_subbands, lyc_gate, convention
-) -> SubbandFold:
+def subband_fold_table(ssp_data, bands, z_grid, *, igm_model) -> SubbandFold:
     """:func:`subband_fold` on every node of a z grid, content-cached.
 
     The table is a build-time constant of (SSP grid, filters, z grid, partition,
@@ -280,7 +273,7 @@ def subband_fold_table(
 
     Parameters
     ----------
-    ssp_data, filters, igm_model, n_subbands, lyc_gate, convention
+    ssp_data, bands, igm_model
         As :func:`subband_fold`.
     z_grid : array_like, shape (n_z,)
         Redshift nodes of the z-table the ratio multiplies.
@@ -293,15 +286,8 @@ def subband_fold_table(
     from tengri.components.igm import _subband_cache
 
     z_grid = np.asarray(z_grid, dtype=np.float64)
-    key = _subband_cache.exact_fold_key(
-        ssp_data,
-        filters,
-        z_grid,
-        igm_model=igm_model,
-        n_subbands=n_subbands,
-        lyc_gate=lyc_gate,
-        convention=convention,
-    )
+    filters = list(zip(*bands.filters, strict=True))
+    key = _subband_cache.exact_fold_key(ssp_data, bands, z_grid, igm_model=igm_model)
     cached = _subband_cache.memo_get(key)
     if cached is None:
         # (ratio, nodes) stacked on axis 0, then (n_z, n_met, n_age, n_filters, n_chunks).
@@ -326,12 +312,9 @@ def subband_fold_table(
     folds = [
         subband_fold(
             ssp_data,
-            filters,
+            bands,
             float(z),
             igm_model=igm_model,
-            n_subbands=n_subbands,
-            lyc_gate=lyc_gate,
-            convention=convention,
             transmission=transmission_z,
             wave_rest=wave_rest,
             templates_T=templates_T,

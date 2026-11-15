@@ -295,7 +295,7 @@ class IGMSEDComponent(TemplateThreading):
 
         # The runtime band average integrates with the same spec, so the tabulated
         # factor is bit-identical to it at the nodes.
-        fws, fts = bands.filters
+        fws, _ = bands.filters
         n_filters = bands.n_filters
 
         spec = dict(redshift_spec or {"mode": "fixed", "value": 0.0})
@@ -317,9 +317,7 @@ class IGMSEDComponent(TemplateThreading):
         # unlike the node table this integrates against the bandpass.
         from tengri.components.igm import _subband_cache
 
-        key = _subband_cache.band_factor_key(
-            wave_rest, fws, fts, zgrid, self.config.igm_model, bands.convention
-        )
+        key = _subband_cache.band_factor_key(wave_rest, bands, zgrid, self.config.igm_model)
         cached = _subband_cache.memo_get(key)
         if cached is None:
             cached = _subband_cache.load(key, expected_shape=(len(zgrid), n_filters))

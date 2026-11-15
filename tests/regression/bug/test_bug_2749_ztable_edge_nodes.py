@@ -35,6 +35,7 @@ import numpy as np
 import pytest
 
 from tengri.utils.filter_convention import FilterConvention
+from tests._band_keys import ztable_key
 
 pytestmark = pytest.mark.regression_bug
 
@@ -312,7 +313,6 @@ def test_redshift_gradient_tracks_the_exact_path_across_the_crossing(ssp_id, z):
 
 def test_cache_key_differs_when_the_crossings_differ(ssp_data_wne):
     from tengri.components.stellar.sps import ztable_grid as zg
-    from tengri.components.stellar.sps.precompute import _ztable_cache_key
     from tengri.utils.filter_convention import FilterConvention
 
     waves, trans = _curves(["galex_fuv"])
@@ -321,7 +321,7 @@ def test_cache_key_differs_when_the_crossings_differ(ssp_data_wne):
     assert with_edges.shape != uniform.shape
 
     def key(grid):
-        return _ztable_cache_key(
+        return ztable_key(
             ssp_data_wne, waves, trans, grid, False, False, FilterConvention.BESSELL, 0, False
         )
 
