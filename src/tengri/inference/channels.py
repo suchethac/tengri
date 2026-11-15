@@ -511,12 +511,13 @@ def _spectrum_loglik(preds, data, noise):
 
 
 def _spectrum_norm(data, noise):
-    obs, err = _part(data["data"], "spec", noise), _part(data["noise"], "spec", noise)
+    obs = _part(data["data"], "spec", noise)
     if noise.student_t and noise.covariance != "diagonal":
         return 0.0
     if noise.student_t:
         return -0.5 * jnp.size(obs) * LOG_2PI
     if noise.covariance == "diagonal":
+        err = _part(data["noise"], "spec", noise)
         return diag_gaussian_log_normalization(jnp.hypot(err, 0.0 * obs), None)
     if noise.covariance == "dense":
         log_det = -jnp.linalg.slogdet(data["spec_cov_inv"])[1]

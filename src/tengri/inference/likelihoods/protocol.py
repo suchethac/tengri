@@ -46,10 +46,8 @@ import numpy as np
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, shape
 from tengri.inference.likelihoods.gaussian import (
-    LOG_2PI,
     diag_gaussian_log_normalization,
     diag_gaussian_log_prob,
-    student_t_log_norm_per_point,
 )
 from tengri.inference.likelihoods.terms import (
     censored_term,
@@ -252,6 +250,17 @@ _GAUSSIAN_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
 }
 
 
+def _channel_norm(name, data, **noise_fields):
+    """The constant a channel of :mod:`tengri.inference.channels` omits, for these arrays.
+
+    The shipped likelihood classes keep a ``log_normalization`` method for the composite and
+    the user-likelihood path; the constant itself lives once, in the channel's ``log_norm``.
+    """
+    from tengri.inference.channels import NoiseSpec, channel_keys
+
+    return channel_keys()[name].log_norm(data, NoiseSpec(**noise_fields))
+
+
 # ─────────────────────────────────────────────────────────────────────
 # 2. Student-t, heavy-tailed
 # ─────────────────────────────────────────────────────────────────────
@@ -337,7 +346,14 @@ class StudentTLikelihood:
         constant is missing.
         """
         obs = resolve_channel_data(self.obs, self.obs_key, self.data_slice, data_args)
-        return -0.5 * jnp.size(obs) * LOG_2PI
+        err = resolve_channel_data(self.err, self.err_key, self.data_slice, data_args)
+        photometry = self.channel == "phot_fnu"
+        return _channel_norm(
+            "photometry" if photometry else "spectrum",
+            {"data": obs, "noise": err},
+            data_type="photometry" if photometry else "spectroscopy",
+            student_t=True,
+        )
 
 
 _STUDENT_T_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
@@ -451,11 +467,7 @@ class CensoredLikelihood:
         which :func:`~tengri.observation.noise.censored_neg_log_likelihood` leaves out.
         """
         mask = resolve_channel_data(self.mask, self.mask_key, self.data_slice, data_args)
-        n_detected = jnp.sum(mask == 0)
-        if self.dof is not None:
-            # The Student-t density carries its own -(1/2) log(nu pi); no separate 2 pi.
-            return n_detected * student_t_log_norm_per_point(self.dof)
-        return -0.5 * n_detected * LOG_2PI
+        return _channel_norm("censoring", {"data_mask": mask}, dof=self.dof)
 
 
 _CENSORED_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
@@ -597,13 +609,20 @@ class MultivariateGaussianLikelihood:
             return 0.0
         obs = resolve_channel_data(self.obs, self.obs_key, self.data_slice, data_args)
         if self.chol_data is None:
-            log_det = -jnp.linalg.slogdet(self.cov_inv)[1]
-        else:
-            chol = resolve_channel_data(self.chol_data, self.chol_key, None, data_args)
-            offsets = np.asarray(self.chol_offsets, dtype=int)
-            diagonal = chol[int(np.where(offsets == 0)[0][0])]
-            log_det = 2.0 * jnp.sum(jnp.log(diagonal))
-        return -0.5 * log_det - 0.5 * jnp.size(obs) * LOG_2PI
+            return _channel_norm(
+                "spectrum",
+                {"data": obs, "spec_cov_inv": self.cov_inv},
+                data_type="spectroscopy",
+                covariance="dense",
+            )
+        chol = resolve_channel_data(self.chol_data, self.chol_key, None, data_args)
+        return _channel_norm(
+            "spectrum",
+            {"data": obs, "spec_chol_data": chol},
+            data_type="spectroscopy",
+            covariance="banded",
+            chol_offsets=tuple(int(k) for k in np.asarray(self.chol_offsets)),
+        )
 
 
 _MULTIVARIATE_GAUSSIAN_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
