@@ -308,36 +308,55 @@ def test_band_tables_follow_the_convention(provider):
 # ------------------------------------------------------------------------- AST check
 
 
-#: The three public entry points where a user declares the convention for the first time.
-#: Each states its own default in its documentation; everything below them takes the
-#: convention from the observation's ``BandSpec`` with no default.
+#: The public entry points where a user declares the convention for the first time, by
+#: qualified name (``file:function`` or ``file:Class.field``). Each one states its own default in
+#: its documentation: ``from_names`` and ``from_filter_set`` default to Bessell, the
+#: ``Photometry.convention`` and ``PhotometryObservationModel.convention`` fields default to
+#: Bessell, and ``measure.photometry`` defaults to the convention its ``Photometry`` carries.
+#: Everything below them takes the convention from the observation's ``BandSpec``, with no default.
 _USER_DECLARATION_ENTRY_POINTS = {
     ("observation/photometry_config.py", "from_names"),
     ("observation/photometry_config.py", "from_filter_set"),
+    ("observation/photometry_config.py", "Photometry.convention"),
+    ("observation/photometry_model.py", "PhotometryObservationModel.convention"),
     ("measure.py", "photometry"),
 }
 
 
-def _defaulted_convention_parameters():
-    root = Path(__file__).resolve().parents[2] / "src" / "tengri"
-    found = []
-    for path in sorted(root.rglob("*.py")):
-        for node in ast.walk(ast.parse(path.read_text())):
-            if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-                continue
+def _convention_defaults_in(tree):
+    """Yield ``(qualified_name, lineno)`` of each defaulted ``convention`` parameter or field."""
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef):
+            for stmt in node.body:
+                if (
+                    isinstance(stmt, ast.AnnAssign)
+                    and isinstance(stmt.target, ast.Name)
+                    and stmt.target.id == "convention"
+                    and stmt.value is not None
+                ):
+                    yield f"{node.name}.convention", stmt.lineno
+        elif isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
             a = node.args
             pos = a.posonlyargs + a.args
             defaulted = pos[len(pos) - len(a.defaults) :]
             defaulted += [k for k, d in zip(a.kwonlyargs, a.kw_defaults, strict=True) if d]
-            if (str(path.relative_to(root)), node.name) in _USER_DECLARATION_ENTRY_POINTS:
-                continue
             if any(arg.arg == "convention" for arg in defaulted):
-                found.append(f"{path.relative_to(root)}:{node.lineno} {node.name}")
+                yield node.name, node.lineno
+
+
+def _defaulted_conventions():
+    root = Path(__file__).resolve().parents[2] / "src" / "tengri"
+    found = []
+    for path in sorted(root.rglob("*.py")):
+        rel = str(path.relative_to(root))
+        for name, lineno in _convention_defaults_in(ast.parse(path.read_text())):
+            if (rel, name) not in _USER_DECLARATION_ENTRY_POINTS:
+                found.append(f"{rel}:{lineno} {name}")
     return found
 
 
-def test_no_function_defaults_its_filter_convention():
-    found = _defaulted_convention_parameters()
+def test_convention_is_required_outside_the_public_entry_points():
+    found = _defaulted_conventions()
     assert not found, "convention must be required, never defaulted:\n" + "\n".join(found)
 
 

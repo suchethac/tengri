@@ -177,7 +177,9 @@ class Galaxy:
         flux_err_cgs = flux_err * scale
 
         # Build Photometry
-        photometry = Photometry.from_names(filters)
+        from tengri.utils.filter_convention import FilterConvention
+
+        photometry = Photometry.from_names(filters, convention=FilterConvention.BESSELL)
 
         # Build Observation (assume Gaussian noise, no spectroscopy for from_arrays)
         noise_model = NoiseModel()

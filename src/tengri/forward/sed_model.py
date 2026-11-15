@@ -4334,8 +4334,11 @@ class SEDModel:
                 spec = spec.with_params(**obs_params)
         elif filters is not None:
             from tengri.observation.photometry_config import Photometry
+            from tengri.utils.filter_convention import FilterConvention
 
-            observation = Observation(photometry=Photometry.from_filter_set(filters))
+            observation = Observation(
+                photometry=Photometry.from_filter_set(filters, convention=FilterConvention.BESSELL)
+            )
 
         return observation, spec
 
