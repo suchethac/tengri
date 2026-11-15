@@ -76,6 +76,14 @@ _UNCONVERGED = {
 }
 
 
+#: The quantity the driver's diagnostics must name for a sampler that does not converge.
+_WARNS = {
+    "mcmc_barker": ("R-hat", "moved", "ESS"),
+    "mcmc_mala": ("R-hat", "moved", "ESS"),
+    "vi_fullrank": ("ELBO",),
+}
+
+
 def _marks(method):
     if method in _UNCONVERGED:
         return [pytest.mark.xfail(strict=True, reason=_UNCONVERGED[method])]
@@ -169,7 +177,18 @@ def test_the_nine_names_are_flat_samplers():
 def test_a_newly_wired_sampler_recovers_the_population_mean(method, population, reference):
     settings = {"n_warmup": 400, "n_burnin": 100, "n_samples": 1000, "n_chains": 2}
     settings.update(_SETTINGS.get(method, {}))
-    post = population.run(method, key=jax.random.PRNGKey(1), allow_unvalidated=True, **settings)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        post = population.run(
+            method, key=jax.random.PRNGKey(1), allow_unvalidated=True, **settings
+        )
+    health = [str(w.message) for w in caught if issubclass(w.category, RuntimeWarning)]
+    if method in _WARNS:
+        assert len(health) == 1, health
+        assert any(key in health[0] for key in _WARNS[method]), health
+        assert post.diagnostics["convergence_problems"]
+    else:
+        assert not health, health
     for name in ("psd_sigma", "psd_tau_myr"):
         values = np.asarray(post.shared_samples[name])
         assert np.all(np.isfinite(values)), f"{method}: {name} has non-finite draws"

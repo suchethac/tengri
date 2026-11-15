@@ -1,0 +1,122 @@
+# SPDX-License-Identifier: BSD-3-Clause
+"""The shared driver judges convergence for every engine (#3505, M5).
+
+``run_sampler`` writes split R-hat, bulk ESS and the fraction of steps that moved into the
+diagnostics (chain and ensemble samplers), the ELBO trace's relative change (variational
+samplers) and the retained rank (low-rank HMC), and emits one warning per run naming what
+failed. The estimators and thresholds are the repo's.
+"""
+
+from __future__ import annotations
+
+import warnings
+
+import jax
+import jax.numpy as jnp
+import numpy as np
+import pytest
+
+from tengri.inference.sampling import driver
+from tengri.inference.sampling.driver import Sampler, SamplerResult, run_sampler
+from tengri.inference.sampling.health import (
+    chain_diagnostics,
+    elbo_diagnostics,
+    element_names,
+    lowrank_diagnostics,
+)
+from tengri.inference.sampling.target import FlatTarget, LatentLayout
+
+pytestmark = pytest.mark.contract
+
+
+def _target(dim=3):
+    return FlatTarget(
+        lambda x, args: -0.5 * jnp.sum(x**2), LatentLayout.vector(dim), jnp.zeros(dim)
+    )
+
+
+@pytest.fixture
+def stuck_sampler():
+    """A sampler whose two chains sit at -3 and +3: deterministic, never mixing."""
+
+    def run(target, key, n_chains, metric, cfg):
+        n = cfg["n_samples"]
+        wiggle = 0.01 * jnp.sin(jnp.arange(n))[None, :, None]
+        base = jnp.where(jnp.arange(2) == 0, -3.0, 3.0)[:, None, None]
+        return SamplerResult(base + wiggle + jnp.zeros((2, n, target.n_dim)), None, {})
+
+    sampler = Sampler("stuck", "chain", ("stuck",), run)
+    driver.register_sampler(sampler)
+    yield sampler
+    driver._REGISTRY.pop("stuck")
+
+
+def test_a_stuck_pair_of_chains_triggers_one_warning_naming_the_parameter(stuck_sampler):
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        result = run_sampler("stuck", _target(), key=jax.random.PRNGKey(0), n_samples=200)
+    health = [w for w in caught if "R-hat" in str(w.message)]
+    assert len(health) == 1
+    assert "'x[0]'" in str(health[0].message)
+    assert result.diagnostics["rhat_max"] > 1.1
+    assert result.diagnostics["convergence_problems"]
+
+
+def test_the_warning_can_be_silenced_and_the_diagnostics_stay(stuck_sampler):
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        result = run_sampler(
+            "stuck", _target(), key=jax.random.PRNGKey(0), n_samples=200, health_warnings=False
+        )
+    assert not [w for w in caught if "R-hat" in str(w.message)]
+    assert result.diagnostics["rhat_max"] > 1.1
+
+
+def test_a_healthy_chain_reports_its_diagnostics_without_a_warning():
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        result = run_sampler(
+            "nuts", _target(), key=jax.random.PRNGKey(0), n_chains=4, n_warmup=200, n_samples=500
+        )
+    assert not [w for w in caught if issubclass(w.category, RuntimeWarning)]
+    assert result.diagnostics["rhat_max"] < 1.1
+    assert result.diagnostics["ess_bulk_min"] > 100
+    assert result.diagnostics["acceptance_rate"] > 0.5
+
+
+def test_a_chain_that_never_moves_is_reported_as_collapsed():
+    draws = np.zeros((1, 100, 2))
+    draws[0, :, 1] = np.linspace(0, 1, 100)
+    draws[0, ::50, 0] = 1.0  # moves on 4 of 99 steps
+    record, problems = chain_diagnostics(draws, ["a", "b"])
+    assert record["acceptance_rate"] > 0.05  # coordinate b moves every step
+    still = np.zeros((1, 100, 1))
+    still[0, 50:, 0] = 1.0
+    record, problems = chain_diagnostics(still, ["a"])
+    assert any("collapsed" in p for p in problems)
+
+
+def test_an_unconverged_elbo_trace_is_flagged_and_a_flat_one_is_not():
+    rising = np.linspace(0.0, 100.0, 1000)
+    _, problems = elbo_diagnostics(rising)
+    assert problems and "ELBO" in problems[0]
+    record, problems = elbo_diagnostics(np.full(1000, 5.0) + 1e-6 * np.arange(1000))
+    assert not problems and record["elbo_rel_change"] < 0.05
+
+
+def test_a_truncating_low_rank_metric_is_flagged():
+    record, problems = lowrank_diagnostics(rank=10, weakest_log_lambda=1.2, dim=22)
+    assert record["lowrank_rank"] == 10 and record["lowrank_dim"] == 22
+    assert problems and "rank 10 of D=22" in problems[0]
+    assert not lowrank_diagnostics(10, 0.05, 22)[1]
+    assert not lowrank_diagnostics(10, 1.2, 8)[1]
+
+
+def test_element_names_follow_the_ravel_order():
+    layout = LatentLayout.hierarchical(
+        ("log_total_mass",), 2, 3, sigma_bounds=(0.1, 4.0), tau_bounds=(1.0, 300.0)
+    )
+    names = element_names(layout)
+    assert len(names) == layout.n_dim
+    assert names[0] == "gal/log_total_mass[0]"
+    assert "psd_sigma_u" in names and "gal_xi[1,2]" in names

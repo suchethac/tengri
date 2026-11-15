@@ -2284,6 +2284,25 @@ class _CatalogFitterOriginal:
                     f"{n_precond_fallback} of {n_gal} fell back to identity"
                 )
 
+        # Convergence of each galaxy's chains, by the shared driver's estimators; one warning
+        # for the whole run naming the galaxies and what failed.
+        from tengri.inference.sampling import health
+
+        health_names = health.element_names(unravel_fn(jnp.zeros(d_params)))
+        health_records, flagged = [], {}
+        for i in range(n_gal):
+            record, found = health.chain_diagnostics(
+                np.asarray(all_positions[i]).reshape(n_returned, n_samples, d_params),
+                health_names,
+            )
+            health_records.append({**record, "convergence_problems": found})
+            if found:
+                flagged[i] = found
+        if flagged:
+            shown = "; ".join(f"galaxy {i}: {', '.join(p)}" for i, p in list(flagged.items())[:5])
+            more = f" (and {len(flagged) - 5} more)" if len(flagged) > 5 else ""
+            health.warn_once(f"CatalogFitter/{method_tag}", [f"{shown}{more}"], stacklevel=2)
+
         posteriors = []
         for i in range(n_gal):
             samples_phys = _vmap_samples_to_physical(
@@ -2312,6 +2331,7 @@ class _CatalogFitterOriginal:
                     # True when the pilot of a dense metric could not define one for
                     # this galaxy and its draws are the diagonal pass's own.
                     "metric_fallback": bool(all_fallback[i]),
+                    **health_records[i],
                     # Same three keys ``run_chees`` records for a single fit, so
                     # a catalog galaxy and a single fit of it report their
                     # geometry the same way. ``metric_condition`` is 1.0 with

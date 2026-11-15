@@ -28,6 +28,7 @@ from typing import Any
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 from tengri.inference.sampling.target import FlatTarget, pilot_whitening
 
@@ -67,6 +68,7 @@ DEFAULTS: dict[str, Any] = {
     "is_proposal_inflation": 1.5,
     "memory_budget_gb": 8.0,
     "verbose": False,
+    "health_warnings": True,
 }
 
 KINDS = ("chain", "ensemble", "variational", "nested", "point")
@@ -263,7 +265,7 @@ def run_sampler(
     if metric == "diag" or sampler.metric_mode != "layer":
         result = sampler.run(target, key, n_chains, metric, full)
         applied = "diag" if metric == "diag" else sampler.metric_mode
-        return _tagged(result, metric, applied, False)
+        return _judged(sampler, target, _tagged(result, metric, applied, False), full)
     pilot_key, final_key = jax.random.split(key)
     pilot = sampler.run(target, pilot_key, 1, "diag", full)
     rows, mask = _usable_rows(pilot)
@@ -272,11 +274,11 @@ def run_sampler(
         # A pilot that cannot define a metric (too few usable draws, or a stuck chain) leaves
         # the diagonal run; the fallback is reported, never silent.
         result = sampler.run(target, final_key, n_chains, "diag", full)
-        return _tagged(result, metric, "none", True)
+        return _judged(sampler, target, _tagged(result, metric, "none", True), full)
     whitened, back = target.whiten(mu, factor)
     result = sampler.run(whitened, final_key, n_chains, "diag", full)
     result = dataclasses.replace(result, draws=back(result.draws))
-    return _tagged(result, metric, "pilot", False)
+    return _judged(sampler, target, _tagged(result, metric, "pilot", False), full)
 
 
 def _tagged(result: SamplerResult, requested: str, applied: str, fallback: bool) -> SamplerResult:
@@ -287,3 +289,44 @@ def _tagged(result: SamplerResult, requested: str, applied: str, fallback: bool)
         "metric_fallback": bool(fallback),
     }
     return dataclasses.replace(result, diagnostics={**result.diagnostics, **record})
+
+
+def _judged(
+    sampler: Sampler, target: FlatTarget, result: SamplerResult, cfg: dict
+) -> SamplerResult:
+    """Add the convergence diagnostics of ``result`` and warn once about what they show.
+
+    Chain and ensemble samplers get split R-hat, bulk ESS and the fraction of steps that
+    moved; variational ones the ELBO trace's relative change; a low-rank metric its rank
+    against D. The estimators and thresholds are the repo's (see :mod:`.health`).
+    """
+    from tengri.inference.sampling import health
+
+    record: dict = {}
+    problems: list[str] = []
+    diag = result.diagnostics
+    if sampler.kind in ("chain", "ensemble"):
+        names = health.element_names(target.layout)
+        record, problems = health.chain_diagnostics(
+            np.asarray(result.draws), names, exchangeable=sampler.name == "smc"
+        )
+        step = diag.get("step_size")
+        if step is not None and not (np.isfinite(step) and step > 1e-8):
+            problems.append(f"the adapted step size collapsed to {step:.3g}")
+        if sampler.name == "smc":
+            ancestor, count = diag.get("min_ancestor_ess"), diag.get("n_particles")
+            if ancestor is not None and count and ancestor < health.ESS_FRACTION_WARN * count:
+                problems.append(f"particle ESS {ancestor:.1f} of {count} particles")
+        if "lowrank_rank" in diag:
+            extra, more = health.lowrank_diagnostics(
+                diag["lowrank_rank"], diag["lowrank_weakest_log_lambda"], diag["lowrank_dim"]
+            )
+            record.update(extra)
+            problems += more
+    elif sampler.kind == "variational" and "elbo_history" in diag:
+        record, problems = health.elbo_diagnostics(diag["elbo_history"])
+    record["convergence_problems"] = problems
+    result = dataclasses.replace(result, diagnostics={**diag, **record})
+    if cfg["health_warnings"]:
+        health.warn_once(f"{sampler.name}", problems)
+    return result

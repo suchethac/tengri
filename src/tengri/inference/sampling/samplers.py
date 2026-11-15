@@ -609,6 +609,9 @@ def _run_lowrank(target, key, n_chains, metric, cfg):
             "divergent": int(jnp.sum(div)),
             "n_warmup": cfg["n_warmup"],
             "warmup_divergent": int(jnp.sum(warm_div)),
+            "lowrank_rank": int(inv_mass.U.shape[1]),
+            "lowrank_dim": int(target.n_dim),
+            "lowrank_weakest_log_lambda": float(jnp.min(jnp.abs(jnp.log(inv_mass.lam)))),
         },
     )
 
@@ -623,7 +626,14 @@ def _run_hmc_is(target, key, n_chains, metric, cfg):
     from tengri.inference.importance import importance_sample
 
     hmc_key, is_key = jax.random.split(key)
-    chain = run_sampler("hmc", target, key=hmc_key, n_chains=n_chains, metric=metric, **cfg)
+    chain = run_sampler(
+        "hmc",
+        target,
+        key=hmc_key,
+        n_chains=n_chains,
+        metric=metric,
+        **{**cfg, "health_warnings": False},
+    )
     flat = np.asarray(chain.draws.reshape(-1, target.n_dim))
     flat = flat[np.isfinite(flat).all(axis=1)]
     if flat.shape[0] < max(10, 2 * target.n_dim):
