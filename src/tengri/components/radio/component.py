@@ -77,6 +77,7 @@ from tengri.protocols.component import (
     SEDComponentConfig,
     SEDComponentState,
 )
+from tengri.utils.scale import is_float32_arithmetic
 
 __all__ = ["RadioSEDComponent", "RadioSEDComponentConfig"]
 
@@ -764,14 +765,16 @@ class RadioSEDComponent(TemplateThreading):
             L_2500_intrinsic if self.config.agn_loudness_ref == "2500_30deg" else L_4400_intrinsic
         )
 
-        # Float32 routing (#1206): only when the forward grid is float32 do we
-        # bypass the linear ``L_ir`` (~1e43) / ``L_agn_bol`` (~1e46), which
-        # overflow float32 max (3.4e38): by handing the log companions to the
-        # radio kernels (they form the representable ~1e28 radio luminosity via
-        # ``pow10``). In float64 the logs are withheld so the exact linear path
-        # is bit-for-bit unchanged. Both require the producer to have published
-        # the log (dust → ``log_L_ir``, AGN → ``log_L_agn_bol``).
-        _use_log = wave.dtype == jnp.float32
+        # Float32 routing (#1206, #3401): when the forward arithmetic is float32 we
+        # bypass the linear ``L_ir`` (~1e43) / ``L_agn_bol`` (~1e46), which overflow
+        # float32 max (3.4e38): by handing the log companions to the radio kernels
+        # (they form the representable ~1e28 radio luminosity via ``pow10``). The
+        # gate is the active precision, not the wave grid's dtype: a model built
+        # under float64 keeps a float64 grid when evaluated with x64 off, and its
+        # linear L_ir then overflows to inf. In float64 the logs are withheld so the
+        # exact linear path is bit-for-bit unchanged. Both require the producer to
+        # have published the log (dust → ``log_L_ir``, AGN → ``log_L_agn_bol``).
+        _use_log = is_float32_arithmetic(wave)
         _log_L_ir = log_L_ir if _use_log else None
         _log_L_agn = log_L_agn_bol if _use_log else None
 

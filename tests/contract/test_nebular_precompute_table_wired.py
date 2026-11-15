@@ -225,15 +225,17 @@ def test_free_eline_sigma_declines_the_gate(cloudy_source):
 
 def test_non_linear_grid_interp_declines_the_gate(cloudy_source, monkeypatch):
     """(e) A CLOUDY backend on grid_interp='triweight' declines the table, reason recorded."""
-    import functools
-
-    import tengri.components.nebular as nebular_pkg
     from tengri.components.nebular.cloudy_grid import CloudyGridBackend
 
+    # The model builds its backend through ``from_spec`` (the nebular registry).
     monkeypatch.setattr(
-        nebular_pkg,
-        "CloudyGridBackend",
-        functools.partial(CloudyGridBackend, grid_interp="triweight"),
+        CloudyGridBackend,
+        "from_spec",
+        classmethod(
+            lambda cls, spec, ssp_data: cls(
+                spec.cloudy_grid_path, ssp_data, grid_interp="triweight"
+            )
+        ),
     )
     model = _build(cloudy_source, approx=True)
     template = model._template_data_for_jit()

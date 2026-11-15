@@ -149,23 +149,22 @@ class TestDampingWingPhysics:
             "Gradient w.r.t. x_HI should be positive (tau increases with x_HI)"
         )
 
-    def test_blueward_of_lya_suppressed(self):
-        """Damping wing should be zero blueward of Lyα.
+    def test_blueward_of_lya_gunn_peterson_trough_outside_the_bubble(self):
+        """Blueward of Lyα the neutral IGM outside the bubble absorbs at tau_GP * x_HI (#3429).
 
-        The damping wing extends only redward of Lyα at the source
-        redshift (the high-frequency side in the source rest frame).
+        The red-side damping wing is zero blueward of Lyα; the Gunn-Peterson trough
+        is not. Far from Lyα the bubble mask is 1, so tau equals tau_GP * x_HI. Within
+        the bubble (about 10 Angstrom blueward at R = 1 pMpc, z = 7) the mask suppresses it.
         """
         from tengri.components.igm.igm import _damping_wing_tau
 
         z = 7.0
         lya_obs = 1215.67 * (1.0 + z)
+        tau_gp = 6.45e5 * ((1.0 + z) / 7.0) ** 1.5
 
-        # Wavelengths blueward of Lyα
-        wave_blue = jnp.array([lya_obs - 500.0, lya_obs - 100.0, lya_obs - 10.0])
+        wave_outside = jnp.array([lya_obs - 500.0, lya_obs - 100.0])
+        tau_outside = _damping_wing_tau(wave_outside, z, x_HI=0.5, R_bubble=1.0)
+        assert jnp.allclose(tau_outside, 0.5 * tau_gp, rtol=1e-6)
 
-        tau_blue = _damping_wing_tau(wave_blue, z, x_HI=0.5, R_bubble=1.0)
-
-        # All tau values should be zero blueward of Lyα
-        assert jnp.allclose(tau_blue, 0.0, atol=1e-12), (
-            "Damping wing tau should be zero blueward of Lyα"
-        )
+        tau_inside = _damping_wing_tau(jnp.array([lya_obs - 10.0]), z, x_HI=0.5, R_bubble=1.0)
+        assert float(tau_inside[0]) < 0.5 * tau_gp * 0.01

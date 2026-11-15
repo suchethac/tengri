@@ -43,6 +43,10 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.nebular._line_ingest import rounded_labels_to_vacuum
+from tengri.components.nebular._params import (
+    DEFAULT_SHOCK_B_OVER_SQRT_N,
+    DEFAULT_SHOCK_LOG_DENSITY,
+)
 from tengri.components.nebular._shared import (
     render_nebular_lines as _place_line_profiles,
 )
@@ -475,8 +479,8 @@ def population_envelope(
 
 def shock_line_ratios(
     shock_velocity: float,
-    shock_log_density: float = 0.0,
-    shock_b_over_sqrt_n: float = 1.0,
+    shock_log_density: float = DEFAULT_SHOCK_LOG_DENSITY,
+    shock_b_over_sqrt_n: float = DEFAULT_SHOCK_B_OVER_SQRT_N,
     shock_abundance: str = "solar",
     shock_component: str = "combined",
     templates: ShockTemplateGrid | None = None,
@@ -744,8 +748,8 @@ _LOG10_2 = float(jnp.log10(2.0))
 def _shock_line_arrays(
     shock_velocity: float,
     l_shock_halpha: float,
-    shock_log_density: float = 0.0,
-    shock_b_over_sqrt_n: float = 1.0,
+    shock_log_density: float = DEFAULT_SHOCK_LOG_DENSITY,
+    shock_b_over_sqrt_n: float = DEFAULT_SHOCK_B_OVER_SQRT_N,
     shock_abundance: str = "solar",
     shock_component: str = "combined",
     templates: ShockTemplateGrid | None = None,
@@ -796,8 +800,8 @@ def compute_shock_sed(
     wavelength: jnp.ndarray,
     shock_velocity: float,
     l_shock_halpha: float,
-    shock_log_density: float = 0.0,
-    shock_b_over_sqrt_n: float = 1.0,
+    shock_log_density: float = DEFAULT_SHOCK_LOG_DENSITY,
+    shock_b_over_sqrt_n: float = DEFAULT_SHOCK_B_OVER_SQRT_N,
     shock_abundance: str = "solar",
     shock_component: str = "combined",
     line_sigma_aa: float = 0.0,

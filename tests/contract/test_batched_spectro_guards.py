@@ -343,6 +343,35 @@ def test_chunk_size_splits_the_bucket_into_vmapped_chunks(synthetic_ssp, monkeyp
     assert calls == [3]
 
 
+def test_chunk_size_none_maps_the_whole_bucket_in_one_call(synthetic_ssp, monkeypatch):
+    """Documented contract: chunk_size=None is one whole-bucket call, handled in this module."""
+    import tengri.inference.batched_spectro as module
+
+    mock = _mock_catalog(synthetic_ssp)
+    template = _free_z_model(synthetic_ssp, mock[0]["wave"], _banded(mock[0]["wave"]))
+    batches = build_spectro_batches([_record(g) for g in mock], quantum=420, model=template)
+    calls = []
+    real_chunk_program = module._chunk_program
+
+    def counting_chunk_program(model, spec, options):
+        program = real_chunk_program(model, spec, options)
+
+        def counting(batch, init, tables):
+            calls.append(int(batch.z.shape[0]))
+            return program(batch, init, tables)
+
+        return counting
+
+    monkeypatch.setattr(module, "_chunk_program", counting_chunk_program)
+    none_fit = fit_spectra_map_vmap(template, batches, n_steps=2, chunk_size=None)
+    assert calls == [3]
+    np.testing.assert_allclose(
+        np.asarray(none_fit["nlp"]),
+        np.asarray(fit_spectra_map_vmap(template, batches, n_steps=2)["nlp"]),
+        rtol=1e-9,
+    )
+
+
 # ── A banded template refuses records without the banded operator ─────────
 
 

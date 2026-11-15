@@ -52,7 +52,11 @@ __all__ = [
     "slone_netzer_sed_from_grid",
 ]
 
-from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn._params import (
+    DEFAULT_AGN_LOG_LBOL,
+    SN12_LOG_LEDD_ON_GRID,
+    SN12_LOG_MBH_GRID_CENTER,
+)
 
 
 def _load_slone_netzer_arrays(grid_path: str) -> dict:
@@ -178,8 +182,8 @@ def slone_netzer_sed_from_grid(
     # Deliberately NOT DEFAULT_AGN_LOG_MBH: the SN12 grid's log_mbh axis
     # starts at 7.4, so the declared 7.0 would be silently clipped by the
     # jnp.clip below. 8.6 is the grid's center node.
-    agn_log_mbh: float = 8.6,
-    agn_log_ledd: float = -2.0,
+    agn_log_mbh: float = SN12_LOG_MBH_GRID_CENTER,
+    agn_log_ledd: float = SN12_LOG_LEDD_ON_GRID,
     **_kwargs,
 ) -> jnp.ndarray:
     r"""Slone & Netzer (2012) disc SED at a single ``(M_BH, Mdot/Mdot_Edd)``.

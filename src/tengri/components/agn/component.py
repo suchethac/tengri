@@ -84,7 +84,25 @@ from tengri.components.agn._lbol_reference import (
     reference_evaluation,
     rescale,
 )
-from tengri.components.agn._params import DEFAULT_AGN_LUM_RATIO, PARAMS as _AGN_PARAMS
+from tengri.components.agn._params import (
+    DEFAULT_AGN_A_SPIN,
+    DEFAULT_AGN_ALPHA,
+    DEFAULT_AGN_COS_INC,
+    DEFAULT_AGN_EBV_DISC,
+    DEFAULT_AGN_FRAC_HOT,
+    DEFAULT_AGN_IR_FRAC,
+    DEFAULT_AGN_LOG_LEDD,
+    DEFAULT_AGN_LOG_MBH,
+    DEFAULT_AGN_LUM_RATIO,
+    DEFAULT_AGN_POLAR_OA,
+    DEFAULT_AGN_T_HOT,
+    DEFAULT_AGN_T_TORUS,
+    DEFAULT_AGN_T_WARM,
+    DEFAULT_AGN_TAU_TORUS,
+    DEFAULT_AGN_TORUS_FRAC,
+    PARAMS as _AGN_PARAMS,
+    POLAR_EBV_OFF,
+)
 from tengri.components.agn._phys import log10_nu_lnu_at
 from tengri.components.agn._publication import with_lsun_siblings
 from tengri.components.agn.adaf import adaf_accretion_diagnostics
@@ -417,7 +435,7 @@ class AGNSEDComponent(TemplateThreading):
         Mirrors the ``agn_kwargs`` assembled in :meth:`apply` for the composable model, so
         :meth:`emission_terms` and the dense path evaluate the same function.
         """
-        kwargs = numeric_agn_kwargs(params, params.get("agn_torus_frac", 0.5))
+        kwargs = numeric_agn_kwargs(params, params.get("agn_torus_frac", DEFAULT_AGN_TORUS_FRAC))
         kwargs["agn_disc_block"] = self.config.agn_disc_block
         kwargs["agn_nlr_block"] = self.config.agn_nlr_block
         kwargs["agn_blr_block"] = self.config.agn_blr_block
@@ -980,10 +998,10 @@ class AGNSEDComponent(TemplateThreading):
         # as inf/inf. ``agn_ir_frac == 0`` leaves the coupling inert (the user
         # torus_frac), with the log branch still finite so its unused-branch
         # gradient cannot leak (#1206).
-        agn_ir_frac = jnp.asarray(params.get("agn_ir_frac", 0.0))
+        agn_ir_frac = jnp.asarray(params.get("agn_ir_frac", DEFAULT_AGN_IR_FRAC))
         # Avoid divide-by-zero / negative leak when fracAGN ≥ 1.
         _one_minus_frac = jnp.maximum(1.0 - agn_ir_frac, 1e-6)
-        agn_torus_frac_user = jnp.asarray(params.get("agn_torus_frac", 0.5))
+        agn_torus_frac_user = jnp.asarray(params.get("agn_torus_frac", DEFAULT_AGN_TORUS_FRAC))
         # ``log_L_absorbed``, not ``log_L_ir``: this coupling wants the ABSORBED
         # stellar+nebular energy the dust screen actually intercepted, not the
         # re-emitted IR budget, which ``dust_eta_balance`` (and a declared
@@ -1404,7 +1422,10 @@ class AGNSEDComponent(TemplateThreading):
         module = registry.resolve("composable_agn")
         values = [jnp.asarray(params[name]) for name in sorted(table["axes"])]
         both = module.lookup_from_table(
-            table, "composable_agn", jnp.asarray(params.get("agn_lum_ratio", 1.0)), *values
+            table,
+            "composable_agn",
+            jnp.asarray(params.get("agn_lum_ratio", DEFAULT_AGN_LUM_RATIO)),
+            *values,
         )
         n_filters = both.shape[-1] // 2
         return both[:n_filters], both[n_filters:]
@@ -1645,21 +1666,21 @@ def numeric_agn_kwargs(params: Mapping[str, Any], agn_torus_frac) -> dict[str, j
         call the model with the same defaults.
     """
     kwargs = {
-        "agn_lum_ratio": jnp.asarray(params.get("agn_lum_ratio", 1.0)),
-        "agn_alpha": jnp.asarray(params.get("agn_alpha", -1.0)),
-        "agn_log_mbh": jnp.asarray(params.get("agn_log_mbh", 8.0)),
-        "agn_log_ledd": jnp.asarray(params.get("agn_log_ledd", -1.0)),
-        "agn_a_spin": jnp.asarray(params.get("agn_a_spin", 0.0)),
+        "agn_lum_ratio": jnp.asarray(params.get("agn_lum_ratio", DEFAULT_AGN_LUM_RATIO)),
+        "agn_alpha": jnp.asarray(params.get("agn_alpha", DEFAULT_AGN_ALPHA)),
+        "agn_log_mbh": jnp.asarray(params.get("agn_log_mbh", DEFAULT_AGN_LOG_MBH)),
+        "agn_log_ledd": jnp.asarray(params.get("agn_log_ledd", DEFAULT_AGN_LOG_LEDD)),
+        "agn_a_spin": jnp.asarray(params.get("agn_a_spin", DEFAULT_AGN_A_SPIN)),
         "agn_torus_frac": jnp.asarray(agn_torus_frac),
-        "agn_T_torus": jnp.asarray(params.get("agn_T_torus", 1000.0)),
-        "agn_tau_torus": jnp.asarray(params.get("agn_tau_torus", 3.0)),
-        "agn_T_hot": jnp.asarray(params.get("agn_T_hot", 1500.0)),
-        "agn_T_warm": jnp.asarray(params.get("agn_T_warm", 300.0)),
-        "agn_frac_hot": jnp.asarray(params.get("agn_frac_hot", 0.5)),
-        "agn_cos_inc": jnp.asarray(params.get("agn_cos_inc", 0.5)),
-        "agn_polar_ebv": jnp.asarray(params.get("agn_polar_ebv", 0.0)),
-        "agn_polar_oa": jnp.asarray(params.get("agn_polar_oa", 40.0)),
-        "agn_ebv_disc": jnp.asarray(params.get("agn_ebv_disc", 0.0)),
+        "agn_T_torus": jnp.asarray(params.get("agn_T_torus", DEFAULT_AGN_T_TORUS)),
+        "agn_tau_torus": jnp.asarray(params.get("agn_tau_torus", DEFAULT_AGN_TAU_TORUS)),
+        "agn_T_hot": jnp.asarray(params.get("agn_T_hot", DEFAULT_AGN_T_HOT)),
+        "agn_T_warm": jnp.asarray(params.get("agn_T_warm", DEFAULT_AGN_T_WARM)),
+        "agn_frac_hot": jnp.asarray(params.get("agn_frac_hot", DEFAULT_AGN_FRAC_HOT)),
+        "agn_cos_inc": jnp.asarray(params.get("agn_cos_inc", DEFAULT_AGN_COS_INC)),
+        "agn_polar_ebv": jnp.asarray(params.get("agn_polar_ebv", POLAR_EBV_OFF)),
+        "agn_polar_oa": jnp.asarray(params.get("agn_polar_oa", DEFAULT_AGN_POLAR_OA)),
+        "agn_ebv_disc": jnp.asarray(params.get("agn_ebv_disc", DEFAULT_AGN_EBV_DISC)),
     }
     for key, val in params.items():
         if key.startswith("agn_") and key != "agn_log_lbol" and key not in kwargs:

@@ -32,7 +32,7 @@ from tengri import DEFAULT, FREE, Fixed, Observation, Photometry
 from tengri._data_setup import find_data_str
 from tengri.components.grid_support import GRID_SUPPORT, grid_support
 from tengri.components.stellar.sps.dsps_wrapper import SSPData
-from tengri.config.exceptions import GridSupportWarning
+from tengri.config.exceptions import GridSupportWarning, ParameterError
 
 pytestmark = pytest.mark.regression_bug
 
@@ -149,32 +149,22 @@ def test_gradient_at_seed0_draw_is_finite_and_nonzero(synthetic_ssp):
 
 
 @_needs_prsc
-def test_neb_logu_fixed_outside_grid_warns(synthetic_ssp):
-    """Fixed(-0.5) outside the grid axis warns (does not silently clip mute).
+def test_neb_logu_fixed_outside_grid_is_refused(synthetic_ssp):
+    """Fixed(-0.5) outside the CLOUDY grid axis is refused at build, naming the extent.
 
-    Not a raise: :class:`~tengri.config.exceptions.GridSupportWarning`'s own
-    docstring states the #1586 policy deliberately -- "overhanging a grid is
-    wasteful but not ill-posed" -- and that policy is unchanged by this fix.
-    What #2460 fixes is that the warning previously never fired for any
-    "neb" selector at all (``Parameters._selected_grid_components`` did not
-    know about it); it now does, with the grid extent named in the message.
+    A fixed value beyond the tabulated axis would be clipped onto the nearest
+    edge node, so the model would be evaluated somewhere other than where it
+    was pinned. The build refuses it and names the parameter, the value and
+    the grid extent. Cue is different: its emulator extrapolates, so the same
+    situation there warns (see the Cue test below).
     """
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        model = _prsc_model(synthetic_ssp, logU=Fixed(-0.5))
+    with pytest.raises(ParameterError) as info:
+        _prsc_model(synthetic_ssp, logU=Fixed(-0.5))
 
-    grid_warnings = [w for w in caught if issubclass(w.category, GridSupportWarning)]
-    assert len(grid_warnings) == 1, [str(w.message) for w in caught]
-    msg = str(grid_warnings[0].message)
+    msg = str(info.value)
     assert "neb_logU" in msg
     assert "-0.5" in msg
-    assert "-4" in msg and "-1" in msg  # the grid extent
-
-    # Still builds and predicts (the clip is silent numerically, not a raise):
-    # the fixed value is bit-identical to the -1.0 edge node.
-    params = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    state = model.predict_state(params)
-    assert np.isfinite(np.asarray(state.derived["sed_nebular"])).all()
+    assert "[-4, -1]" in msg  # the grid extent
 
 
 def test_cue_trained_ranges_match_table_1():

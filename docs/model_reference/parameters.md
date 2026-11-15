@@ -28,7 +28,7 @@ Table {ref}`1 <tab-params>` lists all configurable parameters in tengri, groupe
 | *Metallicity* |  |  |  |  |  |
 | `met_logzsol` | $\log(Z/Z_\odot)$ | Gaussian | $[-2.0, 0.2]$ | dex | Log solar metallicity |
 | *Alpha-Element Enhancement (acts only on a grid with an [α/Fe] axis; no shipped grid has one, so leave at default)* |  |  |  |  |  |
-| `met_alpha_fe` | $[\alpha/\mathrm{Fe}]$ | Uniform | $[-0.2, 0.6]$ | dex | Alpha-to-iron ratio (uniform mode) |
+| `met_alpha_fe` | $[\alpha/\mathrm{Fe}]$ | Fixed(0) | grid nodes | dex | Alpha-to-iron ratio (uniform mode). Fixed at 0 by default on every grid; free only through an explicit prior on a grid with an [alpha/Fe] axis, checked against the grid's nodes |
 | `met_alpha_fe_old` | $[\alpha/\mathrm{Fe}]_{\rm old}$ | Uniform | $[0.0, 0.6]$ | dex | Alpha enhancement at old ages (time-evolving mode) |
 | `met_alpha_fe_young` | $[\alpha/\mathrm{Fe}]_{\rm young}$ | Fixed(0) | $[-0.2, 0.4]$ | dex | Alpha enhancement at young ages (typically fixed at 0) |
 | *Dust Attenuation* |  |  |  |  |  |

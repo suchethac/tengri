@@ -48,7 +48,7 @@ import jax.numpy as jnp
 
 from tengri.parameters.parameters import Parameters
 from tengri.utils.atomic_io import atomic_path
-from tengri.utils.batching import vmap_chunked
+from tengri.utils.batching import GALAXY_CHUNK_SIZE, vmap_chunked
 
 
 def generate_sbi_training_data(
@@ -59,7 +59,7 @@ def generate_sbi_training_data(
     obs_type: str = "photometry",
     noise_model: str = "gaussian",
     snr_range: tuple[float, float] = (5.0, 50.0),
-    chunk_size: int = 1024,
+    chunk_size: int = GALAXY_CHUNK_SIZE,
 ) -> dict[str, Any]:
     """Generate training data for simulation-based inference.
 
@@ -83,7 +83,7 @@ def generate_sbi_training_data(
         ``"gaussian"`` (default) or ``"heteroscedastic"``.
     snr_range : tuple of float
         Range of S/N ratios to sample uniformly.
-    chunk_size : int, default 1024
+    chunk_size : int, default 32
         Draws per compiled forward-model call. Bounds peak memory; the result does
         not depend on it beyond round-off.
 

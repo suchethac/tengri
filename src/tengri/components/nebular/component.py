@@ -29,6 +29,14 @@ import numpy as np
 from tengri.components.lyc import ionizing_mask, log10_lyc_luminosity, lyc_shares
 from tengri.components.nebular._constants import _LSUN_ERG
 from tengri.components.nebular._models import resolve_nebular_backend
+from tengri.components.nebular._params import (
+    DEFAULT_NEB_DIG_DELTA_LOGU,
+    DEFAULT_NEB_DIG_FRAC,
+    DEFAULT_NEB_ELINE_SIGMA_KMS,
+    DEFAULT_NEB_FDUST_FRAC,
+    DEFAULT_NEB_FESC,
+    DEFAULT_NEB_FESC_LYA,
+)
 from tengri.components.nebular._shared import render_nebular_lines
 from tengri.components.nebular.dig import (
     mix_dig_emission,
@@ -511,14 +519,16 @@ class NebularSEDComponent(TemplateThreading):
             "log_z": log_z,
             "neb_logU": jnp.asarray(params.get("neb_logU", NEB_LOGU_DEFAULT)),
             "neb_logZ_gas": _neb_logZ_gas,
-            "neb_fesc": jnp.asarray(params.get("neb_fesc", 0.0)),
-            "neb_fesc_lya": jnp.asarray(params.get("neb_fesc_lya", 1.0)),
+            "neb_fesc": jnp.asarray(params.get("neb_fesc", DEFAULT_NEB_FESC)),
+            "neb_fesc_lya": jnp.asarray(params.get("neb_fesc_lya", DEFAULT_NEB_FESC_LYA)),
             # #2436: the fraction of the NON-escaping budget dust absorbs, not
             # the retired absolute share -- backends convert via `lyc_shares`.
-            "neb_fdust_frac": jnp.asarray(params.get("neb_fdust_frac", 0.0)),
+            "neb_fdust_frac": jnp.asarray(params.get("neb_fdust_frac", DEFAULT_NEB_FDUST_FRAC)),
             # Intrinsic nebular line velocity dispersion → triweight line
             # profile width (Prospector-style). Default 100 km/s.
-            "line_sigma_kms": jnp.asarray(params.get("neb_eline_sigma_kms", 100.0)),
+            "line_sigma_kms": jnp.asarray(
+                params.get("neb_eline_sigma_kms", DEFAULT_NEB_ELINE_SIGMA_KMS)
+            ),
         }
         # Axes only some backends model (CB19's log_nH / log_CO / dNO / hbfrac).
         # Passed only to a backend that names them; a value absent from
@@ -743,8 +753,8 @@ class NebularSEDComponent(TemplateThreading):
         # it, a snapshot taken here (~80 lines above the cue branch) missed
         # ``cue_population``, and the DIG call fell back to Cue's
         # population-independent defaults.
-        _dig_frac = params.get("neb_dig_frac", 0.0)
-        _dig_delta_logU = params.get("neb_dig_delta_logU", -1.0)
+        _dig_frac = params.get("neb_dig_frac", DEFAULT_NEB_DIG_FRAC)
+        _dig_delta_logU = params.get("neb_dig_delta_logU", DEFAULT_NEB_DIG_DELTA_LOGU)
 
         # FAST path (#950): with a per-Q_H grid attached, the nebular photometry
         # (this apply) and the emission lines (predict_line_fluxes) reconstruct
@@ -1134,7 +1144,7 @@ class NebularSEDComponent(TemplateThreading):
         # balance against the nebular emission. Attenuate stellar LyC by
         # ``fesc`` here so the SED reflects "stellar LyC × fesc + nebular
         # ∝ (1 − fesc)" globally.
-        neb_fesc = jnp.asarray(params.get("neb_fesc", 0.0))
+        neb_fesc = jnp.asarray(params.get("neb_fesc", DEFAULT_NEB_FESC))
         # Publish the stellar-LyC survival fraction so the two-component dust
         # component: which rebuilds the stellar SED from the *unmasked* per-age
         # ``lnu_age`` cube: can apply the same fesc absorption. Masking only
@@ -1171,7 +1181,7 @@ class NebularSEDComponent(TemplateThreading):
         # NON-escaping budget, so the absolute share downstream consumers
         # need is derived through the one shared ``lyc_shares`` helper
         # (``_recombination_coeffs.py``), not read off the raw parameter.
-        neb_fdust_frac = jnp.asarray(params.get("neb_fdust_frac", 0.0))
+        neb_fdust_frac = jnp.asarray(params.get("neb_fdust_frac", DEFAULT_NEB_FDUST_FRAC))
         _, neb_fdust, _ = lyc_shares(neb_fesc, neb_fdust_frac)
         derived_overrides["lyc_fdust"] = neb_fdust
 

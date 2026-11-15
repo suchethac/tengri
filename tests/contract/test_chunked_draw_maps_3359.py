@@ -300,6 +300,35 @@ def test_compile_relevant_mutation_is_not_served_a_stale_kernel(
     np.testing.assert_allclose(got, after, rtol=RTOL, atol=0.0)
 
 
+def test_mutated_model_retires_the_kernel_filed_under_its_old_signature(
+    synthetic_ssp_wide, synthetic_tophat_obs, samples
+):
+    """A second model must not be traced over a first model that was mutated in place.
+
+    The owner files one kernel per compile signature and that kernel reads the model
+    that built it at trace time. ``first`` builds the kernel, is mutated before the
+    kernel is ever traced, and ``second`` (same signature as ``first`` had) then calls
+    it: without retirement ``second`` is traced over the fast-nebular ``first``.
+    """
+    from tengri.inference._model_cache import _default_owner
+
+    _default_owner.clear()  # a kernel an earlier test already traced would hide the defect
+    wl = np.asarray([6564.61, 4862.68])  # Halpha, Hbeta (vacuum)
+    first = _build_cue_model(synthetic_ssp_wide, synthetic_tophat_obs)
+    first._get_or_build_predict_observables_jit()  # built, not traced
+    first.enable_fast_nebular(wl, n_grid=8)
+    fast = _loop(first.predict_photometry, samples)
+
+    second = _build_cue_model(synthetic_ssp_wide, synthetic_tophat_obs)
+    exact = _loop(second.predict_photometry, samples)
+    assert not np.allclose(exact, fast, rtol=RTOL, atol=0.0)
+
+    second.enable_fast_nebular(wl, n_grid=8)
+    np.testing.assert_allclose(
+        _loop(second.predict_photometry, samples), fast, rtol=RTOL, atol=0.0
+    )
+
+
 def test_mapped_kernel_does_not_keep_the_model_alive(
     synthetic_ssp_wide, synthetic_tophat_obs, samples
 ):

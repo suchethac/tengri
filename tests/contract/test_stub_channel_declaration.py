@@ -79,6 +79,10 @@ def _model(*, declare_observation: bool) -> MagicMock:
         model.observation = SimpleNamespace(
             spectroscopy=None, line_fluxes=None, line_ratios=None, spectral_indices=None
         )
+    else:
+        # A bare mock answers every attribute with a truthy mock; the broad-line
+        # refusal (#3332) reads this one flag before any channel is probed.
+        model.observation.spectroscopy.eline_broad = False
     return model
 
 

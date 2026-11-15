@@ -175,7 +175,8 @@ def main() -> int:
                 "tsnorm_field": Parameters(
                     mean_sfh_type=["tsnorm", "field"],
                     sfh_tsnorm_log_total_mass=Uniform(8, 12),
-                    sfh_tsnorm_peak_lbt_gyr=Uniform(1, 12),
+                    # 1-12 Gyr at z=0.1 (age 12.44 Gyr), as a fraction of age(z) (#2748).
+                    sfh_tsnorm_peak_lbt_frac=Uniform(0.0804, 0.9645),
                     sfh_tsnorm_width_gyr=Uniform(0.5, 5),
                     sfh_tsnorm_skew=Uniform(-1, 1),
                     sfh_tsnorm_trunc=Uniform(1, 10),

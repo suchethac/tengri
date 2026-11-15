@@ -133,6 +133,7 @@ from tengri.observation.eline_marginalization import (
 )
 from tengri.observation.linear_marginal import marginalize_linear_nuisance
 from tengri.parameters.priors import Gaussian, Uniform
+from tengri.utils.batching import GALAXY_CHUNK_SIZE
 
 _REDSHIFT = "redshift"
 
@@ -510,7 +511,9 @@ def batched_log_likelihood(
     ``calibration_marginalize=True`` the spectral term is a marginal likelihood and
     keeps that constant, as the per-galaxy ``CalibrationMarginalizedLikelihood`` does,
     so the two settings differ by that constant and by nothing else. The photometric
-    term is unchanged in both. With ``eline_mode="marginalized"`` the spectral term is
+    term is unchanged in both. The photometry is projected through the template's
+    ``WavePrecomp`` LUT when it has one (see :mod:`tengri.forward.batched_spectrum`). With
+    ``eline_mode="marginalized"`` the spectral term is
     the marginal over the line amplitudes, and over the calibration polynomial too when
     ``calibration_marginalize=True``, with the normalization constant dropped.
     """
@@ -932,7 +935,7 @@ def fit_spectra_map_vmap(
     n_steps: int = 500,
     learning_rate: float = 0.05,
     seed: int = 0,
-    chunk_size: int | None = None,
+    chunk_size: int | None = GALAXY_CHUNK_SIZE,
     calibration_marginalize: bool = False,
     cal_n_poly: int = 3,
     cal_prior_sigma: float = 1.0,
@@ -957,9 +960,10 @@ def fit_spectra_map_vmap(
     seed : int, optional
         PRNG seed for the initial latents. Default 0.
     chunk_size : int, optional
-        Galaxies per ``vmap`` call within a bucket. ``None`` (default) maps the
-        whole bucket at once. Smaller chunks bound the peak memory of the gradient
-        on a device with little of it; the result does not depend on this value.
+        Galaxies per compiled ``vmap`` call within a bucket. Default 32. Peak memory
+        scales with the chunk: each galaxy holds one ``(n_age, n_wave)`` per-age
+        cube, about ``n_age * n_wave * 8`` bytes. ``None`` maps the whole bucket at
+        once. The result does not depend on this value beyond round-off.
     calibration_marginalize : bool, optional
         Marginalize a Chebyshev calibration polynomial out of the spectral term, as
         :func:`batched_log_likelihood` does. Default False.

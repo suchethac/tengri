@@ -67,6 +67,12 @@ import jax
 import jax.numpy as jnp
 from jax import Array
 
+from tengri.components.agn._params import (
+    DEFAULT_AGN_GRAHSP_A_BC,
+    DEFAULT_AGN_GRAHSP_CUTOFF_NM,
+    DEFAULT_AGN_GRAHSP_TOR_CUTOFF_UM,
+    DEFAULT_AGN_GRAHSP_TOR_TEMP,
+)
 from tengri.components.agn._publication import with_lsun_siblings
 from tengri.components.agn.grahsp.attenuation import attenuation_factors
 from tengri.components.agn.grahsp.balmer import balmer_continuum
@@ -648,7 +654,7 @@ class GRAHSPSEDComponent(PublishedLuminosities):
             balmer_continuum(
                 wave_nm=wave_nm,
                 l5100=l5100,
-                a_bc=jnp.asarray(params.get("agn_grahsp_a_bc", 0.0)),
+                a_bc=jnp.asarray(params.get("agn_grahsp_a_bc", DEFAULT_AGN_GRAHSP_A_BC)),
                 linewidth_kms=jnp.asarray(params["agn_grahsp_linewidth_kms"]),
             )
             if cfg.include_balmer and cfg.agn_type == 1
@@ -697,7 +703,9 @@ class GRAHSPSEDComponent(PublishedLuminosities):
             plslope=jnp.asarray(params["agn_grahsp_plslope"]),
             plbendloc_nm=jnp.asarray(params["agn_grahsp_plbendloc_nm"]),
             plbendwidth=jnp.asarray(params["agn_grahsp_plbendwidth"]),
-            cutoff_nm=jnp.asarray(params.get("agn_grahsp_cutoff_nm", 10000.0)),
+            cutoff_nm=jnp.asarray(
+                params.get("agn_grahsp_cutoff_nm", DEFAULT_AGN_GRAHSP_CUTOFF_NM)
+            ),
         )
 
     def _torus_at(
@@ -722,8 +730,12 @@ class GRAHSPSEDComponent(PublishedLuminosities):
                 wave_nm=wave_nm,
                 l5100=l5100,
                 fcov=fcov,
-                tor_temp=jnp.asarray(params.get("agn_grahsp_tor_temp", 0.0)),
-                tor_cutoff_um=jnp.asarray(params.get("agn_grahsp_tor_cutoff_um", 1.2)),
+                tor_temp=jnp.asarray(
+                    params.get("agn_grahsp_tor_temp", DEFAULT_AGN_GRAHSP_TOR_TEMP)
+                ),
+                tor_cutoff_um=jnp.asarray(
+                    params.get("agn_grahsp_tor_cutoff_um", DEFAULT_AGN_GRAHSP_TOR_CUTOFF_UM)
+                ),
                 mn12_wave_nm=templates_state.torus_mn12_wave_nm,
                 mn12_avg=templates_state.torus_mn12_avg,
                 mn12_lo=templates_state.torus_mn12_lo,

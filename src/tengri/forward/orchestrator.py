@@ -203,6 +203,8 @@ _CANONICAL_UNITS: dict[str, str] = {
     "age_weights": "Msun",
     "age_weights_surviving": "Msun",
     "log_stellar_mass_scale": "dex",
+    "stellar_alpha_bracket_index": "",
+    "stellar_alpha_bracket_fraction": "",
     # Stellar, ionizing rate + SFH grid + chemistry history
     "nion": "photons/s",
     "log_nion": "dex",

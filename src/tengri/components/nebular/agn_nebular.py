@@ -160,6 +160,12 @@ from tengri.components.nebular._constants import (
     _LSUN_ERG,
 )
 from tengri.components.nebular._line_ingest import cloudy_labels_to_vacuum
+from tengri.components.nebular._params import (
+    DEFAULT_GAS_LOGCO,
+    DEFAULT_GAS_LOGNO,
+    DEFAULT_NEB_FESC,
+    DEFAULT_NEB_LOGU,
+)
 from tengri.components.nebular.ionizing_spectrum import _CLIP_RANGES, SEGMENT_EDGES
 from tengri.protocols.component import declared_default
 
@@ -381,11 +387,11 @@ def agn_nlr_cue(
     cue_backend,
     l_acc_erg: float | None = None,
     covering_fraction: float = 0.1,
-    neb_logU: float = -3.0,
+    neb_logU: float = DEFAULT_NEB_LOGU,
     gas_logn: float | None = None,
     gas_logz: float = 0.0,
-    gas_logno: float = 0.0,
-    gas_logco: float = 0.0,
+    gas_logno: float = DEFAULT_GAS_LOGNO,
+    gas_logco: float = DEFAULT_GAS_LOGCO,
     alpha_pl: float = -1.7,
     ionspec_params: dict | None = None,
     template_data=None,
@@ -813,7 +819,7 @@ class SynthesizerNLRBackend:
         log_ionU: float = -1.5,
         log_nH: float = 4.0,
         log_qh: float = 53.0,
-        neb_fesc: float = 0.0,
+        neb_fesc: float = DEFAULT_NEB_FESC,
         **_kwargs,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
         """Compute AGN NLR emission line luminosities via grid interpolation.
@@ -1285,12 +1291,12 @@ class FeltreNLRBackend:
     def predict_agn_nlr_lines(
         self,
         alpha_pl: float = -1.7,
-        neb_logU: float = -3.0,
+        neb_logU: float = DEFAULT_NEB_LOGU,
         neb_logn: float = 3.0,
         neb_logZ_gas: float = _LOG10_ZSUN,
         xi_d: float = 0.3,
         log_qh: float = 53.0,
-        neb_fesc: float = 0.0,
+        neb_fesc: float = DEFAULT_NEB_FESC,
         **_kwargs,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
         """Compute AGN NLR emission line luminosities via grid interpolation.
@@ -1368,16 +1374,16 @@ def agn_nlr_emission(
     l_acc_erg: float = 1e44,
     covering_fraction: float = 0.1,
     alpha_pl: float = -1.7,
-    neb_logU: float = -3.0,
+    neb_logU: float = DEFAULT_NEB_LOGU,
     gas_logn: float | None = None,
     gas_logz: float = 0.0,
-    gas_logno: float = 0.0,
-    gas_logco: float = 0.0,
+    gas_logno: float = DEFAULT_GAS_LOGNO,
+    gas_logco: float = DEFAULT_GAS_LOGCO,
     ionspec_params: dict | None = None,
     neb_logZ_gas: float | None = None,
     xi_d: float = 0.3,
     log_qh: float = 53.0,
-    neb_fesc: float = 0.0,
+    neb_fesc: float = DEFAULT_NEB_FESC,
     log_bh_mass: float = 8.0,
     log_eddington: float = -0.3,
     cosine_inclination: float = 0.2,

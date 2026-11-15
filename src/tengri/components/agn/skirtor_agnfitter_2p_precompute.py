@@ -28,7 +28,12 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.agn._params import DEFAULT_AGN_COS_INC, DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn._params import (
+    DEFAULT_AGN_COS_INC,
+    DEFAULT_AGN_LOG_LBOL,
+    DEFAULT_AGN_OA_SKIRTOR,
+    DEFAULT_AGN_TORUS_FRAC,
+)
 from tengri.components.agn._skirtor_agnfitter_sightline import (
     AXIS_TRANSFORMS,
     accepts_retired_incl_skirtor,
@@ -158,9 +163,9 @@ def build_skirtor_agnfitter_2p_photometry_lookup(precomp: dict):
     @accepts_retired_incl_skirtor
     def skirtor_agnfitter_2p_photometry(
         agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
-        agn_oa_skirtor: float = 40.0,
+        agn_oa_skirtor: float = DEFAULT_AGN_OA_SKIRTOR,
         agn_cos_inc: float = DEFAULT_AGN_COS_INC,
-        agn_torus_frac: float = 0.5,
+        agn_torus_frac: float = DEFAULT_AGN_TORUS_FRAC,
         **_kwargs,
     ) -> jnp.ndarray:
         r"""SKIRTOR_mean_2p torus photometry at a given (oa, incl).

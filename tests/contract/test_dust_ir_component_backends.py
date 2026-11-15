@@ -18,6 +18,7 @@ from tengri.components.dust.draine2021_pah_ir import (
 )
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.protocols.component import ParamDeclaration
+from tests._data_skip import requires_pahspec
 
 pytestmark = pytest.mark.contract
 
@@ -48,6 +49,7 @@ class TestDraine2021PAHIRComponent:
         assert decls[0].units == "dex"
         assert isinstance(decls[0], ParamDeclaration)
 
+    @requires_pahspec
     def test_predict_signature(self):
         """Draine2021PAHIR.predict has correct signature."""
         comp = Draine2021PAHIRSEDComponent()

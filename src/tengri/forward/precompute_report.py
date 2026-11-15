@@ -225,10 +225,6 @@ def _infer_lut_decline_reason(model: Any) -> str | None:
     if not (hasattr(model, "_approx") and model._approx.get("wave_precomp")):
         return "approx=WavePrecomp() not enabled"
 
-    # Check for alpha_fe_evolving
-    if getattr(model.spec, "alpha_fe_evolving", False):
-        return "alpha_fe_evolving is True"
-
     # Check for SSP data
     if model.ssp_data is None:
         return "ssp_data is None"
