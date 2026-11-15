@@ -132,9 +132,6 @@ def _pdr_luminosity_weight(umin, umax, alpha):
     return _expm1_over_u(s * L) / _expm1_over_u(t * L)
 
 
-# Import DUST_EMISSION_MODELS from emission.py after module initialization
-# This will be populated by lazy loaders
-DUST_EMISSION_MODELS: dict[str, Callable] = {}
 
 # ── All template loading functions extracted from emission.py ─────
 
@@ -168,7 +165,7 @@ def create_dl07_from_grid(grid_path: str | dict) -> Callable:
     Example
     -------
     >>> dl07 = create_dl07_from_grid("data/dl07_templates.h5")
-    >>> DUST_EMISSION_MODELS["dl07_tabulated"] = dl07  # optional: register
+    >>> emission.DUST_EMISSION_MODELS["dl07_tabulated"] = dl07  # optional: register
     >>> sed_ir = dl07(wavelength, L_absorbed, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5)
     """
     # A dict means the caller already loaded the grid: typically the component,
@@ -537,7 +534,7 @@ def create_dl14_from_grid(grid_path: str) -> Callable:
     Example
     -------
     >>> dl14 = create_dl14_from_grid("data/dl14_templates.h5")
-    >>> DUST_EMISSION_MODELS["dl14_tabulated"] = dl14
+    >>> emission.DUST_EMISSION_MODELS["dl14_tabulated"] = dl14
     >>> sed = dl14(
     ...     wav, L_abs, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5, dust_alpha_dl14=2.0
     ... )
@@ -615,7 +612,7 @@ def register_dl14_tabulated(grid_path: str, name: str = "dl14_tabulated") -> Non
     r"""Load and register the tabulated DL14 model in the emission registry.
 
     After calling this, the model is available via
-    ``DUST_EMISSION_MODELS["dl14_tabulated"]`` and can be used as the
+    ``emission.DUST_EMISSION_MODELS["dl14_tabulated"]`` and can be used as the
     ``dust_emission_model`` in ``SEDModel()``.
 
     Parameters
@@ -628,7 +625,7 @@ def register_dl14_tabulated(grid_path: str, name: str = "dl14_tabulated") -> Non
     Returns
     -------
     None
-        Model is registered in ``DUST_EMISSION_MODELS`` dict as a side effect.
+        Model is registered in ``emission.DUST_EMISSION_MODELS`` dict as a side effect.
 
     Notes
     -----
@@ -660,7 +657,7 @@ def dale2014_emission_lnu(
     Single source of truth for the Dale2014 ``fracAGN`` mixing, shared by the
     ``dale2014`` engine emission model (:func:`create_dale2014_from_grid` registry
     closure, resolved via
-    the ``DUST_EMISSION_MODELS`` loader cache) so the
+    the ``emission.DUST_EMISSION_MODELS`` loader cache) so the
     template-loading and mixing paths cannot diverge (#717 consolidation).
 
     .. math::
@@ -1049,7 +1046,7 @@ def create_dale2014_from_grid(grid_path: str) -> Callable:
     Example
     -------
     >>> dale = create_dale2014_from_grid("data/dale2014_templates_v2.h5")
-    >>> DUST_EMISSION_MODELS["dale2014_tabulated"] = dale
+    >>> emission.DUST_EMISSION_MODELS["dale2014_tabulated"] = dale
     >>> sed = dale(wav, L_abs, dust_alpha_dale=1.5, dust_frac_agn=0.1)
     """
     t = load_dale2014_lnu_grid(grid_path)
@@ -1492,7 +1489,7 @@ def register_dale2014_tabulated(grid_path: str, name: str = "dale2014_tabulated"
     r"""Load and register the tabulated Dale+2014 model in the emission registry.
 
     After calling this, the model is available via
-    ``DUST_EMISSION_MODELS["dale2014_tabulated"]`` and can be used as the
+    ``emission.DUST_EMISSION_MODELS["dale2014_tabulated"]`` and can be used as the
     ``dust_emission_model`` in ``SEDModel()``.
 
     Parameters
@@ -1505,7 +1502,7 @@ def register_dale2014_tabulated(grid_path: str, name: str = "dale2014_tabulated"
     Returns
     -------
     None
-        Model is registered in ``DUST_EMISSION_MODELS`` dict as a side effect.
+        Model is registered in ``emission.DUST_EMISSION_MODELS`` dict as a side effect.
 
     Notes
     -----
@@ -1521,7 +1518,7 @@ def register_dl07_tabulated(grid_path: str, name: str = "dl07_tabulated") -> Non
     r"""Load and register the tabulated DL07 model in the emission registry.
 
     After calling this, the model is available via
-    ``DUST_EMISSION_MODELS["dl07_tabulated"]`` and can be used as the
+    ``emission.DUST_EMISSION_MODELS["dl07_tabulated"]`` and can be used as the
     ``dust_emission_model`` in ``SEDModel()``.
 
     Parameters
@@ -1534,7 +1531,7 @@ def register_dl07_tabulated(grid_path: str, name: str = "dl07_tabulated") -> Non
     Returns
     -------
     None
-        Model is registered in ``DUST_EMISSION_MODELS`` dict as a side effect.
+        Model is registered in ``emission.DUST_EMISSION_MODELS`` dict as a side effect.
 
     Notes
     -----
@@ -2148,7 +2145,7 @@ def register_astrodust_tabulated(grid_path: str, name: str = "astrodust_tabulate
     Returns
     -------
     None
-        Model is registered in ``DUST_EMISSION_MODELS`` dict as a side effect.
+        Model is registered in ``emission.DUST_EMISSION_MODELS`` dict as a side effect.
 
     Notes
     -----
@@ -2327,7 +2324,7 @@ def create_bosa_from_grid(template_data: dict | str) -> Callable:
             takes the same float32-safety approach for its own
             ``factors_l_ir=False`` budget). ``None`` (the default) preserves
             the exact original formula for callers that only have the linear
-            value (e.g. the legacy ``DUST_EMISSION_MODELS`` dispatch and the
+            value (e.g. the legacy ``emission.DUST_EMISSION_MODELS`` dispatch and the
             bit-exact golden-fixture regression, see the comment at the
             normalization below for why that path is deliberately NOT
             converted).
@@ -2459,7 +2456,7 @@ def register_bosa_tabulated(grid_path: str, name: str = "bosa_tabulated") -> Non
     Returns
     -------
     None
-        Model is registered in ``DUST_EMISSION_MODELS`` dict as a side effect.
+        Model is registered in ``emission.DUST_EMISSION_MODELS`` dict as a side effect.
 
     Notes
     -----
@@ -3426,7 +3423,7 @@ def register_themis_tabulated(grid_path: str, name: str = "themis_tabulated") ->
     Returns
     -------
     None
-        Model is registered in ``DUST_EMISSION_MODELS`` dict as a side effect.
+        Model is registered in ``emission.DUST_EMISSION_MODELS`` dict as a side effect.
 
     Notes
     -----
