@@ -262,7 +262,7 @@ def pilot_whitening(draws, mask, shrinkage: float = DENSE_SHRINKAGE):
     factor, fallback = pilot_metric(draws, mask, shrinkage)
     weight = mask.astype(draws.dtype)
     mean = jnp.sum(weight[:, None] * jnp.where(mask[:, None], draws, 0.0), axis=0)
-    mean = mean / jnp.maximum(jnp.sum(weight), 1.0)
+    mean = mean / jnp.sum(weight)  # NaN below one usable row; the fallback replaces it
     return jnp.where(fallback, 0.0, mean), factor, fallback
 
 

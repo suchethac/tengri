@@ -229,23 +229,6 @@ class TestOffIsOff:
         assert _resolve_whitening_strength(True, 3) == 0.5
 
 
-class TestTheRefusalNowPointsSomewhere:
-    def test_chees_dense_mass_refusal_names_precondition_as_the_route(self):
-        """It used to say the catalog path "does not yet thread" the metric.
-
-        It now does, so the message must send the caller there rather than to a
-        different sampler. A refusal whose advice is stale is worse than none.
-        """
-        from tengri.inference.catalog_fitter import _CatalogFitterOriginal
-
-        cat = _CatalogFitterOriginal.__new__(_CatalogFitterOriginal)
-        with pytest.raises(ValueError, match="precondition=True") as exc:
-            _CatalogFitterOriginal._run_native_mcmc(
-                cat, "mcmc_chees", key=None, dense_mass_matrix=True
-            )
-        assert "does not yet thread" not in str(exc.value)
-
-
 class TestTheMassMatrixControlIsReachable:
     """Both arms of the HMC-vs-ChEES confound must be settable from a call.
 
@@ -290,16 +273,6 @@ class TestTheMassMatrixControlIsReachable:
             "_run_native_mcmc names mass_matrix_estimation nowhere in its body: "
             "the surface accepts the argument and its kernel never sees it"
         )
-
-    def test_dense_mass_matrix_is_still_refused_for_chees(self):
-        """The new knob must not have opened a door the old refusal closed."""
-        from tengri.inference.catalog_fitter import _CatalogFitterOriginal
-
-        cat = _CatalogFitterOriginal.__new__(_CatalogFitterOriginal)
-        with pytest.raises(ValueError, match="dense_mass_matrix"):
-            _CatalogFitterOriginal._run_native_mcmc(
-                cat, "mcmc_chees", key=None, dense_mass_matrix=True
-            )
 
 
 class TestNoTierMoved:

@@ -56,35 +56,41 @@ Consequences that do the work:
   needs (mass matrix, step size, warmup). Standardization buys uniform
   dispatch, not free mixing.
 
-## Wiring a new sampler: three edits plus one executed fit
+## Wiring a new sampler: one registration plus one executed fit
 
-Demonstrated six times in 2026-08 (dynamic-HMC, GHMC, ESS, MCLMC,
-adjusted-MCLMC, NSS; PRs #1531/#1624/#1644 and the #1429 wiring):
+Every sampler lives in the shared driver, `tengri.inference.sampling`, and every
+inference engine (single galaxy, batched catalog, hierarchical) reaches it from there:
 
-1. **`FLAT_SAMPLERS["name"] = "driver"`** — or move the name out of
-   `FLAT_UNSUPPORTED`. Registry gating (tier opt-in via `allow_unvalidated`),
-   the advertised supported list (#1576's derived, tier-filtered helper), and
-   `PopulationFitter.run` dispatch all follow automatically.
-2. **One `elif driver == ...` branch in `run_flat_sampler`** calling the
-   algorithm on the standardized problem. A chain-program family (NUTS, HMC,
-   dynamic HMC, GHMC) joins `flat_chain_drivers()` instead and runs through
-   `chain_program.run_chain`, with its program, window adaptation and statics
-   read from the registry entry; the fused warmup-and-sampling shims are gone.
-   Other drivers call their algorithm directly. Gradient samplers use
-   `prob.log_prob_with_data` with `prob.data_args` traced (the compile-reuse
-   contract: one compiled program serves every catalog); prior-aware samplers
-   use `prob.log_likelihood_with_data` alone; a nested sampler would take the
-   likelihood plus `prob.prior_transform`. When an upstream tuner only accepts
-   a 1-argument logdensity (the blackjax MCLMC tuners), the data must close
-   over — one compile per catalog, documented at the call site, matching the
-   single-galaxy backends.
+1. **Register a `Sampler`** in `sampling/samplers.py`: a name, a kind (`chain`, `ensemble`,
+   `variational`, `nested` or `point`), the registry method names that select it, and a
+   runner `run(target, key, n_chains, metric, cfg) -> SamplerResult` over a `FlatTarget`.
+   `FLAT_SAMPLERS`, the tier gate (`allow_unvalidated`), the advertised supported list and
+   `PopulationFitter.run` dispatch all derive from the registry. A chain-program family
+   (NUTS, HMC, dynamic HMC, GHMC, Barker, MALA) is one entry in `sampling/families.py`
+   and runs through `chain_program.run_chain`, with its program, adaptation and statics
+   read from the registry entry. Gradient samplers use `target.logdensity` with
+   `target.item_args` traced (the compile-reuse contract); prior-aware samplers use
+   `target.likelihood()` alone; a nested sampler draws its live points from the iid N(0, 1)
+   prior. When an upstream tuner only accepts a 1-argument logdensity (the blackjax MCLMC
+   tuners), the data closes over, as in the single-galaxy backends.
+2. **`n_chains` and `metric="dense"` are generic layers**, not per-sampler code. Chain
+   families adapt once and vmap overdispersed chains; every other sampler runs independent
+   chains from overdispersed starts. A dense metric uses the family's own dense adaptation
+   where it has one (NUTS, HMC, dynamic HMC) and a pilot-covariance whitening
+   (`FlatTarget.whiten`) otherwise. A sampler with no metric records
+   `metric_applied="none"` in its diagnostics.
 3. **The set-pin test** in
    `tests/regression/bug/test_bug_1394_hierarchical_all_methods.py`
    (`test_no_method_is_silently_substituted_for_another`) must be updated in
-   the same commit — deliberate friction: a name may appear in `FLAT_SAMPLERS`
-   only when its driver runs the algorithm the name promises. Running a
-   stand-in under a requested name is silent substitution, the seam's founding
-   bug.
+   the same commit: a name may appear in `FLAT_SAMPLERS` only when its sampler runs
+   the algorithm the name promises. Running a stand-in under a requested name is silent
+   substitution, the seam's founding bug. `tests/contract/test_sampler_sweep.py`
+   enumerates the registry, so the new sampler enters the engine x `n_chains` x `metric`
+   sweep without a test edit.
+
+A cost concern (the memory of a dense metric, a ChEES ensemble, a full-rank factor, an SMC
+population) is a warning with the computed footprint (`memory_budget_gb`), never a refusal.
+Mean-field VI warns once per run that it drops cross-level correlations.
 
 **And then the part that is not optional: one executed fit.** Every wiring in
 the series found something at runtime that no static check caught — a blackjax
@@ -200,4 +206,4 @@ exact-path control arm measured the LUT's price at this SNR: 9.66x faster
 90% interval; τ unresolved) — the spectroscopy sibling of #1671's
 WavePrecomp gradient bias, filed as #1688. Execution verified; the
 approximation's cost is now a number instead of an assumption.
-`FLAT_UNSUPPORTED` is empty — every registered backend is genuinely driven.
+Every registered backend is driven: there is no refusal table.

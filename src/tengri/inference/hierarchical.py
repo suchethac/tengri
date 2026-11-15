@@ -32,7 +32,6 @@ import numpy as np
 from tengri.inference._batching import AUTO, resolve_forward_chunk_size
 from tengri.inference._hierarchical_flat import (
     FLAT_SAMPLERS,
-    FLAT_UNSUPPORTED,
     run_flat_sampler,
 )
 from tengri.inference.fitter import _resolve_batch_fit_approx, resolve_method
@@ -659,11 +658,6 @@ class PopulationFitter:
         ``mcmc_nuts``, ``mcmc_hmc``, …), the same class of omission this
         helper exists to prevent, one layer further out.
 
-        Names in ``tengri.inference._hierarchical_flat.FLAT_UNSUPPORTED``
-        are deliberately *not* listed. ``run`` raises ``NotImplementedError``
-        with a per-name reason for those, which is more useful than appearing
-        in a list of things that work.
-
         Parameters
         ----------
         method : str
@@ -894,16 +888,6 @@ class PopulationFitter:
             if method in FLAT_SAMPLERS:
                 return run_flat_sampler(
                     self, method, key=key, allow_unvalidated=allow_unvalidated, **kwargs
-                )
-            # Refuse the ones the seam knowingly cannot drive with a specific
-            # reason rather than a generic "unknown method". A backend that is
-            # absent because nobody wired it up and one that is absent because
-            # its naive implementation returns biased samples deserve different
-            # errors, the second is a warning to whoever tries to add it.
-            if method in FLAT_UNSUPPORTED:
-                raise NotImplementedError(
-                    f"method={method!r} is not available for hierarchical fits. "
-                    f"{FLAT_UNSUPPORTED[method]}"
                 )
             # Derive the advertised list; never hand-write it. The literal this
             # replaced named 'vi_nonlinear_fast' as "(default)" for months after

@@ -123,9 +123,11 @@ def _run_hierarchical(method, n_chains, metric, monkeypatch):
     class _Fitter:
         n_galaxies = 1
 
+    from tengri.inference.sampling.driver import get_sampler
+
     post = hf.run_flat_sampler(
         _Fitter(),
-        method,
+        get_sampler(method).methods[0],
         key=jax.random.PRNGKey(5),
         n_warmup=_N_WARMUP,
         n_burnin=_N_BURNIN,
