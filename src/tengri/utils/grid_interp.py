@@ -1633,8 +1633,8 @@ def _pchip_slopes(x: jnp.ndarray, y: jnp.ndarray) -> jnp.ndarray:
     # skirtor_disc_dust_ratio, #892). Replacing d_left/d_right with 1.0 wherever
     # the harmonic is unused keeps the denominator = w1+w2 > 0, so the reverse
     # pass stays finite. Forward is unchanged: interior is 0 in exactly the same
-    # places (d_left*d_right <= 0).
-    mono = d_left * d_right > 0.0
+    # places (the secants have opposite signs or one is zero).
+    mono = ((d_left > 0.0) & (d_right > 0.0)) | ((d_left < 0.0) & (d_right < 0.0))
     d_left_safe = jnp.where(mono, d_left, 1.0)
     d_right_safe = jnp.where(mono, d_right, 1.0)
     harmonic = (w1 + w2) / (w1 / d_left_safe + w2 / d_right_safe)
