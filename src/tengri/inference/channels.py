@@ -182,7 +182,10 @@ class LineSpec:
     prior_type : {"flat", "cloudy", "model"}, optional
         Prior of marginalized amplitudes.
     prior_sigma : float or None, optional
-        Width of the flat prior; ``None`` is the uninformative ``1e10``.
+        Width of the flat prior; ``None`` is ``1e10``. The marginal is exact at this finite
+        width, not the improper-prior limit: each constrained line lowers the evidence by
+        about ``ln prior_sigma`` nats, so compare models with different numbers of
+        marginalized lines at the same width.
     prior_variance : float or None, optional
         Variance of the flat prior, taking precedence over ``prior_sigma``.
     line_wavelengths : array_like, optional

@@ -770,3 +770,32 @@ def test_calibration_alone_equals_calibration_with_every_line_masked_batched(syn
         )
     )
     np.testing.assert_allclose(got, ref, rtol=1e-10)
+
+
+def test_batched_and_per_galaxy_lines_agree_at_the_default_prior_width(synthetic_ssp):
+    """Both paths read Spectroscopy.eline_prior_sigma (default 100) as the flat-prior width."""
+    from tengri.inference.batched_spectro import batched_log_likelihood
+    from tengri.inference.likelihoods.marginalized import ELineMarginalizedLikelihood
+    from tengri.observation.batched import GalaxySpectrum, build_spectro_batches
+    from tengri.observation.spectroscopy import Spectroscopy
+
+    width = Spectroscopy(wave_obs=_MARG_WAVE).eline_prior_sigma
+    assert width == 100.0
+    z = 0.1
+    template = _marg_template(synthetic_ssp, prior_sigma=width)
+    assert template.observation.spectroscopy.eline_prior_sigma == width
+    flux, sigma = _marg_data()
+    gal = GalaxySpectrum(wave=_MARG_WAVE, flux=flux, ivar=1.0 / sigma**2, z=z, resolution=_MARG_R)
+    spec, batch, _ = build_spectro_batches([gal], model=template)[0]
+    params = {"sfh_dpl_log_total_mass": 10.0}
+    got = float(batched_log_likelihood(template, spec)(params, batch.galaxy(0)))
+    per_galaxy = ELineMarginalizedLikelihood(
+        fnu_obs=jnp.asarray(flux),
+        fnu_err=jnp.asarray(sigma),
+        design_matrix=_marg_line_design(template, z),
+        prior_variance=width**2,
+    )
+    expected = float(
+        per_galaxy.log_prob({"spec_fnu": template.predict_spectrum({**params, "redshift": z})})
+    )
+    np.testing.assert_allclose(got, expected, rtol=1e-10)
