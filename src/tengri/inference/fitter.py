@@ -1541,6 +1541,49 @@ def _reject_non_finite_data(data, noise, presence) -> None:
         )
 
 
+def _presence_over_data(presence, data_type, model, n_data):
+    """Presence over the whole data vector, refusing a length that is not one per band.
+
+    ``presence`` has one entry per photometric band. For photometry that is the data vector.
+    For joint data it is the photometric block, and the spectrum pixels are present.
+
+    Parameters
+    ----------
+    presence : array_like or None
+        The user's presence weights.
+    data_type : str
+        Resolved data type.
+    model : SEDModel or ForwardModel
+        Gives the number of photometric bands of joint data.
+    n_data : int
+        Length of the data vector.
+
+    Returns
+    -------
+    ndarray or None
+        Presence of every datum, or ``None`` without presence.
+
+    Raises
+    ------
+    ValueError
+        If the length is not the number of photometric bands.
+    """
+    if presence is None:
+        return None
+    given = np.asarray(presence, dtype=float)
+    n_phot = n_data
+    if data_type == "joint":
+        n_phot = getattr(getattr(model, "observation", None), "n_data_phot", None)
+        if n_phot is None:
+            raise ValueError("joint data with presence needs model.observation.n_data_phot")
+    if given.shape != (n_phot,):
+        raise ValueError(
+            f"presence has shape {given.shape}; expected ({n_phot},), one entry per "
+            f"photometric band (data_type={data_type!r}, {n_data} data)"
+        )
+    return np.concatenate([given, np.ones(n_data - n_phot)])
+
+
 def _neutralize_absent(data, noise, presence):
     """Replace non-finite values at absent positions with finite placeholders.
 
@@ -1682,6 +1725,15 @@ class Fitter:
         "upper limit", the opposite of the include/exclude semantics a
         boolean mask suggests. To exclude a datum, drop it from ``data``
         and ``noise`` (or inflate its ``noise``).
+    presence : array_like or None
+        Optional exact 0/1 presence of the photometric bands: ``0`` marks a band absent
+        and it contributes nothing to the likelihood or its gradient. The length is the
+        number of photometric bands: ``len(data)`` for ``data_type="photometry"``, and
+        ``model.observation.n_data_phot`` for ``"joint"`` data, where it masks the
+        photometric block and the spectrum pixels stay present. Spectroscopy has no
+        per-pixel presence here. Store an absent band as zero flux and zero error, or as
+        any finite placeholder. A length that does not match raises ``ValueError`` stating
+        the expected length. Default ``None`` (all bands present).
     calibration_marginalize : bool, optional
         If ``True``, analytically marginalize over spectroscopic calibration
         polynomial coefficients (Chebyshev order 1--``cal_n_poly``) when
@@ -1959,8 +2011,11 @@ class Fitter:
         self.model = model
         self.data = jnp.asarray(data)
         self.noise = jnp.asarray(noise)
-        _reject_non_finite_data(self.data, self.noise, presence)
-        _refuse_uncovered_bands(model, self.data, self.noise, presence, data_type)
+        presence_over_data = _presence_over_data(
+            presence, self._resolve_data_type(data_type, model), model, self.data.shape[0]
+        )
+        _reject_non_finite_data(self.data, self.noise, presence_over_data)
+        _refuse_uncovered_bands(model, self.data, self.noise, presence_over_data, data_type)
         # An absent datum's value is never *used*, but IEEE still propagates
         # it: 0 * NaN is NaN, so a masked NaN poisons the likelihood exactly
         # as an unmasked one does, and the guard above would be telling users
@@ -1968,7 +2023,7 @@ class Fitter:
         # the same way ("Set NaN flux to finite placeholder (doesn't matter,
         # presence=False)").
         if presence is not None:
-            self.data, self.noise = _neutralize_absent(self.data, self.noise, presence)
+            self.data, self.noise = _neutralize_absent(self.data, self.noise, presence_over_data)
         if data_mask is not None:
             data_mask = jnp.asarray(data_mask)
             # A boolean mask here is a semantics trap: the censored
@@ -1984,10 +2039,6 @@ class Fitter:
         self.data_mask = data_mask
         if presence is not None:
             presence = jnp.asarray(presence, dtype=jnp.float32)
-            if presence.shape != self.data.shape:
-                raise ValueError(
-                    f"presence shape {presence.shape} does not match data shape {self.data.shape}"
-                )
         self.presence = presence
         # Per-galaxy emission-line values (#1599). The Observation carries the
         # line *schema* -- names, wavelengths, and whether each is a limit --
