@@ -197,7 +197,7 @@ def floored_noise(model_flux, err, chol_data, chol_offsets, f_cal):
     rows = jnp.arange(n)[None, :]
     lag = jnp.arange(n)[:, None]
     cols = rows - lag
-    bands = jnp.where(cols >= 0, lower[rows, jnp.clip(cols, 0)], 0.0)
+    bands = jnp.where(cols >= 0, lower[rows, jnp.where(cols >= 0, cols, 0)], 0.0)
     return err, bands, tuple(-k for k in range(n))
 
 
