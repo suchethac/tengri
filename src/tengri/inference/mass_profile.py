@@ -2055,8 +2055,19 @@ def _reinsert_mass_fn(fitter: Fitter):
     use_components = bool(getattr(fitter, "use_components", False))
     chunk_size = _compute_reinsertion_chunk_size(fitter)
     line_schema = _line_flux_schema(fitter)
+    threaded_impl = _threaded_predict_impl(model, use_components)
 
-    def _reinsert(samples_no_mass, draw_keys, data, noise, presence, line_obs, line_err):
+    def _reinsert(
+        samples_no_mass,
+        draw_keys,
+        data,
+        noise,
+        presence,
+        line_obs,
+        line_err,
+        redshift=None,
+        jit_inputs=None,
+    ):
         """Map the per-draw conditional-mass draw over the posterior.
 
         ``jax.lax.map(..., batch_size=chunk_size)`` vmaps within each chunk and
@@ -2076,11 +2087,19 @@ def _reinsert_mass_fn(fitter: Fitter):
         that objective's conditional. A block here without one there, or the
         reverse, is a mass drawn from a different posterior than the one
         sampled, again silently.
+
+        ``redshift`` and ``jit_inputs`` are arguments for the same reason. When the
+        model takes its redshift as a runtime input, the objective scored the galaxy
+        at its own redshift through the threaded forward; predicting here without
+        either would score it at the redshift the model was built with and shift the
+        mass by the ratio of the two luminosity distances.
         """
 
         def one_draw(draw):
             sample_dict, key = draw
             phys = {**fixed_values, **sample_dict}
+            if redshift is not None:
+                phys = {**phys, "redshift": redshift}
             A_ref, a_star, _, ell_ref = _profile_stats(
                 model,
                 mass_name,
@@ -2090,6 +2109,8 @@ def _reinsert_mass_fn(fitter: Fitter):
                 presence=presence,
                 data_type=data_type,
                 use_components=use_components,
+                jit_inputs=jit_inputs,
+                threaded_impl=threaded_impl,
                 line_flux_block=_block_for(line_schema, line_obs, line_err),
             )
             return _sample_log_mass(key, A_ref, a_star, ell_lo, ell_hi, mass_prior, ell_ref)
@@ -2162,6 +2183,7 @@ def reinsert_profiled_mass(
     line_obs,
     line_err,
     key,
+    redshift=None,
 ) -> Posterior:
     """Draw (or set) the profiled mass and merge it into ``posterior``.
 
@@ -2197,6 +2219,9 @@ def reinsert_profiled_mass(
         PRNG key for the mass draw (samples case only; unused for a point
         estimate, since :func:`_profile_stats` is deterministic given the
         other channels).
+    redshift : float or None
+        That galaxy's own redshift when the fit threaded one per galaxy, else ``None``
+        and the fitter's fixed redshift stands.
 
     Returns
     -------
@@ -2208,6 +2233,8 @@ def reinsert_profiled_mass(
     fixed_values = fitter._fixed_values
     data_type = fitter.data_type
     use_components = bool(getattr(fitter, "use_components", False))
+    jit_inputs = getattr(fitter, "_data_args", {}).get("_jit_inputs")
+    threaded_impl = _threaded_predict_impl(model, use_components)
 
     if posterior.samples is not None:
         samples_no_mass = {k: v for k, v in posterior.samples.items() if k != mass_name}
@@ -2223,6 +2250,8 @@ def reinsert_profiled_mass(
                 presence,
                 line_obs,
                 line_err,
+                redshift,
+                jit_inputs,
             )
             # Execute inside the lock: dispatch is asynchronous, and without
             # this the work (and its memory) would run whenever the caller
@@ -2233,6 +2262,8 @@ def reinsert_profiled_mass(
         posterior.params = {**posterior.params, mass_name: jnp.mean(ell_samples)}
     else:
         phys = {**fixed_values, **{k: v for k, v in posterior.params.items() if k != mass_name}}
+        if redshift is not None:
+            phys = {**phys, "redshift": redshift}
         # Same channel set as the objective and the draw path: a point estimate
         # taken against a different set of channels would disagree with the
         # samples beside it in the same Posterior.
@@ -2245,6 +2276,8 @@ def reinsert_profiled_mass(
             presence=presence,
             data_type=data_type,
             use_components=use_components,
+            jit_inputs=jit_inputs,
+            threaded_impl=threaded_impl,
             line_flux_block=_block_for(_line_flux_schema(fitter), line_obs, line_err),
         )
         ell_lo, ell_hi, mass_prior = _profile_mass_state(fitter)

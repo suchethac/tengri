@@ -21,6 +21,7 @@ import numpy as np
 import pytest
 
 from tengri.inference.catalog_fitter import _CatalogFitterOriginal as CatalogFitter
+from tests._fixed_z_reference import reinserted_mass_mean
 
 
 def _noise_for(flux):
@@ -90,22 +91,60 @@ class TestBatchedRedshift:
             f"vs L_base={L_base} — the override never reached the forward pass."
         )
 
-    def test_catalog_z_range_required_for_batched_per_galaxy_z(
+    def test_batched_per_galaxy_z_without_declared_range_matches_fixed_z_fits(
         self, ssp_data_wne, synthetic_tophat_obs
     ):
-        """Without the runtime-LUT, a batched per-galaxy-z fit would recompile per z."""
+        """A model with no ``catalog_z_range`` fits a per-galaxy-z catalog, and correctly.
+
+        The span is derived from the catalog. Each galaxy's data is generated at its own
+        redshift by a model built at that redshift, so the reference for galaxy ``i`` is
+        the plain fixed-z model. Two things are compared with that reference:
+
+        * the MAP stellar mass of each galaxy (tolerance 0.05 dex; the table-interpolated
+          and exact predictions differ at the 1e-3 level, and the two fits agree to
+          4e-4 dex when measured);
+        * the stellar mass the batched NUTS fit reinserts for each galaxy, recomputed
+          from the same non-mass draws by the fixed-z model's own fitter (tolerance 0.1 dex
+          on the mean of the draws, against a conditional width of about 0.02 dex).
+          Reinserting at the wrong redshift moves the mass by about 1.8 dex at z = 0.8.
+        """
         import jax
 
-        model = self._model(ssp_data_wne, synthetic_tophat_obs, z_range=None)
-        key = jax.random.PRNGKey(2)
-        flux = np.asarray(model.predict_photometry(model.spec.sample(key)), dtype=np.float64)
-        noise = _noise_for(flux)
-        catalog = [
-            {"flux_obs": flux, "noise": noise, "redshift": 0.1},
-            {"flux_obs": flux, "noise": noise, "redshift": 0.8},
+        from tengri.inference.fitter import Fitter
+
+        zs = (0.1, 0.8)
+        models = [
+            self._model(ssp_data_wne, synthetic_tophat_obs, z_range=None, redshift=z) for z in zs
         ]
-        with pytest.raises(ValueError, match="catalog_z_range"):
-            CatalogFitter(model, catalog).run("mcmc_nuts", key=key, n_warmup=5, n_samples=5)
+        key = jax.random.PRNGKey(2)
+        params = models[0].spec.sample(key)
+        fluxes = [np.asarray(m.predict_photometry(params), dtype=np.float64) for m in models]
+        noises = [_noise_for(f) for f in fluxes]
+        catalog = [
+            {"flux_obs": f, "noise": n, "redshift": z}
+            for f, n, z in zip(fluxes, noises, zs, strict=True)
+        ]
+        mass = "sfh_dpl_log_total_mass"
+
+        map_cat = CatalogFitter(models[0], catalog).run("map", key=key, verbose=False)
+        mcmc_cat = CatalogFitter(models[0], catalog).run(
+            "mcmc_nuts", key=key, n_warmup=30, n_burnin=0, n_samples=30, verbose=False
+        )
+        for i, (model, flux, noise) in enumerate(zip(models, fluxes, noises, strict=True)):
+            ref = Fitter(model, flux, noise).run("map", key=key, verbose=False)
+            got, want = float(map_cat.posteriors[i].params[mass]), float(ref.params[mass])
+            assert abs(got - want) < 0.05, (
+                f"galaxy {i} (z={zs[i]}): MAP log mass {got:.4f} vs fixed-z {want:.4f}"
+            )
+
+            want = reinserted_mass_mean(
+                model, flux, noise, mcmc_cat.posteriors[i].samples, mass, key
+            )
+            got = float(np.mean(np.asarray(mcmc_cat.posteriors[i].samples[mass])))
+            assert abs(got - want) < 0.1, (
+                f"galaxy {i} (z={zs[i]}): batched NUTS reinserted log mass {got:.3f} vs "
+                f"fixed-z reference {want:.3f}"
+            )
 
     @pytest.mark.slow  # a real 2-galaxy NUTS catalog fit; see #1346 (shard OOM)
     def test_batched_heterogeneous_redshift_fits_and_separates(

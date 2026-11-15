@@ -2386,6 +2386,7 @@ class _CatalogFitterOriginal:
                     line_obs=None if _line_obs_i is None else jnp.asarray(_line_obs_i),
                     line_err=None if _line_err_i is None else jnp.asarray(_line_err_i),
                     key=jax.random.fold_in(key, i),
+                    redshift=all_redshift_orig[i] if per_galaxy_z else None,
                 )
 
             _attach_summaries(post_i, store, percentiles, reducers, properties)
