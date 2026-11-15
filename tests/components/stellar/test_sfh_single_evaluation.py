@@ -10,7 +10,8 @@ SFH family is covered without editing this file:
 * every ``SFH_REGISTRY`` key except the ``field`` modulator, the tabulated
   ``table`` SFH, and one composite (list) SFH;
 * the GP field off and on;
-* the metallicity models ``delta``, ``ramp`` and ``table``.
+* the metallicity models ``delta``, ``ramp``, ``table`` (runtime ``met_history``, tabulated
+  SFH only) and ``table_build`` (a Z(t) table pinned on the config, any SFH).
 
 Checked on each combination:
 
@@ -27,6 +28,7 @@ reason, excluded at collection, and pinned by a test, so none is skipped silentl
 
 from __future__ import annotations
 
+import dataclasses
 import warnings
 
 import jax
@@ -70,17 +72,24 @@ ADDITIVE_ONLY = {
     "recent_ssfr": "an episode that splices over a smooth member: alone it has nothing to splice",
 }
 MODIFIER_COMPOSITES = [("delayed", "recent"), ("delayed", "recent_ssfr")]
-METALLICITY_MODES = ("delta", "ramp", "table")
+#: ``table`` is the runtime ``met_history`` route (riding the SFH table's time axis);
+#: ``table_build`` is a Z(t) table pinned on the config at build, which any SFH takes.
+METALLICITY_MODES = ("delta", "ramp", "table", "table_build")
+MET_BUILD_LOG_AGE_YR = np.linspace(6.0, 10.14, 16)
+MET_BUILD_LOG_Z_ABS = np.linspace(-3.0, -1.6, 16)
 
 #: Registry keys that are not SFH families: the field toggle supplies the modulator.
 NOT_A_FAMILY = ("field",)
 
-#: Contradictory input, excluded at collection. ``met_history`` (a runtime Z(t) table)
-#: is tied to the SFH time axis ``sfh_t_gyr``, which only ``sfh_model='table'`` supplies.
+#: Contradictory input, excluded at collection: only the runtime ``met_history`` route
+#: (metallicity ``table``) with an SFH other than ``table``. The library's own reason
+#: (``StellarSEDComponentConfig`` build-time refusal, ``METALLICITY_TABLE_SOURCE_MESSAGE``):
+#: "That array is read only with sfh_model='table', so with any other SFH the table must
+#: be given here." The build-time table (``table_build``) is that other route, swept below.
 CONTRADICTORY = {
     (sfh, "table"): (
-        "a runtime Z(t) table (met_history) rides the SFH time axis sfh_t_gyr, which "
-        "only sfh_model='table' supplies; apply raises for met_history otherwise"
+        "the runtime met_history array is read only with sfh_model='table', so with any "
+        "other SFH the table must be given on the config (METALLICITY_TABLE_SOURCE_MESSAGE)"
     )
     for sfh in [
         *(k for k in SFH_REGISTRY if k not in NOT_A_FAMILY),
@@ -133,13 +142,16 @@ def _sfh_type(sfh, field):
 
 
 def _build(ssp, obs, sfh, field, met):
+    # ``table_build`` builds with delta metallicity; the build-time table is pinned on
+    # the stellar component's config afterwards (see ``_with_build_time_met_table``).
+    met_type = "delta" if met == "table_build" else met
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return SEDModel.build(
             ssp_data=ssp,
             observation=obs,
             sfh={"type": _sfh_type(sfh, field), "all_params": Fixed(DEFAULT)},
-            met={"type": met},
+            met={"type": met_type},
             dust_attenuation=None,
             neb={"type": "none"},
             redshift=Fixed(Z_OBS),
@@ -179,6 +191,17 @@ def _declared_mass(sfh, params):
     return float(10.0 ** params[keys[0]])
 
 
+def _with_build_time_met_table(stellar):
+    """The stellar component with a Z(t) table pinned on its config (no ``met_history``)."""
+    config = dataclasses.replace(
+        stellar.config,
+        metallicity_model="table",
+        met_table_log_age_yr=jnp.asarray(MET_BUILD_LOG_AGE_YR),
+        met_table_log_z_abs=jnp.asarray(MET_BUILD_LOG_Z_ABS),
+    )
+    return dataclasses.replace(stellar, config=config)
+
+
 @pytest.fixture(scope="module")
 def built(synthetic_ssp_wide, synthetic_tophat_obs):
     """Memoized (sfh, field, met) -> both paths' outputs, one build per combination."""
@@ -192,6 +215,8 @@ def built(synthetic_ssp_wide, synthetic_tophat_obs):
             stellar = next(
                 c for c in model._build_component_chain() if isinstance(c, C.StellarSEDComponent)
             )
+            if met == "table_build":
+                stellar = _with_build_time_met_table(stellar)
             w_c, m_c, _ages, _yf = stellar._joint_weights_impl(params, synthetic_ssp_wide)
             state = stellar.apply(
                 ForwardState(wave=jnp.logspace(3.0, 4.5, 64)), params, synthetic_ssp_wide
@@ -289,3 +314,10 @@ def test_exclusions_name_their_reason():
 def test_fast_path_unsupported_map_is_gone():
     """The refusal table of the fast path is deleted, not kept as a second evaluator."""
     assert not hasattr(C, "_FAST_PATH_UNSUPPORTED_SFH_FNS")
+
+
+def test_build_time_met_table_is_read(built):
+    """The build-time Z(t) table reaches the weights: they differ from delta metallicity."""
+    delta = np.asarray(built("dpl", False, "delta")["w_apply"])
+    table = np.asarray(built("dpl", False, "table_build")["w_apply"])
+    assert np.max(np.abs(delta - table)) > 1e-3 * np.max(delta)
