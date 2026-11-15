@@ -10,8 +10,8 @@ checks pin that class:
   bound, with fallback warnings promoted to errors;
 * the canary: each registered band-table provider's tables change between the photon and
   energy conventions on a sloped SED, so a provider that ignores the spec fails;
-* the AST check: no function in ``src/tengri`` has a parameter named ``convention`` with a
-  default value.
+* the AST check: outside the named public entry points where a user first declares it, no
+  function parameter and no dataclass field named ``convention`` in ``src/tengri`` has a default.
 """
 
 from __future__ import annotations
