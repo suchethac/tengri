@@ -48,16 +48,18 @@ def _loss_for(data):
 
 @pytest.fixture
 def round_compiles(monkeypatch):
-    """Record the compile count at the start of each continuation round."""
+    """Record ``(compiles_at_entry, compiles_at_exit)`` for each continuation round."""
     real = map_dispatch.lbfgs_to_gtol
-    seen = []
+    rounds = []
 
     def recording(*args, **kwargs):
-        seen.append(_compiles())
-        return real(*args, **kwargs)
+        entry = _compiles()
+        out = real(*args, **kwargs)
+        rounds.append((entry, _compiles()))
+        return out
 
     monkeypatch.setattr(map_dispatch, "lbfgs_to_gtol", recording)
-    return seen
+    return rounds
 
 
 def test_second_stationarity_on_the_same_loss_compiles_nothing():
@@ -74,7 +76,8 @@ def test_continuation_rounds_compile_nothing_after_the_first(round_compiles):
     x0 = jnp.full((4,), 3.0, dtype=jnp.float64)
     map_dispatch._certify_map_point(loss, x0, scipy_success=False, n_steps=3, gtol=1e-14)
     assert len(round_compiles) == 2, "the certificate should run both continuation rounds"
-    assert round_compiles[1] - round_compiles[0] == 0, "the second round recompiled"
+    second_entry, second_exit = round_compiles[1]
+    assert second_exit - second_entry == 0, "the second round recompiled"
 
 
 def test_second_certificate_with_continuation_compiles_nothing(round_compiles):

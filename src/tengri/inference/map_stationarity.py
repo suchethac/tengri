@@ -174,9 +174,9 @@ def stationarity(loss: Callable, x: jax.Array, data=None) -> Stationarity:
     -----
     Not JIT-compatible as a whole (it reads concrete eigenvalue signs to report
     ``positive_definite``); the value, gradient, Hessian and decrement are one jitted
-    program, and the host reads its five results in one transfer. The decrement is summed over the positive-curvature eigendirections only, so a
-    non-positive-definite point reports a finite decrement next to
-    ``positive_definite=False``. A non-finite Hessian is reported as
+    program, and the host reads its five results in one transfer. The decrement is
+    summed over the positive-curvature eigendirections only, so a non-positive-definite
+    point reports a finite decrement next to ``positive_definite=False``. A non-finite Hessian is reported as
     ``hessian_finite=False`` with a NaN decrement, never as a zero decrement.
     """
     _, _, certificate = _programs(loss)
