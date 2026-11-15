@@ -912,7 +912,10 @@ class ForwardModel:
         for pop, params in zip(self.populations, per_pop_params.values()):
             spec = getattr(pop.sed, "spec", None)
             if spec is not None and hasattr(spec, "get_fixed_values"):
-                per_pop_params_full[pop.name] = merge_fixed_params(spec, params)
+                inner = getattr(pop.sed, "sed", pop.sed)
+                per_pop_params_full[pop.name] = merge_fixed_params(
+                    spec, params, getattr(inner, "_runtime_keys", ())
+                )
             else:
                 per_pop_params_full[pop.name] = dict(params)
 

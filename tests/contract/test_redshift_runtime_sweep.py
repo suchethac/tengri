@@ -561,9 +561,12 @@ def test_catalog_promotes_once_and_a_rerun_adds_no_lowering(entry, representatio
     promotions = []
     real = _SEDModel._promote_to_runtime_redshift
 
+    promoted_models = []
+
     def _count(self, z_range):
         promotions.append(z_range)
-        return real(self, z_range)
+        promoted_models.append(real(self, z_range))
+        return promoted_models[-1]
 
     lowerings = []
 
@@ -583,20 +586,24 @@ def test_catalog_promotes_once_and_a_rerun_adds_no_lowering(entry, representatio
         _jax_monitoring.unregister_event_duration_listener(_listener)
 
     assert n_promotions == 1, f"{entry}/{representation}: promotions {promotions}"
+    if representation == "exact":
+        assert promotions == [None], f"{entry}: an exact model got a table span {promotions}"
     assert len(promotions) == 1, "the second run promoted again instead of reusing the first"
     assert len(lowerings) == after_first, (
         f"{entry}/{representation}: the second run lowered {lowerings[after_first:]}"
     )
     assert len(first) == len(second) == len(CATALOG_ZS)
-    if (promoted := getattr(first[0], "model", None)) is not None:
-        inner = promoted.populations[0].sed if hasattr(promoted, "populations") else promoted
-        params = {"sfh_dpl_log_total_mass": _TRUTH_LOGM}
-        for z in CATALOG_ZS:
-            got = np.asarray(inner.predict_photometry({**params, "redshift": z}))
-            ref = np.asarray(_mass_model(representation, z).predict_photometry(params))
-            np.testing.assert_allclose(
-                got, ref, rtol=RTOL[representation], atol=0.0, err_msg=f"{entry}/{representation}"
-            )
+    inner = promoted_models[0]
+    if representation == "exact":
+        assert not inner._approx["wave_precomp"], f"{entry}: the exact model was tabulated"
+        assert inner._catalog_z_range is None, f"{entry}: a table was built for an exact model"
+    params = {"sfh_dpl_log_total_mass": _TRUTH_LOGM}
+    for z in CATALOG_ZS:
+        got = np.asarray(inner.predict_photometry({**params, "redshift": z}))
+        ref = np.asarray(_mass_model(representation, z).predict_photometry(params))
+        np.testing.assert_allclose(
+            got, ref, rtol=RTOL[representation], atol=0.0, err_msg=f"{entry}/{representation}"
+        )
 
 
 @cache

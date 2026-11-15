@@ -489,6 +489,7 @@ class Catalog:
         percentiles=None,
         reducers=None,
         properties=None,
+        approx="auto",
         **kwargs,
     ) -> CatalogPosterior:
         """Fit all galaxies independently.
@@ -507,6 +508,10 @@ class Catalog:
             Pad the catalog up to this many galaxies before running. Allows
             different catalog sizes to share XLA cache entries. ``None``
             (default) pads only to the next multiple of K.
+        approx : "auto", None or precompute config, default "auto"
+            Fit-time approximation policy, as for :class:`~tengri.Fitter`: ``"auto"``
+            routes a photometry fit through the precompute LUT, ``None`` keeps the model
+            exact, a config (or tuple) overrides.
         store : {"full", "summary"} or None
             Storage mode for posterior samples. ``None`` (default) auto-selects:
             ``"full"`` if N <= 1000, else ``"summary"`` with a warning.
@@ -593,7 +598,7 @@ class Catalog:
             galaxies.append(galaxy_dict)
 
         # Delegate to the existing engine.
-        fitter = CatalogFitter(self.fwd, galaxies, data_type="photometry")
+        fitter = CatalogFitter(self.fwd, galaxies, data_type="photometry", approx=approx)
         result = fitter.run(
             method=method,
             key=key,
