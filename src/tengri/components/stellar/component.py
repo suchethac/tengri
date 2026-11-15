@@ -203,6 +203,21 @@ _AGE_FAMILIES = (
 )
 
 
+def _is_age_anchored(member: str) -> bool:
+    """Whether one registry name is an age-anchored family, by name or by function.
+
+    An alias (``db`` and ``dbp``) shares its implementation with its family, so the
+    registry function's name is checked as well as the name itself. Without this an
+    alias silently loses its ``age_universe_yr`` and fails at evaluation.
+    """
+    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+
+    if member in _AGE_FAMILIES:
+        return True
+    entry = SFH_REGISTRY.get(member)
+    return entry is not None and getattr(entry.fn, "__name__", None) in _AGE_FAMILIES
+
+
 def age_universe_kwargs(sfh_model, redshift) -> dict:
     """The ``age_universe_yr`` kwarg of an age-anchored SFH, at ``redshift``.
 
@@ -228,7 +243,7 @@ def age_universe_kwargs(sfh_model, redshift) -> dict:
         ``{}``. A new dict on every call.
     """
     members = (sfh_model,) if isinstance(sfh_model, str) else tuple(sfh_model)
-    if not any(m in _AGE_FAMILIES for m in members):
+    if not any(_is_age_anchored(m) for m in members):
         return {}
     from tengri.cosmology import age_at_z
 
