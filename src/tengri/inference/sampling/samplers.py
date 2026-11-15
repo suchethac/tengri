@@ -20,7 +20,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.inference.sampling import guards
-from tengri.inference.sampling.chains import jittered_starts
+from tengri.inference.sampling.chains import PRIOR_SCALE, jittered_starts
 from tengri.inference.sampling.driver import (
     Sampler,
     SamplerResult,
@@ -33,10 +33,20 @@ from tengri.inference.sampling.target import FlatTarget
 _BYTES = 8
 
 
-def _jitter(cfg: dict) -> float:
-    from tengri.inference.backends.mcmc._shared import _CHEES_JITTER_SCALE
+def _jitter(cfg: dict, target: FlatTarget | None = None) -> float:
+    """Start dispersion of independent chains: the prior's scale unless ``chain_jitter`` says.
 
-    return float(_CHEES_JITTER_SCALE if cfg["chain_jitter"] is None else cfg["chain_jitter"])
+    The flat space has an iid N(0, 1) prior that the posterior only narrows, so a start
+    dispersed at the prior's scale is overdispersed. A reparametrized target carries its own
+    prior, whose mean marginal sd is used.
+    """
+    if cfg["chain_jitter"] is not None:
+        return float(cfg["chain_jitter"])
+    if target is not None and (target.prior_is_standard or target.prior is not None):
+        _mean, precision = target.gaussian_prior()
+        cov = jnp.linalg.inv(precision.T @ precision)
+        return float(jnp.sqrt(jnp.mean(jnp.diag(cov))))
+    return PRIOR_SCALE
 
 
 def _bound(target: FlatTarget):
@@ -81,7 +91,7 @@ def _independent(single, target: FlatTarget, key, n_chains: int, cfg: dict) -> S
     if n_chains == 1:
         return single(target, key)
     keys = jax.random.split(key, n_chains)
-    starts = jittered_starts(target.init, key, n_chains, _jitter(cfg))
+    starts = jittered_starts(target.init, key, n_chains, _jitter(cfg, target))
     runs = [
         single(FlatTarget(**{**_fields(target), "init": starts[c]}), keys[c])
         for c in range(n_chains)
@@ -564,7 +574,7 @@ def _run_lowrank(target, key, n_chains, metric, cfg):
     if n_chains == 1:
         starts = target.init[None, :]
     else:
-        starts = jittered_starts(target.init, wkey, n_chains, _jitter(cfg))
+        starts = jittered_starts(target.init, wkey, n_chains, _jitter(cfg, target))
     # One warmup shared by every chain, as run_hmc does.
     step_size, inv_mass, warm_div = _hmc_low_rank_warmup_only(
         starts[0],

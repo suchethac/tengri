@@ -4,6 +4,17 @@
 from __future__ import annotations
 
 import jax
+import jax.numpy as jnp
+
+#: Start dispersion of the extra chains in units of the adapted posterior standard
+#: deviation. Starts that are narrower than the posterior make a cross-chain R-hat a
+#: consistency check; two sd apart they are a test. Used where the adaptation provides a
+#: metric (its inverse mass matrix estimates the posterior covariance).
+OVERDISPERSION = 2.0
+
+#: Start dispersion where no posterior scale is known: the sd of the standardized prior the
+#: flat space is built on (iid N(0, 1)), which the posterior only narrows.
+PRIOR_SCALE = 1.0
 
 
 def jittered_starts(base, warmup_key, n_chains, chain_jitter):
@@ -18,18 +29,53 @@ def jittered_starts(base, warmup_key, n_chains, chain_jitter):
         own sampling keys.
     n_chains : int (static)
         Number of starts.
-    chain_jitter : float
-        Standard deviation of each offset.
+    chain_jitter : float or ndarray
+        Standard deviation of each offset: a scalar, a per-coordinate vector, shape (D,), or
+        a lower-triangular factor, shape (D, D), of the offset covariance.
 
     Returns
     -------
     ndarray, shape (n_chains, D)
-        ``base + chain_jitter * z`` with ``z`` standard normal, one row per chain.
+        ``base + chain_jitter * z`` (``z`` standard normal, one row per chain), with the
+        vector or factor applied coordinate-wise or as a matrix.
     """
     chain_init_key = jax.random.fold_in(warmup_key, 0xC4A15)
-    return base[None, :] + chain_jitter * jax.random.normal(
-        chain_init_key, (n_chains, base.shape[0]), dtype=base.dtype
-    )
+    z = jax.random.normal(chain_init_key, (n_chains, base.shape[0]), dtype=base.dtype)
+    scale = jnp.asarray(chain_jitter)
+    if scale.ndim == 2:
+        return base[None, :] + z @ scale.T
+    return base[None, :] + scale * z
+
+
+def start_scale(inverse_mass_matrix, chain_jitter, factor=OVERDISPERSION):
+    """Return the start dispersion of the extra chains.
+
+    The start covariance is ``factor^2 Sigma + chain_jitter^2 I``, ``Sigma`` the adaptation's
+    estimate of the posterior covariance: at least ``factor`` posterior standard deviations
+    on every coordinate, and at least ``chain_jitter`` (the prior's scale by default), so
+    that two modes a few posterior widths apart but inside the prior are both visited.
+
+    Parameters
+    ----------
+    inverse_mass_matrix : ndarray, shape (D,) or (D, D), or None
+        The adaptation's estimate of the posterior covariance, diagonal or dense.
+    chain_jitter : float
+        Isotropic scale: the whole dispersion when the adaptation has no metric.
+    factor : float
+        Multiple of the posterior standard deviation.
+
+    Returns
+    -------
+    float or ndarray
+        ``chain_jitter`` without a metric; else the per-coordinate sd, shape (D,), or the
+        lower Cholesky factor, shape (D, D), of the start covariance.
+    """
+    if inverse_mass_matrix is None or not hasattr(inverse_mass_matrix, "ndim"):
+        return chain_jitter
+    if inverse_mass_matrix.ndim == 1:
+        return jnp.sqrt(factor**2 * inverse_mass_matrix + chain_jitter**2)
+    eye = jnp.eye(inverse_mass_matrix.shape[0], dtype=inverse_mass_matrix.dtype)
+    return jnp.linalg.cholesky(factor**2 * inverse_mass_matrix + chain_jitter**2 * eye)
 
 
 def run_jittered_chains(sample_body, init_state, starts, chain_keys):

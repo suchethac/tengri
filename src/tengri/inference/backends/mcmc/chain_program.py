@@ -29,6 +29,7 @@ from tengri.inference.backends.mcmc import _shared
 from tengri.inference.sampling.chains import (
     jittered_starts as _jittered_starts,
     run_jittered_chains,
+    start_scale,
 )
 
 
@@ -765,7 +766,8 @@ def _run_jittered_chains(
     are jittered. Families that do not start from warmup start at ``init_flat``.
     """
     base = state.position if program.starts_from_warmup else init_flat
-    starts = _jittered_starts(base, warmup_key, chain_keys.shape[0], chain_jitter)
+    scale = start_scale(params[1], chain_jitter)
+    starts = _jittered_starts(base, warmup_key, chain_keys.shape[0], scale)
     return run_jittered_chains(
         lambda s, k: _sample_body(program, s, k, ld, params, cfg),
         lambda p: program.init(p, ld, init_key, cfg),

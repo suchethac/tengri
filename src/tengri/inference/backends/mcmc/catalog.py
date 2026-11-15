@@ -948,7 +948,7 @@ def build_catalog_mcmc_engine(
                 n_warmup=n_warmup,
                 cfg=settings,
                 dense=dense_native,
-                chain_jitter=float(ensemble_scale if chain_jitter is None else chain_jitter),
+                chain_jitter=chain_jitter,
             )
             positions, divergent = draws.position, draws.divergent
             if divergent is None:  # Metropolis-corrected first-order families report none
