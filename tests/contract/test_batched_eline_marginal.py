@@ -25,14 +25,12 @@ def _toy(n_pix: int = 40, seed: int = 0):
 def _dense_marginal(residual, sigma, design, prior_variance):
     """Marginal log-likelihood from the dense covariance diag(sigma^2) + G Lambda G^T.
 
-    The normalization is the one of the wrapper: the constant -1/2 N ln 2pi and the
-    -sum ln sigma of the full Gaussian are removed, so the value is -1/2 ln det C +
-    sum ln sigma - 1/2 r^T C^-1 r.
+    The value is the normalized log-density: -1/2 ln det C - 1/2 N ln 2pi - 1/2 r^T C^-1 r.
     """
     cov = np.diag(sigma**2) + design @ np.diag(prior_variance) @ design.T
     _sign, logdet = np.linalg.slogdet(cov)
     quad = residual @ np.linalg.solve(cov, residual)
-    return -0.5 * logdet - 0.5 * quad + np.sum(np.log(sigma))
+    return -0.5 * logdet - 0.5 * quad - 0.5 * len(residual) * np.log(2.0 * np.pi)
 
 
 def _old_closed_form(residual, noise, design, prior_variance):
@@ -56,7 +54,9 @@ def test_value_is_the_exact_marginal():
     ln_l, a_hat, _a_cov = marginalize_emission_lines(
         residual, sigma, design, prior_variance=prior_variance
     )
-    expected = _dense_marginal(residual, sigma, design, prior_variance)
+    # The primitive omits the Gaussian constant the normalized density carries.
+    constant = 0.5 * residual.size * np.log(2.0 * np.pi) + np.sum(np.log(sigma))
+    expected = _dense_marginal(residual, sigma, design, prior_variance) + constant
     assert np.isclose(float(ln_l), expected, rtol=1e-10, atol=0.0)
     assert np.all(np.isfinite(np.asarray(a_hat)))
 
@@ -385,7 +385,10 @@ def test_all_lines_outside_grid_equals_no_line_likelihood(synthetic_ssp):
     params = {"sfh_dpl_log_total_mass": 10.0}
     got = float(batched_log_likelihood(on, spec_on)(params, batch_on.galaxy(0)))
     ref = float(batched_log_likelihood(off, spec_off)(params, batch_off.galaxy(0)))
-    np.testing.assert_allclose(got, ref, rtol=1e-10)
+    # The lines-off term drops the Gaussian constant the marginal carries.
+    _flux, sigma = _marg_data()
+    constant = 0.5 * sigma.size * np.log(2.0 * np.pi) + np.sum(np.log(sigma))
+    np.testing.assert_allclose(got, ref - constant, rtol=1e-10)
 
 
 def test_one_compile_per_spec_across_masks(synthetic_ssp):
@@ -635,7 +638,7 @@ def test_per_galaxy_marginal_gradients_are_finite_and_nonzero_in_float32(synthet
 def test_per_galaxy_and_batched_marginals_both_call_the_one_helper(synthetic_ssp, monkeypatch):
     """Replacing the shared line-prior helper makes both paths raise, so there is one helper."""
     import tengri.inference.batched_spectro as batched_spectro
-    import tengri.inference.likelihoods.marginalized as marginalized
+    import tengri.inference.likelihoods.terms as terms
     import tengri.observation.eline_marginalization as eline_marginalization
     from tengri.inference.batched_spectro import batched_log_likelihood
     from tengri.observation.batched import GalaxySpectrum, build_spectro_batches
@@ -656,7 +659,7 @@ def test_per_galaxy_and_batched_marginals_both_call_the_one_helper(synthetic_ssp
     loglik = batched_log_likelihood(template, spec)
 
     monkeypatch.setattr(eline_marginalization, "unit_line_prior", _refuse)
-    monkeypatch.setattr(marginalized, "unit_line_prior", _refuse)
+    monkeypatch.setattr(terms, "unit_line_prior", _refuse)
     monkeypatch.setattr(batched_spectro, "unit_line_prior", _refuse)
     jax.clear_caches()
     with pytest.raises(RuntimeError, match="shared line-prior helper"):

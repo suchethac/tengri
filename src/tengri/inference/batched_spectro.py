@@ -405,12 +405,7 @@ def _marginal_lines_loglik(
             line_col_mask=line_cols.astype(g_eff.dtype),
             chol=chol,
         )
-        n_eff = jnp.sum(obs.pix_mask)
-        return (
-            marginal
-            + 0.5 * n_eff * math.log(2.0 * math.pi)
-            + jnp.sum(obs.pix_mask * jnp.log(scatter))
-        )
+        return marginal
     if calibration_marginalize:
         basis = calibration_basis(obs.wave, obs.cal_lo, obs.cal_hi, cal_n_poly)
         col_mask = jnp.concatenate([jnp.ones(cal_n_poly, dtype=bool), line_cols])
@@ -436,10 +431,7 @@ def _marginal_lines_loglik(
             col_mask=line_cols.astype(line.design.dtype),
             scale=line.scale,
         )
-    weight = obs.pix_mask
-    n_eff = jnp.sum(weight)
-    log_sigma_sum = jnp.sum(weight * jnp.log(scatter))
-    return result.log_like + 0.5 * n_eff * math.log(2.0 * math.pi) + log_sigma_sum
+    return result.log_like
 
 
 def batched_log_likelihood(
