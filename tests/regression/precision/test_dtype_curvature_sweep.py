@@ -58,7 +58,7 @@ _BANDS_ONE = ["sdss_r"]
 _BANDS_MULTI = ["sdss_g", "sdss_r", "sdss_i", "sdss_z", "wise_w1"]
 
 #: Configuration classes. Each is the smallest fixture that exercises its feature.
-CONFIGS = ("photometry_1band", "multiband", "censored", "presence", "nebular", "agn")
+CONFIGS = ("photometry_1band", "multiband", "censored", "presence", "nebular", "agn_disc", "agn")
 #: ``"auto"`` engages profiling where the model admits it and steps aside (with a logged
 #: reason) where it does not: censored data and affine-in-mass AGN refuse an explicit True.
 PROFILES = (False, "auto")
@@ -79,6 +79,12 @@ def _recipe(config: str) -> dict:
     """Return the nested-dict recipe for one configuration class."""
     if config == "agn":
         return recipes.composable_agn()
+    if config == "agn_disc":
+        # The smallest AGN fixture: the multicolor disc only, no torus table, no lines.
+        base = recipes.composable_agn()
+        for slot in ("nlr", "blr", "feii", "torus", "atten"):
+            base["agn"][slot] = {"type": "none"}
+        return base
     base = recipes.mock_recovery_minimal()
     if config == "nebular":
         base["neb"] = {"type": "cue", "all_params": Fixed(DEFAULT)}
@@ -268,21 +274,34 @@ def _case_id(config: str, profile) -> str:
 _CASE_IDS = [_case_id(c, p) for c, p in _cases()]
 
 
-AGN_SECOND_ORDER = (
-    "float32 Hessian of the composable AGN photometry is non-finite (measured: every column, "
-    "20 of 30 rows, at the float64 MAP; a disc-only model alone gives 15 of 15 columns) while "
-    "its gradient is finite and the SKIRTOR table read is repaired. The multicolor disc's "
-    "hot-corona root is differentiated by an implicit-function rule "
-    "(components/agn/disc.py _solve_log_x_hot_jvp) whose second derivative with respect to "
-    "log_mbh and a_spin differs between dtypes (standalone multicolor_disc at one point: "
-    "H[log_mbh, log_mbh] = -3366 in float32, 389 in float64). Float64 is unaffected."
+AGN_REVERSE_UNDERFLOW = (
+    "the float32 reverse-mode gradient of the AGN disc is wrong when the incoming cotangent "
+    "is small, and forward mode is right at every scale. Measured on a standalone "
+    "multicolor_disc under the runner's float32 reference hand-off (components/agn/"
+    "_lbol_reference.py: shape on the true L_bol, magnitude on a constant reference), "
+    "reverse(float32)/reverse(float64) over (log L_bol, log M_BH, a_spin, cos_inc) is "
+    "[3.36, 3.57, 3.22, 0.0] at a loss scale of 1e-12, [2.6, 0.24, 0.76, 0.61] at 1, and "
+    "1.00001 at 1e12 and above; forward(float32)/forward(float64) is 1.00001 throughout. "
+    "In the fit the cotangent reaching the disc is the chi-squared cotangent times the "
+    "1e-58 flux projection, so it lands in the wrong regime; the fitted gradient is off by "
+    "up to 8x on the disc parameters (agn_disc cell: a_spin -9.7 vs +10.2, log_mbh 143 vs "
+    "-102) and the float32 MAP, Laplace covariance and draws are NaN. The same mechanism "
+    "as the raw-observable cell below (no local rule fixes it). Float64 is unaffected. The "
+    "float32 Hessian at the float64 MAP is finite and agrees with float64, so the "
+    "second-order cells of this configuration are not marked."
 )
 
 
-def _expect_agn_second_order(request, config: str, dtype: str | None = "float32") -> None:
-    """Mark the float32 second-order cells of the AGN configuration as known failures."""
-    if config == "agn" and dtype != "float64":
-        request.applymarker(pytest.mark.xfail(strict=True, reason=AGN_SECOND_ORDER))
+def _expect_agn_float32_reverse(request, config: str) -> None:
+    """Mark the float32 cells that need a correct reverse gradient on the AGN configurations."""
+    if config in ("agn", "agn_disc"):
+        request.applymarker(
+            pytest.mark.xfail(
+                strict=True,
+                raises=(AssertionError, pytest.fail.Exception),
+                reason=AGN_REVERSE_UNDERFLOW,
+            )
+        )
 
 
 def _value(cell: dict, dtype: str, path: str):
@@ -300,7 +319,6 @@ def _rel_max(a: np.ndarray, b: np.ndarray) -> float:
 @pytest.mark.parametrize("config,profile", _cases(), ids=_CASE_IDS)
 def test_hessian_is_finite_in_both_dtypes(config, profile, dtype, request):
     """The flat log-posterior Hessian at the MAP is finite."""
-    _expect_agn_second_order(request, config, dtype)
     hess = _value(_cell(config, profile), dtype, "hess")
     assert np.all(np.isfinite(hess)), (
         f"{dtype} Hessian has {np.sum(~np.isfinite(hess))} non-finite"
@@ -310,7 +328,6 @@ def test_hessian_is_finite_in_both_dtypes(config, profile, dtype, request):
 @pytest.mark.parametrize("config,profile", _cases(), ids=_CASE_IDS)
 def test_hessian_float32_agrees_with_float64(config, profile, request):
     """Same point, same objective: float32 Hessian within 1e-3 of float64."""
-    _expect_agn_second_order(request, config)
     cell = _cell(config, profile)
     h32 = _value(cell, "float32", "hess")
     h64 = _value(cell, "float64", "hess")
@@ -321,7 +338,6 @@ def test_hessian_float32_agrees_with_float64(config, profile, request):
 @pytest.mark.parametrize("config,profile", _cases(), ids=_CASE_IDS)
 def test_preconditioning_metric_is_finite(config, profile, dtype, request):
     """The preconditioning metric at the MAP is finite and float32 tracks float64."""
-    _expect_agn_second_order(request, config, dtype)
     cell = _cell(config, profile)
     metric = _value(cell, dtype, "metric")
     assert np.all(np.isfinite(metric))
@@ -347,8 +363,8 @@ def test_profile_auto_resolves_identically_in_both_dtypes(config, profile):
 
 @pytest.mark.parametrize("config,profile", _cases(), ids=_CASE_IDS)
 def test_laplace_float32_matches_float64(config, profile, request):
-    """``fitter.run("laplace")``: float32 mean within 0.1 sigma, covariance within 5 %."""
-    _expect_agn_second_order(request, config)
+    """``fitter.run("laplace")``: float32 mean and covariance agree with float64."""
+    _expect_agn_float32_reverse(request, config)
     cell = _cell(config, profile)
     lap32 = _value(cell, "float32", "laplace")
     lap64 = _value(cell, "float64", "laplace")
@@ -371,7 +387,7 @@ def test_float32_derivatives_match_float64_and_finite_differences(config, profil
     An exact zero in float32 where float64 is not is underflow; a uniform ratio is a
     double-counted autodiff path. Both would pass a finiteness check.
     """
-    _expect_agn_second_order(request, config)
+    _expect_agn_float32_reverse(request, config)
     cell = _cell(config, profile)
     d32 = _value(cell, "float32", "derivs")
     d64 = _value(cell, "float64", "derivs")

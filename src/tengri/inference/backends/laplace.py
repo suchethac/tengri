@@ -35,7 +35,7 @@ from tengri.config.exceptions import (
 )
 from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
 from tengri.inference.backends._psis import pareto_k_threshold
-from tengri.inference.curvature import flat_names, require_finite
+from tengri.inference.curvature import NonFiniteCurvatureError, flat_names, require_finite
 from tengri.inference.importance import StudentTProposal, importance_sample
 from tengri.inference.newton import _loss_derivatives_jit, newton_polish
 
@@ -490,6 +490,13 @@ def run_laplace(
 
     # Symmetrize covariance (numerical safety)
     cov = 0.5 * (cov + cov.T)
+    if not isinstance(cov, jax.core.Tracer) and not bool(jnp.all(jnp.isfinite(cov))):
+        raise NonFiniteCurvatureError(
+            f"laplace: the covariance H^-1 is non-finite although the Hessian is finite "
+            f"(max |H| = {float(jnp.max(jnp.abs(hessian))):.3g}, dtype {hessian.dtype}): "
+            "the spectrum overflows the eigensolver or the Hessian is singular and "
+            "regularize=False left it so. No draws are returned from a NaN covariance."
+        )
 
     if verbose and n_clipped > 0:
         print(f"  Regularized: {n_clipped}/{n_dim} eigenvalues clipped")

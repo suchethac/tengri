@@ -289,3 +289,48 @@ def test_collected_functions_release_their_programs():
     del temporary
     gc.collect()
     assert len(module._PROGRAMS) == before
+
+
+def test_migrated_call_sites_compile_once_for_a_stable_function():
+    """The metric, the Newton polish and the stationarity certificate reuse their programs."""
+    from tengri.inference.map_stationarity import stationarity
+    from tengri.inference.newton import newton_polish
+    from tengri.inference.preconditioning import negative_hessian_metric
+
+    def logdensity(v, _data=None):
+        return -0.5 * jnp.sum(v**2) - 0.1 * jnp.sum(v**4)
+
+    x = jnp.asarray([0.3, 0.2, -0.1])
+
+    def loss(v):
+        return -logdensity(v)
+
+    cases = {
+        "negative_hessian_metric": lambda: negative_hessian_metric(logdensity, x, None),
+        "newton_polish": lambda: newton_polish(x, logdensity, None, max_steps=2, tol=1e-12)[0],
+        "stationarity": lambda: jnp.asarray(stationarity(loss, x).decrement),
+    }
+    for name, call in cases.items():
+        call()
+        assert _compiles(call) == 0, f"{name} recompiled on a repeat call"
+
+
+def test_laplace_refuses_a_non_finite_covariance_from_a_finite_hessian():
+    """A flat objective has a zero Hessian: finite, but H^-1 is inf when nothing regularizes it."""
+    from tengri.inference.backends.laplace import run_laplace
+
+    def flat(x, _data=None):
+        return 0.0 * jnp.sum(x**2)
+
+    with pytest.raises(NonFiniteCurvatureError, match=r"covariance H\^-1 is non-finite"):
+        run_laplace(
+            key=jax.random.PRNGKey(0),
+            logdensity_fn=flat,
+            data_args=None,
+            position=jnp.asarray([0.3, 0.2]),
+            unravel_fn=lambda v: {"a": v[0], "b": v[1]},
+            to_physical_fn=None,
+            model=None,
+            regularize=False,
+            newton_steps=0,
+        )
