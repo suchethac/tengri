@@ -821,20 +821,19 @@ def list_available_ssps() -> list[dict]:
     list_known_ssps : The flat ``name → filename`` mapping that this
         view groups and enriches.
     """
-    from tengri.components.stellar.sps.dsps_wrapper import _KNOWN_IMFS
+    from tengri.components.stellar.sps.dsps_wrapper import _detect_imf
 
     out: list[dict] = []
     for name, entry in _KNOWN_SSPS.items():
         filename = entry.filename
-        # Strip the trailing IMF token to recover the family stem.
-        imf = "unknown"
+        # The IMF is the last IMF token of the name (the loader's own rule, which also
+        # reads "mist_c3k_hr_chabrier_wNE"); the family is the name without it.
+        imf = _detect_imf(None, name)
         family = name
-        for token in _KNOWN_IMFS:
-            suffix = "_" + token
-            if name.endswith(suffix):
-                imf = token
-                family = name[: -len(suffix)]
-                break
+        if imf != "unknown":
+            tokens = name.split("_")
+            del tokens[len(tokens) - 1 - tokens[::-1].index(imf)]
+            family = "_".join(tokens)
         out.append(
             {
                 "name": name,
