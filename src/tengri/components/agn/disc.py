@@ -965,22 +965,31 @@ def multicolor_disc(
         ) ** 0.25
 
     r_sg_rg = _self_gravity_radius(agn_log_mbh, l_edd_ratio)
-    r_out = jnp.maximum(r_sg_rg, r_isco * 10.0) * r_g  # at least 10 r_isco
+    # Outer radius at least 10 r_isco; only its ratio to the inner radius is needed, and
+    # R_g cancels in it.
+    out_over_in = jnp.maximum(r_sg_rg, r_isco * 10.0) / r_isco
 
-    # Radial grid (logarithmic spacing)
-    log_r_min = jnp.log10(r_in)
-    log_r_max = jnp.log10(r_out)
-    log_r_grid = jnp.linspace(log_r_min, log_r_max, n_radii)
-    r_grid = 10.0**log_r_grid  # [cm]
+    # Radial grid, logarithmic in the ratio r / r_in. The first node is exactly 1 (10**0), so
+    # the inner annulus sits at the ISCO where the zero-torque factor vanishes, in every dtype.
+    # Forming r_grid as ``10**linspace(log r_in, log r_out)`` and dividing by r_in instead left
+    # r_ratio[0] = 1 + 2.6e-6 in float32 (1 - 4e-16 in float64): the factor
+    # ``(1 - sqrt(1/r_ratio))**0.25`` then read 0.034 against 3e-8, and its second derivative
+    # with respect to log M_BH was -34205 against 0 (#3505).
+    log_ratio_grid = jnp.linspace(0.0, jnp.log10(out_over_in), n_radii)
+    r_ratio = 10.0**log_ratio_grid
+    r_grid = r_in * r_ratio  # [cm]
 
     # Temperature profile: T(r) = T_in * (r/r_in)^{-3/4} * (1 - sqrt(r_in/r))^{1/4}
-    r_ratio = r_grid / r_in
-    torque_correction = jnp.maximum(1.0 - jnp.sqrt(1.0 / r_ratio), 1e-30) ** 0.25
+    # The floor sits on the inner annulus, where the factor vanishes; its second derivative
+    # carries x**-1.75, so the float32 floor is the smallest whose own power is finite.
+    torque_correction = (
+        jnp.maximum(1.0 - jnp.sqrt(1.0 / r_ratio), _representable_denominator(1e-30)) ** 0.25
+    )
     t_profile = t_in * r_ratio ** (-0.75) * torque_correction  # [K]
 
     # Integrate: L_nu = sum_i [ B_nu(T_i) * 8 * pi^2 * r_i * dr_i * cos(i) ] = 2 cos(i) D_nu
     # dr from logarithmic spacing: dr = r * d(ln r) = r * ln(10) * d(log r)
-    d_log_r = log_r_grid[1] - log_r_grid[0]
+    d_log_r = log_ratio_grid[1] - log_ratio_grid[0]
     dr = r_grid * jnp.log(10.0) * d_log_r  # [cm]
 
     # B_nu at each (radius, wavelength): shape (n_radii, n_wave)

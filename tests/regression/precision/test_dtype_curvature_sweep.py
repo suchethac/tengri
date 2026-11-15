@@ -476,6 +476,7 @@ def test_raw_observable_forward_gradient_float32_matches_float64():
 
 @pytest.mark.xfail(
     strict=True,
+    raises=AssertionError,
     reason=(
         "the reverse pass multiplies the cotangent by the 1e-58 flux projection factor "
         "(observation/redshift_kernel.py), below float32's smallest subnormal: measured "
