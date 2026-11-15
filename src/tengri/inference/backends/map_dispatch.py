@@ -393,13 +393,25 @@ def _run_map_scipy(
     if certify_loss is None:
         certify_loss = _flat_map_loss(loss_fn, data_args, unravel_fn)
 
-    x_final, final_loss, grad_norm, decrement, converged, attempts, reason = _certify_map_point(
-        certify_loss,
-        jnp.asarray(result.x),
-        scipy_success=bool(result.success),
-        n_steps=n_steps,
-        gtol=tol,
+    # A converged stop needs no certificate: scipy's point is the answer (#3530). The
+    # certificate is called only when this gate says its check is needed.
+    x_scipy = jnp.asarray(result.x)
+    accepted = _scipy_stop_accepted(
+        certify_loss, x_scipy, scipy_success=bool(result.success), gtol=tol
     )
+    if accepted is not None:
+        final_loss, grad_norm = accepted
+        x_final, decrement, converged, attempts, reason = x_scipy, None, True, 1, None
+    else:
+        x_final, final_loss, grad_norm, decrement, converged, attempts, reason = (
+            _certify_map_point(
+                certify_loss,
+                x_scipy,
+                scipy_success=bool(result.success),
+                n_steps=n_steps,
+                gtol=tol,
+            )
+        )
     if reason == "hessian_not_finite":
         warn_measured(
             f"MAP point not certified: the Hessian at the returned point has non-finite "
@@ -519,6 +531,19 @@ def _accept_round(candidate, best, bar: float) -> bool:
     return candidate.stationary and candidate.nlp - best.nlp <= bar
 
 
+def _scipy_stop_accepted(flat_loss, x, *, scipy_success, gtol):
+    """``(nlp, grad_norm)`` at scipy's stop when it is accepted without a certificate.
+
+    Accepted when scipy reported success and max |grad| at ``x`` is below ``gtol``;
+    ``None`` otherwise, meaning the Newton-decrement certificate must decide.
+    """
+    value_and_grad, _ = compiled_derivatives(flat_loss)
+    value, grad = value_and_grad(x)
+    if scipy_success and float(jnp.max(jnp.abs(grad))) < gtol:
+        return float(value), float(jnp.linalg.norm(grad))
+    return None
+
+
 def _certify_map_point(flat_loss, x, *, scipy_success, n_steps, gtol):
     """Return the point to report after scipy's stop, continuing with the shared driver if needed.
 
@@ -574,10 +599,10 @@ def _certify_map_point(flat_loss, x, *, scipy_success, n_steps, gtol):
     is returned, converged when it is genuinely stationary, otherwise with
     ``reason="precision_limit"``. Float64 keeps its continuation rounds.
     """
-    value_and_grad, _ = compiled_derivatives(flat_loss)
-    value, grad = value_and_grad(x)
-    if scipy_success and float(jnp.max(jnp.abs(grad))) < gtol:
-        return x, float(value), float(jnp.linalg.norm(grad)), None, True, 1, None
+    accepted = _scipy_stop_accepted(flat_loss, x, scipy_success=scipy_success, gtol=gtol)
+    if accepted is not None:
+        nlp, grad_norm = accepted
+        return x, nlp, grad_norm, None, True, 1, None
     stat = stationarity(flat_loss, x)
     attempts = 1
     if scipy_success and stat.stationary:
