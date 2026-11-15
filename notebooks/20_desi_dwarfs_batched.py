@@ -23,8 +23,9 @@
 # photometry set that is shared across galaxies.
 #
 # ## What you need
-# The `fsps_prsc_miles_chabrier` SSP grid in the repository's `data/` directory. The notebook is
-# sized for a laptop CPU. The mocks are synthetic: the truth of every galaxy is known.
+# The `fsps_mist_miles_chabrier` SSP grid, downloaded on first use. Its oldest template is older
+# than the universe at every redshift fitted here. The notebook is sized for a laptop CPU. The
+# mocks are synthetic: the truth of every galaxy is known.
 #
 # ## What you will have
 # A MAP estimate and a posterior for every galaxy, recovered against the truth, with the compile and
@@ -234,7 +235,7 @@ def build_template():
         cal_scale_prior=(0.0, 0.1),
     )
     model = SEDModel.build(
-        ssp_data=tengri.load_ssp("fsps_prsc_miles_chabrier", download=True),
+        ssp_data=tengri.load_ssp("fsps_mist_miles_chabrier", download=True),
         observation=Observation(
             spectroscopy=spectroscopy, photometry=Photometry.from_names(FILTERS)
         ),
@@ -432,7 +433,7 @@ for i in range(N_GAL):
     )
 
 # %% [markdown]
-# The MAP is a starting point, not the estimate: for galaxy 2 it sits 0.38 dex above the truth
+# The MAP is a starting point, not the estimate: for galaxy 2 it sits 0.47 dex above the truth
 # because the continuity history trades stellar mass against the age of the old bins (the MAP's
 # SFH ratios are far from the truth's), and the posterior below is the estimate.
 
