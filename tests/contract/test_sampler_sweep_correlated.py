@@ -127,7 +127,7 @@ def _ess_per_draw(chains):
 
 def _applies(name):
     sampler = get_sampler(name)
-    return sampler.kind == "chain" and sampler.metric_mode in ("layer", "native")
+    return sampler.kind == "chain" and sampler.metric_mode in ("layer", "native", "internal")
 
 
 def _catalog_names():
@@ -137,7 +137,7 @@ def _catalog_names():
 
 
 def _hierarchical_names():
-    skip = {"nuts_pathfinder", "ess", "hmc_is", "hmc_lowrank", "nuts_fast"}
+    skip = {"nuts_pathfinder", "ess", "nuts_fast"}
     return sorted(n for n in sampler_names() if _applies(n) and n not in skip)
 
 
@@ -159,8 +159,9 @@ _SATURATED = 0.5
 #: Cells exempt from the gain factor, with the measurement: MEADS's per-fold scale and
 #: partially refreshed momentum put the diagonal and the dense arm of the catalog GHMC at
 #: 0.210 and 0.221 ESS per draw (gain 1.05), so whitening gives it nothing it can use. The
-#: layer still runs: ``test_the_dense_layer_changes_the_catalog_ghmc_draws``.
-_NO_HEADROOM = {("catalog", "ghmc")}
+#: layer still runs: ``test_the_dense_layer_changes_the_catalog_ghmc_draws``. Low-rank HMC learns
+#: a metric of rank 10 on D = 2, which already spans the posterior: both arms sit at 0.225.
+_NO_HEADROOM = {("catalog", "ghmc"), ("hierarchical", "hmc_lowrank")}
 
 
 def _gain_ok(engine, sampler, diag, dense):
@@ -223,3 +224,9 @@ def test_the_posterior_covariance_survives_the_flat_seam(method, monkeypatch):
     ess = _ess(chains)
     bar = 4.0 * np.sqrt((np.outer(_SD**2, _SD**2) + _COV**2) / ess.min())
     assert np.all(np.abs(cov - _COV) < bar), (cov, _COV, bar)
+
+
+@pytest.mark.slow
+def test_nuts_fast_samples_the_correlated_posterior_with_its_dense_metric(monkeypatch):
+    """``nuts_fast`` is dense by preset: there is no diagonal arm to gain over, only accuracy."""
+    _agrees(_hierarchical("nuts_fast", 1, "diag", monkeypatch))
