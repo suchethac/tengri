@@ -54,6 +54,7 @@ EXTRA_KINDS = (
     "spec_dense_lines",
     "spec_dense_lines_fitted",
     "spec_student_t_cal",
+    "spec_student_t_lines_fitted",
 )
 
 
@@ -170,6 +171,8 @@ def fitter_of(kind: str) -> Fitter:
         return _spectroscopy_fitter(covariance="dense", eline="marginalized")
     if kind == "spec_dense_lines_fitted":
         return _spectroscopy_fitter(covariance="dense", eline="fitted")
+    if kind == "spec_student_t_lines_fitted":
+        return _spectroscopy_fitter("student_t", eline="fitted")
     if kind == "spec_student_t_cal":
         return _spectroscopy_fitter("student_t", calibration_marginalize=True)
     if kind.startswith("mask"):

@@ -149,6 +149,8 @@ def _flat_prior_is_supported(member):
 def _split(member, fields, data_type, data_keys):
     """Fold one member into the noise fields; ``False`` when it is not a shipped term."""
     if isinstance(member, _MARGINAL_TYPES):
+        if isinstance(member, ELineFittedLikelihood) and member.student_t:
+            fields.update(student_t=True, dof=member.dof, f_cal_param=member.f_cal_param)
         return _fold_marginal(member, fields)
     if isinstance(member, StudentTLikelihood):
         ok = member.channel in ("phot_fnu", "spec_fnu") and _routes_data(member)

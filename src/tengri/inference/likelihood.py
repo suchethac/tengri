@@ -126,16 +126,10 @@ def build_base_likelihood(context: InferenceContext):
     # matches the legacy `variable_noise_hamiltonian` semantics.
     if has_noise_model(context.spec) or uses_student_t(context.spec):
         dof = get_noise_dof(context.spec) if uses_student_t(context.spec) else None
-        if context.has_spectroscopy and (
-            context.calibration_marginalize or context.eline_marginalize or context.eline_fitted
-        ):
-            raise NotImplementedError(
-                "A variable-noise (Student-t or calibration-floor) likelihood cannot be "
-                "combined with calibration marginalization or emission-line amplitudes: the "
-                "marginal has no closed form under heavy-tailed noise. Use Gaussian noise "
-                "(drop noise_dof and noise_frac_cal), or fit the coefficients explicitly "
-                "(calibration_order > 0, no marginalization)."
-            )
+        if context.has_spectroscopy:
+            _validate_variable_noise(context, dof)
+            if context.eline_fitted:
+                return _student_t_fitted_lines(context, dof)
         if context.data_type == "photometry":
             return StudentTLikelihood(
                 obs=context.data,
@@ -596,6 +590,71 @@ def build_likelihood_extras(context: InferenceContext):
 
 
 # ── Helpers (private) ────────────────────────────────────────────────
+
+
+def _validate_variable_noise(context, dof) -> None:
+    """Ask the scorer whether heavy-tailed noise can be combined with the requested nuisance."""
+    from tengri.inference.channels import CalibrationSpec, LineSpec, NoiseSpec, validate
+
+    lines = None
+    if context.eline_marginalize:
+        lines = LineSpec(mode="marginalized")
+    elif context.eline_fitted:
+        lines = LineSpec(mode="fitted")
+    noise = NoiseSpec(
+        data_type=context.data_type,
+        student_t=True,
+        dof=dof,
+        f_cal_param="noise_frac_cal",
+        calibration=CalibrationSpec(wavelength=None) if context.calibration_marginalize else None,
+        lines=lines,
+    )
+    validate(noise, ())
+
+
+def _student_t_fitted_lines(context, dof):
+    """Heavy-tailed noise with explicit line amplitudes: the spectrum block carries the lines."""
+    from tengri.inference.composite_likelihood import CompositeLikelihood
+    from tengri.inference.likelihoods import ELineFittedLikelihood, StudentTLikelihood
+
+    builder = _make_eline_design_builder(context)
+    if builder is None:
+        raise ValueError(
+            "Emission-line path requires _eline_wavelengths and "
+            "_eline_constraint_matrix to be set on the fitter."
+        )
+    joint = context.data_type == "joint"
+    n_phot = _n_phot_split(context) if joint else 0
+    n_total = len(context.data)
+    spec_slice = (n_phot, n_total) if joint else None
+    fitted = ELineFittedLikelihood(
+        fnu_obs=context.data[n_phot:],
+        fnu_err=context.noise[n_phot:],
+        fnu_obs_key="data",
+        fnu_err_key="noise",
+        data_slice=spec_slice,
+        design_matrix_builder=builder,
+        amplitude_names=tuple(context.eline_amplitude_names),
+        channel="spec_fnu",
+        student_t=True,
+        dof=dof,
+        f_cal_param="noise_frac_cal",
+    )
+    if not joint:
+        return fitted
+    return CompositeLikelihood(
+        StudentTLikelihood(
+            obs=context.data[:n_phot],
+            err=context.noise[:n_phot],
+            dof=dof,
+            f_cal_param="noise_frac_cal",
+            channel="phot_fnu",
+            obs_key="data",
+            err_key="noise",
+            data_slice=(0, n_phot),
+        ),
+        fitted,
+    )
 
 
 def _calibration_segment_kwargs(context: InferenceContext, wavelength) -> dict:

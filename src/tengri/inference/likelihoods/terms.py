@@ -259,13 +259,25 @@ def fitted_line_model(model_flux, design, amplitudes):
 
 
 def eline_fitted_term(
-    model_flux, obs, err, design, amplitudes, *, cov_inv=None, chol_data=None, chol_offsets=None
+    model_flux,
+    obs,
+    err,
+    design,
+    amplitudes,
+    *,
+    cov_inv=None,
+    chol_data=None,
+    chol_offsets=None,
+    student=None,
 ):
-    """Gaussian log-likelihood with explicit line amplitudes added to the model.
+    """Log-likelihood with explicit line amplitudes added to the model.
 
-    Diagonal in ``err`` by default, or correlated through ``cov_inv`` or the banded factor.
+    Gaussian and diagonal in ``err`` by default, correlated through ``cov_inv`` or the banded
+    factor, or heavy-tailed with ``student = (f_cal, dof)``.
     """
     total = fitted_line_model(model_flux, design, amplitudes)
+    if student is not None:
+        return student_t_term(total, obs, err, student[0], student[1])
     if cov_inv is None and chol_data is None:
         return -0.5 * diag_gaussian_chi2(total, obs, err)
     return correlated_term(total, obs, cov_inv, chol_data, chol_offsets)

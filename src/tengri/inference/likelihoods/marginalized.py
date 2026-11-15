@@ -634,6 +634,9 @@ class ELineFittedLikelihood:
     chol_data: jnp.ndarray | None = None
     chol_offsets: tuple[int, ...] | None = None
     chol_key: str | None = None
+    student_t: bool = False
+    dof: float | None = None
+    f_cal_param: str | None = None
 
     def log_prob(
         self,
@@ -655,7 +658,17 @@ class ELineFittedLikelihood:
             cov_inv=self.cov_inv,
             chol_data=_resolve_chol(self.chol_data, self.chol_key, data_args),
             chol_offsets=self.chol_offsets,
+            student=self._student(params),
         )
+
+    def _student(self, params):
+        """``(f_cal, dof)`` of the heavy-tailed variant, or ``None`` for Gaussian noise."""
+        if not self.student_t:
+            return None
+        f_cal = 0.0
+        if self.f_cal_param is not None and self.f_cal_param in params:
+            f_cal = params[self.f_cal_param]
+        return f_cal, self.dof
 
     def declared_parameters(self):
         return list(self.amplitude_names)
@@ -685,6 +698,9 @@ _ELINE_FITTED_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
     "fnu_err_key": content("data_args routing key changes which traced input is read"),
     "data_slice": content("channel slice changes which part of the traced input is read"),
     "cov_inv": content("the noise covariance basis; a per-model structural input"),
+    "student_t": content("heavy-tailed scoring changes the likelihood"),
+    "dof": content("degrees of freedom changes the tail weight"),
+    "f_cal_param": content("routing to a free calibration floor changes the graph"),
     "chol_data": shape("banded factor bands; only their shape fixes the program"),
     "chol_offsets": content("diagonal offsets of the factor are static program structure"),
     "chol_key": content("data_args routing key changes which traced input is read"),
