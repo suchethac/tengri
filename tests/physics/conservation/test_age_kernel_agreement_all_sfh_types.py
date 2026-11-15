@@ -160,12 +160,19 @@ def _sfh_4d(name, z=0.0):
 
 
 @pytest.fixture(scope="module")
-def ssp4(ssp):
-    """The shipped 3-D library with an alpha axis: flux x (1 + 0.4 [alpha/Fe]).
+def ssp4():
+    """The bare-stellar 3-D library with an alpha axis: flux x (1 + 0.4 [alpha/Fe]).
+
+    Re-pinned 2026-11-15: default SSP is the MIST c3k_hr wNE grid (#3465). The 4-D
+    library is built on the bare twin of that grid, because these models pass
+    neb={"type": "none"}: a wNE source with a non-baked nebular mode is swapped to its
+    twin, and the twin cannot replace a 4-D grid (its axes differ). The bare library
+    keeps the invariant these tests check, that the kernels see the same cube.
 
     The [alpha/Fe] = 0 node equals the 3-D library exactly. (The two fixtures in
     tests/components/sps carry 10 and 8 age nodes: too coarse to compare kernels.)
     """
+    ssp = tengri.load_ssp("mist_c3k_hr_chabrier_noNE")
     flux4 = ssp.ssp_flux[:, None, :, :] * (1.0 + 0.4 * ALPHA_NODES)[None, :, None, None]
     return ssp._replace(ssp_flux=flux4, ssp_alpha_fe=ALPHA_NODES)
 

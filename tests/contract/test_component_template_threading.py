@@ -65,12 +65,24 @@ def ssp():
     return load_ssp_data(str(candidates[0].resolve()))
 
 
+def _bare_ssp_or_skip():
+    """A bare-stellar grid from data/ (CB_19 refuses a wNE grid with no bare twin, #3465)."""
+    candidates = sorted(p for p in _SSP_DIR.glob("ssp_*.h5") if "_wNE" not in p.name)
+    if not candidates:
+        pytest.skip(f"no bare-stellar SSP grid available under {_SSP_DIR.resolve()}")
+    return load_ssp_data(str(candidates[0].resolve()))
+
+
 @pytest.fixture(scope="module")
 def obs():
     return Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i"]))
 
 
 def _build(ssp, obs, groups, approx=None):
+    # Re-pinned 2026-11-15 (#3465): the CB_19 case needs a bare-stellar grid. The
+    # BakedIn cases keep the wNE grid, whose nebular emission they read.
+    if (groups.get("neb") or {}).get("type") == "cb19" and "_wNE" in str(ssp.source):
+        ssp = _bare_ssp_or_skip()
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return SEDModel.build(
