@@ -42,11 +42,24 @@ def driver():
 
 
 @pytest.fixture(scope="module")
-def pcigale_bc03():
+def bc03_root(driver) -> Path:
+    """pcigale's BC03 pickle directory; skip where pcigale is installed without its database."""
     pytest.importorskip("pcigale")
-    import pcigale.data
+    root = driver.bc03_data_dir()
+    needed = [
+        root / f"Z={z}_imf={imf}.pickle"
+        for z in driver.BC03_METALLICITIES
+        for imf in ("chab", "salp")
+    ]
+    missing = [p.name for p in needed if not p.is_file()]
+    if missing:
+        pytest.skip(f"pcigale BC03 database not built ({len(missing)} pickles absent from {root})")
+    return root
 
-    root = Path(pcigale.data.__file__).parent / "bc03"
+
+@pytest.fixture(scope="module")
+def pcigale_bc03(bc03_root):
+    root = bc03_root
 
     def load(z: float, imf: str):
         with open(root / f"Z={z}_imf={imf}.pickle", "rb") as f:
@@ -94,7 +107,7 @@ def test_salpeter_nodes_match_pcigale_pickle(driver, pcigale_bc03, tmp_path):
     np.testing.assert_allclose(lgmet, np.log10(np.array(_SALPETER_Z)), rtol=_RTOL_SALPETER)
 
 
-def test_chabrier_default_path_unchanged(driver, tmp_path):
+def test_chabrier_default_path_unchanged(driver, bc03_root, tmp_path):
     """Values measured from the Chabrier repackager before the Salpeter path was added."""
     out = tmp_path / "bc03_chab.h5"
     driver.repackage_bc03_chabrier(out)

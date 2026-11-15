@@ -38,6 +38,13 @@ C_ANGSTROM_PER_S = C_AA  # speed of light in Angstrom/s
 L_SUN_ERG_PER_S = L_SUN  # solar luminosity in erg/s
 
 
+def bc03_data_dir() -> Path:
+    """Directory holding the installed pcigale's BC03 pickles."""
+    import pcigale.data
+
+    return Path(pcigale.data.__file__).parent / "bc03"
+
+
 def load_bc03_pickle(metallicity: float, imf: str = "chab") -> dict:
     """Load a BC03 pickle file from CIGALE's data directory.
 
@@ -54,13 +61,7 @@ def load_bc03_pickle(metallicity: float, imf: str = "chab") -> dict:
         Dictionary with keys: 'wl' (wavelength in nm), 'spec' (flux in W/nm/Msun),
         't' (age in Myr), 'Z' (metallicity), 'imf'.
     """
-    import sys
-
-    cigale_data_path = (
-        Path(sys.prefix) / "lib" / "python3.12" / "site-packages" / "pcigale" / "data" / "bc03"
-    )
-
-    filename = cigale_data_path / f"Z={metallicity}_imf={imf}.pickle"
+    filename = bc03_data_dir() / f"Z={metallicity}_imf={imf}.pickle"
     if not filename.exists():
         raise FileNotFoundError(f"BC03 pickle not found: {filename}")
 
