@@ -59,7 +59,9 @@ def lookup(model, kw, fw, ft, **grids):
     """Lookup value from precomputed grid."""
     from tengri.components.dust import dust_analytic_precompute as adapter
 
-    res = adapter.precompute([fw], [ft], 0.0, None, model=model, **grids)
+    res = adapter.precompute(
+        [fw], [ft], 0.0, None, model=model, **grids, convention=FilterConvention.BESSELL
+    )
     q = [kw[n] for n in adapter.AXIS_PARAMS[model]]
     return float(np.asarray(adapter.build_lookup(res, model=model)(1.0, *q)).ravel()[0])
 
@@ -196,7 +198,15 @@ def test_band_beyond_rest_grid_refused():
 
     fw, ft = tophat(15_000_000, 20_000_000)  # 15-20 m
     with pytest.raises(ValueError, match="Filter 0 RED edge"):
-        adapter.precompute([fw], [ft], 0.0, None, model="modified_blackbody", **_MM_GRIDS)
+        adapter.precompute(
+            [fw],
+            [ft],
+            0.0,
+            None,
+            model="modified_blackbody",
+            **_MM_GRIDS,
+            convention=FilterConvention.BESSELL,
+        )
 
 
 def test_pah_drude_coverage():
@@ -256,12 +266,14 @@ import json, sys
 import numpy as np
 import jax, jax.numpy as jnp
 from tengri.components.dust import dust_analytic_precompute as adapter
+from tengri.utils.filter_convention import FilterConvention
 
 assert not jax.config.jax_enable_x64
 spec = json.loads(sys.argv[1])
 filters = [(np.asarray(w), np.asarray(t)) for w, t in spec["filters"]]
 res = adapter.precompute(
     [f[0] for f in filters], [f[1] for f in filters], 0.0, None, model=spec["model"],
+    convention=FilterConvention.BESSELL,
     **{k: np.asarray(v) for k, v in spec["grids"].items()},
 )
 fn = adapter.build_lookup(res, model=spec["model"])
@@ -344,6 +356,7 @@ def test_float32_value_and_gradient_are_finite(model):
         None,
         model=model,
         **{k: np.asarray(v) for k, v in grids.items()},
+        convention=FilterConvention.BESSELL,
     )
     ref = np.asarray(adapter.build_lookup(res, model=model)(1.0, *query))
     assert out["value"][2] == pytest.approx(ref[2], rel=1e-4)

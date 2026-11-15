@@ -183,7 +183,9 @@ def _assert_collapse_matches(adapter, filter_set, *, model, fix_idx, n_axes, kw=
         kw["model"] = model
     redshift = 0.5
 
-    full = adapter.precompute(waves, trans, redshift, parameters=None, **kw)
+    full = adapter.precompute(
+        waves, trans, redshift, parameters=None, **kw, convention=FilterConvention.BESSELL
+    )
     lookup_kw = {"model": model} if model is not None else {}
     full_lookup = adapter.build_lookup(full, **lookup_kw)
     assert len(full["axes"]) == n_axes, (
@@ -195,7 +197,12 @@ def _assert_collapse_matches(adapter, filter_set, *, model, fix_idx, n_axes, kw=
     param_name = _axis_params(adapter, model)[fix_idx]
 
     coll = adapter.precompute(
-        waves, trans, redshift, parameters=_mock_params({param_name: midpoints[fix_idx]}), **kw
+        waves,
+        trans,
+        redshift,
+        parameters=_mock_params({param_name: midpoints[fix_idx]}),
+        **kw,
+        convention=FilterConvention.BESSELL,
     )
     coll_lookup = adapter.build_lookup(coll, **lookup_kw)
     assert len(coll["axes"]) == n_axes - 1, (
@@ -289,7 +296,6 @@ def test_cb19_collapse_axis0(filter_set_radio, usable_cb19_grid_path):
         0.5,
         parameters=None,
         filepath=str(usable_cb19_grid_path),
-        convention=FilterConvention.BESSELL,
     )
     assert len(full["axes"]) == 6, f"CB19 should have 6 axes, got {len(full['axes'])}"
 
@@ -310,7 +316,6 @@ def test_cb19_collapse_axis0(filter_set_radio, usable_cb19_grid_path):
         0.5,
         parameters=_mock_params({adapter.AXIS_PARAMS[0]: midpoints[0]}),
         filepath=str(usable_cb19_grid_path),
-        convention=FilterConvention.BESSELL,
     )
     coll_lookup_dict = adapter.build_lookup(coll)
     coll_lookup = coll_lookup_dict["predict_lines"]
@@ -371,7 +376,6 @@ def test_cb19_hbfrac_parameter(filter_set_radio, tmp_path):
             parameters=None,
             filepath=str(grid_path),
             hbfrac=0.0,
-            convention=FilterConvention.BESSELL,
         )
 
         # The loader itself no longer takes hbfrac -- it always loads both nodes.
@@ -389,7 +393,6 @@ def test_cb19_hbfrac_parameter(filter_set_radio, tmp_path):
         parameters=None,
         filepath=str(grid_path),
         hbfrac=1.0,
-        convention=FilterConvention.BESSELL,
     )
 
     # Verify the results are valid

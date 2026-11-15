@@ -98,7 +98,15 @@ def _lookup_value(model, z, band_um, spacing, temperature):
     names = adapter.AXIS_PARAMS[model]
     grids = {_GRID_KEYWORD[n]: _nodes(central[n], spacing) for n in names}
     filt_wave, filt_trans = _tophat(*band_um)
-    result = adapter.precompute([filt_wave], [filt_trans], z, None, model=model, **grids)
+    result = adapter.precompute(
+        [filt_wave],
+        [filt_trans],
+        z,
+        None,
+        model=model,
+        **grids,
+        convention=FilterConvention.BESSELL,
+    )
     lookup = adapter.build_lookup(result, model=model)
     return float(np.asarray(lookup(1.0, *(central[n] for n in names)))[0])
 
