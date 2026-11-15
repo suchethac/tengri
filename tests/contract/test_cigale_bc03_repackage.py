@@ -128,3 +128,55 @@ def test_chabrier_default_path_unchanged(driver, bc03_root, tmp_path):
             np.testing.assert_allclose(
                 float(mass[i_z, age_idx]), mass_ref, rtol=_RTOL_CHABRIER_DEFAULT
             )
+
+
+class _SyntheticEntry:
+    """A pcigale-shaped SSP entry with spectra drawn here."""
+
+    def __init__(self, wl_nm: np.ndarray, t_myr: np.ndarray, rng: np.random.Generator):
+        self.wl = wl_nm
+        self.t = t_myr
+        self.spec = rng.uniform(1e-6, 1e-3, size=(wl_nm.size, t_myr.size))
+        self.info = np.vstack([rng.uniform(0.5, 1.0, t_myr.size), np.zeros(t_myr.size)])
+
+
+def test_writer_converts_synthetic_spectra_to_dsps_layout(driver, tmp_path):
+    """The HDF5 writer on spectra built here, so it runs without pcigale's database."""
+    metallicities = (0.004, 0.02)
+    wl_nm = np.array([100.0, 550.0, 2200.0])
+    t_myr = np.array([1.0, 100.0, 10000.0])
+    rng = np.random.default_rng(3510)
+    entries = {z: _SyntheticEntry(wl_nm, t_myr, rng) for z in metallicities}
+    data_by_z = {
+        z: {"wl": e.wl, "t": e.t, "spec": e.spec, "m_star": e.info[0]} for z, e in entries.items()
+    }
+    out = tmp_path / "synthetic.h5"
+    driver._write_ssp_grid(
+        out,
+        data_by_z,
+        metallicities=metallicities,
+        source="synthetic",
+        imf_name="salpeter",
+        dtype=np.float64,
+    )
+
+    with h5py.File(out, "r") as f:
+        flux = f["ssp_flux"][...]
+        mass = f["ssp_mass_remaining"][...]
+        assert flux.shape == (len(metallicities), t_myr.size, wl_nm.size)
+        assert flux.dtype == np.float64
+        assert f.attrs["imf"] == "salpeter"
+        assert f.attrs["flux_units"] == "Lsun/Hz/Msun"
+        wave = f["ssp_wave"][...]
+        lg_age = f["ssp_lg_age_gyr"][...]
+        lgmet = f["ssp_lgmet"][...]
+
+    for i_z, z in enumerate(metallicities):
+        for i_age in range(t_myr.size):
+            np.testing.assert_allclose(
+                flux[i_z, i_age], _reference_lnu(entries[z], i_age), rtol=_RTOL_SALPETER
+            )
+        np.testing.assert_allclose(mass[i_z], entries[z].info[0], rtol=_RTOL_SALPETER)
+    np.testing.assert_allclose(wave, wl_nm * 10.0, rtol=_RTOL_SALPETER)
+    np.testing.assert_allclose(lg_age, np.log10(t_myr / 1000.0), rtol=_RTOL_SALPETER)
+    np.testing.assert_allclose(lgmet, np.log10(np.array(metallicities)), rtol=_RTOL_SALPETER)
