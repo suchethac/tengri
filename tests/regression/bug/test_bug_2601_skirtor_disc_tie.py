@@ -713,24 +713,27 @@ def test_written_out_discs_agree_with_cigale_output(disk_type, delta):
 #: (log M_BH 10). The standalone kubota_done SED at 1e4 A moves +3.6% at log M_BH 8 (the warm
 #: zone moved out) and the corona at 0.01 A moves -1.85% at log M_BH 10 (the clipped corona
 #: carries ``L_0 h(x_clip)``, which follows ``Mdot``).
+# Re-pinned 2026-11-15 after #3434 (in #3462): an undeclared metallicity scatter is now a node-
+# exact cubic-Hermite read of the SSP. The sum moves +3.9e-4 to +4.6e-4 and the other elements by
+# up to -1.6e-3; 8aff37cb3 reproduces the previous values to 5.6e-9 (largest element).
 _DISC_TIMES_ETA_T_REFERENCE = {
     6.0: (
-        1.5587109390655671e32,
-        85337841668033.16,
-        2.8902213555268623e28,
-        8.773309142845245e21,
+        1.559409976871857e32,
+        85389391208234.4,
+        2.8855429418458107e28,
+        8.778586637207044e21,
     ),
     8.0: (
-        1.653208688436929e32,
-        2.418488207638265e16,
-        3.10397865173599e28,
-        8.825368698532178e21,
+        1.6539648153426048e32,
+        2.419949129928412e16,
+        3.099429361197953e28,
+        8.830677640210973e21,
     ),
     10.0: (
-        1.7813101718704078e32,
+        1.782007651815151e32,
         6.035185906510221e17,
-        3.3409902113646174e28,
-        8.772828236359366e21,
+        3.336309004385196e28,
+        8.778105440222744e21,
     ),
 }
 #: Re-captured for #3015. (1) The disc ends at R_out = r_sg (Kubota & Done 2018; RELAGN), with no
