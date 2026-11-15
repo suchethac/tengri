@@ -59,8 +59,9 @@ def _run_scipy(loss, context=None):
 
 def test_fixture_value_is_finite_and_gradient_is_not():
     value, grad = jax.value_and_grad(_loss_nan_gradient)(_INIT, None)
-    assert np.isfinite(float(value))
-    assert np.all(np.isfinite(np.asarray(grad["a"])))
+    # (0.2 - 1)**2 + (-0.3 - 1)**2 = 2.33, and d/da = 2 (a - 1).
+    np.testing.assert_allclose(float(value), 2.33, rtol=1e-12)
+    np.testing.assert_allclose(np.asarray(grad["a"]), [-1.6, -2.6], rtol=1e-12)
     assert np.isnan(float(grad["b"]))
 
 
@@ -117,7 +118,8 @@ def test_laplace_raises_on_a_nonfinite_hessian_with_a_finite_gradient():
         return jnp.sum((params["a"] - 1.0) ** 2) + jnp.where(b > 0.0, b**1.5, 0.0)
 
     grad = jax.grad(loss)(_INIT, None)
-    assert np.isfinite(float(grad["b"]))
+    # The gradient at b = 0 is exactly zero; only the second derivative is NaN.
+    assert float(grad["b"]) == 0.0
     with pytest.raises(NonFiniteGradientError, match="Hessian") as excinfo:
         _run_laplace(loss, _INIT)
     assert excinfo.value.parameters == ("b",)
@@ -126,7 +128,10 @@ def test_laplace_raises_on_a_nonfinite_hessian_with_a_finite_gradient():
 def test_laplace_on_a_finite_objective_still_returns():
     """Unit Gaussian in three dimensions: mode at (1, 1, 0), unit covariance / 2 and 1."""
     posterior = _run_laplace(_loss_finite, _INIT)
-    assert np.isfinite(posterior.diagnostics["log_evidence"])
+    # The polish reaches the mode, where the loss is 0: log Z = -0.5 ln(1 * 2 * 2).
+    np.testing.assert_allclose(
+        posterior.diagnostics["log_evidence"], -0.5 * np.log(4.0), rtol=1e-6
+    )
     np.testing.assert_allclose(posterior.diagnostics["eigenvalues"], [1.0, 2.0, 2.0], rtol=1e-6)
 
 
