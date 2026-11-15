@@ -718,8 +718,8 @@ _COMPARE_MODELS = _Tutorial(
     code=textwrap.dedent(
         """
         # Same data, vary one structural choice (here: AGN model).
-        # Compare via Bayesian evidence (nested sampling) or out-of-sample
-        # WAIC / LOO if you have arviz.
+        # Compare via Bayesian evidence (nested sampling) or by predictive
+        # accuracy (PSIS-LOO or WAIC).
 
         import tengri
         results = {}
@@ -744,10 +744,11 @@ _COMPARE_MODELS = _Tutorial(
             print(f"  {name!r:25s}  log Z = {post.log_evidence:7.2f}  "
                   f"ΔlogBF vs no-AGN = {log_BF:+5.2f}")
 
-        # Or via WAIC (if posterior samples available: needs arviz)
-        for name, post in results.items():
-            idata = post.to_arviz()
-            print(f"  {name!r:25s}  WAIC = {idata.waic:.2f}")
+        # Or by predictive accuracy: elpd differences with paired standard errors.
+        # criterion="waic" gives WAIC; "loo" also reports unreliable points (n_bad_k).
+        for row in tengri.inference.compare_models(results, criterion="loo"):
+            print(f"  {row['name']!r:25s}  elpd = {row['elpd']:8.2f}  "
+                  f"Δelpd = {row['delta_elpd']:+7.2f} ± {row['delta_se']:.2f}")
 
         # See:
         #   tengri.describe('skirtor')  →  param details for each candidate
