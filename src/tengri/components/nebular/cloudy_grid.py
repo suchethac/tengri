@@ -114,6 +114,12 @@ from tengri._cache_keys import KeyPolicy, content, derive_key, exclude
 from tengri.components.lyc import lyc_shares
 from tengri.components.nebular._component_params import NEBULAR_STANDARD_PARAMS
 from tengri.components.nebular._constants import _LOG10_ZSUN, _LSUN_ERG
+from tengri.components.nebular._params import (
+    DEFAULT_NEB_FDUST_FRAC,
+    DEFAULT_NEB_FESC,
+    DEFAULT_NEB_FESC_LYA,
+    DEFAULT_NEB_LOGU,
+)
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import (
     NebularBackendDefaults,
@@ -128,6 +134,7 @@ from tengri.components.nebular._shared import (
     sanitize_qh_table,
     ssp_log_age_yr_axis,
 )
+from tengri.components.nebular.ionizing_spectrum import require_ionizing_coverage
 from tengri.utils.grid_interp import interp_nd_pchip
 from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
 from tengri.utils.scale import pow10
@@ -747,6 +754,7 @@ class CloudyGridBackend(NebularBackendDefaults):
 
         This avoids recomputing the ionizing integral at every inference step.
         """
+        require_ionizing_coverage(ssp_data.ssp_wave, backend="cloudy (CloudyGridBackend)")
         # Metadata check (#1014): a grid flagged nebular-included is refused
         # outright, BEFORE the Q_H heuristic below: the retained-LyC wNE
         # class keeps its ionizing continuum, so no physics heuristic can
@@ -902,11 +910,11 @@ class CloudyGridBackend(NebularBackendDefaults):
         ssp_weights: jnp.ndarray,
         ssp_log_ages_yr: jnp.ndarray,
         log_z: float,
-        neb_logU: float = -3.0,
+        neb_logU: float = DEFAULT_NEB_LOGU,
         neb_logZ_gas: float | None = None,
-        neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 1.0,
-        neb_fdust_frac: float = 0.0,
+        neb_fesc: float = DEFAULT_NEB_FESC,
+        neb_fesc_lya: float = DEFAULT_NEB_FESC_LYA,
+        neb_fdust_frac: float = DEFAULT_NEB_FDUST_FRAC,
         template_data: Any | None = None,
         **_kwargs,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
@@ -1031,10 +1039,10 @@ class CloudyGridBackend(NebularBackendDefaults):
         ssp_weights: jnp.ndarray,
         ssp_log_ages_yr: jnp.ndarray,
         log_z: float,
-        neb_logU: float = -3.0,
+        neb_logU: float = DEFAULT_NEB_LOGU,
         neb_logZ_gas: float | None = None,
-        neb_fesc: float = 0.0,
-        neb_fdust_frac: float = 0.0,
+        neb_fesc: float = DEFAULT_NEB_FESC,
+        neb_fdust_frac: float = DEFAULT_NEB_FDUST_FRAC,
         template_data: Any | None = None,
         **_kwargs,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
@@ -1142,11 +1150,11 @@ class CloudyGridBackend(NebularBackendDefaults):
         ssp_wave: jnp.ndarray,
         ssp_log_ages_yr: jnp.ndarray,
         log_z: float,
-        neb_logU: float = -3.0,
+        neb_logU: float = DEFAULT_NEB_LOGU,
         neb_logZ_gas: float | None = None,
-        neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 1.0,
-        neb_fdust_frac: float = 0.0,
+        neb_fesc: float = DEFAULT_NEB_FESC,
+        neb_fesc_lya: float = DEFAULT_NEB_FESC_LYA,
+        neb_fdust_frac: float = DEFAULT_NEB_FDUST_FRAC,
         line_sigma_aa: float = 0.0,
         line_sigma_kms: float = 0.0,
         template_data: Any | None = None,
@@ -1239,11 +1247,11 @@ class CloudyGridBackend(NebularBackendDefaults):
         ssp_wave: jnp.ndarray,
         ssp_log_ages_yr: jnp.ndarray,
         log_z: float,
-        neb_logU: float = -3.0,
+        neb_logU: float = DEFAULT_NEB_LOGU,
         neb_logZ_gas: float | None = None,
-        neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 1.0,
-        neb_fdust_frac: float = 0.0,
+        neb_fesc: float = DEFAULT_NEB_FESC,
+        neb_fesc_lya: float = DEFAULT_NEB_FESC_LYA,
+        neb_fdust_frac: float = DEFAULT_NEB_FDUST_FRAC,
         template_data: Any | None = None,
         **_kwargs,
     ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:

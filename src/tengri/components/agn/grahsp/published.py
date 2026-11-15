@@ -67,6 +67,7 @@ import numpy as np
 from jax import Array
 from jax.scipy.special import erfc
 
+from tengri.components.agn._params import DEFAULT_AGN_GRAHSP_A_BC
 from tengri.components.agn.grahsp._publication_rules import (
     _BALMER_HI_NM,
     _DISC_GRID_HI_NM,
@@ -382,7 +383,7 @@ class PublishedLuminosities:
         return balmer_continuum(
             wave_nm=wave_nm,
             l5100=jnp.asarray(params["agn_grahsp_l5100"]),
-            a_bc=jnp.asarray(params.get("agn_grahsp_a_bc", 0.0)),
+            a_bc=jnp.asarray(params.get("agn_grahsp_a_bc", DEFAULT_AGN_GRAHSP_A_BC)),
             linewidth_kms=jnp.asarray(params["agn_grahsp_linewidth_kms"]),
         )
 

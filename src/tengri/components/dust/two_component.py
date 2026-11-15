@@ -1755,10 +1755,19 @@ class DustSEDComponent(TemplateThreading):
             # signed ∫(L_intrinsic - L_attenuated) dν, then abs(); when the
             # full cube is not otherwise needed XLA dead-code-eliminates it.
             from tengri.components.dust.energy_balance_precompute import (
+                collapse_lut_alpha,
                 lut_l_absorbed_stellar_log10,
             )
             from tengri.forward.energy_balance import bolometric_absorbed_log10
             from tengri.utils.scale import log10_add, log10_add_signed
+
+            # A table built from a 4D [alpha/Fe] grid collapses its alpha axis at the
+            # stellar component's bracket (absent on a 3D grid), before the contraction.
+            _alpha_ia = state.derived.get("stellar_alpha_bracket_index")
+            if _alpha_ia is not None:
+                eb_lut = collapse_lut_alpha(
+                    eb_lut, _alpha_ia, state.derived["stellar_alpha_bracket_fraction"]
+                )
 
             # ``lut_l_absorbed_stellar_log10``'s own ``fesc`` combine is a
             # no-op unless the LUT was BUILT with the A_0/A_1 fesc-exact

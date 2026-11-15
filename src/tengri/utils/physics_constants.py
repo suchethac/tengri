@@ -259,10 +259,12 @@ Reference: Asplund et al. (2009), ARA&A 47, 481, "The Chemical Composition of
 the Sun", https://doi.org/10.1146/annurev.astro.46.060407.145222
 
 This is the photospheric present-day value, and matches the MIST/DSPS
-convention.  Other SSP libraries adopt different solar scales: BC03/Padova
-= 0.0190, PARSEC = 0.0152, BASTI = 0.0200.  Per-library values live in
-``LOG10_ZSUN_BY_LIBRARY`` (:mod:`tengri.parameters.translate`); use those,
-not this constant, when reproducing another code bit-exactly.
+convention. ``met_logzsol`` is log10(Z_total / Z_SUN) with this value on every
+SSP grid (#3411). Other libraries quote their nodes against a different solar
+scale (BC03/Padova 0.0190, PARSEC 0.0152, BASTI 0.0200; listed in
+``LOG10_ZSUN_BY_LIBRARY``, :mod:`tengri.parameters.translate`): those label the
+nodes and never enter the interpolation. To reproduce another code bit-exactly,
+convert its metallicity to absolute Z and pin ``met_logzsol = log10(Z / Z_SUN)``.
 """
 
 LOG10_ZSUN: float = math.log10(Z_SUN)

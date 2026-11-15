@@ -324,17 +324,17 @@ For accurate CSP integration, the priority order is:
 ## tengri configuration
 
 ```python
-from tengri import ParamSpec, Uniform
+from tengri import Parameters, Uniform
 
 # Default: smooth triweight (DSPS-compatible)
-spec = ParamSpec(
+spec = Parameters(
     met_logzsol=Uniform(-2, 0.2),
     # met_interp="smooth",    # default
     # lgmet_scatter=0.1,      # DSPS default bandwidth
 )
 
 # FSPS/Prospector-compatible
-spec = ParamSpec(
+spec = Parameters(
     met_interp="linear",
     met_logzsol=Uniform(-2, 0.2),
 )

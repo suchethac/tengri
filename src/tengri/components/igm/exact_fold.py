@@ -315,7 +315,13 @@ def subband_fold_table(
         cached = _subband_cache.load(
             key,
             prefix=_subband_cache.EXACT_FOLD_PREFIX,
-            expected_shape=(2, z_grid.size, None, None, len(filters), None),
+            expected_shape=(
+                2,
+                z_grid.size,
+                *np.shape(ssp_data.ssp_flux)[:-1],  # (n_met[, n_alpha], n_age)
+                len(filters),
+                None,
+            ),
         )
         if cached is not None:
             _subband_cache.memo_put(key, cached)

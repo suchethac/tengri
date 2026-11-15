@@ -305,6 +305,8 @@ SPACE_FILTER_FACILITIES: tuple[str, ...] = (
 )
 
 #: SVO facility prefixes of ground-based or ground-calibrated curves: convention unestablished.
+#: The radio arrays (LOFAR, MeerKAT, VLA; #3409) are ground facilities whose curves are
+#: tabulated in frequency, where the air/vacuum distinction does not arise.
 GROUND_FILTER_FACILITIES: tuple[str, ...] = (
     "2MASS",
     "APEX",
@@ -315,7 +317,9 @@ GROUND_FILTER_FACILITIES: tuple[str, ...] = (
     "Generic",
     "JCMT",
     "LCO",
+    "LOFAR",
     "LSST",
+    "MeerKAT",
     "NOAO",
     "OAJ",
     "PAN-STARRS",
@@ -325,6 +329,7 @@ GROUND_FILTER_FACILITIES: tuple[str, ...] = (
     "SkyMapper",
     "Subaru",
     "UKIRT",
+    "VLA",
 )
 
 

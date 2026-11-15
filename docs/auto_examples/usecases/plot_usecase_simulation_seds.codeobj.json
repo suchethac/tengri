@@ -51,6 +51,22 @@
    "name": "float"
   }
  ],
+ "age_at_z": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.utils.cosmology",
+   "module_short": "tengri.utils",
+   "name": "age_at_z"
+  }
+ ],
  "ax": [
   {
    "is_class": false,
@@ -871,6 +887,27 @@
    "module": "matplotlib",
    "module_short": "matplotlib",
    "name": "Normalize"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matplotlib.colors",
+   "module_short": "matplotlib.colors",
+   "name": "Norm"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "Norm"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "abc",
+   "module_short": "abc",
+   "name": "ABC"
   },
   {
    "is_class": false,

@@ -251,7 +251,13 @@ from collections.abc import Sequence
 #: no clamp moved. Not converted, on purpose: ``compute_dn4000``, ``compute_balmer_break``,
 #: ``_break_from_means`` and ``_ew_from_means``. A NaN at a zero denominator severs the
 #: gradient there (zero, not finite-nonzero), which the #2100 precision tests reject.
-EXPECTED_SITES = 74
+#: 74 -> 75 (#3462, Gunn-Peterson blue side in ``components/igm/igm.py``): one clamp per
+#: mask, both ``jnp.maximum(x_bubble * 0.1, 1e-8)``, mirroring the red-side ``bubble_mask``.
+#: The blue one is a case where zero is legitimate (R_bubble = 0 is a valid input); the floor
+#: only keeps the sigmoid width finite. Its sibling, ``dsps_wrapper._native_joint``'s
+#: normalization, was added with a clamp and converted in the same PR to the NaN-propagating
+#: form (the joint is normalized to 1, so a vanishing sum is an upstream bug), netting zero.
+EXPECTED_SITES = 75
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 

@@ -40,6 +40,7 @@ from tengri.utils.physics_constants import (
     Z_SUN as _Z_SUN,
 )
 from tengri.utils.scale import (
+    is_float32_arithmetic,
     log10_magnitude as _log10_magnitude,
     pow10 as _pow10,
     representable_floor,
@@ -987,7 +988,7 @@ def xray_xrb_terms(
     # ``nan`` wherever the spectrum underflows: although the result ~1e22
     # erg/s/Hz is representable. Fold the band integral into the exponent so no
     # out-of-range intermediate forms. Float64 keeps the literal expressions.
-    if wavelength.dtype == jnp.float32:
+    if is_float32_arithmetic(wavelength):
         L_nu_hmxb = (
             _pow10(log_l_hmxb_per_sfr + log_L_hmxb_offset - jnp.log10(band_int_hmxb))
             * sfr
@@ -1370,7 +1371,7 @@ def xray_hotgas(
     # even though the result ``L_nu`` (~1e26 erg/s/Hz) is perfectly
     # representable. Divide the constant by the band integral in log space so no
     # out-of-range intermediate forms. Float64 keeps the literal expression.
-    if wavelength.dtype == jnp.float32:
+    if is_float32_arithmetic(wavelength):
         L_nu = _pow10(log_l_hotgas_per_sfr - jnp.log10(band_int)) * sfr * spec
     else:
         L_hotgas_ref = 10.0**log_l_hotgas_per_sfr * sfr

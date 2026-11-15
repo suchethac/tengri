@@ -3,14 +3,76 @@
   "sfh_dpl_log_total_mass": 8.444870947551594
  },
  "platform": "darwin-arm64",
- "signature_sha256": "28e5b3e02b3596e125b6fb576fea99694dffafe7983e56de23d0deec1c0f82ea",
+ "signature_sha256": "5ff8c67ed4c7596fb8705990f8f357dbc68be2f2dd5915bc320c3b00690fe3c5",
  "summary": "Precompute Engagement Summary\n===========================\n\n\u2022 Energy-balance LUT: ENGAGED\n\u2022 Dust band response: ENGAGED\n\n\u2022 Observed facts:\n  components: stellar, nebular, dust, dust_emission\n  dust_emission_configured: True\n  free_params: sfh_dpl_log_total_mass\n  igm_fold: declared=auto, resolved=None\n  redshift_fixed: 0.1\n  wave_precomp_enabled: True\n  ztable_enabled: False",
  "tree": [
   {
    "dtype": "float64",
    "kind": "array",
+   "path": "/stellar/ssp_phot_lut/ssp_phot",
+   "sha256": "ff129b7cee08ba2275b2db8fa4993a8fad62f07133e73ea6d9ef9ac866c9e0c6",
+   "shape": [
+    15,
+    93,
+    4
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/stellar/ssp_phot_lut/effective_wavelengths",
+   "sha256": "3ae9c8097d2b49686c915477a8997e404ec57f158bae5690140496b4f5832b9a",
+   "shape": [
+    4
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/stellar/ssp_phot_lut/effective_wavelengths_rest",
+   "sha256": "5143429e112f21fc87f8ab17d869381fd566c3921c86f23dd2ab210a24802f62",
+   "shape": [
+    4
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/stellar/ssp_phot_lut/log10_flux_scale",
+   "sha256": "5490a4173a02c5980b25017f486d3f899d9e9c205290ca9d9b47b12605271091",
+   "shape": [
+    1
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/stellar/ssp_phot_lut/ssp_subband_phot",
+   "sha256": "9a394357a79d76e8c38ba27c63129855a5cc6fa34a08cb42892eadcfc8e74264",
+   "shape": [
+    15,
+    93,
+    4,
+    5
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/stellar/ssp_phot_lut/ssp_subband_waves_rest",
+   "sha256": "654b46a87d32086f2318fee7f2dd9f50b53c3e5d9fde749c75990e88d674ec99",
+   "shape": [
+    15,
+    93,
+    4,
+    5
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
    "path": "/dust_ir/energy_balance_lut/0",
-   "sha256": "58bb756667638965ca5961ceedf38586fe2f5906d41a9f50bb594e790a83213b",
+   "sha256": "692c512f8612cadff154fd059d13a146334c2329029bec087c6b0ce8ef5614e6",
    "shape": [
     15,
     93
@@ -20,7 +82,7 @@
    "dtype": "float64",
    "kind": "array",
    "path": "/dust_ir/energy_balance_lut/1",
-   "sha256": "15ed2392a3bb340dca2e8657e9cbc2c609c4d3a54fe8249e74c93ab45f67da99",
+   "sha256": "9ba9d281c61f1facb0f0c7ab167d8010b5ced581c22ef72fcfb2eb09291152a9",
    "shape": [
     15,
     93,
@@ -60,7 +122,7 @@
    "dtype": "float64",
    "kind": "array",
    "path": "/dust_ir/energy_balance_lut/6",
-   "sha256": "58bb756667638965ca5961ceedf38586fe2f5906d41a9f50bb594e790a83213b",
+   "sha256": "692c512f8612cadff154fd059d13a146334c2329029bec087c6b0ce8ef5614e6",
    "shape": [
     15,
     93
@@ -70,7 +132,7 @@
    "dtype": "float64",
    "kind": "array",
    "path": "/dust_ir/energy_balance_lut/7",
-   "sha256": "1382ba6e2aedd0b54333fc7a87d7b58b00b268570ba4ffd4727a4330a7df21e4",
+   "sha256": "3ebc8ba0ecbfdb2326d4048f13ba92763523c3a1feeba0abf27417819ff18d13",
    "shape": [
     15,
     93,

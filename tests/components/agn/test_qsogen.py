@@ -201,7 +201,12 @@ class TestBalmerContinuum:
 
         # Frozen golden values at indices [0, n//3, 2n//3, -1]
         indices = [0, len(uv_optical_wave) // 3, 2 * len(uv_optical_wave) // 3, -1]
-        golden_values = [5.111666e-20, 1.161221e00, 2.836441e-06, 3.167700e-10]
+        # #3408: the edge is now erfc (sigma ~26 A), not a 0.02 dex logistic.
+        # Index 133 (3467 A, ~180 A below the 3646 A edge) moved 1.161221 -> 1.549607:
+        # the old logistic suppressed it to 0.75 of the un-edged value, the erfc gives 1.00.
+        # Indices 266 (6733 A) and -1 (10000 A) were logistic tails (2.8e-6, 3.2e-10);
+        # the BC is zero above the edge, so they are now exactly 0.
+        golden_values = [5.111666e-20, 1.549607e00, 0.0, 0.0]
         for idx, golden in zip(indices, golden_values):
             np.testing.assert_allclose(
                 float(bc_eager[idx]),

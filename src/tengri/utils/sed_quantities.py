@@ -1697,10 +1697,27 @@ def compute_q_ir(l_tir_lsun: jnp.ndarray, l_1p4ghz: jnp.ndarray) -> jnp.ndarray:
     float
         q_TIR (dimensionless).
     """
-    l_tir_w = l_tir_lsun * L_SUN * 1e-7  # erg/s → W
-    l_radio_w = l_1p4ghz * 1e-7  # erg/s/Hz → W/Hz
-    return jnp.log10(jnp.maximum(l_tir_w, _FLOOR()) / 3.75e12) - jnp.log10(
-        jnp.maximum(l_radio_w, _FLOOR())
+    # Log-space (#3361): the product l_tir_lsun * L_SUN overflows float32 above ~9e4 Lsun,
+    # so both terms are formed as log10 and the floor is applied in log space
+    # (log10 is monotone, so max(log x, log f) == log max(x, f)). Zero inputs take the
+    # floor through where() so the unselected log branch carries no infinite derivative.
+    log_floor = jnp.log10(_FLOOR())
+    tir_pos = l_tir_lsun > 0
+    radio_pos = l_1p4ghz > 0
+    log_l_tir_w = jnp.where(
+        tir_pos,
+        jnp.log10(jnp.where(tir_pos, l_tir_lsun, 1.0)) + jnp.log10(L_SUN * 1e-7),
+        -jnp.inf,
+    )
+    log_l_radio_w = jnp.where(
+        radio_pos,
+        jnp.log10(jnp.where(radio_pos, l_1p4ghz, 1.0)) + jnp.log10(1e-7),
+        -jnp.inf,
+    )
+    return (
+        jnp.maximum(log_l_tir_w, log_floor)
+        - jnp.log10(3.75e12)
+        - jnp.maximum(log_l_radio_w, log_floor)
     )
 
 

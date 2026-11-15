@@ -49,6 +49,7 @@ from __future__ import annotations
 import platform
 
 import jax
+import numpy as np
 import pytest
 
 import tengri
@@ -169,7 +170,15 @@ def test_resolve_preset_rejects_an_unknown_name():
 
 
 class _MockSSP:
-    """A stand-in with none of the SSP grid attributes the model reads."""
+    """A stand-in with no SSP grid attribute except a non-splat ``ssp_flux``.
+
+    ``ssp_flux`` is present and varies, so the splat refusal at ``SEDModel``
+    construction (#3350) passes it and the first grid attribute the model reads
+    that is absent, ``ssp_lg_age_gyr``, is the failure the test pins. A constant
+    cube would be refused as a splat before that point.
+    """
+
+    ssp_flux = np.arange(1.0, 7.0).reshape(1, 2, 3)
 
 
 @pytest.fixture

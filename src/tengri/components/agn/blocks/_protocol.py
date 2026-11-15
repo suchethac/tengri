@@ -255,7 +255,7 @@ def register_agn_block(
     --------
     >>> @register_agn_block(
     ...     "torus",
-    ...     "grahsp",
+    ...     "example_torus",
     ...     citation="Nenkova et al. 2008",
     ...     short_doc="Clumpy toroidal dust model",
     ... )

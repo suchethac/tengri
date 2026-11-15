@@ -171,6 +171,16 @@ from tengri.components.lyc import lyc_shares
 from tengri.components.nebular._component_params import NEBULAR_STANDARD_PARAMS
 from tengri.components.nebular._constants import _LOG_OH_OFFSET, _LSUN_ERG
 from tengri.components.nebular._line_ingest import catalog_air_to_vacuum
+from tengri.components.nebular._params import (
+    DEFAULT_NEB_CO,
+    DEFAULT_NEB_DNO,
+    DEFAULT_NEB_FDUST_FRAC,
+    DEFAULT_NEB_FESC,
+    DEFAULT_NEB_FESC_LYA,
+    DEFAULT_NEB_HBFRAC,
+    DEFAULT_NEB_LOG_NH,
+    DEFAULT_NEB_LOGU,
+)
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import (
     NebularBackendDefaults,
@@ -183,6 +193,7 @@ from tengri.components.nebular._shared import (
     sanitize_qh_table,
     ssp_log_age_yr_axis,
 )
+from tengri.components.nebular.ionizing_spectrum import require_ionizing_coverage
 from tengri.config.exceptions import ParameterError, TengriIOError
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
@@ -942,10 +953,10 @@ class CB19Backend(NebularBackendDefaults):
         dl_cm: float,
         fixed: dict[int, float] | None = None,
         *,
-        neb_log_nH: float = 2.0,
-        neb_co: float = -0.36,
-        neb_dno: float = 0.0,
-        neb_hbfrac: float = 1.0,
+        neb_log_nH: float = DEFAULT_NEB_LOG_NH,
+        neb_co: float = DEFAULT_NEB_CO,
+        neb_dno: float = DEFAULT_NEB_DNO,
+        neb_hbfrac: float = DEFAULT_NEB_HBFRAC,
     ) -> None:
         """Preintegrate CB19 lines through filters; expose CLOUDY-shaped surface.
 
@@ -1099,6 +1110,7 @@ class CB19Backend(NebularBackendDefaults):
         Stores a (n_met, n_age) table of ionizing photon rates. At prediction
         time, bilinear interpolation gives Q_H for each SSP age bin.
         """
+        require_ionizing_coverage(ssp_data.ssp_wave, backend="cb19 (CB19Backend)")
         ssp_wave = ssp_data.ssp_wave
         ssp_flux = ssp_data.ssp_flux  # (n_met, n_age, n_wave)
 
@@ -1173,14 +1185,14 @@ class CB19Backend(NebularBackendDefaults):
         ssp_weights: jnp.ndarray,
         ssp_log_ages_yr: jnp.ndarray,
         log_z: float,
-        neb_logU: float = -3.0,
+        neb_logU: float = DEFAULT_NEB_LOGU,
         neb_logZ_gas: float | None = None,
-        neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 1.0,
-        neb_fdust_frac: float = 0.0,
-        neb_log_nH: float = 2.0,
-        neb_co: float = -0.36,
-        neb_dno: float = 0.0,
+        neb_fesc: float = DEFAULT_NEB_FESC,
+        neb_fesc_lya: float = DEFAULT_NEB_FESC_LYA,
+        neb_fdust_frac: float = DEFAULT_NEB_FDUST_FRAC,
+        neb_log_nH: float = DEFAULT_NEB_LOG_NH,
+        neb_co: float = DEFAULT_NEB_CO,
+        neb_dno: float = DEFAULT_NEB_DNO,
         neb_hbfrac: float | None = None,
         template_data: Any | None = None,
         **_kwargs,
@@ -1403,14 +1415,14 @@ class CB19Backend(NebularBackendDefaults):
         ssp_wave: jnp.ndarray,
         ssp_log_ages_yr: jnp.ndarray,
         log_z: float,
-        neb_logU: float = -3.0,
+        neb_logU: float = DEFAULT_NEB_LOGU,
         neb_logZ_gas: float | None = None,
-        neb_fesc: float = 0.0,
-        neb_fesc_lya: float = 1.0,
-        neb_fdust_frac: float = 0.0,
-        neb_log_nH: float = 2.0,
-        neb_co: float = -0.36,
-        neb_dno: float = 0.0,
+        neb_fesc: float = DEFAULT_NEB_FESC,
+        neb_fesc_lya: float = DEFAULT_NEB_FESC_LYA,
+        neb_fdust_frac: float = DEFAULT_NEB_FDUST_FRAC,
+        neb_log_nH: float = DEFAULT_NEB_LOG_NH,
+        neb_co: float = DEFAULT_NEB_CO,
+        neb_dno: float = DEFAULT_NEB_DNO,
         neb_hbfrac: float | None = None,
         line_sigma_aa: float = 0.0,
         line_sigma_kms: float = 0.0,

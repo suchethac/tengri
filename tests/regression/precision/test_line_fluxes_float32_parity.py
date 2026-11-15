@@ -170,12 +170,14 @@ _CUE_F64_REF_100MYR_CUT = np.array(
 # -3.363701233348562e-17 -> -3.3636346467589785e-17 (-2.0e-5 of a sign-flipped
 # noise-level line). The #2694 shift is the young-sliver integral; the #2802 shift
 # from the pre-merge main pin (-0.56 % Hbeta) is recorded above. CUE pins unchanged.
+# Re-pinned 2026-11-15 after #3434 (in #3462): no metallicity scatter at fixed Z
+# moves this by +2.265% (Hbeta), +2.329% ([O III] 5007), +1.581% (Halpha), +2.623% ([N II]).
 _WNE_F64_REF = np.array(
     [
-        2.7541036805062576e-16,
-        4.075921813562496e-16,
-        1.3443733651475604e-15,
-        -3.3636346467589785e-17,
+        2.816484033477791e-16,
+        4.17083282763222e-16,
+        1.3656333593051479e-15,
+        -3.451857217911404e-17,
     ]
 )
 

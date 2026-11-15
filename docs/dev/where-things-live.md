@@ -16,6 +16,7 @@ edit:
 |---|---|
 | Star formation history shape, GP-based bursty SFH | `components/stellar/sfh/` |
 | Stellar spectra, SSP grids, mass remaining | `components/stellar/sps/` |
+| Derived stellar properties (formed and surviving mass, sSFR, luminosity-weighted ages, UV colors, ionizing output) and their property-catalog registration | `components/stellar/properties.py` |
 | Dust attenuation laws (Calzetti, Charlot+Fall, …) | `components/dust/attenuation.py` |
 | Two-component screen depths and parameterization (`'tau_bc_diff'` or `'tauv_mu'`: total `tau_v` and diffuse fraction `mu`) | `components/dust/_apply.py` (`screen_optical_depths`), declarations in `components/dust/_params.py`; tests `tests/contract/test_dust_tauv_mu_grammar.py`, `tests/contract/test_two_component_native_unchanged.py`, `tests/regression/dust/test_tauv_mu_build_path.py`, `tests/components/dust/test_tauv_mu_parameterization.py` |
 | Chevallard+13 optical-depth-dependent diffuse-ISM law (`chevallard13`) | `components/dust/attenuation.py` (`chevallard13`); tests `tests/components/dust/test_chevallard13_law.py`, `tests/components/dust/test_chevallard13_plumbing.py` |

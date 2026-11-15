@@ -7,6 +7,7 @@ Functions extracted from individual backends to eliminate duplication.
 from __future__ import annotations
 
 import math as _math
+from collections.abc import Callable
 
 import jax
 import jax.numpy as jnp
@@ -1600,7 +1601,14 @@ class NebularBackendDefaults:
     differs on: Cue supplies the population keywords, the line-catalog keywords,
     the derived ``neb_log_no`` and the continuum split; CloudyGrid supplies the
     continuum split; BakedIn supplies the precompute construction.
+
+    ``predict_nebular_line_luminosities`` is declared, not defined: a backend
+    publishes a line catalog exactly when it defines that method, and the
+    forward model reads its presence (``hasattr``) as the capability. A default
+    here would make every backend read as publishing lines.
     """
+
+    predict_nebular_line_luminosities: Callable[..., tuple]
 
     @classmethod
     def precompute_check(cls, *, suppress_warning: bool) -> None:

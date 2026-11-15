@@ -53,6 +53,7 @@ from dataclasses import dataclass
 
 import jax
 import jax.numpy as jnp
+from jax.core import Tracer
 
 from tengri.utils.scale import whiten
 
@@ -523,8 +524,8 @@ def variable_noise_hamiltonian(
     >>> noise = jnp.array([0.1, 0.2, 0.15])
     >>> pred = jnp.array([0.9, 2.1, 1.4])
     >>> e = variable_noise_hamiltonian(data, noise, pred, f_cal=0.05)
-    >>> float(e) > 0
-    True
+    >>> round(float(e), 2)
+    -4.8
     """
     sigma_eff = compute_effective_noise(noise_obs, predicted, f_cal)
     r = (data - predicted) / sigma_eff
@@ -695,8 +696,8 @@ def exp_squared_kernel(
     >>> K = exp_squared_kernel(x, amplitude=1.0, length_scale=500.0)
     >>> K.shape
     (20, 20)
-    >>> K[0, 0]  # diagonal entry equals amplitude^2
-    DeviceArray(1., dtype=float32)
+    >>> float(K[0, 0])  # diagonal entry equals amplitude^2
+    1.0
     """
     x2 = x if x2 is None else x2
     diff = x[:, None] - x2[None, :]
@@ -889,13 +890,16 @@ def apply_zp_floor(
     noise_arr = jnp.asarray(noise)
     floor_arr = jnp.asarray(floor)
 
+    # A traced floor (a fitted systematic) has no host value to range-check; the
+    # sign check runs only on concrete floors, so eager calls are unchanged.
+    concrete = not isinstance(floor_arr, Tracer)
     if floor_arr.ndim == 0:
-        if float(floor_arr) < 0.0:
+        if concrete and float(floor_arr) < 0.0:
             raise ValueError("zp floor must be non-negative (got < 0)")
     else:
         if floor_arr.shape != flux_arr.shape:
             raise ValueError(f"floor shape {floor_arr.shape} != flux shape {flux_arr.shape}")
-        if not bool(jnp.all(floor_arr >= 0.0)):
+        if concrete and not bool(jnp.all(floor_arr >= 0.0)):
             raise ValueError("zp floor must be non-negative (got < 0 in some band)")
 
     sys_term = floor_arr * jnp.abs(flux_arr)

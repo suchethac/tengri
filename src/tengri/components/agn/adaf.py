@@ -40,7 +40,13 @@ import jax.numpy as jnp
 import numpy as np
 from jax.scipy.special import i0 as _i0, i1 as _i1, logsumexp
 
-from tengri.components.agn._params import DEFAULT_AGN_LOG_MBH, DEFAULT_AGN_LUM_RATIO
+from tengri.components.agn._params import (
+    DEFAULT_AGN_ADAF_ALPHA,
+    DEFAULT_AGN_ADAF_BETA,
+    DEFAULT_AGN_ADAF_DELTA,
+    DEFAULT_AGN_LOG_MBH,
+    DEFAULT_AGN_LUM_RATIO,
+)
 from tengri.components.agn._phys import (
     C_LIGHT as _C_LIGHT,
     H_PLANCK as _H_PLANCK,
@@ -1278,9 +1284,9 @@ _LOG10_ETA_EFF_MDOT_EDD_C2_ERG_S_PER_MSUN: float = float(
 def adaf_accretion_diagnostics(
     agn_log_lbol: float,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
-    agn_adaf_alpha: float = 0.3,
-    agn_adaf_beta: float = 0.5,
-    agn_adaf_delta: float = 0.1,
+    agn_adaf_alpha: float = DEFAULT_AGN_ADAF_ALPHA,
+    agn_adaf_beta: float = DEFAULT_AGN_ADAF_BETA,
+    agn_adaf_delta: float = DEFAULT_AGN_ADAF_DELTA,
     *,
     dtype=None,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
@@ -1529,9 +1535,9 @@ def adaf_scalar_state(
     agn_log_lbol: float,
     agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
-    agn_adaf_alpha: float = 0.3,
-    agn_adaf_beta: float = 0.5,
-    agn_adaf_delta: float = 0.1,
+    agn_adaf_alpha: float = DEFAULT_AGN_ADAF_ALPHA,
+    agn_adaf_beta: float = DEFAULT_AGN_ADAF_BETA,
+    agn_adaf_delta: float = DEFAULT_AGN_ADAF_DELTA,
     agn_log_lbol_shape: float | None = None,
     *,
     dtype=None,
@@ -1739,9 +1745,9 @@ def adaf_spectrum(
     agn_log_lbol: float,
     agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
-    agn_adaf_alpha: float = 0.3,
-    agn_adaf_beta: float = 0.5,
-    agn_adaf_delta: float = 0.1,
+    agn_adaf_alpha: float = DEFAULT_AGN_ADAF_ALPHA,
+    agn_adaf_beta: float = DEFAULT_AGN_ADAF_BETA,
+    agn_adaf_delta: float = DEFAULT_AGN_ADAF_DELTA,
     agn_log_lbol_shape: float | None = None,
     **_kwargs,
 ) -> jnp.ndarray:
