@@ -302,6 +302,64 @@ def ratio_or_nan(num, den):
     return jnp.where(ok, num / jnp.where(ok, den, 1.0), jnp.nan)
 
 
+@jax.custom_jvp
+def _hypot_share(a, b):
+    r""":math:`a / \sqrt{a^2 + b^2}`, zero where both vanish. Range-safe; see :func:`hypot`."""
+    h = jnp.hypot(a, b)
+    return jnp.where(h > 0.0, a / jnp.where(h > 0.0, h, 1.0), 0.0)
+
+
+@_hypot_share.defjvp
+def _hypot_share_jvp(primals, tangents):
+    a, b = primals
+    da, db = tangents
+    ua, ub = _hypot_share(a, b), _hypot_share(b, a)
+    h = jnp.hypot(a, b)
+    # d(a/h) = (b/h) (b da - a db) / h^2 = ub (ub da - ua db) / h: O(1) factors, one 1/h.
+    out = ua
+    tangent = jnp.where(h > 0.0, ub * (ub * da - ua * db) / jnp.where(h > 0.0, h, 1.0), 0.0)
+    return out, tangent
+
+
+@jax.custom_jvp
+def hypot(a, b):
+    r""":math:`\sqrt{a^2 + b^2}` whose first and second derivatives stay representable.
+
+    :func:`jnp.hypot` factors out the larger argument, so its value never underflows,
+    but its autodiff divides by :math:`\max(|a|,|b|)^2`, which is :math:`10^{-60}` at the
+    :math:`\sigma \sim 10^{-30}` of a flux uncertainty and underflows float32 to zero:
+    the gradient of ``jnp.hypot(sigma, f_cal * abs(model_flux))`` with respect to the
+    model flux is NaN at real photometric scales (#3505). Here
+    :math:`\partial h/\partial a = a/h` and :math:`\partial h/\partial b = b/h` are
+    formed as ratios of the two arguments to ``h``, so every intermediate is O(1) and the
+    only large factor is the single :math:`1/h` of a second derivative. The value is
+    ``jnp.hypot``'s, bit for bit.
+
+    Parameters
+    ----------
+    a, b : array_like
+        Operands in the same units, broadcastable against each other.
+
+    Returns
+    -------
+    ndarray
+        :math:`\sqrt{a^2 + b^2}` in the operands' units.
+
+    Notes
+    -----
+    JIT/grad/vmap-safe. Derivatives are exact to all orders; both derivatives are zero
+    where :math:`a = b = 0`.
+    """
+    return jnp.hypot(a, b)
+
+
+@hypot.defjvp
+def _hypot_jvp(primals, tangents):
+    a, b = primals
+    da, db = tangents
+    return hypot(a, b), _hypot_share(a, b) * da + _hypot_share(b, a) * db
+
+
 def whiten(x, sigma):
     r""":math:`x / \sigma`, with the division made binding on the compiler.
 

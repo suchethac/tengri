@@ -55,7 +55,7 @@ import jax
 import jax.numpy as jnp
 from jax.core import Tracer
 
-from tengri.utils.scale import whiten
+from tengri.utils.scale import hypot, whiten
 
 # ── Core noise computation (pure JAX, JIT-compatible) ─────────────
 
@@ -121,7 +121,7 @@ def compute_effective_noise(
     # the likelihood residual (data - pred)/sigma_eff becomes NaN. hypot factors
     # out the larger term, keeping the intermediate O(1). Identical in float64
     # to the last bit (#1206).
-    return jnp.hypot(noise_obs, cal_noise)
+    return hypot(noise_obs, cal_noise)
 
 
 def compute_std_inv(
@@ -421,32 +421,37 @@ def censored_neg_log_likelihood(
        Code Investigating GALaxy Emission. arXiv:1811.03094.
        https://doi.org/10.1051/0004-6361/201834156
     """
+    # Every division is by ``noise_obs`` alone, which is data. The model-dependent floor
+    # enters as the O(1) ratio q = floor / sigma_obs, so sigma_eff = sigma_obs sqrt(1 + q^2)
+    # and its derivatives never carry 1 / sigma^2 (1e60 at a flux uncertainty, inf in float32,
+    # #3505). The same value as hypot(sigma_obs, floor) to round-off.
+    model_term = jnp.abs(predicted)
     if model_sigma_frac is None:
-        sigma_eff = compute_effective_noise(noise_obs, predicted, f_cal)
-        sigma_lim = noise_obs
+        floor_eff = f_cal * model_term
+        floor_lim = jnp.zeros_like(model_term)
     else:
-        # hypot of the two flux-proportional terms first, then with sigma_obs:
-        # the same underflow guard as compute_effective_noise. The model term
-        # is a function of the traced prediction, so its ln is kept below.
-        model_term = jnp.abs(predicted)
-        sigma_model = jnp.hypot(f_cal * model_term, model_sigma_frac * model_term)
-        sigma_eff = jnp.hypot(noise_obs, sigma_model)
-        sigma_lim = jnp.hypot(noise_obs, model_sigma_frac * model_term)
+        # hypot of the two flux-proportional terms: both scale with |m|, so q stays O(1).
+        floor_eff = hypot(f_cal * model_term, model_sigma_frac * model_term)
+        floor_lim = model_sigma_frac * model_term
+    q_eff = whiten(floor_eff, noise_obs)
+    q_lim = whiten(floor_lim, noise_obs)
+    shrink_eff = jnp.sqrt(1.0 + q_eff**2)
+    shrink_lim = jnp.sqrt(1.0 + q_lim**2)
+    log_sigma_eff = jnp.log(noise_obs) + 0.5 * jnp.log1p(q_eff**2)
+    residual = whiten(data - predicted, noise_obs)
 
     # --- Detected band energy ---
-    r = (data - predicted) / sigma_eff
+    r = residual / shrink_eff
     if dof is not None:
-        e_detected = 0.5 * (dof + 1.0) * jnp.log(1.0 + r**2 / dof) + jnp.log(sigma_eff)
+        e_detected = 0.5 * (dof + 1.0) * jnp.log(1.0 + r**2 / dof) + log_sigma_eff
     else:
-        e_detected = 0.5 * r**2 + jnp.log(sigma_eff)
+        e_detected = 0.5 * r**2 + log_sigma_eff
 
     # --- Upper limit: ln L = ln Phi((f_upper - m) / sigma_lim) ---
-    z_upper = (data - predicted) / sigma_lim
-    e_upper = -jax.scipy.stats.norm.logcdf(z_upper)
+    e_upper = -jax.scipy.stats.norm.logcdf(residual / shrink_lim)
 
     # --- Lower limit: ln L = ln Phi((m - f_lower) / sigma_lim) ---
-    z_lower = (predicted - data) / sigma_lim
-    e_lower = -jax.scipy.stats.norm.logcdf(z_lower)
+    e_lower = -jax.scipy.stats.norm.logcdf(-residual / shrink_lim)
 
     # Apply the noise model band by band
     e_per_band = jnp.where(
@@ -527,9 +532,11 @@ def variable_noise_hamiltonian(
     >>> round(float(e), 2)
     -4.8
     """
-    sigma_eff = compute_effective_noise(noise_obs, predicted, f_cal)
-    r = (data - predicted) / sigma_eff
-    logdet = jnp.sum(jnp.log(sigma_eff))
+    # Divide by the data noise alone: sigma_eff = sigma_obs sqrt(1 + q^2), q = f_cal |m| /
+    # sigma_obs, so no derivative carries 1 / sigma^2 (inf in float32, #3505).
+    q2 = whiten(f_cal * jnp.abs(predicted), noise_obs) ** 2
+    r = whiten(data - predicted, noise_obs) / jnp.sqrt(1.0 + q2)
+    logdet = jnp.sum(jnp.log(noise_obs) + 0.5 * jnp.log1p(q2))
 
     if dof is not None:
         # Student-t: (ν+1)/2 · Σ log(1 + r²/ν) + Σ log(σ_eff)
@@ -905,7 +912,7 @@ def apply_zp_floor(
     sys_term = floor_arr * jnp.abs(flux_arr)
     # hypot avoids the float32 underflow of squaring ~1e-30 flux uncertainties
     # (see compute_effective_noise). Identical in float64 (#1206).
-    return jnp.hypot(noise_arr, sys_term)
+    return hypot(noise_arr, sys_term)
 
 
 # ── Photon-limited Poisson likelihood ─────────────────────────────
