@@ -193,6 +193,17 @@ def resolve_cfg(cfg: dict) -> dict:
     return {**DEFAULTS, **cfg}
 
 
+#: Pilot draws per coordinate. The shrunk covariance of ``D`` coordinates needs ``D + 1``
+#: usable rows to be full rank; four per coordinate keep its sampling noise below the
+#: shrinkage's bias.
+PILOT_ROWS_PER_DIM = 4
+
+
+def pilot_rows(n_dim: int) -> int:
+    """Return the pilot draws the dense-metric layer asks for at ``n_dim`` coordinates."""
+    return PILOT_ROWS_PER_DIM * (int(n_dim) + 1)
+
+
 def _usable_rows(result: SamplerResult):
     """Flatten a pilot result to ``(rows, mask)`` of finite, non-divergent draws."""
     draws = result.draws.reshape(-1, result.draws.shape[-1])
@@ -267,12 +278,23 @@ def run_sampler(
         applied = "diag" if metric == "diag" else sampler.metric_mode
         return _judged(sampler, target, _tagged(result, metric, applied, False), full)
     pilot_key, final_key = jax.random.split(key)
-    pilot = sampler.run(target, pilot_key, 1, "diag", full)
+    # The pilot is sized from D: a covariance of D coordinates needs at least D + 1 usable
+    # rows to be full rank, and PILOT_ROWS_PER_DIM rows per coordinate keep its estimate from
+    # being dominated by noise. A request for fewer draws than that is raised, not refused.
+    pilot_cfg = {**full, "n_samples": max(full["n_samples"], pilot_rows(target.n_dim))}
+    pilot = sampler.run(target, pilot_key, 1, "diag", pilot_cfg)
     rows, mask = _usable_rows(pilot)
     mu, factor, fallback = pilot_whitening(rows, mask)
     if bool(fallback):
         # A pilot that cannot define a metric (too few usable draws, or a stuck chain) leaves
         # the diagonal run; the fallback is reported, never silent.
+        warnings.warn(
+            f"{sampler.name}: metric='dense' fell back to the diagonal metric: the pilot gave "
+            f"{int(jnp.sum(mask))} usable draws for D={target.n_dim} (it needs D + 1 = "
+            f"{target.n_dim + 1} and a positive definite covariance).",
+            UserWarning,
+            stacklevel=2,
+        )
         result = sampler.run(target, final_key, n_chains, "diag", full)
         return _judged(sampler, target, _tagged(result, metric, "none", True), full)
     whitened, back = target.whiten(mu, factor)

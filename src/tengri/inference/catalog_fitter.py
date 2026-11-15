@@ -2241,6 +2241,15 @@ class _CatalogFitterOriginal:
         n_returned = int(all_positions.shape[1]) // int(n_samples)
         all_divergent = all_divergent[:n_gal]
         all_fallback = np.asarray(all_fallback[:n_gal])
+        if all_fallback.any():
+            warnings.warn(
+                f"metric='dense' fell back to the diagonal metric for {int(all_fallback.sum())} "
+                f"of {n_gal} galaxies: the pilot could not define a positive definite covariance "
+                f"(it needs at least D + 1 = {d_params + 1} usable draws; raise n_samples or "
+                "n_chains). Their draws are the diagonal pass's own.",
+                UserWarning,
+                stacklevel=2,
+            )
         jax.block_until_ready(all_positions)
 
         # What the metric actually bought, per galaxy. A run that whitened but

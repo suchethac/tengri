@@ -95,3 +95,55 @@ def test_prior_aware_samplers_keep_the_posterior_when_whitened():
         assert result.diagnostics["metric_applied"] == "pilot"
         np.testing.assert_allclose(draws.mean(0), reference.mean(0), atol=0.05, err_msg=name)
         np.testing.assert_allclose(draws.std(0), reference.std(0), rtol=0.15, err_msg=name)
+
+
+@pytest.fixture
+def spy_sampler():
+    """A layered sampler that records the sizes it is asked for and returns constant draws."""
+    from tengri.inference.sampling import driver
+    from tengri.inference.sampling.driver import Sampler, SamplerResult
+
+    calls = []
+
+    def run(target, key, n_chains, metric, cfg):
+        calls.append(cfg["n_samples"])
+        return SamplerResult(jnp.ones((n_chains, cfg["n_samples"], target.n_dim)), None, {})
+
+    driver.register_sampler(Sampler("spy", "chain", ("spy",), run))
+    yield calls
+    driver._REGISTRY.pop("spy")
+
+
+def test_a_fallback_to_the_diagonal_metric_warns_once_with_the_reason(spy_sampler):
+    import warnings
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        result = run_sampler(
+            "spy",
+            _target(),
+            key=jax.random.PRNGKey(0),
+            metric="dense",
+            n_samples=10,
+            health_warnings=False,
+        )
+    fell = [str(w.message) for w in caught if "fell back" in str(w.message)]
+    assert len(fell) == 1
+    assert "usable draws for D=3" in fell[0] and "D + 1 = 4" in fell[0]
+    assert result.diagnostics["metric_fallback"] is True
+
+
+def test_the_pilot_is_sized_from_d(spy_sampler):
+    from tengri.inference.sampling.driver import pilot_rows
+
+    assert pilot_rows(3) == 16
+    run_sampler(
+        "spy",
+        _target(),
+        key=jax.random.PRNGKey(0),
+        metric="dense",
+        n_samples=5,
+        health_warnings=False,
+    )
+    # The pilot asked for more than the 5 draws requested; the final run asked for 5.
+    assert spy_sampler[0] == pilot_rows(3) and spy_sampler[1] == 5
