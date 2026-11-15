@@ -162,7 +162,17 @@ def eline_flat_marginal_term(
     chol_data=None,
     chol_offsets=None,
 ):
-    """Marginal log-likelihood with line amplitudes integrated out under a flat Gaussian prior."""
+    """Normalized marginal log-likelihood under a zero-mean Gaussian line prior.
+
+    The amplitudes ``a`` are integrated out of ``obs = model + G a + noise`` with
+    ``a ~ N(0, Lambda)``. The "flat" prior is this exact finite-width marginal with
+    ``Lambda = prior_variance``, not the improper-prior limit: every line costs
+    ``-1/2 ln Lambda`` nats of evidence when the data constrain it, so evidences of models
+    with different numbers of marginalized lines depend on the prior width. The Fitter's
+    width is ``Spectroscopy.eline_prior_sigma`` (default 100), the same in the batched path.
+    The value is the full normalized log-density: the primitive's Gaussian constant is
+    removed here, once.
+    """
     ln_l_marg, _a_hat, _a_cov = marginalize_emission_lines(
         residual=obs - model_flux,
         noise=err,
@@ -189,21 +199,28 @@ def eline_cloudy_marginal_term(
     chol_data=None,
     chol_offsets=None,
 ):
-    """Marginal log-likelihood with line amplitudes under the Cloudy-ratio prior."""
-    from tengri.observation.eline_priors import marginalize_emission_lines_cloudy
+    """Normalized marginal log-likelihood with line amplitudes under the Cloudy-ratio prior.
 
-    ln_l, _a_hat, _a_err = marginalize_emission_lines_cloudy(
-        obs - model_flux,
-        err,
-        design,
+    The prior is Gaussian per line, with the Cloudy ratio as mean and its scatter as width, so
+    the marginal is the flat-prior assembly on the model shifted by the prior mean.
+    """
+    from tengri.observation.eline_priors import cloudy_line_priors
+
+    means, sigmas = cloudy_line_priors(
         log_z=log_z,
         neb_logU=neb_logU,
         line_wavelengths=line_wavelengths,
         prior_width_dex=prior_width_dex,
+    )
+    return eline_flat_marginal_term(
+        model_flux + design @ means,
+        obs,
+        err,
+        design,
+        prior_variance=sigmas**2,
         chol_data=chol_data,
         chol_offsets=chol_offsets,
     )
-    return ln_l
 
 
 def eline_model_marginal_term(

@@ -66,6 +66,8 @@ NOISES = (
     "lines_marginalized",
     "lines_marginalized_banded",
     "lines_marginalized_dense",
+    "lines_marginalized_cloudy",
+    "lines_marginalized_model",
     "lines_fitted",
     "lines_fitted_banded",
     "lines_fitted_dense",
@@ -74,6 +76,9 @@ NOISES = (
     "cal_marg_lines_banded",
     "cal_marg_lines_dense",
     "cal_marg_lines_segments",
+    "cal_marg_lines_cloudy",
+    "cal_marg_lines_model",
+    "cal_marg_lines_segments_model",
     "cal_marg_fitted_lines",
     "student_t_cal_marg",
     "student_t_lines_marginalized",
@@ -92,12 +97,21 @@ PRESENCE_CHANNELS = tuple(c.name for c in channels.CHANNELS if "presence" in c.o
 MAIN_NOISES = ("gaussian", "student_t", "cal_floor")
 FITTED_NOISES = tuple(n for n in NOISES if n.startswith("lines_fitted"))
 CAL_NOISES = ("cal_marg", "cal_marg_banded", "cal_marg_dense", "cal_marg_segments")
-LINE_NOISES = ("lines_marginalized", "lines_marginalized_banded", "lines_marginalized_dense")
+LINE_NOISES = (
+    "lines_marginalized",
+    "lines_marginalized_banded",
+    "lines_marginalized_dense",
+    "lines_marginalized_cloudy",
+    "lines_marginalized_model",
+)
 JOINT_NOISES = (
     "cal_marg_lines",
     "cal_marg_lines_banded",
     "cal_marg_lines_dense",
     "cal_marg_lines_segments",
+    "cal_marg_lines_cloudy",
+    "cal_marg_lines_model",
+    "cal_marg_lines_segments_model",
 )
 SPECTRUM_NOISES = (
     "gaussian",
@@ -258,12 +272,46 @@ def _ref_calibration(preds, data, noise):
     return _mvn(obs - pred, cov)
 
 
+def _line_moments(preds, noise):
+    """Mean and width of each line amplitude's Gaussian prior, from the prior's definition."""
+    lines = noise.lines
+    if lines.prior_type == "cloudy":
+        from tengri.observation.eline_priors import cloudy_line_priors
+
+        mean, sigma = cloudy_line_priors(
+            log_z=preds.params["met_logzsol"],
+            neb_logU=preds.params["neb_logU"],
+            line_wavelengths=np.asarray(lines.line_wavelengths),
+            prior_width_dex=lines.prior_width_dex,
+        )
+        return np.asarray(mean), np.asarray(sigma)
+    if lines.prior_type == "model":
+        from tengri.observation.eline_marginalization import model_line_prior
+
+        redshift, dl_cm, aperture, transmission = preds.eline_prior_inputs
+        prior = model_line_prior(
+            preds.log_line_lums_attenuated,
+            lines.match_index,
+            lines.matched,
+            lines.line_wavelengths,
+            redshift,
+            dl_cm,
+            aperture,
+            lines.prior_width_dex,
+            transmission=transmission,
+        )
+        assert np.all(np.asarray(prior.gaussian) == 1.0)
+        return np.asarray(prior.prior_mean), np.asarray(prior.prior_width)
+    sigma = lines.prior_variance**0.5 if lines.prior_variance is not None else lines.prior_sigma
+    return np.zeros(N_LINE), np.full(N_LINE, sigma)
+
+
 def _ref_lines(preds, data, noise):
     obs, err = _blocks(data, noise, "spec")
     pred, design = np.asarray(preds.spec_fnu), np.asarray(preds.eline_design)
-    sigma = noise.lines.prior_variance**0.5
-    cov = _pixel_covariance(data, noise, err) + sigma**2 * design @ design.T
-    return _mvn(obs - pred, cov)
+    mean, width = _line_moments(preds, noise)
+    cov = _pixel_covariance(data, noise, err) + (design * width) @ (design * width).T
+    return _mvn(obs - pred - design @ mean, cov)
 
 
 def _ref_calibration_lines(preds, data, noise):
@@ -271,13 +319,13 @@ def _ref_calibration_lines(preds, data, noise):
     pred, design = np.asarray(preds.spec_fnu), np.asarray(preds.eline_design)
     cal = noise.calibration
     basis = pred[:, None] * _calibration_basis(cal)
-    sigma = noise.lines.prior_sigma
+    mean, width = _line_moments(preds, noise)
     cov = (
         _pixel_covariance(data, noise, err)
         + cal.prior_sigma**2 * basis @ basis.T
-        + sigma**2 * design @ design.T
+        + (design * width) @ (design * width).T
     )
-    return _mvn(obs - pred, cov)
+    return _mvn(obs - pred - design @ mean, cov)
 
 
 def reference_density(channel, preds, data, noise):
@@ -395,7 +443,15 @@ def _synthetic(channel: str, label: str, variant: str = "", seed: int = 0):
         pred = rng.uniform(1.0, 2.0, n)
         return pred, pred * (1.0 + 0.1 * rng.standard_normal(n)), rng.uniform(0.05, 0.15, n)
 
-    params = {"noise_frac_cal": F_CAL, "a0": 0.3, "a1": -0.2, "a2": 0.1, "cal_log_q": 0.05}
+    params = {
+        "noise_frac_cal": F_CAL,
+        "a0": 0.3,
+        "a1": -0.2,
+        "a2": 0.1,
+        "cal_log_q": 0.05,
+        "met_logzsol": -0.3,
+        "neb_logU": -2.5,
+    }
     kw = _student_fields(label)
     if channel in ("photometry", "censoring"):
         pred, obs, err = draw(N_BAND)
@@ -438,6 +494,40 @@ def _synthetic_constraint(channel, rng):
     return {"index_obs": obs, "index_err": err}, {"indices": pred}
 
 
+LINE_WAVELENGTHS = np.array([4861.0, 5007.0, 6563.0])
+MODEL_PRIOR_INPUTS = (0.1, 1.0e27, 1.0, np.ones(N_LINE))
+MODEL_LOG_LUMS = np.array([8.0, 8.3, 8.6])
+
+
+def _line_spec(label, calibrated):
+    """The line noise spec a label names, and the prediction fields its prior needs."""
+    if label.endswith("_cloudy"):
+        spec = LineSpec(
+            mode="marginalized",
+            prior_type="cloudy",
+            line_wavelengths=LINE_WAVELENGTHS,
+            prior_width_dex=0.3,
+        )
+        return spec, {}
+    if label.endswith("_model"):
+        spec = LineSpec(
+            mode="marginalized",
+            prior_type="model",
+            line_wavelengths=LINE_WAVELENGTHS,
+            prior_width_dex=0.3,
+            match_index=np.arange(N_LINE),
+            matched=np.ones(N_LINE),
+        )
+        extra = {
+            "log_line_lums_attenuated": MODEL_LOG_LUMS,
+            "eline_prior_inputs": MODEL_PRIOR_INPUTS,
+        }
+        return spec, extra
+    if calibrated:
+        return LineSpec(mode="marginalized", prior_sigma=LINE_SIGMA), {}
+    return LineSpec(mode="marginalized", prior_variance=LINE_SIGMA**2), {}
+
+
 def _synthetic_spectrum(label, rng, draw):
     spec_p, spec_d, spec_e = draw(N_PIX)
     wave = np.linspace(4000.0, 8000.0, N_PIX)
@@ -452,20 +542,46 @@ def _synthetic_spectrum(label, rng, draw):
         segments=(np.arange(N_PIX) % 2) if segmented else None,
         n_segments=2 if segmented else 0,
     )
+    preds_kw = {"spec_fnu": spec_p}
     if label.startswith("cal_marg") and "lines" not in label:
         kw["calibration"] = cal
-    if label.startswith("lines_marginalized"):
-        kw["lines"] = LineSpec(mode="marginalized", prior_variance=LINE_SIGMA**2)
     if label.startswith("lines_fitted"):
         kw["lines"] = LineSpec(mode="fitted", amplitude_names=("a0", "a1", "a2"))
-    if label.startswith("cal_marg_lines"):
-        kw["calibration"] = cal
-        kw["lines"] = LineSpec(mode="marginalized", prior_sigma=LINE_SIGMA)
-    preds_kw = {"spec_fnu": spec_p}
+    if label.startswith("lines_marginalized") or label.startswith("cal_marg_lines"):
+        kw["lines"], extra = _line_spec(label, label.startswith("cal_marg"))
+        preds_kw.update(extra)
+        if label.startswith("cal_marg"):
+            kw["calibration"] = cal
     if "lines" in label:
         scale = np.abs(spec_p.mean()) * 0.2
-        preds_kw["eline_design"] = rng.standard_normal((N_PIX, N_LINE)) * scale
+        design = rng.standard_normal((N_PIX, N_LINE)) * scale
+        if label.endswith(("_cloudy", "_model")):
+            design = design / _prior_mean_scale(label)
+        preds_kw["eline_design"] = design
     return data, kw, preds_kw
+
+
+def _prior_mean_scale(label):
+    """Typical prior-mean amplitude, so design columns put the prior on the data's scale."""
+    if label.endswith("_cloudy"):
+        from tengri.observation.eline_priors import cloudy_line_priors
+
+        mean, _ = cloudy_line_priors(
+            log_z=-0.3, neb_logU=-2.5, line_wavelengths=LINE_WAVELENGTHS, prior_width_dex=0.3
+        )
+        return float(np.mean(np.asarray(mean)))
+    from tengri.observation.eline_marginalization import model_line_prior
+
+    prior = model_line_prior(
+        MODEL_LOG_LUMS,
+        np.arange(N_LINE),
+        np.ones(N_LINE),
+        LINE_WAVELENGTHS,
+        *MODEL_PRIOR_INPUTS[:3],
+        0.3,
+        transmission=MODEL_PRIOR_INPUTS[3],
+    )
+    return float(np.mean(np.asarray(prior.prior_mean)))
 
 
 # ── Cell checks ───────────────────────────────────────────────────────────────────────
@@ -790,81 +906,6 @@ def test_flat_line_prior_limit_is_the_log_width_asymptote():
         values[variance] = float(score(preds, data, spec))
     expected = -0.5 * N_LINE * np.log(1e18 / 1e16)
     np.testing.assert_allclose(values[1e18] - values[1e16], expected, rtol=1e-6)
-
-
-def _model_prior_inputs():
-    wavelengths = np.array([4861.0, 5007.0, 6563.0])
-    return dict(
-        match_index=np.arange(3),
-        matched=np.ones(3),
-        line_wavelengths=wavelengths,
-        log_line_lums=np.array([8.0, 8.3, 8.6]),
-        inputs=(0.1, 1.0e27, 1.0, np.ones(3)),
-    )
-
-
-def _model_prior_cell(label):
-    """A cell whose lines carry a model-centered prior, with design columns on its scale."""
-    from tengri.observation.eline_marginalization import model_line_prior
-
-    cfg = _model_prior_inputs()
-    prior = model_line_prior(
-        cfg["log_line_lums"],
-        cfg["match_index"],
-        cfg["matched"],
-        cfg["line_wavelengths"],
-        *cfg["inputs"][:3],
-        0.3,
-        transmission=cfg["inputs"][3],
-    )
-    mean, width = np.asarray(prior.prior_mean), np.asarray(prior.prior_width)
-    assert np.all(np.asarray(prior.gaussian) == 1.0)
-    channel = "lines" if label.startswith("lines") else "calibration_lines"
-    preds, data, noise = _synthetic(channel, label)
-    preds = Predictions(
-        **{
-            **preds.__dict__,
-            "eline_design": np.asarray(preds.eline_design) / np.mean(mean),
-            "log_line_lums_attenuated": cfg["log_line_lums"],
-            "eline_prior_inputs": cfg["inputs"],
-        }
-    )
-    model = LineSpec(
-        mode="marginalized",
-        prior_type="model",
-        line_wavelengths=cfg["line_wavelengths"],
-        prior_width_dex=0.3,
-        match_index=cfg["match_index"],
-        matched=cfg["matched"],
-    )
-    return preds, data, NoiseSpec(**{**noise.__dict__, "lines": model}), mean, width
-
-
-def test_model_centered_line_prior_matches_a_dense_gaussian_reference():
-    preds, data, spec, mean, width = _model_prior_cell("lines_marginalized")
-    err = np.asarray(data["noise"])
-    design = np.asarray(preds.eline_design)
-    resid = np.asarray(data["data"]) - np.asarray(preds.spec_fnu) - design @ mean
-    expected = _mvn(resid, np.diag(err**2) + (design * width) @ (design * width).T)
-    actual = float(score(preds, data, spec) + log_normalization(data, spec))
-    np.testing.assert_allclose(actual, expected, rtol=1e-9)
-
-
-def test_model_centered_line_prior_works_under_camera_segments():
-    """Camera segments take the model-centered line prior, not a flat fallback."""
-    preds, data, spec, mean, width = _model_prior_cell("cal_marg_lines_segments")
-    err = np.asarray(data["noise"])
-    design = np.asarray(preds.eline_design)
-    cal = spec.calibration
-    basis = np.asarray(preds.spec_fnu)[:, None] * _calibration_basis(cal)
-    resid = np.asarray(data["data"]) - np.asarray(preds.spec_fnu) - design @ mean
-    cov = (
-        np.diag(err**2)
-        + cal.prior_sigma**2 * basis @ basis.T
-        + (design * width) @ (design * width).T
-    )
-    actual = float(score(preds, data, spec) + log_normalization(data, spec))
-    np.testing.assert_allclose(actual, _mvn(resid, cov), rtol=1e-9)
 
 
 # ── Refusals by name ──────────────────────────────────────────────────────────────────
