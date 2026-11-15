@@ -71,26 +71,39 @@ _SETTINGS = {
 }
 
 
-#: Measured at 2 overdispersed chains x 1000 draws: these run and return finite, moving draws
-#: but do not reach the posterior on this funnel (``psd_sigma`` reference 0.157), and the
-#: driver says so. Strict xfails, so a fix that makes one converge is flagged:
+#: Measured at 2 chains x 1000 draws: these run and return finite, moving draws but do not reach
+#: the posterior on this funnel (``psd_sigma`` reference mean 0.157, sd 0.062), and the driver
+#: says so. Strict xfails, so a fix that makes one converge is flagged. Each was also run with
+#: the previous start rule (0.1 in every coordinate), with each chain adapting from its own
+#: start, with twice the warmup (twice the particles or ELBO steps for SMC and VI) and with
+#: ``field_centering`` in {0, 0.5, 1}; none reaches R-hat < 1.1 with ESS >= 100 and a width
+#: ratio near 1 (psd_sigma mean, width over reference sd, R-hat, ESS):
 #:
-#: * Barker 0.62, MALA 0.64: first-order steps of the stiffest direction's scale (1.5 and 2.0
-#:   after 3000 warmup + 3000 draws); MALA's chain moves on 0.0% of steps.
-#: * full-rank VI 1.62: an unconverged optimizer (ELBO still moving 14%; 0.76 after 10000
-#:   steps).
-#: * tempered SMC: its two populations settle at 0.38 and 1.05.
-#: * importance-sampled HMC: the inner fixed-length HMC, tuned at one start, rejects every
-#:   proposal from another (moved on 0.0% of steps, R-hat 8e15 for ``psd_tau_u``).
-#: * low-rank HMC: R-hat 14 for a field latent, ESS 0.7 for ``psd_sigma_u``, and a rank of 10
-#:   that truncates D=20 (weakest retained |log lambda| 1.12).
+#: * Barker: 1.89, 1.3, 2.4, 2 now; 1.89 / 1.3 / 2.4 / 2 old start; 1.96 / 4.6 / 8.0 / 2 per-chain
+#:   warmup; 1.88 / 1.7 / 2.5 / 3 twice the warmup; 1.58 / 2.5 / 2.4 / 2 at ``field_centering``
+#:   0. First-order steps of the stiffest direction's scale never leave the start region.
+#: * MALA: 1.97, 1.7, 1.9, 2 now; the same under every arm (1.90 / 1.6 / 1.7 / 2 twice the
+#:   warmup; 1.80 / 2.0 / 1.5 / 2 at ``field_centering`` 0).
+#: * full-rank VI: 1.62, 14.9, 1.0, 1493 now (an iid Gaussian: R-hat says nothing); 1.07 after
+#:   8000 steps; 0.52 at ``field_centering`` 0; at the default the ELBO is still moving 14%.
+#: * tempered SMC: 0.71, 5.4, populations at 0.38 and 1.05 now; 0.87 / 7.3 / 3.1 / 24 with
+#:   twice the particles. It refuses ``field_centering`` below 1 by name.
+#: * importance-sampled HMC: 1.13, 12.4, 5e15, 0 now (the inner fixed-length HMC, tuned at one
+#:   start, rejects every proposal from another); 0.19 / 1.7 / 1.00 / 64 with the old start;
+#:   0.22 / 2.8 / 1.16 / 65 per-chain warmup; 0.25 / 1.4 / 1.25 / 2 twice the warmup; 0.54 /
+#:   5.9 / 5.5 / 53 starting one adapted sd away. The old start is the only arm near R-hat 1,
+#:   with a posterior 1.7 times too wide and ESS below the floor.
+#: * low-rank HMC: 0.12, 0.31, 1.8, 5 now; 0.13 / 0.65 / 1.07 / 6 old start; 0.21 / 1.7 / 1.28 /
+#:   5 per-chain warmup; 0.12 / 0.59 / 1.9 / 3 twice the warmup; a rank of 10 truncates D=20
+#:   (weakest retained |log lambda| 1.12), which the driver reports.
 _UNCONVERGED = {
-    "mcmc_barker": "psd_sigma 0.62 vs 0.157: first-order chains stuck",
-    "mcmc_mala": "psd_sigma 0.64 vs 0.157: first-order chain collapsed",
-    "vi_fullrank": "psd_sigma 1.62 vs 0.157: full-rank Gaussian optimizer unconverged",
+    "mcmc_barker": "psd_sigma 1.89 vs 0.157, R-hat 2.4: first-order chains stay near the start",
+    "mcmc_mala": "psd_sigma 1.97 vs 0.157, R-hat 1.9: first-order chain collapsed",
+    "vi_fullrank": "psd_sigma 1.62 vs 0.157, width 15: full-rank optimizer unconverged",
     "mcmc_smc": "two populations at 0.38 and 1.05 (reference 0.157)",
-    "hmc_is": "inner HMC chain collapsed from an overdispersed start (R-hat 8e15)",
-    "mcmc_hmc_lowrank": "R-hat 14, ESS 0.7 for psd_sigma_u; rank 10 truncates D=20",
+    "hmc_is": "inner HMC rejects from a start it was not tuned at (R-hat 5e15; 1.00 only "
+    "with the old start, at width 1.7 and ESS 64)",
+    "mcmc_hmc_lowrank": "R-hat 1.8, ESS 5, width 0.31; rank 10 truncates D=20",
 }
 
 
