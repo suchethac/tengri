@@ -645,3 +645,55 @@ def test_cloudy_nebular_photometry_follows_runtime_z(representation):
         np.testing.assert_allclose(
             got, ref, rtol=RTOL[representation], atol=0.0, err_msg=f"cloudy/{representation} z={z}"
         )
+
+
+# ── Wide tabulated spans with a Lyman break inside ─────────────────────────────
+#
+# The runtime-z table adds no error of its own: it agrees with a Fixed-z WavePrecomp
+# build at every redshift. Against the EXACT build the tabulated path keeps WavePrecomp's
+# own in-band error on a band the IGM has suppressed to ~1e-4 of its neighbours (u at
+# z = 3.5: 4.9e-3; u at z = 4.95: 1.3e-2). That error is the same in a plain Fixed-z
+# WavePrecomp build and does not move with n_z or n_subbands, so it is not a node
+# placement matter; the strict xfail tracks it against the 3e-3 bar.
+
+_UGRI = ["sdss_u", "sdss_g", "sdss_r", "sdss_i"]
+_WIDE_SPANS = {
+    "low": ((0.05, 3.55), (0.05, 1.0, 2.296, 3.502, 3.55)),
+    "high": ((2.15, 4.95), (2.15, 3.2, 3.502, 4.2, 4.95)),
+}
+
+
+def _ugri_model(redshift, approx):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return SEDModel.build(
+            ssp_data=_ssp(),
+            observation=Observation(photometry=Photometry.from_names(_UGRI)),
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            dust_attenuation={"type": "single_component", "law": "calzetti", "tau_v": Fixed(0.3)},
+            redshift=Fixed(redshift),
+            approx=approx,
+        )
+
+
+@pytest.mark.parametrize("span_name", sorted(_WIDE_SPANS))
+@pytest.mark.parametrize("reference", ["tabulated", "exact"])
+def test_wide_span_tabulation_at_break_crossings(span_name, reference, request):
+    """Runtime z on a wide span, at its ends and the Lyman-break crossings, vs a Fixed-z build."""
+    if reference == "exact":
+        request.applymarker(
+            pytest.mark.xfail(
+                strict=True,
+                reason="WavePrecomp in-band error on a Lyman-suppressed u band (4.9e-3 at "
+                "z=3.5, 1.3e-2 at z=4.95), identical in a Fixed-z WavePrecomp build",
+            )
+        )
+    span, zs = _WIDE_SPANS[span_name]
+    runtime = _ugri_model(zs[0], WavePrecomp()).with_runtime_redshift(span)
+    for z in zs:
+        ref_approx = WavePrecomp() if reference == "tabulated" else None
+        ref = np.asarray(_ugri_model(z, ref_approx).predict_photometry({}))
+        got = np.asarray(runtime.predict_photometry({"redshift": z}))
+        np.testing.assert_allclose(
+            got, ref, rtol=RTOL["wp"], atol=0.0, err_msg=f"{span_name} span, z={z}"
+        )
