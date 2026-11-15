@@ -2814,11 +2814,8 @@ def evaluate_sfh(
     _tab_lbt_yr = None
     _tab_order = None
     if isinstance(sfh_model, str) and sfh_model == "table":
-        if config.field:
-            raise NotImplementedError(
-                "sfh_model='table' with field=True is not supported: the "
-                "GP field draw modulates parametric SFHs only (#996)."
-            )
+        # With the GP field the table is modulated like a parametric SFH; every draw is
+        # then pinned to the table integral (_pin_table_mass; #2622, owner 2026-11-15).
         # Shared with compute_joint_weights so the exact forward and the
         # SED-free fast path cannot read a simulation history differently
         # (#1395/#1396).
