@@ -10,6 +10,24 @@ never from a hand list, so a sampler added later enters the sweep without a test
 Per cell: no warning that a setting was ignored or is unsupported, finite draws, and the
 accuracy bar for the sampler's declared fidelity. The mean-field warning (it drops
 cross-level correlations) is expected and asserted.
+
+The bar for a sampler that draws the posterior (``fidelity="exact"``) accounts for Monte
+Carlo error instead of fixing a tolerance in posterior standard deviations. With the pooled
+effective sample size ESS of each coordinate, measured from the draws (per-chain initial
+positive sequence of the autocorrelation, summed over chains):
+
+* ESS >= 100 for every coordinate, of the draw and of its squared deviation, so a chain
+  that does not mix cannot pass on the width of its own error bar;
+* |sample mean - analytic mean| <= 4 sd / sqrt(ESS), with the analytic sd;
+* |sample sd / analytic sd - 1| <= 4 / sqrt(2 ESS_sq), the 4-sigma band of a Gaussian
+  variance estimate from ESS_sq independent draws, ESS_sq the effective sample size of the
+  squared deviations from the analytic mean (the quantity the variance averages);
+* split R-hat < 1.1 with four chains.
+
+A mean-field sampler (``fidelity="mean_only"``) must reach the mean within 0.2 sd, a bound
+on the optimizer rather than on Monte Carlo error; a point estimate must be finite. Every
+key is fixed, and ``test_a_cell_is_bitwise_reproducible`` pins that two runs of one cell
+return identical draws.
 """
 
 from __future__ import annotations
@@ -31,7 +49,7 @@ _COV = np.linalg.inv(_PREC)
 _SD = np.sqrt(np.diag(_COV))
 _Y = np.stack([_A @ np.array([0.4, -0.3, 0.2]), _A @ np.array([-0.5, 0.6, 0.1])])
 
-_N_WARMUP, _N_BURNIN, _N_SAMPLES = 300, 50, 2000
+_N_WARMUP, _N_BURNIN, _N_SAMPLES = 300, 50, 4000
 _IGNORED = ("ignored", "not supported", "unsupported", "not available")
 
 
@@ -53,6 +71,27 @@ def _split_rhat(chains):
     within = halves.var(axis=1, ddof=1).mean(axis=0)
     between = n * halves.mean(axis=1).var(axis=0, ddof=1)
     return np.sqrt(((n - 1) / n * within + between / n) / within)
+
+
+def _ess(chains):
+    """Pooled effective sample size per coordinate of ``chains`` (n_chains, n_draws, D).
+
+    Per chain, the autocorrelation sum is truncated at the first non-positive pair of lags
+    (Geyer's initial positive sequence); the chains' ESS add.
+    """
+    total = np.zeros(chains.shape[-1])
+    for chain in chains:
+        n = chain.shape[0]
+        centered = chain - chain.mean(axis=0)
+        spec = np.fft.rfft(centered, n=2 * n, axis=0)
+        acov = np.fft.irfft(spec * np.conj(spec), axis=0)[:n] / n
+        rho = acov / np.where(acov[0] > 0, acov[0], 1.0)
+        for j in range(chain.shape[-1]):
+            pairs = rho[: (n // 2) * 2, j].reshape(-1, 2).sum(axis=1)
+            stop = np.argmax(pairs <= 0) if np.any(pairs <= 0) else len(pairs)
+            tau = max(-1.0 + 2.0 * pairs[:stop].sum(), 1.0)
+            total[j] += n / tau
+    return total
 
 
 def _catalog_samplers():
@@ -142,6 +181,9 @@ def _run_hierarchical(method, n_chains, metric, monkeypatch):
     return [draws.reshape(n_chains, -1, 2)], _Y[:1]
 
 
+_ESS_FLOOR = 100.0
+
+
 def _check(chains, y, fidelity, n_chains, ncoord):
     flat = np.concatenate([c.reshape(-1, c.shape[-1]) for c in chains])
     assert np.all(np.isfinite(flat)), "non-finite draws"
@@ -149,39 +191,26 @@ def _check(chains, y, fidelity, n_chains, ncoord):
         return
     for chain, yy in zip(chains, y, strict=True):
         mean = _analytic_mean(yy)[:ncoord]
+        sd = _SD[:ncoord]
         draws = chain.reshape(-1, ncoord)
-        bar = 0.2 if fidelity == "mean_only" else 0.15
-        np.testing.assert_array_less(np.abs(draws.mean(0) - mean) / _SD[:ncoord], bar)
-        if fidelity == "exact":
-            np.testing.assert_allclose(draws.std(0), _SD[:ncoord], rtol=0.2)
-            if n_chains == 4 and chain.shape[1] > 20:
-                assert np.all(_split_rhat(chain) < 1.1), _split_rhat(chain)
+        if fidelity == "mean_only":
+            np.testing.assert_array_less(np.abs(draws.mean(0) - mean) / sd, 0.2)
+            continue
+        ess = _ess(chain)
+        ess_sq = _ess((chain - mean) ** 2)
+        floor = np.minimum(ess, ess_sq)
+        assert np.all(floor >= _ESS_FLOOR), f"ESS {np.round(ess)}, {np.round(ess_sq)}"
+        np.testing.assert_array_less(np.abs(draws.mean(0) - mean), 4.0 * sd / np.sqrt(ess))
+        np.testing.assert_array_less(np.abs(draws.std(0) / sd - 1.0), 4.0 / np.sqrt(2.0 * ess_sq))
+        if n_chains == 4 and chain.shape[1] > 20:
+            assert np.all(_split_rhat(chain) < 1.1), _split_rhat(chain)
 
 
 def _cells(engine, names):
     return [(engine, n, c, m) for n in names for c in (1, 4) for m in ("diag", "dense")]
 
 
-#: Cells that run and return finite draws but miss the accuracy bar, with the measured miss
-#: (analytic fixture, 2000 draws per chain). Listed, not hidden: the bar is not loosened, and
-#: ``strict=False`` because the cells sit near it and the draws are not bitwise reproducible
-#: across processes. A cell that starts passing is a candidate for removal from this table.
-_KNOWN_MISSES = {
-    ("hierarchical", "ghmc", 1, "diag"): "mean error 0.16 sd (window GHMC, tier broken)",
-    ("catalog", "barker", 1, "diag"): "mean error 0.22 sd (first-order proposal, one chain)",
-    ("catalog", "hmc", 1, "diag"): "std 0.76-0.90 of analytic (fixed 10-leapfrog HMC)",
-    ("catalog", "hmc", 4, "diag"): "std 1.23 of analytic (fixed 10-leapfrog HMC)",
-    ("catalog", "hmc", 1, "dense"): "mean error 0.75-1.13 sd under vmap (native dense, fixed L)",
-    ("catalog", "hmc", 4, "dense"): "mean error 0.83 sd under vmap (native dense, fixed L)",
-    ("hierarchical", "hmc_lowrank", 1, "diag"): "mean error 0.21 sd (low-rank HMC, one chain)",
-    ("hierarchical", "hmc_lowrank", 1, "dense"): "mean error 0.21 sd (low-rank HMC, one chain)",
-    ("hierarchical", "mala", 1, "diag"): "mean error 0.17 sd (MALA, one chain)",
-}
-
-
 def _marks(engine, cell=None):
-    if cell in _KNOWN_MISSES:
-        return [pytest.mark.slow, pytest.mark.xfail(strict=False, reason=_KNOWN_MISSES[cell])]
     if engine in ("single", "batched"):
         return [pytest.mark.xfail(strict=True, reason="stage S-D/S-E", raises=NotImplementedError)]
     return [pytest.mark.slow]
@@ -240,3 +269,16 @@ def test_every_flat_method_is_derived_from_the_sampler_registry():
     from tengri.inference.sampling.driver import sampler_names
 
     assert set(FLAT_SAMPLERS.values()) == set(sampler_names())
+
+
+@pytest.mark.parametrize("engine", ["catalog", "hierarchical"])
+def test_a_cell_is_bitwise_reproducible(engine, monkeypatch):
+    """Two runs of one cell, same keys, return identical draws: no unseeded source."""
+    runs = []
+    for _ in range(2):
+        if engine == "catalog":
+            chains, _y = _run_catalog("chees", 4, "dense")
+        else:
+            chains, _y = _run_hierarchical("mclmc", 4, "dense", monkeypatch)
+        runs.append(np.concatenate([c.reshape(-1) for c in chains]))
+    np.testing.assert_array_equal(runs[0], runs[1])
