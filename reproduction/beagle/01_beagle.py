@@ -1346,12 +1346,21 @@ plt.show()
 # %% [markdown]
 # ## 9. AGN narrow-line region
 #
-# The narrow-line region block is tengri's Feltre et al. (2016) photoionization grid; Vidal-Garcia et al.
-# (2024) is cited for the narrow-line setup. tengri's ionizing rate comes from an accretion luminosity L_acc
-# and a power-law slope alpha, and the raw table is tabulated at L_acc = 10^45 erg/s. There is no BEAGLE AGN
-# run in this matrix, so this section has no BEAGLE column. Both sources are evaluated at grid nodes: the
-# anchor ratio (1.0000) and the zero differences in the table confirm the normalization and the wiring, but
-# they do not test interpolation between nodes.
+# BEAGLE-AGN (Vidal-Garcia et al. 2024) adds a narrow-line region (NLR) to the H II regions of a galaxy. The
+# NLR is the Feltre, Charlot & Gutkin (2016) CLOUDY photoionization grid, and BEAGLE drives it with the
+# accretion luminosity `agn_lacc` (log10 erg/s), the ionization parameter `agn_logU`, the metallicity `agn_Z`
+# (log10 Z/Z_sun, Z_sun 0.01524), `agn_xi` 0.3, n_H 10^3 cm^-3 and alpha -1.7. tengri's composable `nlr` block
+# reads the same grid. Its disc and torus are left out, because BEAGLE adds no AGN continuum, so the AGN
+# contributes lines only. The section has four parts: the grid check (9a), the NLR normalization and the
+# AGN-only line ratios (9b and 9c), and the mixed H II plus NLR population (9d and 9e).
+
+# %% [markdown]
+# ### §9a Feltre grid check
+
+# %% [markdown]
+# The raw Feltre table is tabulated at L_acc = 10^45 erg/s. The check below evaluates tengri's backend at the
+# grid nodes and compares it with the raw table. The BEAGLE rows in 9b to 9e fall between the nodes, so they
+# test interpolation as well as normalization.
 
 # %%
 AGN_ALPHA = -1.7
@@ -1430,6 +1439,338 @@ axes[0].legend(fontsize=6, frameon=False)
 fig.tight_layout()
 save_fig("beagle_09_nlr.png")
 plt.show()
+
+
+# %% [markdown]
+# ### §9b NLR normalization against BEAGLE
+
+# %% [markdown]
+# BEAGLE's `agn_lacc` is taken as the tengri accretion luminosity directly: `agn_log_lbol` = `agn_lacc` - log10(L_sun)
+# with `agn_nlr_cf` 1, so the Feltre grid is evaluated at L_acc = 10^`agn_lacc` erg/s. The column `ratio, cf 0.1` is
+# the ratio if a 10 % covering fraction were applied on top of `agn_lacc`. The composable build at one node checks
+# that the block's summed line luminosity equals the backend's. The last column is the raw grid at Z 0.014, which
+# BEAGLE's Z does not sit on, for the same logU.
+
+# %%
+from types import SimpleNamespace  # noqa: E402
+
+AGN_ONLY_LACC = 45.0  # BEAGLE agn_lacc of s9_agn_only, fixed in the matrix
+MIX_RUN = beagle("s9_agn")
+MIX_ROWS = by_section("s9_agn")[0].input_table()
+ONLY_RUN = beagle("s9_agn_only")
+ONLY_ROWS = by_section("s9_agn_only")[0].input_table()
+ONLY_LOGU = np.asarray(ONLY_ROWS["agn_logU"], float)
+ONLY_Z = np.asarray(ONLY_ROWS["agn_Z"], float)
+
+# BEAGLE vacuum-wavelength windows for each AGN line; doublets are summed.
+AGN_WIN = {
+    "Hb": ((4860.0, 4864.0),), "Ha": ((6562.0, 6566.0),), "CIV": ((1547.0, 1553.0),),
+    "HeII1640": ((1639.0, 1641.0),), "CIII]1908": ((1905.0, 1912.0),), "NeV3426": ((3424.0, 3428.0),),
+    "OII3727": ((3725.0, 3731.0),), "HeII4686": ((4685.0, 4688.0),), "OIII5007": ((5005.0, 5009.0),),
+    "NII6584": ((6582.0, 6586.0),), "SII": ((6714.0, 6734.0),),
+}
+# tengri Feltre line wavelengths [Angstrom, vacuum, as the grid returns them] for each name; doublets are
+# summed. Empty where the Feltre table has no such line. The header names differ from these for [C III] 1910.
+TENGRI_NLR_WAVES = {
+    "Hb": (4862.69,), "Ha": (6564.61,), "CIV": (1548.2, 1550.77), "HeII1640": (1640.4,),
+    "CIII]1908": (1906.68, 1908.73), "NeV3426": (), "OII3727": (3727.09,), "HeII4686": (),
+    "OIII5007": (5008.24,), "NII6584": (6585.27,), "SII": (6718.29, 6732.68),
+}
+
+
+def z_abs_of(zrel):
+    """Absolute gas metallicity Z for BEAGLE agn_Z (log10 Z/Z_sun, Z_sun 0.01524)."""
+    return beagle_driver.Z_SUN_BEAGLE * 10.0**zrel
+
+
+def beagle_agn(run, name):
+    """BEAGLE AGN line luminosity [erg/s] for one AGN_WIN name, shape (rows,)."""
+    return beagle_lines(SimpleNamespace(line_lums_lsun=run.agn_line_lums_lsun), (AGN_WIN[name],))[:, 0]
+
+
+def agn_log_lbol(lacc):
+    """tengri agn_log_lbol [log10 L_sun] for BEAGLE agn_lacc [log10 erg/s]."""
+    return lacc - np.log10(L_SUN)
+
+
+def tengri_nlr_lines(z_abs, log_u, lacc, *, xi=AGN_XI, log_n=AGN_LOG_N, alpha=AGN_ALPHA):
+    """tengri NLR line luminosities [erg/s] by AGN_WIN name, from the backend at L_acc 10^lacc erg/s."""
+    w, lum = tengri_nlr(z_abs, log_u, l_acc=10.0**lacc, xi=xi, log_n=log_n, alpha=alpha)
+    out = {}
+    for name, waves in TENGRI_NLR_WAVES.items():
+        out[name] = sum(line_at(w, lum, wave_aa) for wave_aa in waves) if waves else np.nan
+    return out
+
+
+def agn_mix_model(*, lacc=None, log_u=-2.5, zrel=0.0):
+    """tengri build: the BEAGLE H II part (1 Gyr delayed history, 10 Myr episode at log SFR 1) with gutkin16,
+    plus the Feltre NLR when ``lacc`` is given. The disc and torus are not built, so the AGN is lines only."""
+    agn = None
+    if lacc is not None:
+        agn = {"type": "composable", "agn_log_lbol": Fixed(agn_log_lbol(lacc)), "all_params": Fixed(DEFAULT),
+               "nlr": {"type": "feltre", "agn_nlr_cf": Fixed(1.0), "agn_nlr_alpha_pl": Fixed(AGN_ALPHA),
+                       "agn_nlr_logn": Fixed(AGN_LOG_N), "agn_nlr_logU": Fixed(log_u),
+                       "agn_nlr_logZ": Fixed(float(np.log10(z_abs_of(zrel)))), "agn_nlr_xi_d": Fixed(AGN_XI),
+                       "agn_nlr_fwhm_kms": Fixed(500.0), "other_params": Fixed(DEFAULT)}}
+    kwargs = {"agn": agn} if agn is not None else {}
+    return SEDModel.build(
+        ssp_data=ssp,
+        met={"logzsol": Fixed(TENGRI_LOG_ZSOL_NEB), "logzsol_scatter": Fixed(0.001), "all_params": Fixed(DEFAULT)},
+        sfh={"type": ["delayed", "recent"], "tau_gyr": Fixed(EPISODE_AGE_GYR), "age_gyr": Fixed(EPISODE_AGE_GYR),
+             "log_total_mass": Fixed(LOG_MASS), "log_sfr": Fixed(RECENT_LOG_SFR),
+             "timescale_myr": Fixed(RECENT_MYR), "other_params": Fixed(DEFAULT)},
+        dust_attenuation={"type": "none"},
+        neb={"type": "gutkin16", "logU": Fixed(-2.5), "logZ_gas": Fixed(TENGRI_LOG_ZSOL_NEB),
+             "xi_d": Fixed(0.3), "log_nH": Fixed(2.0), "co_ratio": Fixed(1.0), "other_params": Fixed(DEFAULT)},
+        redshift=Fixed(0.001),
+        **kwargs,
+    )
+
+
+_chk_lacc = AGN_ONLY_LACC
+mix_check = agn_mix_model(lacc=_chk_lacc, log_u=-2.5, zrel=0.0)
+pred_check = mix_check.predict({})
+w_c, lum_c = tengri_nlr(z_abs_of(0.0), -2.5, l_acc=10.0**_chk_lacc)
+composable_total = float(pred_check.properties["L_agn_lines_lsun"])
+backend_total = float(np.sum(lum_c)) / L_SUN
+print(f"§9b composable check (agn_lacc {_chk_lacc:g}, logU -2.5, Z 0.01524): summed NLR line luminosity "
+      f"composable {composable_total:.6e} L_sun, backend {backend_total:.6e} L_sun, ratio {composable_total / backend_total:.8f}")
+print(f"§9b agn_log_lbol for agn_lacc {AGN_ONLY_LACC:g}: {agn_log_lbol(AGN_ONLY_LACC):.4f}; L_sun {L_SUN:.4e} erg/s "
+      f"(BEAGLE 3.826e33 erg/s)")
+
+B_HB_ONLY = beagle_agn(ONLY_RUN, "Hb")
+print("§9b AGN-only H-beta, BEAGLE vs tengri (erg/s)")
+print(f"  {'logU':>6s} {'Z':>6s} {'BEAGLE':>11s} {'tengri':>11s} {'ratio':>8s} {'ratio, cf 0.1':>14s} "
+      f"{'table Z 0.014':>14s}")
+NORM_RATIO = []
+for j, (u, zr) in enumerate(zip(ONLY_LOGU, ONLY_Z)):
+    t_hb = tengri_nlr_lines(z_abs_of(zr), u, AGN_ONLY_LACC)["Hb"]
+    raw_hb = beagle_driver.feltre_node(0.014, u, AGN_XI, 10.0**AGN_LOG_N, AGN_ALPHA)["Hbeta"]
+    NORM_RATIO.append(t_hb / B_HB_ONLY[j])
+    print(f"  {u:6.1f} {zr:6.1f} {B_HB_ONLY[j]:11.4e} {t_hb:11.4e} {t_hb / B_HB_ONLY[j]:8.4f} "
+          f"{0.1 * t_hb / B_HB_ONLY[j]:14.4f} {raw_hb:14.4e}")
+
+# %% [markdown]
+# The two normalizations are not one constant factor apart. The ratio is 0.97 to 0.98 at logU -3.5 and rises to 2.74
+# at logU -1.5 and Z 0. Tengri's H-beta falls by 0.17 dex across the logU range, as the raw grid does, while BEAGLE's
+# falls by 0.62 dex at Z 0. Tengri matches the raw grid at the nodes (9a), so the difference lies in how BEAGLE's
+# `agn_logU` drives the grid. That is model physics, not isolated here. Applying a 10 % covering fraction on top of
+# `agn_lacc` would put every ratio at 0.10 to 0.27, so this comparison takes `agn_lacc` as the ionizing luminosity.
+
+# %% [markdown]
+# ### §9c AGN-only line ratios
+
+# %% [markdown]
+# Each line is divided by H-beta, and the table gives log10 of the ratio for BEAGLE and for tengri, and the
+# difference, for the six (logU, Z) combinations. He II 4686 and [Ne V] 3426 are not in the Feltre table, so
+# tengri has no value for them.
+
+# %%
+ONLY_LABELS = [f"{u:+.1f}/{zr:+.1f}" for u, zr in zip(ONLY_LOGU, ONLY_Z)]
+T_ONLY = [tengri_nlr_lines(z_abs_of(zr), u, AGN_ONLY_LACC) for u, zr in zip(ONLY_LOGU, ONLY_Z)]
+B_ONLY = {k: beagle_agn(ONLY_RUN, k) for k in AGN_WIN}
+LINE_NAMES = [k for k in AGN_WIN if k != "Hb"]
+
+
+def log_ratio_table(title, values):
+    print(title)
+    print(f"  {'line':>10s} " + " ".join(f"{lab:>11s}" for lab in ONLY_LABELS))
+    for name in LINE_NAMES:
+        cells = []
+        for j in range(len(ONLY_LOGU)):
+            v = values[name][j]
+            cells.append(f"{'n/a':>11s}" if not np.isfinite(v) else f"{v:11.3f}")
+        print(f"  {name:>10s} " + " ".join(cells))
+
+
+B_LOG = {k: np.log10(B_ONLY[k] / B_ONLY["Hb"]) for k in LINE_NAMES}
+T_LOG = {k: np.array([np.log10(t[k] / t["Hb"]) if np.isfinite(t[k]) else np.nan for t in T_ONLY])
+         for k in LINE_NAMES}
+D_LOG = {k: T_LOG[k] - B_LOG[k] for k in LINE_NAMES}
+print("§9c combos are logU/Z (Z = log10 Z/Z_sun)")
+log_ratio_table("§9c BEAGLE log10(line / H-beta)", B_LOG)
+log_ratio_table("§9c tengri log10(line / H-beta)", T_LOG)
+log_ratio_table("§9c difference tengri - BEAGLE (dex)", D_LOG)
+
+fig, ax = plt.subplots(figsize=(4.6, 4.0))
+for j, lab in enumerate(ONLY_LABELS):
+    xs = [B_LOG[k][j] for k in LINE_NAMES if np.isfinite(T_LOG[k][j])]
+    ys = [T_LOG[k][j] for k in LINE_NAMES if np.isfinite(T_LOG[k][j])]
+    ax.plot(xs, ys, "o", ms=4, color=f"C{j}", label=f"logU/Z {lab}")
+lim = [-2.5, 1.5]
+ax.plot(lim, lim, "k:", lw=0.8)
+ax.set_xlabel(r"BEAGLE $\log_{10}$(line / H$\beta$)", fontsize=8)
+ax.set_ylabel(r"tengri $\log_{10}$(line / H$\beta$)", fontsize=8)
+ax.legend(fontsize=6, frameon=False)
+fig.tight_layout()
+save_fig("beagle_09_agn_lines.png")
+plt.show()
+
+# %% [markdown]
+# Hα agrees to 0.01 dex in all six combinations, [N II] to 0.04 dex and [O III]/H-beta to 0.05 dex. The [O II] and
+# [S II] differences reach 0.17 and 0.60 dex at logU -1.5 and Z -0.5, C IV reaches -1.12 dex at logU -1.5 and Z 0, and
+# He II 1640 and C III] reach 0.32 and 0.20 dex. The UV and low-ionization lines depend on the shape of the ionizing
+# spectrum, which the two codes drive differently, so these are model physics, not isolated here. He II 4686 and
+# [Ne V] 3426 are not in the Feltre table tengri reads, which holds 20 lines, while BEAGLE's AGN output lists them: a
+# line-set coverage difference.
+
+# %% [markdown]
+# ### §9d Mixed H II and NLR: BPT diagram
+
+# %% [markdown]
+# The 24 mixed rows add the NLR to the same H II regions. Each line is the H II value plus the AGN value, so the
+# H II part is checked first: it is identical in every row, and it sets the H II points of the diagram. Demarcation
+# curves are Kauffmann et al. (2003) and Kewley et al. (2001).
+
+# %%
+BPT_NAMES = ("Ha", "Hb", "NII6584", "OIII5007")
+BPT_WINDOWS = tuple(AGN_WIN[n] for n in BPT_NAMES)
+TG_HII_IDX = {"Ha": GK_LABELS.index("Ha"), "Hb": GK_LABELS.index("Hb"),
+              "NII6584": GK_LABELS.index("[NII]6584"), "OIII5007": GK_LABELS.index("[OIII]5007")}
+
+B_HII = beagle_lines(MIX_RUN, BPT_WINDOWS)
+B_AGN_PART = beagle_lines(SimpleNamespace(line_lums_lsun=MIX_RUN.agn_line_lums_lsun), BPT_WINDOWS)
+B_MIX = B_HII + B_AGN_PART
+hii_spread = np.max(np.abs(B_HII[:, 1] / B_HII[0, 1] - 1.0))
+print(f"§9d BEAGLE H II part of the 24 mixed rows: largest relative spread of H-beta across rows {hii_spread:.2e}")
+
+tg_gk = tengri_gk_lines(pred_check)
+T_HII = np.array([tg_gk[TG_HII_IDX[n]] for n in BPT_NAMES])
+print("§9d tengri H II part (erg/s): " + ", ".join(f"{n} {T_HII[i]:.4e}" for i, n in enumerate(BPT_NAMES)))
+print(f"§9d BEAGLE H II part (erg/s), row 0: " + ", ".join(f"{n} {B_HII[0, i]:.4e}" for i, n in enumerate(BPT_NAMES)))
+
+
+def bpt_xy(ha, hb, nii, oiii):
+    """log10([N II]/H-alpha) and log10([O III]/H-beta)."""
+    return np.log10(nii / ha), np.log10(oiii / hb)
+
+
+MIX_LACC = np.asarray(MIX_ROWS["agn_lacc"], float)
+MIX_LOGU = np.asarray(MIX_ROWS["agn_logU"], float)
+MIX_Z = np.asarray(MIX_ROWS["agn_Z"], float)
+xb, yb = bpt_xy(B_MIX[:, 0], B_MIX[:, 1], B_MIX[:, 2], B_MIX[:, 3])
+T_MIX = np.array([T_HII + np.array([tengri_nlr_lines(z_abs_of(zr), u, la)[n] for n in BPT_NAMES])
+                  for la, u, zr in zip(MIX_LACC, MIX_LOGU, MIX_Z)])
+xt, yt = bpt_xy(T_MIX[:, 0], T_MIX[:, 1], T_MIX[:, 2], T_MIX[:, 3])
+
+ep_idx = np.flatnonzero(np.isclose(EP_SFR, 1.0) & np.isclose(EP_WIN_MYR, 10.0))[0]
+B_PURE_HII = beagle_lines(beagle("s8b_episode"), BPT_WINDOWS)[ep_idx]
+xb_h, yb_h = bpt_xy(*B_PURE_HII[[0, 1, 2, 3]])
+xt_h, yt_h = bpt_xy(*T_HII)
+B_ONLY_LINES = np.array([[B_ONLY["Ha"][j], B_ONLY["Hb"][j], B_ONLY["NII6584"][j], B_ONLY["OIII5007"][j]]
+                         for j in range(len(ONLY_LOGU))])
+xb_a, yb_a = bpt_xy(B_ONLY_LINES[:, 0], B_ONLY_LINES[:, 1], B_ONLY_LINES[:, 2], B_ONLY_LINES[:, 3])
+T_ONLY_LINES = np.array([[t["Ha"], t["Hb"], t["NII6584"], t["OIII5007"]] for t in T_ONLY])
+xt_a, yt_a = bpt_xy(T_ONLY_LINES[:, 0], T_ONLY_LINES[:, 1], T_ONLY_LINES[:, 2], T_ONLY_LINES[:, 3])
+
+print("§9d mixed rows: agn_lacc, logU, Z; BEAGLE log([NII]/Ha), log([OIII]/Hb); tengri the same; differences")
+print(f"  {'lacc':>5s} {'logU':>6s} {'Z':>6s} {'B x':>8s} {'T x':>8s} {'dx':>8s} {'B y':>8s} {'T y':>8s} {'dy':>8s}")
+for i in range(len(MIX_LACC)):
+    print(f"  {MIX_LACC[i]:5.1f} {MIX_LOGU[i]:6.1f} {MIX_Z[i]:6.1f} {xb[i]:8.3f} {xt[i]:8.3f} {xt[i] - xb[i]:8.3f} "
+          f"{yb[i]:8.3f} {yt[i]:8.3f} {yt[i] - yb[i]:8.3f}")
+print(f"§9d max |dx| {np.max(np.abs(xt - xb)):.3f}, max |dy| {np.max(np.abs(yt - yb)):.3f} dex over the 24 mixed rows")
+print(f"§9d pure H II, BEAGLE (x, y) = ({xb_h:.3f}, {yb_h:.3f}); tengri = ({xt_h:.3f}, {yt_h:.3f})")
+print("§9d pure AGN, BEAGLE (x, y) and tengri (x, y): " + "; ".join(
+    f"logU/Z {lab}: B ({xb_a[j]:.3f}, {yb_a[j]:.3f}) T ({xt_a[j]:.3f}, {yt_a[j]:.3f})"
+    for j, lab in enumerate(ONLY_LABELS)))
+
+kx = np.linspace(-1.6, 0.0, 200)
+kewley_x = np.linspace(-2.0, 0.3, 300)
+fig, ax = plt.subplots(figsize=(5.2, 4.2))
+ax.plot(kx, 0.61 / (kx - 0.05) + 1.3, "k--", lw=0.8, label="Kauffmann+03")
+ax.plot(kewley_x[kewley_x < 0.47], 0.61 / (kewley_x[kewley_x < 0.47] - 0.47) + 1.19, "k:", lw=0.8,
+        label="Kewley+01")
+for j in range(len(ONLY_LOGU)):
+    ax.plot(xb_a[j], yb_a[j], "s", mfc="none", color=f"C{j}", ms=5)
+    ax.plot(xt_a[j], yt_a[j], "s", color=f"C{j}", ms=3)
+ax.plot(xb[:], yb[:], "o", mfc="none", ms=4, color="0.3", label="BEAGLE, mixed")
+ax.plot(xt[:], yt[:], "o", ms=3, color="C3", label="tengri, mixed")
+ax.plot(xb_h, yb_h, "*", mfc="none", ms=9, color="k", label="BEAGLE, H II")
+ax.plot(xt_h, yt_h, "*", ms=7, color="k", label="tengri, H II")
+ax.set_xlim(-1.6, 0.8)
+ax.set_ylim(-1.0, 1.6)
+ax.set_xlabel(r"$\log_{10}$([N II] 6584 / H$\alpha$)", fontsize=8)
+ax.set_ylabel(r"$\log_{10}$([O III] 5007 / H$\beta$)", fontsize=8)
+ax.legend(fontsize=6, frameon=False, loc="lower right")
+fig.tight_layout()
+save_fig("beagle_09_bpt.png")
+plt.show()
+
+# %% [markdown]
+# The H II points agree to 0.04 dex in [O III]/H-beta, consistent with the §8 line comparison. The pure-AGN points agree
+# to 0.05 dex in both axes for all six combinations, so the 9b normalization offset does not move a line ratio. The
+# mixed rows differ by at most 0.16 dex in [N II]/H-alpha and 0.13 dex in [O III]/H-beta, at logU -1.5 where the 9b offset
+# is largest (agn_lacc 44 and 45, Z 0 and -0.5). Mixed points depend on the NLR-to-H II H-beta ratio, so this difference is
+# the 9b normalization offset carried into the mixture, together with the H II library bracket of §8c, which this section
+# does not remove. It is classified as model physics of the NLR normalization.
+
+# %% [markdown]
+# ### §9e Spectrum of one mixed row
+
+# %% [markdown]
+# The row with agn_lacc 45, logU -2.5 and Z 0 is shown on BEAGLE's native rest-frame grid, binned to 20 Å in both
+# codes. BEAGLE's `AGN FULL SED` is the AGN part of its `FULL SED`, checked point by point below. The tengri AGN share
+# is the difference from the H II-only build. The H II ratio uses the BEAGLE row with a 10 Myr episode at SFR 1 (§8e).
+
+# %%
+sel = int(np.flatnonzero(np.isclose(MIX_LACC, 45.0) & np.isclose(MIX_LOGU, -2.5) & np.isclose(MIX_Z, 0.0))[0])
+wl_b = np.asarray(MIX_RUN.wl_rest_aa, float)
+lnu_b = np.asarray(MIX_RUN.sed_lnu[sel], float)
+agn_b = np.asarray(MIX_RUN.agn_sed[sel], float)
+lnu_t = np.asarray(pred_check.rest_sed(wl_b), float)
+hii_t = np.asarray(agn_mix_model(lacc=None).predict({}).rest_sed(wl_b), float)
+_ep_run = beagle("s8b_episode")
+hii_b = np.asarray(_ep_run.sed_lnu[ep_idx], float)
+wl_hii_b = np.asarray(_ep_run.wl_rest_aa, float)
+print(f"§9e BEAGLE FULL SED minus AGN FULL SED is non-negative in {np.mean(lnu_b - agn_b >= 0) * 100:.1f} % of the grid points")
+
+LO, HI = 1200.0, 7000.0
+cw, vb = binned_lnu(wl_b, lnu_b, LO, HI, 20.0)
+_, vt = binned_lnu(wl_b, lnu_t, LO, HI, 20.0)
+_, va = binned_lnu(wl_b, agn_b, LO, HI, 20.0)
+_, vh = binned_lnu(wl_b, hii_t, LO, HI, 20.0)
+_, vhb = binned_lnu(wl_hii_b, hii_b, LO, HI, 20.0)
+ratio = vt / vb
+print("§9e binned L_nu ratio tengri/BEAGLE and AGN share of the total, by window (20 Å bins):")
+print(f"  {'window':>14s} {'median T/B':>11s} {'max |log|':>10s} {'AGN share B':>12s} {'AGN share T':>12s} "
+      f"{'H II T/B':>9s}")
+for lo_w, hi_w in ((1200.0, 2000.0), (2000.0, 3500.0), (3500.0, 5500.0), (5500.0, 7000.0)):
+    m = (cw >= lo_w) & (cw < hi_w)
+    share_b = va[m].sum() / vb[m].sum()
+    share_t = (vt[m] - vh[m]).sum() / vt[m].sum()
+    print(f"  {lo_w:6.0f}-{hi_w:5.0f} {np.median(ratio[m]):11.3f} {np.max(np.abs(np.log10(ratio[m]))):10.3f} "
+          f"{share_b:12.3f} {share_t:12.3f} {np.median(vh[m] / vhb[m]):9.3f}")
+print("§9e BEAGLE AGN light per window: integrated AGN L_nu and the sum of its listed lines [erg/s]")
+print(f"  {'window':>14s} {'int L_nu':>11s} {'lines':>11s} {'non-line':>11s} {'non-line share':>15s}")
+for lo_w, hi_w in ((1200.0, 2000.0), (2000.0, 3500.0), (3500.0, 5500.0), (5500.0, 7000.0)):
+    m = (wl_b >= lo_w) & (wl_b < hi_w)
+    int_nu = float(np.trapezoid(agn_b[m] * C_AA / wl_b[m] ** 2, wl_b[m]))
+    lines_sum = float(beagle_lines(SimpleNamespace(line_lums_lsun=MIX_RUN.agn_line_lums_lsun),
+                                   (((lo_w, hi_w),),))[sel, 0])
+    print(f"  {lo_w:6.0f}-{hi_w:5.0f} {int_nu:11.4e} {lines_sum:11.4e} {int_nu - lines_sum:11.4e} "
+          f"{(int_nu - lines_sum) / int_nu:15.3f}")
+
+fig, (ax0, ax1) = plt.subplots(2, 1, figsize=(6.4, 4.6), sharex=True, gridspec_kw={"height_ratios": [3, 1.2]})
+ax0.plot(cw, np.log10(vb), "k-", lw=1.0, label="BEAGLE, H II + NLR")
+ax0.plot(cw, np.log10(vt), "C3-", lw=1.0, label="tengri, H II + NLR")
+ax0.plot(cw, np.log10(va), "k:", lw=0.8, label="BEAGLE, NLR only")
+ax0.set_ylabel(r"$\log_{10} L_\nu$ [erg/s/Hz]", fontsize=8)
+ax0.legend(fontsize=6, frameon=False)
+ax1.plot(cw, ratio, "C0-", lw=1.0)
+ax1.axhline(1.0, color="0.5", lw=0.6)
+ax1.set_ylabel("tengri / BEAGLE", fontsize=8)
+ax1.set_xlabel(r"rest wavelength [$\mathrm{\AA}$]", fontsize=8)
+fig.tight_layout()
+save_fig("beagle_09_spectrum.png")
+plt.show()
+
+# %% [markdown]
+# The optical windows agree. Above 3500 Å the median tengri/BEAGLE ratio is 0.99 to 1.01 and the AGN share agrees to
+# within 0.02. Below 3500 Å the ratio is 1.17 and 1.09, and the H II-only ratio is 1.21 and 1.12, so this excess is in the
+# H II part and not in the NLR. It is the stellar or nebular continuum; the library bracket and the nebular continuum are
+# not separated here. The AGN share below 3500 Å differs: at 1200 to 2000 Å it follows the C IV and He II differences of
+# 9c. At 2000 to 3500 Å, where tengri's Feltre table has no line, 40 % of the BEAGLE AGN light is outside its listed
+# lines (printed above), and tengri's NLR block returns lines only, so this is model physics.
 
 # %% [markdown]
 # ## §12 IGM absorption
