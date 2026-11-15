@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""The nine samplers the flat seam used to refuse, run on a real population fit (#3505, M5).
+"""The nine samplers the flat seam used to refuse, run on a real population fit.
 
 Two galaxies observed spectroscopically on a stochastic SFH (``n_grid=8``, D about 22) are
 the smallest real hierarchy. Its posterior is a funnel: three NUTS runs of one problem
@@ -192,39 +192,59 @@ def test_the_nine_names_are_flat_samplers():
     assert set(_NEW) <= set(FLAT_SAMPLERS)
 
 
+_FITS: dict = {}
+
+
+def _fit(population, method):
+    """One fit per method, shared by the diagnostics test and the accuracy test."""
+    if method not in _FITS:
+        settings = {"n_warmup": 400, "n_burnin": 100, "n_samples": 1000, "n_chains": 2}
+        settings.update(_SETTINGS.get(method, {}))
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            post = population.run(
+                method, key=jax.random.PRNGKey(1), allow_unvalidated=True, **settings
+            )
+        health = [str(w.message) for w in caught if issubclass(w.category, RuntimeWarning)]
+        _FITS[method] = (post, health)
+    return _FITS[method]
+
+
 @pytest.mark.slow
 @pytest.mark.population_fit
-@pytest.mark.parametrize("method", [pytest.param(m, marks=_marks(m)) for m in _NEW])
-def test_a_newly_wired_sampler_recovers_the_population_mean(method, population, reference):
-    settings = {"n_warmup": 400, "n_burnin": 100, "n_samples": 1000, "n_chains": 2}
-    settings.update(_SETTINGS.get(method, {}))
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        post = population.run(
-            method, key=jax.random.PRNGKey(1), allow_unvalidated=True, **settings
-        )
-    health = [str(w.message) for w in caught if issubclass(w.category, RuntimeWarning)]
+@pytest.mark.parametrize("method", _NEW)
+def test_the_driver_judges_every_run(method, population):
+    """Not an xfail: a driver that stops warning about a run that did not converge fails here.
+
+    A run that does not converge draws exactly one warning that names the failing quantity;
+    one that does must not warn about the population parameters. The stochastic-SFH field
+    latents (``gal_xi``) are reported for every sampler, a reference NUTS run included (R-hat
+    2.0, ESS 0.9 of 1500), so they do not count against a converged run.
+    """
+    post, health = _fit(population, method)
     if method in _WARNS:
         assert len(health) == 1, health
         assert any(key in health[0] for key in _WARNS[method]), health
         assert post.diagnostics["convergence_problems"]
     else:
-        # The driver also reports the stochastic-SFH field latents (``gal_xi``), which a
-        # reference NUTS run leaves unmixed too (R-hat 2.0, ESS 0.9 of 1500); what the six
-        # must not trigger is a warning about the population parameters under test.
         assert not [m for m in health if "psd_" in m], health
     for name in ("psd_sigma", "psd_tau_myr"):
         values = np.asarray(post.shared_samples[name])
         assert np.all(np.isfinite(values)), f"{method}: {name} has non-finite draws"
         assert np.unique(values).size > 1, f"{method}: {name} never moved"
+
+
+@pytest.mark.slow
+@pytest.mark.population_fit
+@pytest.mark.parametrize("method", [pytest.param(m, marks=_marks(m)) for m in _NEW])
+def test_a_newly_wired_sampler_recovers_the_population_mean(method, population, reference):
+    post, _health = _fit(population, method)
     n_chains = post.diagnostics["n_chains"]
     chains = np.asarray(post.shared_samples["psd_sigma"]).reshape(n_chains, -1)
     mean, sd = float(chains.mean()), float(chains.std())
     delta = abs(mean - reference["mean"])
     ess = _ess(chains)
-    problems = post.diagnostics["convergence_problems"]
     print(f"REAL {method}: psd_sigma {mean:.3f} ref {reference['mean']:.3f} d {delta:.3f}")
-    print(f"REAL {method}: ess {ess:.1f} problems {problems}")
     if method in _VI:
         assert delta <= _VI_BAR * reference["sd"], (method, mean, reference)
         return

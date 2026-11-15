@@ -116,9 +116,10 @@ class Sampler:
         How ``metric="dense"`` is served: by the pilot-whitening layer, by the family's own
         dense adaptation, by the runner itself (it delegates to another sampler), or not at
         all because the result is invariant under the whitening.
-    pilot : str or None
-        Name of the sampler that supplies the pilot draws of the dense-metric layer when this
-        one does not draw a posterior (a point estimate); ``None`` is the sampler itself.
+    pilot : str, callable or None
+        What supplies the pilot draws of the dense-metric layer when this sampler does not
+        draw a posterior (a point estimate): a sampler name, or a runner with the signature
+        of :attr:`run`. ``None`` is the sampler itself.
     advisory : str or None
         A warning emitted once per :func:`run_sampler` call, however many internal passes
         (a pilot, then the final run) the layers make.
@@ -140,7 +141,7 @@ class Sampler:
     run: Callable
     fidelity: str = "exact"
     metric_mode: str = "layer"
-    pilot: str | None = None
+    pilot: Any = None
     advisory: str | None = None
     engine: str | None = None
     dense_default: bool = False
@@ -297,8 +298,11 @@ def run_sampler(
     # rows to be full rank, and PILOT_ROWS_PER_DIM rows per coordinate keep its estimate from
     # being dominated by noise. A request for fewer draws than that is raised, not refused.
     pilot_cfg = {**full, "n_samples": max(full["n_samples"], pilot_rows(target.n_dim))}
-    pilot_sampler = get_sampler(sampler.pilot) if sampler.pilot else sampler
-    pilot = pilot_sampler.run(target, pilot_key, 1, "diag", pilot_cfg)
+    if callable(sampler.pilot):
+        pilot_run = sampler.pilot
+    else:
+        pilot_run = (get_sampler(sampler.pilot) if sampler.pilot else sampler).run
+    pilot = pilot_run(target, pilot_key, 1, "diag", pilot_cfg)
     rows, mask = _usable_rows(pilot)
     mu, factor, fallback = pilot_whitening(rows, mask)
     if bool(fallback):
@@ -346,7 +350,10 @@ def _judged(
     if sampler.kind in ("chain", "ensemble"):
         names = health.element_names(target.layout)
         record, problems = health.chain_diagnostics(
-            np.asarray(result.draws), names, exchangeable=sampler.name == "smc"
+            np.asarray(result.draws),
+            names,
+            exchangeable=sampler.name == "smc",
+            divergent=None if result.divergent is None else np.asarray(result.divergent),
         )
         step = diag.get("step_size")
         if step is not None and not (np.isfinite(step) and step > 1e-8):

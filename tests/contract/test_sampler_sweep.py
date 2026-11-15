@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Class sweep: every sampler works in every engine, with every setting (#3505, M5).
+"""Class sweep: every sampler works in every engine, with every setting.
 
 One sampler driver (``tengri.inference.sampling``) serves every inference engine, so a
 setting is either honored by every sampler in every engine or it is a bug of the whole
@@ -223,8 +223,7 @@ def _marks(engine, cell=None):
             pytest.mark.xfail(
                 strict=True,
                 reason=(
-                    "single-galaxy and batched-spectroscopy engines not yet on the shared "
-                    "driver (#3505)"
+                    "single-galaxy and batched-spectroscopy engines not yet on the shared driver"
                 ),
                 raises=NotImplementedError,
             )

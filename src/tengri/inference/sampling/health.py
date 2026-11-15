@@ -18,6 +18,10 @@ import numpy as np
 from tengri.analysis.diagnostics.autocorrelation import effective_sample_size, split_rhat
 from tengri.inference.sampler_health import ESS_FRACTION_WARN, RHAT_WARN
 
+#: Fraction of divergent steps above which a chain is dead rather than merely inexact: it
+#: reports divergence on most of its steps and goes nowhere.
+DEAD_DIVERGENT_FRACTION = 0.5
+
 #: Fraction of steps that move the position below which a Metropolis chain has collapsed.
 COLLAPSED_MOVE_FRACTION = 0.05
 
@@ -56,7 +60,9 @@ def element_names(layout) -> list[str]:
     return names
 
 
-def chain_diagnostics(draws, names, *, exchangeable: bool = False) -> tuple[dict, list[str]]:
+def chain_diagnostics(
+    draws, names, *, exchangeable: bool = False, divergent=None
+) -> tuple[dict, list[str]]:
     """Return the R-hat, ESS and move fractions of ``draws`` and the problems they show.
 
     A non-finite draw, R-hat or ESS is a named problem, never a skipped column: a chain that
@@ -71,11 +77,14 @@ def chain_diagnostics(draws, names, *, exchangeable: bool = False) -> tuple[dict
     exchangeable : bool
         True for resampled particle sets, whose autocorrelation ESS is not meaningful: only
         the cross-population R-hat is computed.
+    divergent : ndarray of bool, shape (n_chains, n), optional
+        Divergence flag per step, where the family reports one.
 
     Returns
     -------
     record : dict
-        ``rhat_max``, ``rhat_max_param``, ``ess_bulk_min`` and ``ess_bulk_min_param`` (the
+        ``divergent_fraction`` (when ``divergent`` is given), ``rhat_max``, ``rhat_max_param``,
+        ``ess_bulk_min`` and ``ess_bulk_min_param`` (the
         ESS is the sum of the per-chain ESS), ``acceptance_rate`` (the fraction of steps that
         moved the position, pooled) and ``acceptance_rate_min`` (the worst single chain);
         absent keys mean the quantity could not be computed.
@@ -88,6 +97,13 @@ def chain_diagnostics(draws, names, *, exchangeable: bool = False) -> tuple[dict
     problems: list[str] = []
     if n < 8:
         return record, problems
+    if divergent is not None:
+        record["divergent_fraction"] = float(np.mean(np.asarray(divergent)))
+        if record["divergent_fraction"] > DEAD_DIVERGENT_FRACTION:
+            problems.append(
+                f"{record['divergent_fraction']:.0%} of steps were divergent "
+                f"(above {DEAD_DIVERGENT_FRACTION:.0%}): the chain is dead"
+            )
     finite_columns = np.all(np.isfinite(draws), axis=(0, 1))
     for j in np.flatnonzero(~finite_columns)[:3]:
         bad = int(np.sum(~np.isfinite(draws[..., j])))
@@ -150,6 +166,42 @@ def chain_diagnostics(draws, names, *, exchangeable: bool = False) -> tuple[dict
                     f"(below {ESS_FRACTION_WARN:.0%})"
                 )
     return record, problems
+
+
+def catalog_diagnostics(positions, divergent, n_chains, n_samples, names):
+    """Judge every galaxy of a catalog run and name the ones that failed.
+
+    Parameters
+    ----------
+    positions : ndarray, shape (n_galaxies, n_chains * n_samples, D)
+        Each galaxy's draws, chains concatenated chain-major.
+    divergent : ndarray of bool, shape (n_galaxies, n_chains * n_samples)
+        Divergence flags in the same layout.
+    n_chains, n_samples : int
+        The chain count each galaxy returned and the draws per chain.
+    names : sequence of str
+        One name per coordinate.
+
+    Returns
+    -------
+    records : list of dict
+        Per galaxy, the :func:`chain_diagnostics` record plus ``convergence_problems``.
+    flagged : dict
+        ``galaxy index -> problems`` for the galaxies that have any.
+    """
+    positions = np.asarray(positions)
+    divergent = np.asarray(divergent)
+    records, flagged = [], {}
+    for index in range(positions.shape[0]):
+        record, found = chain_diagnostics(
+            positions[index].reshape(n_chains, n_samples, -1),
+            names,
+            divergent=divergent[index].reshape(n_chains, n_samples),
+        )
+        records.append({**record, "convergence_problems": found})
+        if found:
+            flagged[index] = found
+    return records, flagged
 
 
 def elbo_diagnostics(elbo_history) -> tuple[dict, list[str]]:

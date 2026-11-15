@@ -2300,15 +2300,9 @@ class _CatalogFitterOriginal:
         from tengri.inference.sampling import health
 
         health_names = health.element_names(unravel_fn(jnp.zeros(d_params)))
-        health_records, flagged = [], {}
-        for i in range(n_gal):
-            record, found = health.chain_diagnostics(
-                np.asarray(all_positions[i]).reshape(n_returned, n_samples, d_params),
-                health_names,
-            )
-            health_records.append({**record, "convergence_problems": found})
-            if found:
-                flagged[i] = found
+        health_records, flagged = health.catalog_diagnostics(
+            all_positions, all_divergent, n_returned, n_samples, health_names
+        )
         if flagged:
             shown = "; ".join(f"galaxy {i}: {', '.join(p)}" for i, p in list(flagged.items())[:5])
             more = f" (and {len(flagged) - 5} more)" if len(flagged) > 5 else ""

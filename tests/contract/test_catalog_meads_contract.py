@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""The ghmc catalog engine returns every chain of its MEADS ensemble (#3505, M5).
+"""The ghmc catalog engine returns every chain of its MEADS ensemble.
 
 MEADS adapts from an ensemble of at least ``2 D K`` chains and every chain of it is a
 sampling chain, so ``n_chains`` is a minimum. Nothing the sampler produced is discarded:

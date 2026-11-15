@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""The n_chains layer starts chains overdispersed, so R-hat can detect multimodality (#3505).
+"""The n_chains layer starts chains overdispersed, so R-hat can detect multimodality.
 
 The start covariance is ``OVERDISPERSION^2 Sigma_adapted + diag(s^2)`` with ``s =
 min(prior scale, START_CAP sd)``: at least two adapted posterior standard deviations on every
