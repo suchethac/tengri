@@ -433,7 +433,9 @@ def parameter_information(target, params=None, *, key=None) -> ParameterInformat
     # floor=0.0: the default floor of 1.0 keeps the whitening transform positive
     # definite and in doing so clips away exactly the prior-carried modes this
     # function exists to count.
-    metric = negative_hessian_metric(logdensity_flat, init_flat, data_args, floor=0.0)
+    metric = negative_hessian_metric(
+        logdensity_flat, init_flat, data_args, floor=0.0, names=latent_names(latent)
+    )
     gradient = -jax.grad(logdensity_flat)(init_flat, data_args)
 
     info = information_from_precision(

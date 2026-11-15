@@ -12,7 +12,7 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
-from tengri.inference.curvature import curvature
+from tengri.inference.curvature import curvature, require_finite
 
 
 def loss_derivatives(logdensity_fn, position, data_args):
@@ -257,6 +257,9 @@ def newton_polish(
 
     Notes
     -----
+    A non-finite gradient or Hessian, at the start or at an accepted point, raises
+    :class:`~tengri.inference.curvature.NonFiniteCurvatureError` naming the rows.
+
     Stops at the first trial round that accepts nothing. Python loop; each
     round is one call to the compiled trial-loss kernel. Derivatives come from
     the compiled :func:`loss_derivatives` kernel.
@@ -264,6 +267,7 @@ def newton_polish(
     position = jnp.asarray(position)
     if loss_grad is None or loss_hessian is None:
         loss_grad, loss_hessian = _loss_derivatives_jit(logdensity_fn, position, data_args)
+        require_finite(grad=loss_grad, hess=loss_hessian, where="newton polish")
     n_accepted = 0
     for _ in range(max_steps):
         if float(jnp.max(jnp.abs(loss_grad))) <= tol:
@@ -283,4 +287,5 @@ def newton_polish(
         position = new_position
         n_accepted += 1
         loss_grad, loss_hessian = _loss_derivatives_jit(logdensity_fn, position, data_args)
+        require_finite(grad=loss_grad, hess=loss_hessian, where="newton polish")
     return position, n_accepted, loss_grad, loss_hessian

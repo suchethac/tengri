@@ -35,6 +35,7 @@ from tengri.config.exceptions import (
 )
 from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
 from tengri.inference.backends._psis import pareto_k_threshold
+from tengri.inference.curvature import flat_names, require_finite
 from tengri.inference.importance import StudentTProposal, importance_sample
 from tengri.inference.newton import _loss_derivatives_jit, newton_polish
 
@@ -452,6 +453,8 @@ def run_laplace(
 
     # Loss gradient and exact Hessian at the optimizer's endpoint.
     grad_flat, hessian = _loss_derivatives_jit(logdensity_fn, theta_flat, data_args)
+    _names = lambda: flat_names(unravel_fn, n_dim)  # noqa: E731 - evaluated only on failure
+    require_finite(grad=grad_flat, hess=hessian, names=_names, where="laplace")
 
     # Decrement at the endpoint, before any polish, on the raw spectrum.
     initial_eigenvalues, initial_eigenvectors = jnp.linalg.eigh(hessian)
@@ -472,6 +475,7 @@ def run_laplace(
         )
     if verbose:
         print(f"  Newton polish: {n_newton_accepted} step(s) accepted")
+    require_finite(grad=grad_flat, hess=hessian, names=_names, where="laplace (polished point)")
 
     (
         _eigenvalues_raw,

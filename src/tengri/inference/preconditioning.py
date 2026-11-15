@@ -110,6 +110,7 @@ def negative_hessian_metric(
     data_args,
     *,
     floor: float = PRIOR_METRIC_FLOOR,
+    names=None,
 ) -> jnp.ndarray:
     """Metric of a log-density at a point: :math:`-\\nabla^2 \\log p`, floored.
 
@@ -125,6 +126,9 @@ def negative_hessian_metric(
         Lower clip applied to the eigenvalue *magnitudes* [dimensionless]. Default
         :data:`PRIOR_METRIC_FLOOR` (1.0). Pass ``0.0`` to disable clipping when
         the curvature is already known to be positive definite.
+
+    names : sequence of str, optional
+        Coordinate names, used only to name the rows of a non-finite Hessian.
 
     Returns
     -------
@@ -146,6 +150,12 @@ def negative_hessian_metric(
     correctly. Where the point *is* stationary, all eigenvalues are positive and this
     is identical to a plain floor.
 
+    Raises
+    ------
+    NonFiniteCurvatureError
+        When called eagerly and the Hessian has a NaN or inf entry (the rows are named).
+        Under a trace the check is skipped and the metric carries the NaN.
+
     **JIT/grad/vmap-safe**: builds the dense ``(D, D)`` Hessian via
     :func:`~tengri.inference.curvature.curvature` (:math:`O(D)` backward passes) and
     symmetrizes it, then rescales the eigenvalues through an :func:`jax.numpy.linalg.eigh`
@@ -158,7 +168,8 @@ def negative_hessian_metric(
        in high-dimensional non-convex optimization," NeurIPS 27 (2014).
        arXiv:1406.2572.
     """
-    hess = curvature(logdensity_fn, jnp.asarray(position), data_args, want=("hess",)).hess
+    hess = curvature(logdensity_fn, jnp.asarray(position), data_args, want=("hess",))
+    hess = hess.require_finite(names=names, where="preconditioning metric").hess
     metric = -0.5 * (hess + hess.T)
     eigenvalues, eigenvectors = jnp.linalg.eigh(metric)
     scale = jnp.maximum(jnp.abs(eigenvalues), floor)
