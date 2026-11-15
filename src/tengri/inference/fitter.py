@@ -484,6 +484,44 @@ def _spectrum_lut_for_auto(model):
 _APPROX_CLONE_CACHE: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 
 
+def _try_feature_top_up(model, configs):
+    """Clone ``model`` with a ``FeaturePrecomp`` top-up, or ``None`` if the table refuses.
+
+    The refusal of a table with nothing to tabulate is a ``ValueError`` (``ConfigError`` is one),
+    and it is the detection ``approx='auto'`` relies on to keep the wave LUT. Only that is
+    caught; any other exception is a bug and propagates. The reason is recorded on ``model`` as
+    ``_approx_declines['feature_precomp']`` so the engagement report can show it (#3505 X1).
+
+    Parameters
+    ----------
+    model : SEDModel or ForwardModel
+        Source model, which receives the recorded decline.
+    configs : tuple
+        The full resolved precompute configuration including ``FeaturePrecomp``.
+
+    Returns
+    -------
+    SEDModel, ForwardModel or None
+        The memoized clone, or ``None`` after the decline was recorded.
+    """
+    try:
+        return _memoized_approx_clone(model, configs)
+    except ValueError as refusal:
+        model._approx_declines = {
+            **getattr(model, "_approx_declines", {}),
+            "feature_precomp": str(refusal),
+        }
+        return None
+
+
+def _carry_approx_declines(model, resolved):
+    """Copy the declines recorded on ``model`` onto the ``resolved`` fallback and return it."""
+    declines = getattr(model, "_approx_declines", None)
+    if declines and resolved is not model:
+        resolved._approx_declines = dict(declines)
+    return resolved
+
+
 def _memoized_approx_clone(model, cfg):
     """``model.with_approx(cfg)``, returning one shared clone per distinct config.
 
@@ -1409,8 +1447,9 @@ def _resolve_batch_fit_approx(model, approx, data_type):
             ):
                 existing = tuple(getattr(model, "approx_configs", ()))
                 extra = (FeaturePrecomp(),) if has_wave else (cfg, FeaturePrecomp())
-                with contextlib.suppress(Exception):
-                    return _memoized_approx_clone(model, (*existing, *extra))
+                topped_up = _try_feature_top_up(model, (*existing, *extra))
+                if topped_up is not None:
+                    return topped_up
             if has_wave:
                 return model
         elif data_type == "spectroscopy" or data_type == "joint":
@@ -2649,8 +2688,10 @@ class Fitter:
                 from tengri.forward.sed_model import FeaturePrecomp
 
                 base = cfg if isinstance(cfg, tuple) else (cfg,)
-                with contextlib.suppress(Exception):
-                    return _memoized_approx_clone(model, (*base, FeaturePrecomp()))
+                topped_up = _try_feature_top_up(model, (*base, FeaturePrecomp()))
+                if topped_up is not None:
+                    return topped_up
+                return _carry_approx_declines(model, _memoized_approx_clone(model, cfg))
             return _memoized_approx_clone(model, cfg)
 
         resolved = _memoized_approx_clone(model, approx)

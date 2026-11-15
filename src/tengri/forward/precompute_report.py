@@ -324,6 +324,11 @@ def _gather_observed_facts(model: Any) -> dict[str, Any]:
         facts["wave_precomp_enabled"] = model._approx.get("wave_precomp", False)
         facts["ztable_enabled"] = model._approx.get("ztable", False)
 
+    # Declines recorded by the approx='auto' resolvers: table attempted, refused, with a reason.
+    declines = getattr(model, "_approx_declines", None)
+    if declines:
+        facts["approx_declines"] = dict(declines)
+
     # Free parameters
     if hasattr(model, "spec"):
         free = model.spec.free_params

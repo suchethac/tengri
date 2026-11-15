@@ -20,6 +20,41 @@ def test_decline_keeps_its_reason():
     assert Decline("why").reason == "why"
 
 
+class _Model:
+    """Stands in for a model: only an attribute bag."""
+
+
+def test_feature_top_up_records_a_refusal_and_returns_none(monkeypatch):
+    from tengri.inference import fitter
+
+    def refuse(model, cfg):
+        raise ValueError("no lines to tabulate")
+
+    monkeypatch.setattr(fitter, "_memoized_approx_clone", refuse)
+    model = _Model()
+    assert fitter._try_feature_top_up(model, ("cfg",)) is None
+    assert model._approx_declines == {"feature_precomp": "no lines to tabulate"}
+
+
+def test_feature_top_up_lets_a_real_bug_propagate(monkeypatch):
+    from tengri.inference import fitter
+
+    def broken(model, cfg):
+        raise RuntimeError("a bug, not a refusal")
+
+    monkeypatch.setattr(fitter, "_memoized_approx_clone", broken)
+    with pytest.raises(RuntimeError, match="a bug"):
+        fitter._try_feature_top_up(_Model(), ("cfg",))
+
+
+def test_report_carries_the_recorded_approx_declines():
+    from tengri.forward.precompute_report import _gather_observed_facts
+
+    model = _Model()
+    model._approx_declines = {"feature_precomp": "why"}
+    assert _gather_observed_facts(model).get("approx_declines") == {"feature_precomp": "why"}
+
+
 def _eb_model(ssp, obs, approx):
     return SEDModel.build(
         ssp_data=ssp,
