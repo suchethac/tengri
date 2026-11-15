@@ -567,7 +567,7 @@ def student_t_log_density(
     data: jnp.ndarray,
     noise_obs: jnp.ndarray,
     predicted: jnp.ndarray,
-    dof: float | jnp.ndarray,
+    dof: float,
     present: jnp.ndarray | None = None,
 ) -> jnp.ndarray:
     r"""Normalized log-density of independent location-scale Student-t data.
@@ -609,7 +609,7 @@ def student_t_log_density(
 
 
 def multivariate_student_t_log_density(
-    chi2: jnp.ndarray, log_det: jnp.ndarray, n: jnp.ndarray, dof: float | jnp.ndarray
+    chi2: jnp.ndarray, log_det: jnp.ndarray, n: float | jnp.ndarray, dof: float | jnp.ndarray
 ) -> jnp.ndarray:
     r"""Log-density of a multivariate Student-t with scale matrix :math:`C`, constants included.
 

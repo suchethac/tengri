@@ -33,7 +33,7 @@ pyright	src/tengri/inference/information.py	1
 pyright	src/tengri/inference/jit_engine.py	4
 pyright	src/tengri/inference/lbfgs_driver.py	5
 pyright	src/tengri/inference/likelihood.py	9
-pyright	src/tengri/inference/likelihoods/protocol.py	2
+pyright	src/tengri/inference/likelihoods/protocol.py	1
 pyright	src/tengri/inference/loss_functions.py	1
 pyright	src/tengri/inference/mass_profile.py	47
 pyright	src/tengri/inference/population/interim.py	4
@@ -42,7 +42,7 @@ pyright	src/tengri/observation/banded.py	2
 pyright	src/tengri/observation/batched.py	2
 pyright	src/tengri/observation/calibration.py	11
 pyright	src/tengri/observation/catalog.py	1
-pyright	src/tengri/observation/eline_marginalization.py	7
+pyright	src/tengri/observation/eline_marginalization.py	3
 pyright	src/tengri/observation/fiber_aperture.py	1
 pyright	src/tengri/observation/fiber_spectroscopy.py	1
 pyright	src/tengri/observation/filters/__init__.py	2
