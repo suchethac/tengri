@@ -690,7 +690,7 @@ class Posterior:
             return {}
         held = dict(self._runtime_values or {})
         if not held and self._fitter is not None:
-            held = dict(self._fitter._fixed_values)
+            held = dict(getattr(self._fitter, "_fixed_values", {}))
         return {k: v for k, v in assemble_eval_params(self._model, {}, held).items()}
 
     def _with_runtime(self, params: dict) -> dict:
