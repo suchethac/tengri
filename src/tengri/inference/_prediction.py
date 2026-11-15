@@ -14,6 +14,16 @@ import jax.numpy as jnp
 __all__ = ["_build_prediction", "_resolve_measured_line_defs"]
 
 
+def _runtime_keys_of(model) -> tuple:
+    """The Fixed keys a model reads from params at call time (#3505).
+
+    A ``ForwardModel`` answers through its population's SED.
+    """
+    if hasattr(model, "populations"):
+        model = model.populations[0].sed
+    return getattr(model, "_runtime_keys", ())
+
+
 def _build_prediction(
     model,
     params,
@@ -70,7 +80,7 @@ def _build_prediction(
         eval_fixed = None
     # A runtime redshift is read from params by the eager forward (#3505), so it travels
     # with the free values; every other Fixed value stays out (the forward refuses it).
-    runtime_keys = getattr(model, "_runtime_keys", ())
+    runtime_keys = _runtime_keys_of(model)
     eager_params = {**free_params, **{k: params[k] for k in runtime_keys if k in params}}
 
     # Single threaded forward for phot/spec/joint: one orchestrator call

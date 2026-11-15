@@ -1234,6 +1234,12 @@ def _predict_full_vector(
     """
     from tengri.inference.loss_functions import _build_prediction
 
+    # The linearity probe varies mass, not redshift. A runtime-redshift model reads z
+    # from params, so the probe names its representative z explicitly (#3505).
+    sed = model.populations[0].sed if hasattr(model, "populations") else model
+    if getattr(sed, "_runtime_keys", ()) and "redshift" not in phys:
+        phys = {**phys, "redshift": sed._representative_redshift()}
+
     has_line_fluxes = line_flux_block is not None
     data_args = {} if line_flux_block is None else {"line_flux_waves": line_flux_block.waves}
     measured_line_defs = None if line_flux_block is None else line_flux_block.measured_line_defs
