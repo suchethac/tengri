@@ -409,3 +409,61 @@ def test_dtype_order_does_not_change_the_result():
     np.testing.assert_allclose(h64, _value(cell, "float64", "hess"), rtol=1e-12)
     np.testing.assert_allclose(h32, _value(cell, "float32", "hess"), rtol=1e-5)
     assert _rel_max(h32, h64) <= HESSIAN_REL_TOL
+
+
+def _raw_observable_derivatives(x64: bool, point: dict | None):
+    """Gradient (reverse, forward) and Hessian of ``sum(predict_photometry)`` at ``point``.
+
+    The unweighted observable, not the chi-squared objective: nothing standardizes its
+    cotangent, so the -58 dex projection factor reaches the reverse pass raw.
+    """
+    with jax.enable_x64(x64):
+        model = _build_model("photometry_1band")
+        if point is None:
+            point = {k: np.asarray(v) for k, v in model.spec.sample(jax.random.PRNGKey(0)).items()}
+        names = sorted(model.spec.free_params)
+        params = {k: jnp.asarray(v) for k, v in point.items()}
+        x0 = jnp.asarray([params[n] for n in names])
+
+        def raw(x):
+            return jnp.sum(
+                model.predict_photometry({**params, **dict(zip(names, x, strict=True))})
+            )
+
+        curv = curvature(raw, x0)
+        return point, {
+            "grad_rev": np.asarray(curv.grad, dtype=np.float64),
+            "grad_fwd": np.asarray(jax.jacfwd(raw)(x0), dtype=np.float64),
+            "hess": np.asarray(curv.hess, dtype=np.float64),
+        }
+
+
+@functools.cache
+def _raw_pair():
+    point, d64 = _raw_observable_derivatives(True, None)
+    _, d32 = _raw_observable_derivatives(False, point)
+    return d32, d64
+
+
+def test_raw_observable_forward_gradient_float32_matches_float64():
+    """Forward mode carries the observable's derivative through float32 intact."""
+    d32, d64 = _raw_pair()
+    assert np.all(d32["grad_fwd"] != 0.0)
+    assert _scaled_gap(d32["grad_fwd"], d64["grad_fwd"]) <= HESSIAN_REL_TOL
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "the reverse pass multiplies the cotangent by the 1e-58 flux projection factor "
+        "(observation/redshift_kernel.py), below float32's smallest subnormal: measured "
+        "float32 reverse gradient and Hessian of sum(predict_photometry) are exactly 0.0 "
+        "(float64: max|grad| ~5e-24, max|H| ~3e-23). Flips when the model is differentiated "
+        "in a scaled flux. The chi-squared objective is unaffected: its cotangent is 1/sigma."
+    ),
+)
+def test_raw_observable_reverse_curvature_float32_matches_float64():
+    d32, d64 = _raw_pair()
+    for key in ("grad_rev", "hess"):
+        assert np.any(d32[key] != 0.0), f"float32 {key} is exactly 0"
+        assert _scaled_gap(d32[key], d64[key]) <= HESSIAN_REL_TOL

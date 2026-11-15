@@ -127,6 +127,8 @@ def curvature(
     compiled program per ``(fn, want, shapes, dtype)``, never an op-by-op dispatch of the
     model. The Hessian is :func:`jax.hessian` (forward over reverse), the only call of it in
     the inference package. A non-finite entry is reported in ``finite``, never replaced.
+    The helper declines no dtype: float32 and float64 take the same path, and every
+    consumer reads the result through ``finite``.
     """
     unknown = set(want) - _FIELDS
     if unknown:
