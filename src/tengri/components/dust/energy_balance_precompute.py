@@ -560,6 +560,38 @@ _B_ALPHA_FIELDS = ("B", "B_fesc", "B_old", "B_fesc_old")
 _G_ALPHA_FIELDS = ("G", "G_fesc", "G_old", "G_fesc_old")
 
 
+def read_lut_met(lut: EnergyBalanceLUT, joint, met_z, lgmet):
+    """Read every B and G family over metallicity at the galaxy's met_z (#3434, phase 2).
+
+    ``joint`` is the stellar component's published exact joint: ``(n_met, n_age)`` on
+    a declared scatter (the stored families are used as they are) or the age
+    marginal ``(1, n_age)`` when undeclared. In the undeclared case each family's
+    metallicity axis is PCHIP-read at ``met_z`` (one value per SSP age, or a scalar)
+    and collapsed to one row, so the contraction with ``joint`` is exact.
+
+    Returns the (possibly new) table and the joint to contract with it.
+    """
+    from tengri.components.stellar.sps.met_pchip import met_collapsed
+
+    if joint.shape[0] == lgmet.shape[0]:
+        return lut, joint
+    updates = {}
+    for name in _B_ALPHA_FIELDS:
+        value = getattr(lut, name)
+        if value is not None:
+            updates[name] = met_collapsed(value, lgmet, met_z, age_axis=1)
+    for name in _G_ALPHA_FIELDS:
+        value = getattr(lut, name)
+        if value is None:
+            continue
+        if lut.ln1pz is None:
+            updates[name] = met_collapsed(value, lgmet, met_z, age_axis=1)
+        else:
+            # leading ln(1+z) axis: read each redshift slab over metallicity
+            updates[name] = jax.vmap(lambda t: met_collapsed(t, lgmet, met_z, age_axis=1))(value)
+    return lut._replace(**updates), joint
+
+
 def collapse_lut_alpha(lut: EnergyBalanceLUT, ia, fa) -> EnergyBalanceLUT:
     """Collapse the [alpha/Fe] axis of every family of a 4D-grid table at one bracket.
 

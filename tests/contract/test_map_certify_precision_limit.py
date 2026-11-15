@@ -62,7 +62,7 @@ def test_float32_stationary_point_is_converged_even_when_scipy_failed(monkeypatc
     stationary = Stationarity(
         nlp=1.0, grad_norm=0.0, decrement=1e-12, positive_definite=True, hessian_finite=True
     )
-    monkeypatch.setattr(map_dispatch, "stationarity", lambda flat_loss, x: stationary)
+    monkeypatch.setattr(map_dispatch, "stationarity", lambda flat_loss, x, data=None: stationary)
     _, _, _, _, converged, attempts, reason = map_dispatch._certify_map_point(
         loss, x0, scipy_success=False, n_steps=50, gtol=1e-6
     )

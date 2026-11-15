@@ -27,6 +27,7 @@ Data-gated (needs a wNE SSP grid); skips in CI.
 
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
 
 import jax
@@ -40,6 +41,7 @@ from tengri.observation.line_flux_data import LineFluxData
 from tengri.observation.spectral_indices import (
     STANDARD_INDICES,
     SpectralIndexDef,
+    exact_window_precomp,
     measure_index_jax,
     measure_indices_from_point_terms,
     measure_indices_from_window_lut,
@@ -87,8 +89,40 @@ _HALPHA_EW = SpectralIndexDef(
 )
 
 
+def _exact_read(st):
+    """The metallicity-read operands the forward publishes (#3434): joint, log Z, nodes."""
+    return (
+        np.asarray(st.derived["met_exact_joint"]),
+        np.asarray(st.derived["met_exact_z"], dtype=float),
+        np.asarray(st.derived["met_exact_lgmet"], dtype=float),
+    )
+
+
+def _pchip_per_age(table, lgmet, z_age):
+    """Each age column of ``table`` (metallicity leading) PCHIP-read at its own log Z.
+
+    An independent reference for the undeclared read: SciPy's monotone PCHIP in log Z,
+    the query held at the node hull as the forward holds it. Returns ``(n_age, ...)``.
+    """
+    from scipy.interpolate import PchipInterpolator
+
+    t = np.asarray(table, dtype=float)
+    z = np.clip(
+        np.broadcast_to(np.asarray(z_age, dtype=float), (t.shape[1],)), lgmet[0], lgmet[-1]
+    )
+    return np.stack([PchipInterpolator(lgmet, t[:, a], axis=0)(z[a]) for a in range(t.shape[1])])
+
+
+def _pchip_collapsed_precomp(pc, st):
+    """The window precomputation with its integrands PCHIP-read per age, one metallicity row."""
+    _joint, z, lgmet = _exact_read(st)
+    integrands = _pchip_per_age(pc.points.integrands, lgmet, z)[None]
+    points = dataclasses.replace(pc.points, integrands=jnp.asarray(integrands))
+    return dataclasses.replace(pc, points=points)
+
+
 def test_window_lut_reproduces_wne_reconstruction_bitexact():
-    """joint_weights × SSP window integrals == measure on the real SED (dust=0)."""
+    """The exact-read joint × PCHIP-read SSP window integrals == measure on the SED (dust=0)."""
     import warnings
 
     ssp = _wne_ssp()
@@ -120,13 +154,15 @@ def test_window_lut_reproduces_wne_reconstruction_bitexact():
     p = dict(m.spec.sample(jax.random.PRNGKey(0)))
 
     st = m.predict_state(p)
-    jw = np.asarray(st.derived["joint_weights"])
+    joint, z_age, lgmet = _exact_read(st)
     # The linear scale is not published (#3149); rebuild it from the log key in float64.
     sms = float(10.0 ** np.asarray(st.derived["log_stellar_mass_scale"], dtype=np.float64))
 
-    # (1) the reconstruction identity the window LUT relies on
+    # (1) the reconstruction identity the window LUT relies on: each SSP age read over
+    # metallicity by PCHIP at its own log Z, then weighted by the exact age marginal
     sed_int = np.asarray(st.sed_intrinsic)
-    sed_lut = sms * np.tensordot(jw, np.asarray(ssp.ssp_flux), axes=([0, 1], [0, 1]))
+    flux_at_age = _pchip_per_age(ssp.ssp_flux, lgmet, z_age)
+    sed_lut = sms * np.einsum("ma,aw->w", joint, flux_at_age)
     sel = (np.asarray(ssp.ssp_wave) > 4000) & (np.asarray(ssp.ssp_wave) < 8000)
     id_rel = np.max(np.abs(sed_int - sed_lut)[sel] / np.maximum(np.abs(sed_int)[sel], 1e-40))
     assert id_rel < 1e-10, f"reconstruction identity off by {id_rel:.2e}"
@@ -141,7 +177,8 @@ def test_window_lut_reproduces_wne_reconstruction_bitexact():
     rest = m.predict_rest_sed(p)
     pc = precompute_index_windows(ssp.ssp_wave, ssp.ssp_flux, defs)
     # per-point terms: a Lick EW (HdA, Hbeta, Halpha_EW) is evaluated at the grid points (#2690)
-    terms = sms * jnp.einsum("ma,map->p", jnp.asarray(jw), pc.points.integrands)
+    integrands_at_age = _pchip_per_age(pc.points.integrands, lgmet, z_age)
+    terms = sms * jnp.asarray(np.einsum("ma,ap->p", joint, integrands_at_age))
     lut = np.asarray(measure_indices_from_point_terms(terms, pc))
     for d, l in zip(defs, lut):
         exact = float(measure_index_jax(rest.wavelength, rest.sed, d))
@@ -207,10 +244,9 @@ def _dust_model():
 def _window_lut_indices(m, ssp, p, defs):
     """indices via measure_indices_from_window_lut with two-component dust."""
     st = m.predict_state(p)
-    jw = jnp.asarray(st.derived["joint_weights"])
+    joint = jnp.asarray(st.derived["met_exact_joint"])
     sms = 10.0 ** jnp.asarray(st.derived["log_stellar_mass_scale"], dtype=jnp.float64)
-    ages = jnp.asarray(st.derived["ssp_ages_yr"])
-    pc = precompute_index_windows(ssp.ssp_wave, ssp.ssp_flux, defs)
+    pc = _pchip_collapsed_precomp(precompute_index_windows(ssp.ssp_wave, ssp.ssp_flux, defs), st)
     trans = two_component_dust(
         wavelength=pc.points.waves,
         younger_fraction=jnp.asarray(st.derived["age_boundary_younger_fraction"])[0],
@@ -219,7 +255,7 @@ def _window_lut_indices(m, ssp, p, defs):
         law_bc="calzetti",
         law_diff="calzetti",
     )  # (n_age, n_window)
-    return np.asarray(measure_indices_from_window_lut(jw, sms, trans, pc)), pc
+    return np.asarray(measure_indices_from_window_lut(joint, sms, trans, pc)), pc
 
 
 def test_window_lut_with_two_component_dust_matches_full_sed(real_ssp_only):
@@ -364,7 +400,8 @@ def test_fast_path_is_faster_than_full_grid(real_ssp_only):
         # (redshift) it reads directly. Safe under jit: a static membership
         # test plus filling in compile-time-constant Fixed values.
         full_params = merge_fixed_params(m.spec, params)
-        jw, tm, _ages = stellar.compute_joint_weights(full_params)
+        _jw, tm, _ages, met_joint, met_z, lgmet = stellar.compute_joint_weights_exact(full_params)
+        pc_exact = exact_window_precomp(pc, met_joint, lgmet, met_z)
         trans = two_component_dust(
             wavelength=pc.points.waves,
             younger_fraction=stellar.compute_age_boundary_fractions(full_params)[0],
@@ -373,7 +410,7 @@ def test_fast_path_is_faster_than_full_grid(real_ssp_only):
             law_bc="calzetti",
             law_diff="calzetti",
         )
-        return measure_indices_from_window_lut(jw, tm * 3.828e33, trans, pc)
+        return measure_indices_from_window_lut(met_joint, tm * 3.828e33, trans, pc_exact)
 
     # accuracy: fast path must agree with the exact measurement it replaces
     ex = float(exact(p))

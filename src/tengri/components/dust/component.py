@@ -608,7 +608,7 @@ class DustAttenuationSEDComponent(TemplateThreading):
             if isinstance(_dir, dict):
                 eb_lut = _dir.get("energy_balance_lut")
 
-        jw = state.derived.get("joint_weights")
+        jw = state.derived.get("met_exact_joint")
         log_mass_scale = state.derived.get("log_stellar_mass_scale")
         # FSPS-parity toggle (#961), the same expression DustSEDComponent uses:
         # None disables the canonical LyC mask so all absorbed energy heats
@@ -622,6 +622,7 @@ class DustAttenuationSEDComponent(TemplateThreading):
             from tengri.components.dust.energy_balance_precompute import (
                 collapse_lut_alpha,
                 lut_l_absorbed_stellar_log10,
+                read_lut_met,
             )
 
             # A table built from a 4D [alpha/Fe] grid collapses its alpha axis at the
@@ -632,6 +633,9 @@ class DustAttenuationSEDComponent(TemplateThreading):
                     eb_lut, _alpha_ia, state.derived["stellar_alpha_bracket_fraction"]
                 )
 
+            eb_lut, jw = read_lut_met(
+                eb_lut, jw, state.derived["met_exact_z"], state.derived["met_exact_lgmet"]
+            )
             log_stellar, sign_stellar = lut_l_absorbed_stellar_log10(
                 eb_lut,
                 jnp.asarray(jw),

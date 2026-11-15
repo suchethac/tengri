@@ -723,7 +723,10 @@ def test_law_scope_is_read_from_the_signature_not_a_table():
 
     assert _law_shape_params("calzetti") == frozenset()
     assert _law_shape_params("cardelli") == frozenset({"dust_Rv"})
-    assert _law_shape_params("power_law") == frozenset({"dust_slope"})
+    # power_law reads its opt-in UV bump as well as its slope.
+    assert _law_shape_params("power_law") == frozenset(
+        {"dust_slope", "dust_bump_strength", "dust_bump_x0", "dust_bump_gamma"}
+    )
     assert _law_shape_params("conroy2010") == frozenset({"dust_Rv", "dust_bump_strength"})
     # An unregistered name must not raise — it resolves to "reads nothing", and
     # the caller leaves such a group unnarrowed.

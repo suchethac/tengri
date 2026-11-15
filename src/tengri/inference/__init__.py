@@ -13,11 +13,19 @@ from tengri.inference.context import InferenceContext
 from tengri.inference.fitter import Fitter, resolve_method
 from tengri.inference.hierarchical import PopulationFitter, PopulationPosterior
 from tengri.inference.posterior import Posterior
+from tengri.inference.predictive import (
+    ElpdResult,
+    compare_models,
+    loo,
+    pointwise_log_likelihood,
+    waic,
+)
 from tengri.inference.vi_config import VIConfig
 
 __all__ = [
     "CatalogFitter",
     "CatalogPosterior",
+    "ElpdResult",
     "Fitter",
     "InferenceContext",
     "PopulationFitter",
@@ -27,6 +35,10 @@ __all__ = [
     "bma",
     "bma_resample",
     "bma_weights",
+    "compare_models",
+    "loo",
+    "pointwise_log_likelihood",
     "resolve_method",
     "sample_raytrace",
+    "waic",
 ]

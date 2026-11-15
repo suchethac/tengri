@@ -110,7 +110,10 @@ _CI_JAX = re.search(r"^jax==(\S+)$", _CI_CONSTRAINTS.read_text(), re.MULTILINE).
 #: in CI. An exact digest holds only at one platform and JAX version; the reference bounds above
 #: cover everywhere else. Checked only on Linux at the pinned version; a stale pin fails.
 _CI_LINUX_SPEC_JAX = "0.12.0"
-_CI_LINUX_SPEC_SHA256 = "697f52a76b402428cc153a88ae8c76facf79356354e6c202ad302a1d1da80e0f"
+#: Re-pinned 2026-11-15 from CI Linux (jax 0.12.0) on main 210a9c6c9: #3434 (in #3462, no
+#: metallicity scatter at fixed Z) moved the spectrum; the x64-off reference was re-recorded in
+#: #3525. Previous digest 697f52a76b402428cc153a88ae8c76facf79356354e6c202ad302a1d1da80e0f.
+_CI_LINUX_SPEC_SHA256 = "9fbf05710951089e9ccb0e862c6de925c04a5fa706d00d8ea76da274246e2289"
 
 
 def _build(ssp, *, neb: str = "cue"):
