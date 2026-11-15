@@ -2766,14 +2766,15 @@ def evaluate_sfh(
     # quantities) sees the table through the one SFH function. Dict-key
     # presence is static under jit; the array VALUES stay traced, so two
     # calls with different same-length tables share one compile. SFR is
-    # edge-clamped outside the table (the legacy jnp.interp convention);
+    # zero outside the table's support (#2621, see ``_tabulated_sfh``);
     # lookbacks older than t_obs are dropped by the CIC t_obs cutoff.
     sfh_fn = sfh_fn_composed if sfh_fn_composed is not None else sfh_spec.fn
     _tab_lbt_yr = None
     _tab_order = None
     if isinstance(sfh_model, str) and sfh_model == "table":
         # With the GP field the table is modulated like a parametric SFH; every draw is
-        # then pinned to the table integral (_pin_table_mass; #2622, owner 2026-11-15).
+        # then pinned to the table integral (_pin_table_mass; #2622): the declared formed
+        # mass of a draw is its own, not the ensemble mean's.
         # Shared with compute_joint_weights so the exact forward and the
         # SED-free fast path cannot read a simulation history differently
         # (#1395/#1396).

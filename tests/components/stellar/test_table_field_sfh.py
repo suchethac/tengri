@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""A tabulated SFH with the GP field (#3505, row B25).
+"""A tabulated SFH with the GP field (#3505).
 
 The GP field multiplies the table SFR by the lognormal modulation
 ``exp(x(t) - K(0)/2)``, which changes the SFR shape draw by draw. As for a parametric
 SFH under the field (#2622), every draw's formed mass is pinned to the table integral
-(owner ruling, 2026-11-15). Pinned here:
+(the declared mass is each draw's own, #2622). Pinned here:
 
 * the model builds and runs, where it used to raise ``NotImplementedError``;
 * the exact forward (apply) predicts finite, non-negative photometry;

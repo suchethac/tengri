@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Class sweep: one SFH evaluation shared by every path (#3505, mechanism M7).
+"""Class sweep: one SFH evaluation shared by every path (#3505).
 
-Before this mechanism the stellar weights were computed three times: by
+The stellar weights used to be computed three times: by
 ``apply``, by ``compute_joint_weights`` (which refused the binned and tabulated
 families), and by ``sample_sfh_prior`` (which refused the GP field). Each copy
 drifted. The sweep is parametrized from the registry, not a hand list, so a new
@@ -18,7 +18,7 @@ Checked on each combination:
 * ``compute_joint_weights`` and the weights ``apply`` publishes agree
   (``joint_weights`` to rtol 1e-12, ``total_mass`` to 1e-10);
 * with the field on, each draw's formed mass equals the declared
-  ``10**log_total_mass`` (or the table integral) to 1e-10 (#2622, B25);
+  ``10**log_total_mass`` (or the table integral) to 1e-10 (#2622);
 * the prior curves of :func:`sample_sfh_prior` equal the registry SFR at the same
   kwargs, with the field modulation applied draw by draw.
 
@@ -245,7 +245,7 @@ def test_joint_weights_agree_between_compute_and_apply(built, cell):
 
 @pytest.mark.parametrize("cell", [c for c in _sweep_cells() if c[1]], ids=_cell_id)
 def test_field_draw_forms_the_declared_mass(built, cell):
-    """With the field on, this draw forms the declared mass (#2622, owner ruling B25)."""
+    """With the field on, every draw forms the declared mass, not the ensemble mean (#2622)."""
     c = built(*cell)
     np.testing.assert_allclose(
         float(c["m_apply"]), _declared_mass(cell[0], c["params"]), rtol=1e-10
