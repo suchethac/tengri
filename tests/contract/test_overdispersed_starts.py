@@ -122,7 +122,7 @@ def test_rhat_stays_quiet_on_the_unimodal_control():
 
 
 def _spy_starts(monkeypatch, module):
-    """Record ``(centre, scale)`` of every ``jittered_starts`` call, traced or not.
+    """Record ``(center, scale)`` of every ``jittered_starts`` call, traced or not.
 
     ``run_chain`` is jitted, so inside it the arguments are tracers; a debug callback reads
     their values at run time. The compile cache is cleared so the spy is traced.
@@ -211,7 +211,7 @@ def test_independent_runs_use_the_same_rule(monkeypatch):
     np.testing.assert_allclose(seen[-1][1], OVERDISPERSION)
 
 
-def test_low_rank_warms_up_from_the_centre_and_starts_chains_by_the_same_rule(monkeypatch):
+def test_low_rank_warms_up_from_the_center_and_starts_chains_by_the_same_rule(monkeypatch):
     from tengri.inference.backends.mcmc import _shared
     from tengri.inference.sampling import samplers
 
@@ -240,6 +240,6 @@ def test_low_rank_warms_up_from_the_centre_and_starts_chains_by_the_same_rule(mo
     )
     np.testing.assert_array_equal(warm_inits[0], np.array([0.3, -0.2, 0.1]))
     assert seen, "the start rule was not reached"
-    centre, scale = seen[-1]
-    np.testing.assert_array_equal(centre, np.array([0.3, -0.2, 0.1]))
+    center, scale = seen[-1]
+    np.testing.assert_array_equal(center, np.array([0.3, -0.2, 0.1]))
     assert scale.shape == (3,), "the adapted low-rank metric sets the start dispersion"

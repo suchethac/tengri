@@ -170,7 +170,7 @@ def test_ess_is_the_sum_of_the_per_chain_ess():
     record, _ = chain_diagnostics(draws, ["a"])
     # The repo's Sokal estimator is conservative on iid draws (about 0.55 of n), per chain.
     assert 0.4 * 2000 < record["ess_bulk_min"] <= 1.3 * 2000
-    # Chains with different centres: the flattened series would read one long slow chain.
+    # Chains with different centers: the flattened series would read one long slow chain.
     shifted = draws + np.array([0.0, 5.0, 0.0, 5.0])[:, None, None]
     shifted_record, _ = chain_diagnostics(shifted, ["a"])
     np.testing.assert_allclose(shifted_record["ess_bulk_min"], record["ess_bulk_min"], rtol=1e-6)

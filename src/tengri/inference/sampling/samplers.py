@@ -612,7 +612,7 @@ def _run_lowrank(target, key, n_chains, metric, cfg):
     accept = resolve_accept("hmc", cfg)
     wkey, ckey = jax.random.split(key)
     ld, args = target.logdensity, target.item_args
-    # One warmup shared by every chain, as run_hmc does, from the un-jittered centre: the
+    # One warmup shared by every chain, as run_hmc does, from the un-jittered center: the
     # adaptation then tunes at the point the others are dispersed around, and its metric
     # sets how far they are dispersed.
     step_size, inv_mass, warm_div = _hmc_low_rank_warmup_only(
