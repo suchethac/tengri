@@ -175,3 +175,45 @@ def test_field_changes_the_sfr_shape(model, stellar):
     shape_sfr = sfr[inside] / sfr[inside].sum()
     shape_table = table[inside] / table[inside].sum()
     assert np.max(np.abs(shape_sfr / shape_table - 1.0)) > 1e-2
+
+
+def _weights_at_xi_zero(ssp, sfh_model, n_grid, field, extra):
+    """Joint weights and log formed mass at xi = 0, delta metallicity, z = Z_OBS."""
+    from tengri.components.stellar.component import StellarSEDComponentConfig
+    from tengri.protocols.component import ForwardState
+
+    comp = StellarSEDComponent(
+        config=StellarSEDComponentConfig(sfh_model=sfh_model, field=field, n_grid=n_grid),
+        ssp_data=ssp,
+    )
+    params = {"redshift": jnp.asarray(Z_OBS), "met_logzsol": jnp.asarray(0.0), **extra}
+    if field:
+        params["sfh_field_psd_sigma"] = jnp.asarray(PSD_SIGMA)
+        params["sfh_field_psd_tau_myr"] = jnp.asarray(PSD_TAU_MYR)
+        params["sfh_field_xi"] = jnp.zeros(n_grid)
+    state = comp.apply(ForwardState(wave=jnp.logspace(3.0, 4.5, 16)), params, ssp)
+    return np.asarray(state.derived["joint_weights"]), float(state.derived["log_mstar_formed"])
+
+
+@pytest.mark.parametrize("n_grid", [64, 512])
+@pytest.mark.parametrize("kind", ["dpl", "table"])
+def test_xi_zero_equals_no_field_to_grid_resolution(synthetic_ssp_wide, kind, n_grid):
+    """At xi = 0 the field weights equal the no-field weights up to the log-grid interpolation.
+
+    The field path interpolates the n_grid log-grid history to the SSP ages, the no-field
+    path evaluates the SFR at the SSP ages: a parametric SFH on ``origin/main`` differs the
+    same way. Measured max |dw| (z = 0.1): dpl 4.4e-3 (n_grid 64), 1.0e-4 (512); table 6.1e-3
+    (64), 2.1e-3 (512), the same order as the stepped ``continuity`` history (5.4e-3, 2.6e-3).
+    The formed mass is identical, and a smooth history's difference falls with n_grid.
+    """
+    extra = (
+        {"sfh_t_gyr": jnp.asarray(T_NODES_GYR), "sfh_sfr": jnp.asarray(SFR_NODES)}
+        if kind == "table"
+        else {}
+    )
+    w_off, m_off = _weights_at_xi_zero(synthetic_ssp_wide, kind, n_grid, False, extra)
+    w_on, m_on = _weights_at_xi_zero(synthetic_ssp_wide, kind, n_grid, True, extra)
+    assert m_on == m_off
+    diff = float(np.max(np.abs(w_on - w_off)))
+    bound = {("dpl", 64): 1e-2, ("dpl", 512): 3e-4, ("table", 64): 1e-2, ("table", 512): 5e-3}
+    assert diff <= bound[(kind, n_grid)]

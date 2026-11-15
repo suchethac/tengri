@@ -325,6 +325,18 @@ def _apply_gp_field(sfr_history, params, n_grid, log_age_grid, centering: float 
     support-restricted integral also equals the declaration exactly, on
     every draw.
 
+    **Resolution at xi = 0.** With the field on, the weights are built from the
+    modulated history on the ``n_grid`` log grid, interpolated to the SSP ages;
+    with the field off, the SFR is evaluated at the SSP ages directly. At
+    ``xi = 0`` the modulation is the constant ``exp(-K_0/2)``, which the mass pin
+    removes, so the two weight sets differ only by that interpolation. Measured
+    (z = 0.1, delta metallicity, max abs weight difference; the same for a
+    parametric family on ``origin/main``): smooth families fall with ``n_grid``
+    (``dpl``: 4.4e-3 at 64, 1.3e-3 at 128, 5.1e-4 at 256, 1.0e-4 at 512);
+    a history with steps or kinks (``continuity``, a table) stays near 2e-3 at 512
+    (table: 6.1e-3, 1.8e-3, 4.9e-3, 2.1e-3 at 64, 128, 256, 512). The formed mass
+    is identical.
+
     Parameters
     ----------
     sfr_history : ndarray, shape (n_grid,)
