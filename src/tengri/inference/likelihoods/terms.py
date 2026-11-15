@@ -11,6 +11,7 @@ marginalization primitive adds or removes a constant.
 
 from __future__ import annotations
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 
@@ -40,7 +41,9 @@ __all__ = [
     "calibration_eline_marginal_term",
     "calibration_marginal_term",
     "censored_term",
+    "correlated_noise_term",
     "correlated_term",
+    "dense_covariance",
     "eline_cloudy_marginal_term",
     "eline_fitted_term",
     "eline_flat_marginal_term",
@@ -94,6 +97,51 @@ def correlated_term(predicted, obs, cov_inv, chol_data, chol_offsets, presence=N
     factor = BandedMatrix(offsets=np.asarray(chol_offsets, dtype=int), data=chol_data)
     whitened = banded_forward_substitution(factor, diff)
     return -0.5 * jnp.dot(whitened, whitened)
+
+
+def dense_covariance(cov_inv=None, chol_data=None, chol_offsets=None):
+    """The pixel covariance as a dense matrix, from its inverse or its banded Cholesky factor."""
+    if chol_data is None:
+        return jnp.linalg.inv(cov_inv)
+    n = chol_data.shape[1]
+    lower = jnp.zeros((n, n))
+    for row, offset in enumerate(np.asarray(chol_offsets, dtype=int)):
+        lag = -int(offset)
+        lower = lower + jnp.diag(chol_data[row, lag:], -lag)
+    return lower @ lower.T
+
+
+def correlated_noise_term(
+    model_flux, obs, *, cov_inv=None, chol_data=None, chol_offsets=None, f_cal=0.0, dof=None
+):
+    """Normalized log-density under a correlated covariance plus a calibration floor.
+
+    The covariance is ``C + diag((f_cal * model)^2)``: the floor adds its variance to the
+    diagonal of the supplied covariance, whose diagonal is the measurement variance. With
+    ``dof`` the density is the multivariate Student-t with that covariance as its scale
+    matrix; without it, the multivariate Gaussian. The value carries its constants.
+
+    Notes
+    -----
+    The floor depends on the model, so the covariance is factored on every evaluation,
+    ``O(n^3)`` in the number of pixels; a banded input is densified for it.
+    """
+    cov = dense_covariance(cov_inv, chol_data, chol_offsets)
+    cov = cov + jnp.diag((f_cal * model_flux) ** 2)
+    lower = jnp.linalg.cholesky(cov)
+    whitened = jax.scipy.linalg.solve_triangular(lower, obs - model_flux, lower=True)
+    n = whitened.shape[0]
+    log_det = 2.0 * jnp.sum(jnp.log(jnp.diagonal(lower)))
+    chi2 = jnp.dot(whitened, whitened)
+    if dof is None:
+        return -0.5 * chi2 - 0.5 * log_det - 0.5 * n * LOG_2PI
+    return (
+        jax.scipy.special.gammaln(0.5 * (dof + n))
+        - jax.scipy.special.gammaln(0.5 * dof)
+        - 0.5 * n * jnp.log(dof * jnp.pi)
+        - 0.5 * log_det
+        - 0.5 * (dof + n) * jnp.log1p(chi2 / dof)
+    )
 
 
 def _segments_or_zeros(segments, wavelength):
@@ -293,6 +341,16 @@ def eline_fitted_term(
     factor, or heavy-tailed with ``student = (f_cal, dof)``.
     """
     total = fitted_line_model(model_flux, design, amplitudes)
+    if student is not None and (cov_inv is not None or chol_data is not None):
+        return correlated_noise_term(
+            total,
+            obs,
+            cov_inv=cov_inv,
+            chol_data=chol_data,
+            chol_offsets=chol_offsets,
+            f_cal=student[0],
+            dof=student[1],
+        )
     if student is not None:
         return student_t_term(total, obs, err, student[0], student[1])
     if cov_inv is None and chol_data is None:

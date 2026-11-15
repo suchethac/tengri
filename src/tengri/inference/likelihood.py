@@ -130,6 +130,9 @@ def build_base_likelihood(context: InferenceContext):
             _validate_variable_noise(context, dof)
             if context.eline_fitted:
                 return _student_t_fitted_lines(context, dof)
+            correlated = _student_t_covariance(context, dof)
+            if correlated is not None:
+                return correlated
         if context.data_type == "photometry":
             return StudentTLikelihood(
                 obs=context.data,
@@ -612,6 +615,56 @@ def _validate_variable_noise(context, dof) -> None:
     validate(noise, ())
 
 
+def _covariance_kw(context):
+    """Keywords naming the dense inverse or banded factor of the spectrum covariance."""
+    if "spec_chol_data" in context.data_args:
+        return {
+            "chol_data": context.data_args["spec_chol_data"],
+            "chol_offsets": context.model.observation.spectroscopy.chol_offsets,
+            "chol_key": "spec_chol_data",
+        }
+    if "spec_cov_inv" in context.data_args:
+        return {"cov_inv": context.data_args["spec_cov_inv"]}
+    return {}
+
+
+def _student_t_covariance(context, dof):
+    """Variable noise on a spectrum with a pixel covariance; ``None`` when it has none."""
+    from tengri.inference.composite_likelihood import CompositeLikelihood
+    from tengri.inference.likelihoods import MultivariateGaussianLikelihood, StudentTLikelihood
+
+    kw = _covariance_kw(context)
+    if not kw:
+        return None
+    joint = context.data_type == "joint"
+    n_phot = _n_phot_split(context) if joint else 0
+    spectrum = MultivariateGaussianLikelihood(
+        obs=context.data[n_phot:],
+        channel="spec_fnu",
+        obs_key="data",
+        data_slice=(n_phot, len(context.data)) if joint else None,
+        student_t=True,
+        dof=dof,
+        f_cal_param="noise_frac_cal",
+        **kw,
+    )
+    if not joint:
+        return spectrum
+    return CompositeLikelihood(
+        StudentTLikelihood(
+            obs=context.data[:n_phot],
+            err=context.noise[:n_phot],
+            dof=dof,
+            f_cal_param="noise_frac_cal",
+            channel="phot_fnu",
+            obs_key="data",
+            err_key="noise",
+            data_slice=(0, n_phot),
+        ),
+        spectrum,
+    )
+
+
 def _student_t_fitted_lines(context, dof):
     """Heavy-tailed noise with explicit line amplitudes: the spectrum block carries the lines."""
     from tengri.inference.composite_likelihood import CompositeLikelihood
@@ -639,6 +692,7 @@ def _student_t_fitted_lines(context, dof):
         student_t=True,
         dof=dof,
         f_cal_param="noise_frac_cal",
+        **_covariance_kw(context),
     )
     if not joint:
         return fitted

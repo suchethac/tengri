@@ -166,6 +166,8 @@ def _split(member, fields, data_type, data_keys):
             covariance="banded" if banded else "dense",
             chol_offsets=_chol_offsets(member),
         )
+        if member.student_t:
+            fields.update(student_t=True, dof=member.dof, f_cal_param=member.f_cal_param)
         return _routes_data(member)
     if isinstance(member, GaussianLikelihood):
         if member.sigma_floor != 0.0:

@@ -79,6 +79,11 @@ NOISES = (
     "cal_marg_lines_cloudy",
     "cal_marg_lines_model",
     "cal_marg_lines_segments_model",
+    "student_t_dense",
+    "student_t_banded",
+    "cal_floor_dense",
+    "cal_floor_banded",
+    "lines_fitted_student_t_dense",
     "cal_marg_fitted_lines",
     "student_t_cal_marg",
     "student_t_lines_marginalized",
@@ -119,6 +124,10 @@ SPECTRUM_NOISES = (
     "cal_floor",
     "dense_cov",
     "banded_cov",
+    "student_t_dense",
+    "student_t_banded",
+    "cal_floor_dense",
+    "cal_floor_banded",
     *FITTED_NOISES,
 )
 REFUSED_REASON = {
@@ -259,6 +268,12 @@ def _fitted_shift(preds, noise):
 def _ref_spectrum(preds, data, noise):
     obs, err = _blocks(data, noise, "spec")
     model = np.asarray(preds.spec_fnu) + _fitted_shift(preds, noise)
+    if noise.student_t and noise.covariance != "diagonal":
+        # Convention: the floor adds (f * model)^2 to the diagonal of the covariance.
+        cov = _pixel_covariance(data, noise, err) + np.diag((_f_cal_of(preds, noise) * model) ** 2)
+        if noise.dof is None:
+            return _mvn(obs - model, cov)
+        return float(scipy.stats.multivariate_t.logpdf(obs, loc=model, shape=cov, df=noise.dof))
     if noise.student_t or noise.covariance == "diagonal":
         return _ref_main(model, obs, err, noise, preds)
     return _mvn(obs - model, _pixel_covariance(data, noise, err))
@@ -428,9 +443,11 @@ def _covariance_inputs(label, err):
 
 
 def _student_fields(label):
-    if label in ("student_t", "lines_fitted_student_t"):
+    if label in REFUSED:
+        return {}
+    if label.startswith("student_t") or "student_t" in label:
         return {"student_t": True, "dof": DOF, "f_cal_param": "noise_frac_cal"}
-    if label == "cal_floor":
+    if label.startswith("cal_floor"):
         return {"student_t": True, "dof": None, "f_cal_param": "noise_frac_cal"}
     return {}
 
@@ -670,6 +687,9 @@ FITTER_KINDS = {
     ("spectrum", "lines_fitted", ""): "spec_lines_fitted",
     ("spectrum", "lines_fitted_dense", ""): "spec_dense_lines_fitted",
     ("spectrum", "lines_fitted_student_t", ""): "spec_student_t_lines_fitted",
+    ("spectrum", "student_t_dense", ""): "spec_student_t_dense",
+    ("spectrum", "cal_floor_banded", ""): "spec_floor_banded",
+    ("spectrum", "lines_fitted_student_t_dense", ""): "spec_student_t_dense_lines_fitted",
     ("calibration", "cal_marg", ""): "spec_cal",
     ("calibration", "cal_marg_dense", ""): "spec_dense_cal",
     ("calibration", "cal_marg_banded", ""): "spec_banded_cal",
@@ -1085,3 +1105,98 @@ def test_a_calibration_floor_with_marginalization_is_refused_with_its_own_reason
         score(preds, data, floor)
     with pytest.raises(NotImplementedError, match="calibration floor"):
         channels.validate(floor, data.keys())
+
+
+# ── The full product of noise family x covariance x nuisance ──────────────────────────
+
+FAMILIES = ("gaussian", "floor", "student_t")
+COVARIANCE_KINDS = ("diagonal", "dense", "banded")
+NUISANCES = ("none", "fitted", "calibration", "lines", "calibration_lines")
+TERM_NAMES = (
+    "diag_gaussian_log_prob",
+    "student_t_term",
+    "correlated_term",
+    "correlated_noise_term",
+    "calibration_marginal_term",
+    "eline_flat_marginal_term",
+    "calibration_eline_marginal_term",
+)
+
+
+def _product_cell(family, covariance, nuisance):
+    rng = np.random.default_rng(0)
+    pred = rng.uniform(1.0, 2.0, N_PIX)
+    err = rng.uniform(0.05, 0.15, N_PIX)
+    data = {"data": pred * (1 + 0.1 * rng.standard_normal(N_PIX)), "noise": err}
+    cov_label = {"diagonal": "", "dense": "dense", "banded": "banded"}[covariance]
+    cov_data, kw = _covariance_inputs(cov_label, err)
+    data.update(cov_data)
+    kw.update(data_type="spectroscopy")
+    if family == "floor":
+        kw.update(student_t=True, dof=None, f_cal_param="noise_frac_cal")
+    if family == "student_t":
+        kw.update(student_t=True, dof=DOF, f_cal_param="noise_frac_cal")
+    wave = np.linspace(4000.0, 8000.0, N_PIX)
+    calibration = CalibrationSpec(wavelength=wave, n_poly=2, prior_sigma=CAL_SIGMA)
+    marginalized = LineSpec(mode="marginalized", prior_variance=LINE_SIGMA**2)
+    fitted = LineSpec(mode="fitted", amplitude_names=("a0", "a1", "a2"))
+    kw.update(
+        {
+            "none": {},
+            "fitted": {"lines": fitted},
+            "calibration": {"calibration": calibration},
+            "lines": {"lines": marginalized},
+            "calibration_lines": {"calibration": calibration, "lines": marginalized},
+        }[nuisance]
+    )
+    preds_kw = {"spec_fnu": pred}
+    if nuisance != "none" and nuisance != "calibration":
+        preds_kw["eline_design"] = rng.standard_normal((N_PIX, N_LINE)) * 0.2
+    params = {"noise_frac_cal": F_CAL, "a0": 0.1, "a1": 0.0, "a2": -0.1}
+    return Predictions(params=params, **preds_kw), data, NoiseSpec(**kw)
+
+
+def _expected_term(family, covariance, nuisance):
+    if nuisance == "calibration":
+        return "calibration_marginal_term"
+    if nuisance == "lines":
+        return "eline_flat_marginal_term"
+    if nuisance == "calibration_lines":
+        return "calibration_eline_marginal_term"
+    heavy = family != "gaussian"
+    if covariance == "diagonal":
+        return "student_t_term" if heavy else "diag_gaussian_log_prob"
+    return "correlated_noise_term" if heavy else "correlated_term"
+
+
+@pytest.mark.parametrize("nuisance", NUISANCES)
+@pytest.mark.parametrize("covariance", COVARIANCE_KINDS)
+@pytest.mark.parametrize("family", FAMILIES)
+def test_every_noise_family_covariance_and_nuisance_has_a_term_or_a_named_error(
+    family, covariance, nuisance, monkeypatch
+):
+    """No combination is scored by a term that ignores part of the noise model."""
+    preds, data, noise = _product_cell(family, covariance, nuisance)
+    marginalized = nuisance in ("calibration", "lines", "calibration_lines")
+    if family != "gaussian" and marginalized:
+        match = "calibration floor" if family == "floor" else "closed form"
+        with pytest.raises(NotImplementedError, match=match):
+            score(preds, data, noise)
+        with pytest.raises(NotImplementedError, match=match):
+            channels.validate(noise, data.keys())
+        return
+
+    used = []
+    for name in TERM_NAMES:
+        original = getattr(channels, name)
+
+        def spy(*args, _name=name, _original=original, **kwargs):
+            used.append((_name, kwargs.get("chol_data") is not None))
+            return _original(*args, **kwargs)
+
+        monkeypatch.setattr(channels, name, spy)
+    channels.validate(noise, data.keys())
+    assert np.isfinite(float(score(preds, data, noise)))
+    assert [name for name, _ in used] == [_expected_term(family, covariance, nuisance)]
+    if marginalized:
+        assert used[0][1] == (covariance != "diagonal")

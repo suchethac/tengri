@@ -51,7 +51,12 @@ from tengri.inference.likelihoods.gaussian import (
     diag_gaussian_log_prob,
     student_t_log_norm_per_point,
 )
-from tengri.inference.likelihoods.terms import censored_term, correlated_term, student_t_term
+from tengri.inference.likelihoods.terms import (
+    censored_term,
+    correlated_noise_term,
+    correlated_term,
+    student_t_term,
+)
 
 __all__ = [
     "CensoredLikelihood",
@@ -521,6 +526,9 @@ class MultivariateGaussianLikelihood:
     obs_key: str | None = None
     presence_key: str | None = None
     data_slice: tuple[int, int] | None = None
+    student_t: bool = False
+    dof: float | None = None
+    f_cal_param: str | None = None
 
     def log_prob(
         self,
@@ -533,7 +541,6 @@ class MultivariateGaussianLikelihood:
         With ``chol_data`` the quadratic form is ``-0.5 |L^-1 diff|^2`` for the lower
         factor ``L`` of the covariance, so the dense inverse is never formed.
         """
-        del params
         obs = resolve_channel_data(self.obs, self.obs_key, self.data_slice, data_args)
         presence = None
         if (
@@ -547,6 +554,19 @@ class MultivariateGaussianLikelihood:
         chol = None
         if self.chol_data is not None:
             chol = resolve_channel_data(self.chol_data, self.chol_key, None, data_args)
+        if self.student_t:
+            f_cal = 0.0
+            if params is not None and self.f_cal_param in params:
+                f_cal = params[self.f_cal_param]
+            return correlated_noise_term(
+                prediction[self.channel],
+                obs,
+                cov_inv=self.cov_inv,
+                chol_data=chol,
+                chol_offsets=self.chol_offsets,
+                f_cal=f_cal,
+                dof=self.dof,
+            )
         return correlated_term(
             prediction[self.channel], obs, self.cov_inv, chol, self.chol_offsets, presence
         )
@@ -570,8 +590,11 @@ class MultivariateGaussianLikelihood:
 
         The determinant comes from the banded Cholesky factor when one is given (twice
         the sum of the log of its diagonal), otherwise from the dense inverse. The
-        covariance is per model, so this does not depend on the parameters.
+        covariance is per model, so this does not depend on the parameters. The correlated
+        floor and Student-t variants return their normalization inside ``log_prob``.
         """
+        if self.student_t:
+            return 0.0
         obs = resolve_channel_data(self.obs, self.obs_key, self.data_slice, data_args)
         if self.chol_data is None:
             log_det = -jnp.linalg.slogdet(self.cov_inv)[1]
@@ -591,6 +614,9 @@ _MULTIVARIATE_GAUSSIAN_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
     "chol_data": shape("banded factor bands; only their shape fixes the program"),
     "chol_offsets": content("diagonal offsets of the factor are static program structure"),
     "chol_key": content("data_args routing key changes which traced input is read"),
+    "student_t": content("heavy-tailed scoring changes the likelihood"),
+    "dof": content("degrees of freedom changes the tail weight"),
+    "f_cal_param": content("routing to a free calibration floor changes the graph"),
     "channel": content("which prediction-dict key to read determines the graph"),
     "name": content("diagnostic identifier, cheap and harmless to key"),
     "obs_key": content("data_args routing key changes which traced input is read"),

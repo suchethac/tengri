@@ -40,6 +40,7 @@ from tengri.inference.likelihoods.terms import (
     calibration_eline_marginal_term,
     calibration_marginal_term,
     censored_term,
+    correlated_noise_term,
     correlated_term,
     eline_cloudy_marginal_term,
     eline_flat_marginal_term,
@@ -453,6 +454,17 @@ def _chol(data, noise):
 def _spectrum_loglik(preds, data, noise):
     obs, err = _part(data["data"], "spec", noise), _part(data["noise"], "spec", noise)
     model = _spectrum_model(preds, noise)
+    if noise.student_t and noise.covariance != "diagonal":
+        banded = noise.covariance == "banded"
+        return correlated_noise_term(
+            model,
+            obs,
+            cov_inv=None if banded else data["spec_cov_inv"],
+            chol_data=data["spec_chol_data"] if banded else None,
+            chol_offsets=noise.chol_offsets if banded else None,
+            f_cal=_f_cal(preds, noise),
+            dof=noise.dof,
+        )
     if noise.student_t:
         return student_t_term(model, obs, err, _f_cal(preds, noise), noise.dof)
     if noise.covariance == "diagonal":
@@ -464,6 +476,8 @@ def _spectrum_loglik(preds, data, noise):
 
 def _spectrum_norm(data, noise):
     obs, err = _part(data["data"], "spec", noise), _part(data["noise"], "spec", noise)
+    if noise.student_t and noise.covariance != "diagonal":
+        return 0.0
     if noise.student_t:
         return -0.5 * jnp.size(obs) * LOG_2PI
     if noise.covariance == "diagonal":
