@@ -1071,8 +1071,8 @@ class ForwardModel:
         Parameters
         ----------
         z_range : tuple of float or None, optional
-            ``(z_lo, z_hi)`` table range [dimensionless] for tabulated
-            populations; None for exact ones.
+            ``(z_lo, z_hi)`` table range [dimensionless]. Tabulated populations
+            take it; exact populations have no table and ignore it.
 
         Returns
         -------
@@ -1088,7 +1088,11 @@ class ForwardModel:
         import dataclasses
 
         new_pops = tuple(
-            self._population_rebuilt(pop, "with_runtime_redshift", z_range)
+            self._population_rebuilt(
+                pop,
+                "with_runtime_redshift",
+                lambda inner: z_range if inner._approx["wave_precomp"] else None,
+            )
             for pop in self.populations
         )
         if all(new is old for new, old in zip(new_pops, self.populations, strict=True)):
@@ -1115,7 +1119,7 @@ class ForwardModel:
                 f"population {pop.name!r}: {type(inner).__name__} has no {method}, "
                 "so a redshift override cannot rebuild its redshift-dependent tables."
             )
-        new_inner = getattr(inner, method)(arg)
+        new_inner = getattr(inner, method)(arg(inner) if callable(arg) else arg)
         if new_inner is inner:
             return pop
         if inner is sub:

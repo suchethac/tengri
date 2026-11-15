@@ -1006,6 +1006,14 @@ class _CatalogFitterOriginal:
         self.approx = approx
         self.galaxies = list(galaxies)
         self.n_galaxies = len(self.galaxies)
+        # Per-galaxy redshifts run as a runtime input of ONE promoted model: an exact
+        # model gets no table, a tabulated one a table over this catalog's span, and a
+        # declared catalog_z_range is used as it is (#3505). The caller's model is kept.
+        per_galaxy_z = [g["redshift"] for g in self.galaxies if "redshift" in g]
+        if per_galaxy_z:
+            from tengri.inference.fitter import promote_to_runtime_redshift
+
+            self.model = promote_to_runtime_redshift(self.model, per_galaxy_z)
         # For the #1671 bias advisory in run(): the exact reference when
         # resolution produced a LUT clone. Deferred to run() so construction
         # stays cheap; priced once for the whole catalog (the probe caches on
@@ -1264,14 +1272,6 @@ class _CatalogFitterOriginal:
         # dropped in silence -- that is how per-galaxy line fluxes reached the
         # objective on mcmc_nuts and not on map (#1599).
         self._refuse_unsupported_channels(resolved)
-        _has_pg_z = any("redshift" in g for g in self.galaxies)
-        if _has_pg_z and resolved in self._MCMC_VMAPPABLE and self._catalog_z_range() is None:
-            raise ValueError(
-                "Batched per-galaxy redshift requires a catalog_z_range so ONE "
-                "compiled program serves all redshifts. Build the model with "
-                "approx=WavePrecomp(catalog_z_range=(zmin, zmax)), or use "
-                "method='map' (sequential, recompiles per redshift). See #1337."
-            )
         if resolved in self._NATIVE_VMAPPABLE:
             return self._run_native(
                 resolved,
@@ -1548,21 +1548,6 @@ class _CatalogFitterOriginal:
             )
             self._dummy_fitters[key] = cached
         return cached
-
-    def _catalog_z_range(self):
-        """The model's ``catalog_z_range`` (the runtime-redshift LUT span), or None.
-
-        A ``catalog_z_range`` is what lets a per-galaxy redshift flow as a runtime
-        input so ONE compiled program serves all z (#1337 phase 2). Reads it from a
-        ``ForwardModel`` (via its population's SED) or a bare ``SEDModel``.
-        """
-        m = self.model
-        if hasattr(m, "populations"):
-            try:
-                return m.populations[0].sed._catalog_z_range
-            except (AttributeError, IndexError):
-                return None
-        return getattr(m, "_catalog_z_range", None)
 
     def _get_catalog_linear_engine(self):
         if self._catalog_linear_engine is None:
@@ -2129,7 +2114,12 @@ class _CatalogFitterOriginal:
 
         _reject_non_finite_data(all_data_orig, all_noise_orig, all_presence_orig)
         _refuse_uncovered_bands(
-            self.model, all_data_orig, all_noise_orig, all_presence_orig, self.data_type
+            self.model,
+            all_data_orig,
+            all_noise_orig,
+            all_presence_orig,
+            self.data_type,
+            redshifts=[g["redshift"] for g in self.galaxies] if per_galaxy_z else None,
         )
         # Per-galaxy redshift (#1337 phase 2); dummy zeros when not threaded.
         if per_galaxy_z:
@@ -2644,6 +2634,7 @@ class _CatalogFitterOriginal:
                 line_flux_data=self._galaxy_line_fluxes(galaxy),
                 cache=self.cache,
                 params_override=override,
+                approx=self.approx,
             )
             try:
                 post_i = fitter_i.run(method, key=keys[i], verbose=False, **kwargs)

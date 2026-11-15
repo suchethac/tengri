@@ -489,3 +489,39 @@ def test_profile_mass_reinserts_each_galaxys_own_mass(synthetic_ssp, simple_obse
         assert abs(mass[i] - truth) < 0.6, (
             f"galaxy {i} reinserted mass {mass[i]:.3f} far from truth {truth}"
         )
+
+
+def test_per_galaxy_redshift_without_a_declared_range_runs_batched(
+    synthetic_ssp, simple_observation
+):
+    """Per-galaxy z with no ``catalog_z_range`` runs batched on one promoted model.
+
+    The table span comes from the catalog's own redshifts, so one batched program
+    serves every galaxy. The user's model is left as it was.
+    """
+    from tengri import CatalogFitter
+
+    model = _build_model(synthetic_ssp, simple_observation)
+    assert model._catalog_z_range is None
+    galaxies = _catalog_from_truths(model, _DISTINCT_TRUTHS, jax.random.PRNGKey(0))
+    # Inside the synthetic SSP's observed-frame band coverage; 0.2 pushes band_0 off the grid.
+    redshifts = (0.02, 0.05, 0.1)
+    for galaxy, z in zip(galaxies, redshifts, strict=True):
+        galaxy["redshift"] = jnp.array(z)
+
+    cat = CatalogFitter(model, galaxies, data_type="photometry")
+    cp = cat.run(
+        "mcmc_nuts",
+        key=jax.random.PRNGKey(1),
+        forward_chunk_size=3,
+        n_warmup=15,
+        n_burnin=5,
+        n_samples=15,
+        verbose=False,
+    )
+
+    assert cp.n_galaxies == len(galaxies)
+    assert model._catalog_z_range is None, "the caller's model was mutated"
+    for i in range(len(galaxies)):
+        for name in model.spec.free_params:
+            assert np.all(np.isfinite(np.asarray(cp[i].samples[name])))

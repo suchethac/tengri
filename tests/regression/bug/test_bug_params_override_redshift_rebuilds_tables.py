@@ -429,8 +429,8 @@ def test_checkpointed_rows_recover_each_galaxys_truth(synthetic_ssp_wide, tmp_pa
         )
 
 
-def test_catalog_promotes_once_per_distinct_redshift(synthetic_ssp_wide):
-    """Repeated catalog redshifts share one rebuilt model, and the advisory still fires."""
+def test_catalog_promotes_once_for_all_redshifts(synthetic_ssp_wide):
+    """A catalog of several redshifts is served by one promoted model; no recompile advisory."""
     obs = Observation(photometry=Photometry.from_names(OPT_BANDS))
     approx = WavePrecomp()
     zs = (0.3, 0.9, 0.3, 0.9, 0.3)
@@ -444,10 +444,9 @@ def test_catalog_promotes_once_per_distinct_redshift(synthetic_ssp_wide):
         mock.patch.object(
             ForwardModel, "with_runtime_redshift", autospec=True, side_effect=real
         ) as spy,
-        pytest.warns(
-            UserWarning, match=r"catalog_z_range.*recompiles|recompiles.*catalog_z_range"
-        ),
+        warnings.catch_warnings(record=True) as caught,
     ):
+        warnings.simplefilter("always")
         convenience.fit_batch(
             base,
             rows,
@@ -458,11 +457,12 @@ def test_catalog_promotes_once_per_distinct_redshift(synthetic_ssp_wide):
             n_steps=2,
             verbose=False,
         )
-    # A tabulated model builds one redshift table per distinct override z; repeated
-    # redshifts reuse it.
-    spans = sorted(c.args[1] for c in spy.call_args_list)
-    assert len(spans) == 2, "expected exactly one promotion per distinct catalog redshift"
-    assert [round(0.5 * (lo + hi), 6) for lo, hi in spans] == [0.3, 0.9]
+    assert not [w for w in caught if "recompiles" in str(w.message)]
+    # One promoted model, whose table spans every catalog redshift, serves the catalog.
+    spans = [c.args[1] for c in spy.call_args_list]
+    assert len(spans) == 1, f"expected exactly one promotion for the catalog, got {spans}"
+    lo, hi = spans[0]
+    assert lo <= min(zs) and max(zs) <= hi
 
 
 # ── Multi-population forwards ─────────────────────────────────────────────

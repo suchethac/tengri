@@ -6780,6 +6780,16 @@ class SEDModel:
         """
         if self._z_runtime or not self.spec.get_distribution("redshift").is_fixed:
             return self
+        # One promotion per (model, range): the compile caches key on model identity, so a
+        # repeated request must return the same object to reuse its compiled program.
+        memo = self.__dict__.setdefault("_runtime_promotions", {})
+        memo_key = None if z_range is None else tuple(map(float, z_range))
+        if memo_key not in memo:
+            memo[memo_key] = self._promote_to_runtime_redshift(z_range)
+        return memo[memo_key]
+
+    def _promote_to_runtime_redshift(self, z_range):
+        """Build the runtime-redshift copy for :meth:`with_runtime_redshift`."""
         if self._approx["wave_precomp"]:
             cz = self._catalog_z_range if z_range is None else tuple(map(float, z_range))
             if cz is None:

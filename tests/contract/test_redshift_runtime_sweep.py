@@ -243,6 +243,7 @@ def test_fixed_unpromoted_model_is_bit_identical_to_main(representation, structu
 # model (promoted from a Fixed placeholder) evaluated at three redshifts under ONE
 # jit trace must equal a model built Fixed at each z, in both representations.
 
+import tempfile
 from pathlib import Path
 
 from tengri import LineList
@@ -459,4 +460,188 @@ def test_nebular_grid_line_fluxes_follow_runtime_z():
         ref = np.asarray(_line_fluxes(_grid_model(z), free))
         np.testing.assert_allclose(
             got, ref, rtol=RTOL["wp"], atol=0.0, err_msg=f"grid lines z={z}"
+        )
+
+
+# ── Catalog entry points: N galaxies at N redshifts, one promoted model ────────
+#
+# Every catalog-level entry point derives one table span from the catalog's redshifts
+# and promotes the model once. A second run on the same catalog adds no lowering, and
+# the model the engine fits predicts at each galaxy's z what a Fixed-z build does.
+
+import jax.monitoring as _jax_monitoring
+
+from tengri.forward import convenience
+from tengri.forward.sed_model import SEDModel as _SEDModel
+
+CATALOG_ZS = (0.12, 0.31, 0.58, 0.77)
+_TRUTH_LOGM = 9.5
+_LOWERING = "/jax/core/compile/jaxpr_to_mlir_module_duration"
+#: Programs a fit builds afresh around its result, whatever the redshift: the MAP
+#: stationarity derivatives (one per fit, keyed on that fit's loss object), the posterior
+#: summary maps and the result conversion. They are not the forward or loss programs the
+#: promotion governs, so the second-run bar counts everything else.
+_POST_FIT_PROGRAMS = frozenset({"jit(live)", "jit(mapped)", "jit(_convert_one)"})
+
+
+def _mass_model(representation, redshift):
+    approx = None if representation == "exact" else WavePrecomp()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return SEDModel.build(
+            ssp_data=_ssp(),
+            observation=_obs(),
+            sfh={
+                "type": "dpl",
+                "all_params": Fixed(DEFAULT),
+                "log_total_mass": Uniform(8.0, 12.0),
+            },
+            dust_attenuation={"type": "single_component", "law": "calzetti", "tau_v": Fixed(0.3)},
+            redshift=Fixed(redshift),
+            approx=approx,
+        )
+
+
+def _catalog_rows(representation):
+    rows = []
+    for z in CATALOG_ZS:
+        phot = np.asarray(
+            _mass_model(representation, z).predict_photometry(
+                {"sfh_dpl_log_total_mass": _TRUTH_LOGM}
+            )
+        )
+        row = {"z": z}
+        row.update({f"f{j}": float(v) for j, v in enumerate(phot)})
+        row.update({f"e{j}": float(0.05 * v) for j, v in enumerate(phot)})
+        rows.append(row)
+    return rows
+
+
+def _run_catalog(entry, representation, rows, base, tmp_path):
+    approx = None if representation == "exact" else "auto"
+    if entry == "catalog_fitter":
+        from tengri.inference.catalog_fitter import _CatalogFitterOriginal as CatalogFitter
+
+        n_b = len(_obs().photometry.filters)
+        galaxies = [
+            {
+                "flux_obs": jnp.asarray([r[f"f{j}"] for j in range(n_b)]),
+                "noise": jnp.asarray([r[f"e{j}"] for j in range(n_b)]),
+                "redshift": jnp.asarray(r["z"]),
+            }
+            for r in rows
+        ]
+        return (
+            CatalogFitter(base, galaxies, approx=approx)
+            .run("mcmc_nuts", key=jax.random.PRNGKey(0), n_warmup=8, n_samples=8, verbose=False)
+            .posteriors
+        )
+    n_b = len(_obs().photometry.filters)
+    kw = {"output_dir": str(tmp_path)} if entry == "fit_batch_checkpoint" else {}
+    return convenience.fit_batch(
+        base,
+        rows,
+        flux_cols=[f"f{j}" for j in range(n_b)],
+        err_cols=[f"e{j}" for j in range(n_b)],
+        redshift_col="z",
+        method="map",
+        n_steps=20,
+        verbose=False,
+        approx=approx,
+        **kw,
+    )
+
+
+@pytest.mark.parametrize("representation", REPRESENTATIONS)
+@pytest.mark.parametrize("entry", ("catalog", "catalog_fitter", "fit_batch_checkpoint"))
+def test_catalog_promotes_once_and_a_rerun_adds_no_lowering(entry, representation, tmp_path):
+    """One promotion for the whole catalog; a second run compiles nothing new."""
+    base = _mass_model(representation, Z_PLACEHOLDER)
+    rows = _catalog_rows(representation)
+    promotions = []
+    real = _SEDModel._promote_to_runtime_redshift
+
+    def _count(self, z_range):
+        promotions.append(z_range)
+        return real(self, z_range)
+
+    lowerings = []
+
+    def _listener(name, _duration, **kw):
+        if name == _LOWERING and kw.get("fun_name") not in _POST_FIT_PROGRAMS:
+            lowerings.append(kw.get("fun_name"))
+
+    _SEDModel._promote_to_runtime_redshift = _count
+    _jax_monitoring.register_event_duration_secs_listener(_listener)
+    try:
+        first = _run_catalog(entry, representation, rows, base, tmp_path / "a")
+        after_first = len(lowerings)
+        n_promotions = len(promotions)
+        second = _run_catalog(entry, representation, rows, base, tmp_path / "b")
+    finally:
+        _SEDModel._promote_to_runtime_redshift = real
+        _jax_monitoring.unregister_event_duration_listener(_listener)
+
+    assert n_promotions == 1, f"{entry}/{representation}: promotions {promotions}"
+    assert len(promotions) == 1, "the second run promoted again instead of reusing the first"
+    assert len(lowerings) == after_first, (
+        f"{entry}/{representation}: the second run lowered {lowerings[after_first:]}"
+    )
+    assert len(first) == len(second) == len(CATALOG_ZS)
+    if (promoted := getattr(first[0], "model", None)) is not None:
+        inner = promoted.populations[0].sed if hasattr(promoted, "populations") else promoted
+        params = {"sfh_dpl_log_total_mass": _TRUTH_LOGM}
+        for z in CATALOG_ZS:
+            got = np.asarray(inner.predict_photometry({**params, "redshift": z}))
+            ref = np.asarray(_mass_model(representation, z).predict_photometry(params))
+            np.testing.assert_allclose(
+                got, ref, rtol=RTOL[representation], atol=0.0, err_msg=f"{entry}/{representation}"
+            )
+
+
+@cache
+def _cloudy_grid_path():
+    """The synthetic CLOUDY grid, written once per process (xdist workers do not share it)."""
+    from tests._cloudy_grid import write_synthetic_cloudy_grid
+
+    return write_synthetic_cloudy_grid(Path(tempfile.mkdtemp(prefix="tengri_sweep_")) / "grid.h5")
+
+
+def _cloudy_model(representation, redshift, z_range=None):
+    from tests._cloudy_grid import synthetic_ionizing_ssp
+
+    grid = _cloudy_grid_path()
+    approx = None if representation == "exact" else WavePrecomp()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        model = SEDModel.build(
+            ssp_data=synthetic_ionizing_ssp(),
+            observation=Observation(
+                photometry=Photometry.from_names(["sdss_g", "sdss_r", "galex_fuv", "2mass_ks"])
+            ),
+            sfh={
+                "type": "dpl",
+                "all_params": Fixed(DEFAULT),
+                "log_total_mass": Uniform(8.0, 12.0),
+            },
+            dust_attenuation={"type": "none"},
+            neb={"type": "cloudy", "all_params": Fixed(DEFAULT), "grid": str(grid)},
+            redshift=Fixed(redshift),
+            approx=approx,
+        )
+        return model if z_range is None else model.with_runtime_redshift(z_range)
+
+
+@pytest.mark.parametrize("representation", REPRESENTATIONS)
+def test_cloudy_nebular_photometry_follows_runtime_z(representation):
+    """The CLOUDY-grid band tables follow a runtime z (synthetic grid, tabulated bound)."""
+    free = {"sfh_dpl_log_total_mass": 10.0}
+    model = _cloudy_model(representation, ZS[0], Z_RANGE if representation == "wp" else None)
+    if representation == "exact":
+        model = model.with_runtime_redshift(None)
+    outs = _runtime_outputs(model, ZS, lambda m, p: m.predict_photometry({**free, **p}))
+    for z, got in zip(ZS, outs, strict=True):
+        ref = np.asarray(_cloudy_model(representation, z).predict_photometry(free))
+        np.testing.assert_allclose(
+            got, ref, rtol=RTOL[representation], atol=0.0, err_msg=f"cloudy/{representation} z={z}"
         )

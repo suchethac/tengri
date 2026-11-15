@@ -7,6 +7,8 @@ Each function takes (model, ...) where model is an SEDModel instance.
 
 from __future__ import annotations
 
+import contextlib
+import weakref
 from typing import TYPE_CHECKING
 
 import jax
@@ -23,6 +25,10 @@ if TYPE_CHECKING:
 
 
 # ── Mock data generation ──────────────────────────────────────────
+
+
+#: ``ForwardModel`` wrapping each SED :func:`fit_batch` has fitted, so repeated calls reuse it.
+_FIT_BATCH_FORWARD: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 
 
 def _assemble_mock(params, flux_true, noise, key) -> MockData:
@@ -636,7 +642,16 @@ def fit_batch(
         from tengri.forward.forward_model import ForwardModel
         from tengri.inference.catalog import Catalog
 
-        fwd = ForwardModel.build(sed=model)
+        # One forward model per source SED: the compile caches key on model identity, so
+        # a repeated fit_batch on the same model must hand the engine the same object.
+        try:
+            fwd = _FIT_BATCH_FORWARD.get(model)
+        except TypeError:
+            fwd = None
+        if fwd is None:
+            fwd = ForwardModel.build(sed=model)
+            with contextlib.suppress(TypeError):
+                _FIT_BATCH_FORWARD[model] = fwd
         # Forward an explicit approx= (the legacy loop passed it to every Fitter).
         # "auto" is the default and Catalog/Fitter already resolve it, so only a
         # non-default value needs applying, dropping it would silently change the
@@ -681,15 +696,16 @@ def fit_batch(
     n_skipped = 0
     t0 = time.time()
 
-    # Warn loudly once if redshift_col is set but catalog_z_range is not
-    if redshift_col is not None and getattr(model, "_catalog_z_range", None) is None:
-        warnings.warn(
-            "fit_batch(redshift_col=...) without WavePrecomp(catalog_z_range=...) "
-            "recompiles the forward model for EVERY row (one compile per galaxy). "
-            "Build the model with approx=WavePrecomp(catalog_z_range=(zmin, zmax)) "
-            "to compile once. See #1316.",
-            UserWarning,
-            stacklevel=2,
+    # Per-galaxy redshift runs through ONE promoted model: its table (if tabulated)
+    # spans every row and each row's z is a runtime override, so the forward model
+    # compiles once whatever the number of distinct redshifts.
+    fit_model = model
+    if redshift_col is not None:
+        from tengri.inference.fitter import _resolve_batch_fit_approx, promote_to_runtime_redshift
+
+        fit_model = promote_to_runtime_redshift(
+            _resolve_batch_fit_approx(model, approx, "photometry"),
+            [float(row[redshift_col]) for row in rows],
         )
 
     for i, row in enumerate(rows):
@@ -713,11 +729,13 @@ def fit_batch(
         noise_i = jnp.array([float(row[c]) for c in err_cols])
 
         if redshift_col is not None:
-            # A fixed redshift is a compile constant: the tables, the component
-            # chain and the compile signature are all built at it, so the row
-            # needs a model rebuilt there (memoized per distinct redshift).
-            row_model = model.with_fixed_redshift(float(row[redshift_col]))
-            fitter_i = Fitter(row_model, flux_i, noise_i, approx=approx)
+            fitter_i = Fitter(
+                fit_model,
+                flux_i,
+                noise_i,
+                approx=approx,
+                params_override={"redshift": float(row[redshift_col])},
+            )
         else:
             fitter_i = Fitter(model, flux_i, noise_i, approx=approx)
 

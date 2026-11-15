@@ -152,3 +152,65 @@ def test_catalog_range_shared_signature_across_fixed_z_values():
     assert m_lo.compile_signature() == m_hi.compile_signature(), (
         "two Fixed(z) values under catalog_z_range must share the compile signature"
     )
+
+
+def test_catalog_span_covers_every_redshift_and_is_quantized_outward():
+    """The span is [min z, max z] padded by max(1% of span, 1e-3), clipped at 0, on a 0.05 grid."""
+    from tengri.inference.fitter import catalog_redshift_span
+
+    lo, hi = catalog_redshift_span([0.12, 0.31, 0.58])
+    assert (lo, hi) == pytest.approx((0.10, 0.60))
+    # A tiny span is padded by the floor, then rounded outward.
+    lo, hi = catalog_redshift_span([0.2, 0.2001])
+    assert (lo, hi) == pytest.approx((0.15, 0.25))
+    # The lower edge never goes below zero.
+    assert catalog_redshift_span([0.0005, 0.001])[0] == 0.0
+    # A redshift on a grid line is still covered with a pad.
+    lo, hi = catalog_redshift_span([0.3])
+    assert lo < 0.3 < hi
+    # Similar catalogs share one span, which is what lets them share one compile.
+    assert catalog_redshift_span([0.11, 0.33, 0.57]) == catalog_redshift_span([0.12, 0.31, 0.58])
+
+
+def test_non_finite_redshift_is_refused_naming_the_rows():
+    """A NaN or inf redshift has no place in a table span; the error names the rows."""
+    from tengri.inference.fitter import catalog_redshift_span
+
+    with pytest.raises(ValueError, match=r"row\(s\) \[1, 3\]"):
+        catalog_redshift_span([0.1, float("nan"), 0.3, float("inf")])
+
+
+def test_promotion_is_cached_per_model_and_span_and_leaves_the_user_model(
+    synthetic_ssp, simple_observation
+):
+    """Similar catalogs get the same promoted object; the caller's model is not mutated."""
+    from tengri import Fixed, SEDModel
+    from tengri.inference.fitter import promote_to_runtime_redshift
+
+    user = SEDModel.build(
+        ssp_data=synthetic_ssp,
+        observation=simple_observation,
+        sfh={"type": "dpl"},
+        redshift=Fixed(0.1),
+        approx=WavePrecomp(),
+    )
+    first = promote_to_runtime_redshift(user, [0.06, 0.2, 0.41])
+    again = promote_to_runtime_redshift(user, [0.07, 0.21, 0.42])
+    assert first is again
+    assert first is not user
+    assert user._catalog_z_range is None, "the caller's model was mutated"
+    lo, hi = first._catalog_z_range
+    assert lo <= 0.06 and hi >= 0.41
+    # A declared range is used as it is.
+    assert promote_to_runtime_redshift(first, [0.06, 0.2, 0.41]) is first
+
+    exact = SEDModel.build(
+        ssp_data=synthetic_ssp,
+        observation=simple_observation,
+        sfh={"type": "dpl"},
+        redshift=Fixed(0.1),
+        approx=None,
+    )
+    promoted = promote_to_runtime_redshift(exact, [0.05, 0.2, 0.4])
+    assert promoted._catalog_z_range is None and promoted._z_runtime
+    assert not promoted._approx["wave_precomp"], "an exact model stays exact"
