@@ -611,7 +611,8 @@ def _cloudy_grid_path():
     """The synthetic CLOUDY grid, written once per process (xdist workers do not share it)."""
     from tests._cloudy_grid import write_synthetic_cloudy_grid
 
-    return write_synthetic_cloudy_grid(Path(tempfile.mkdtemp(prefix="tengri_sweep_")) / "grid.h5")
+    tmp_dir = Path(tempfile.mkdtemp(prefix="tengri_sweep_"))
+    return write_synthetic_cloudy_grid(tmp_dir / "grid.h5")
 
 
 def _cloudy_model(representation, redshift, z_range=None):
