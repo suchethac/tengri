@@ -303,65 +303,6 @@ def _is_periodic(fn):
     return fn is periodic
 
 
-def _fast_path_unsupported_sfh_fns():
-    """Map each unsupported SFH function to *why* the fast path refuses it (#950, #1395).
-
-    The SED-free :meth:`StellarSEDComponent.compute_joint_weights` fast path
-    integrates a closed-form SFR on a dense age grid. Two disjoint families
-    cannot be served that way, and they are kept apart here because the reason
-    a caller sees decides what they do next:
-
-    * the non-parametric families (Leja+2019 continuity, Dirichlet, PSB): the
-      fast path has no bin basis for them, and never did (#950);
-    * the tabulated SFH: its registry ``fn`` is an all-zero *placeholder*,
-      because the real history is wired in at
-      :meth:`StellarSEDComponent.apply`, which the fast path never reaches.
-      Evaluating the placeholder returns a zero SFH, zero mass and zero lines,
-      which the weight normalization's ``1e-300`` clamp then launders into a
-      finite zero; silent, and beside correct photometry (#1395).
-
-    Keyed on the function object rather than the model name so that a second
-    registry entry sharing one of these implementations is guarded too. A
-    *wrapper* around a guarded function is a different object and needs its own
-    entry: ``psb_continuity_flex`` calls ``psb_continuity`` and is just as
-    binned, but was invisible here until #2184 moved ``psb_suess2022`` onto it.
-    Imported lazily to avoid import-order coupling at module load.
-
-    Returns
-    -------
-    dict
-        ``{sfh_fn: reason_str}``: the reason is interpolated into the
-        ``ValueError`` raised by :meth:`StellarSEDComponent.compute_joint_weights`.
-    """
-    from tengri.components.stellar.sfh.nonparametric import (
-        continuity,
-        continuity_flex,
-        dirichlet,
-        psb_continuity,
-        psb_continuity_flex,
-    )
-    from tengri.components.stellar.sfh.registry import _table_sfh_placeholder
-    from tengri.components.stellar.sfh.young_fraction import continuity_young_fraction
-
-    binned = "the fast path integrates a closed-form SFR and has no bin basis for it"
-    return {
-        continuity: binned,
-        continuity_young_fraction: binned,
-        continuity_flex: binned,
-        dirichlet: binned,
-        psb_continuity: binned,
-        psb_continuity_flex: binned,
-        _table_sfh_placeholder: (
-            "the tabulated history is supplied at apply(), which the fast path never "
-            "reaches, so the fast path would evaluate an all-zero placeholder and "
-            "return zero weights, zero mass and zero lines without raising (#1395)"
-        ),
-    }
-
-
-_FAST_PATH_UNSUPPORTED_SFH_FNS = _fast_path_unsupported_sfh_fns()
-
-
 def _apply_gp_field(sfr_history, params, n_grid, log_age_grid, centering: float = 1.0):
     """Apply the multiplicative GP-field modulation to a smooth SFR history.
 

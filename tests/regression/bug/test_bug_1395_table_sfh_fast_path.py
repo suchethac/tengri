@@ -36,52 +36,59 @@ from __future__ import annotations
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
-from tengri.components.stellar import component as C
+from tengri import DEFAULT, Fixed
 from tengri.components.stellar.sfh.registry import SFH_REGISTRY
 from tengri.parameters.resolve import merge_fixed_params
 
 pytestmark = pytest.mark.regression_bug
 
 
-def test_table_sfh_is_seen_by_the_fast_path_guard():
-    """The tabulated SFH's registry fn must remain in the guard map as a backstop.
+def test_table_sfh_with_its_arrays_is_served_and_matches_apply(
+    synthetic_ssp_wide, synthetic_tophat_obs
+):
+    """With its runtime arrays, the tabulated SFH is served: fast path equals apply.
 
-    The CI-visible lock: needs no SSP grid, so it runs in the fast tier where a
-    data-gated test would silently skip. This is the single membership fact the
-    whole silent-zero failure hung on.
-
-    Since #1396 the tabulated SFH is normally **served** — routed to the runtime
-    table before the registry placeholder is ever evaluated — so this entry is no
-    longer the primary defense. It stays as the backstop for a tabulated SFH that
-    reaches the CIC branch *unrouted*, which is the only way the all-zero
-    placeholder could be evaluated again.
+    The refusal map that used to guard the placeholder is gone (#3505 M7). The
+    placeholder can no longer be reached: the table is routed to its runtime arrays
+    before it is evaluated, on both paths.
     """
-    assert SFH_REGISTRY["table"].fn in C._FAST_PATH_UNSUPPORTED_SFH_FNS, (
-        "the tabulated SFH is invisible to compute_joint_weights' guard — an "
-        "unrouted table would reach the CIC branch and evaluate the all-zero "
-        "placeholder (#1395)"
+    model = _build({"type": "table"}, synthetic_ssp_wide, synthetic_tophat_obs)
+    stellar = _stellar_of(model)
+    params = merge_fixed_params(model.spec, dict(model.spec.sample(jax.random.PRNGKey(0))))
+    params["sfh_t_gyr"] = jnp.linspace(1.0, 10.0, 19)
+    params["sfh_sfr"] = 2.0 + 3.0 * jnp.exp(-0.5 * ((params["sfh_t_gyr"] - 4.0) / 1.5) ** 2)
+
+    weights, mass, _ages = stellar.compute_joint_weights(params)
+    assert jnp.all(jnp.isfinite(weights)) and abs(float(weights.sum()) - 1.0) < 1e-6
+    assert float(mass) > 0.0, "a served table must form mass, not the placeholder's zero"
+
+    from tengri.protocols.component import ForwardState
+
+    state = stellar.apply(ForwardState(wave=jnp.logspace(3.0, 4.5, 64)), params, stellar.ssp_data)
+    np.testing.assert_allclose(
+        np.asarray(weights), np.asarray(state.derived["joint_weights"]), rtol=1e-12
     )
 
 
-def test_guard_still_covers_the_nonparametric_families():
-    """The #1395 rename must not drop the SFHs the guard already caught (#950).
+def test_binned_family_fast_path_is_served_with_normalized_weights(
+    synthetic_ssp_wide, synthetic_tophat_obs
+):
+    """A binned family (continuity) is served by the fast path, not refused (#3505).
 
-    ``psb_continuity_flex`` joined them with #2184: it wraps ``psb_continuity``
-    and is equally binned, but the map is keyed on the function object, so a
-    wrapper is a different key and was reaching the fast path unguarded.
+    The binned families used to be refused by the fast path's map. They now share
+    evaluate_sfh with apply; the weights are finite and normalized.
     """
-    from tengri.components.stellar.sfh.nonparametric import (
-        continuity,
-        continuity_flex,
-        dirichlet,
-        psb_continuity,
-        psb_continuity_flex,
-    )
-
-    for fn in (continuity, continuity_flex, dirichlet, psb_continuity, psb_continuity_flex):
-        assert fn in C._FAST_PATH_UNSUPPORTED_SFH_FNS, f"{fn.__name__} fell out of the guard"
+    model = _build({"type": "continuity", "all_params": Fixed(DEFAULT)}, synthetic_ssp_wide,
+                   synthetic_tophat_obs)
+    stellar = _stellar_of(model)
+    params = merge_fixed_params(model.spec, dict(model.spec.sample(jax.random.PRNGKey(0))))
+    weights, mass, _ages = stellar.compute_joint_weights(params)
+    assert jnp.all(jnp.isfinite(weights))
+    assert abs(float(weights.sum()) - 1.0) < 1e-6
+    assert float(mass) > 0.0
 
 
 def test_table_sfh_placeholder_still_returns_zero():
