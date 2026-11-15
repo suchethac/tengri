@@ -17,7 +17,6 @@ import pytest
 from tengri.inference.context import InferenceContext
 from tengri.inference.fitter import Fitter
 from tengri.inference.likelihood import build_base_likelihood
-from tengri.inference.likelihoods.marginalized import CalibrationELineMarginalizedLikelihood
 
 pytestmark = pytest.mark.regression_bug
 
@@ -116,13 +115,10 @@ def test_fixed_values_reach_calibration_cloudy_line_prior(monkeypatch):
         return real(**kwargs)
 
     monkeypatch.setattr(eline_priors, "cloudy_line_priors", spy)
-    stub = SimpleNamespace(
-        eline_prior_type="cloudy",
-        eline_line_wavelengths=_LINES,
-        eline_prior_width_dex=0.5,
-    )
+    from tengri.inference.likelihoods.terms import _calibration_line_prior
+
     params = {"met_logzsol": -0.5, "neb_logU": -2.0}
-    CalibrationELineMarginalizedLikelihood._line_prior(stub, params, 2)
+    _calibration_line_prior("cloudy", params, jnp.zeros((4, 2)), 1.0, _LINES, 0.5)
 
     assert seen["log_z"] == pytest.approx(-0.5)
     assert seen["neb_logU"] == pytest.approx(-2.0)

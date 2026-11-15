@@ -221,6 +221,9 @@ def test_eline_marginal_equals_hand_whitened_reference():
         ).log_like
         + 0.5 * N_PIX * LOG_2PI
     )
+    # The adapter returns the normalized marginal: the whitened reference without the
+    # Gaussian constant 0.5 N ln 2pi + sum ln L_ii of the covariance factor.
+    reference = reference - 0.5 * N_PIX * LOG_2PI - np.sum(np.log(np.diag(lower)))
     np.testing.assert_allclose(float(value), float(reference), rtol=1e-10)
 
 
@@ -254,4 +257,7 @@ def test_calibration_eline_marginal_equals_hand_whitened_reference():
         ).log_like
         + 0.5 * N_PIX * LOG_2PI
     )
+    # The adapter returns the normalized marginal: the whitened reference without the
+    # Gaussian constant 0.5 N ln 2pi + sum ln L_ii of the covariance factor.
+    reference = reference - 0.5 * N_PIX * LOG_2PI - np.sum(np.log(np.diag(lower)))
     np.testing.assert_allclose(float(value), float(reference), rtol=1e-10)

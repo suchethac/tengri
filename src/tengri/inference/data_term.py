@@ -737,6 +737,14 @@ def build_data_term(
         """log p(d | params), positive, for one structure."""
         if noise_spec is not None:
             return score(predictions(params, call_data_args), call_data_args, noise_spec)
+        if likelihood is None:
+            raise AssertionError(
+                "Legacy χ² fall-through reached for an unexpected configuration. "
+                "Auto-build (Fitter._maybe_build_default_likelihood) returned None "
+                "but use_censored is False. Either extend the auto-build cohort to "
+                "cover this configuration, or raise NotImplementedError at the "
+                "auto-build bail-out site rather than falling through here."
+            )
         prediction = predict(params, call_data_args)
         if takes_data_args:
             return likelihood.log_prob(prediction, params, data_args=call_data_args)
@@ -746,6 +754,8 @@ def build_data_term(
         """The constant ``log_lik`` omits, for the same structure (#3427)."""
         if noise_spec is not None:
             return log_normalization(call_data_args, noise_spec)
+        if likelihood is None:
+            return 0.0
         return log_normalization_of(likelihood, call_data_args)
 
     return DataTerm(
@@ -770,13 +780,7 @@ def _noise_of(likelihood, options, data_args, noise_dof):
     """
     if likelihood is None:
         if "data_mask" not in data_args:
-            raise AssertionError(
-                "Legacy χ² fall-through reached for an unexpected configuration. "
-                "Auto-build (Fitter._maybe_build_default_likelihood) returned None "
-                "but use_censored is False. Either extend the auto-build cohort to "
-                "cover this configuration, or raise NotImplementedError at the "
-                "auto-build bail-out site rather than falling through here."
-            )
+            return None, None
         spec = NoiseSpec(data_type=options.data_type, dof=noise_dof, f_cal_param="noise_frac_cal")
         validate(spec, data_args.keys())
         return spec, ColumnBuilders()
