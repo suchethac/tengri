@@ -14,7 +14,7 @@
 # ---
 
 # %% [markdown]
-# # Discovering the model menu
+# # Discovering the menu
 #
 # Tengri is plugin-aware. The library knows which physics it ships, which inference backends are installed and compatible with a given model, which filters are on disk, and how to fetch missing stellar population synthesis grids. Asking Python is faster than reading documentation.
 

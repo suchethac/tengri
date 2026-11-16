@@ -547,9 +547,34 @@ def _write_component_reference(app=None):
     (_GENERATED_DIR / "component_tables.rst").write_text("\n".join(chunks), encoding="utf-8")
 
 
+def _write_model_wheel(app=None):
+    """Render the model catalog wheel data to ``_generated/model_wheel.html``.
+
+    Same rationale as ``_write_component_reference``: rebuilt from the live
+    registries every build, gitignored, never committed. A wheel source that
+    no longer resolves raises, so the build fails loudly rather than drawing a
+    wheel with a family silently missing. The JSON is inlined in the fragment
+    so the page needs no fetch and works from ``file://``.
+    """
+    import pathlib
+
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "tools"))
+    from model_wheel_data import resolve, to_json
+
+    data = to_json(resolve())
+    fragment = (
+        '<div class="tg-wheel" id="tg-wheel">\n'
+        '<script type="application/json" id="tg-wheel-data">' + data + "</script>\n"
+        "</div>\n"
+    )
+    _GENERATED_DIR.mkdir(exist_ok=True)
+    (_GENERATED_DIR / "model_wheel.html").write_text(fragment, encoding="utf-8")
+
+
 def setup(app):
     # Before anything is read, so components.md can include the result.
     app.connect("builder-inited", _write_component_reference)
+    app.connect("builder-inited", _write_model_wheel)
     app.connect("builder-inited", _write_parameter_tables)
     # Priority 1000 runs *after* sphinx-gallery's own builder-inited handler.
     app.connect("builder-inited", _fix_gallery_index_toctree, priority=1000)

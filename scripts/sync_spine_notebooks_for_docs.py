@@ -59,7 +59,7 @@ SPINE_TITLES: dict[str, str] = {
     "00_quickstart": "Quickstart",
     "01_why_jax": "Why JAX",
     "02_sed_anatomy": "Anatomy of an SED",
-    "03_discovering_the_menu": "Discovering the model menu",
+    "03_discovering_the_menu": "Discovering the menu",
     "04_building_models": "Building models",
     "05_fitting_photometry": "Fitting photometry",
     "06_fitting_spectroscopy": "Fitting spectroscopy",

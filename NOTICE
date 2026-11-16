@@ -36,6 +36,10 @@ This product includes or depends on software written by third parties:
     https://github.com/blackjax-devs/blackjax
     Apache-2.0
 
+  D3 (vendored in docs/_static/vendor/ for the documentation's model catalog)
+    https://github.com/d3/d3
+    ISC
+
 tengri independently implements models and algorithms described or used in
 the following projects, and validates its implementations against them. In
 each case the docstring of the relevant tengri function names the

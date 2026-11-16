@@ -1,0 +1,988 @@
+# Model wheel: tree + registry mapping. Rendered at docs-build time by docs/conf.py.
+# src: 'lister:name' (registry entry; AGN/radio blocks use 'lister:category/name'),
+#      'ssp:<regex>' (matched against tengri.list_known_ssps() names), 'param:<text>' (a build option, no registry entry).
+# cite: only where the registry has no citation field. cite_status: unverified -> must be checked before merge.
+version: 1
+modules:
+- id: stellar
+  label: Stellar populations
+  short: Stellar pops
+  color: '#f4c247'
+  groups:
+  - id: sps_codes
+    label: SPS codes
+    models:
+    - label: FSPS
+      src:
+      - ssp:^fsps_
+      cite: Conroy, Gunn & White 2009, ApJ 699, 486; Conroy & Gunn 2010, ApJ 712, 833
+    - label: BC03
+      src:
+      - ssp:^bc03_
+      cite: Bruzual & Charlot 2003, MNRAS 344, 1000
+    - label: BPASS
+      src:
+      - ssp:^bpss_
+      cite: Eldridge et al. 2017, PASA 34, e058
+    - label: MILES family (Vazdekis)
+      src:
+      - ssp:^(e|s)?miles_
+      cite: Vazdekis et al. 2010, MNRAS 404, 1639; Vazdekis et al. 2016, MNRAS 463, 3409
+      cite_status: unverified
+    - label: Maraston (M05, MaStar)
+      src:
+      - ssp:^(m05|mastar)_
+      cite: Maraston 2005, MNRAS 362, 799; Maraston et al. 2020, MNRAS 496, 2962
+      cite_status: unverified
+    - label: ProGeny
+      src:
+      - ssp:^pgny_
+      cite: Robotham & Bellstedt 2024; Bellstedt & Robotham 2024, arXiv:2410.17698
+  - id: isochrones
+    label: Isochrones
+    models:
+    - label: MIST
+      src:
+      - ssp:(^|_)mist_
+      cite: Choi et al. 2016, ApJ 823, 102
+    - label: α-MIST
+      src:
+      - ssp:(^|_)amist_
+      cite: Park et al. 2025 (α-MC) — full reference missing from the repo
+      cite_status: unverified
+    - label: PARSEC
+      src:
+      - ssp:_prsc_
+      cite: Bressan et al. 2012, MNRAS 427, 127
+    - label: Padova
+      src:
+      - ssp:_pdva_
+      cite: Marigo et al. 2008, A&A 482, 883
+    - label: BaSTI
+      src:
+      - ssp:_bsti_
+      cite: Pietrinferni et al. 2004, ApJ 612, 168
+    - label: BPASS stellar models
+      src:
+      - ssp:^bpss_
+      cite: Eldridge et al. 2017, PASA 34, e058
+    - label: Fuel consumption (M05)
+      src:
+      - ssp:^m05_
+      cite: Maraston 2005, MNRAS 362, 799
+      cite_status: unverified
+  - id: spectral_libraries
+    label: Stellar spectral libraries
+    short: Spectral libs
+    models:
+    - label: BaSeL
+      src:
+      - ssp:_basel_
+      cite: Westera et al. 2002, A&A 381, 524
+    - label: C3K
+      src:
+      - ssp:_c3k_
+      cite: Conroy et al. (C3K) — no published reference yet
+      cite_status: unverified
+    - label: MILES
+      src:
+      - ssp:(^miles_|_miles_)
+      cite: Falcón-Barroso et al. 2011, A&A 532, A95
+    - label: E-MILES
+      src:
+      - ssp:^emiles_
+      cite: Vazdekis et al. 2016, MNRAS 463, 3409
+      cite_status: unverified
+    - label: sMILES (α-enhanced)
+      src:
+      - ssp:^smiles_
+      cite: Knowles et al. 2023, MNRAS 523, 3450
+      cite_status: unverified
+    - label: STELIB
+      src:
+      - ssp:_stelib_
+      cite: Le Borgne et al. 2003, A&A 402, 433
+    - label: MaStar
+      src:
+      - ssp:^mastar_
+      cite: Yan et al. 2019, ApJ 883, 175
+      cite_status: unverified
+  - id: imf
+    label: IMF
+    models:
+    - label: Salpeter (1955)
+      src:
+      - ssp:salpeter
+      cite: Salpeter 1955, ApJ 121, 161
+    - label: Kroupa (2001)
+      src:
+      - ssp:kroupa(?!_revised)
+      cite: Kroupa 2001, MNRAS 322, 231
+    - label: Kroupa revised
+      src:
+      - ssp:kroupa_revised
+      cite: Kroupa 2001 (revised form as tabulated by MILES)
+      cite_status: unverified
+    - label: Chabrier (2003)
+      src:
+      - ssp:(chabrier|imf_chab)
+      cite: Chabrier 2003, PASP 115, 763
+    - label: Unimodal Γ 0.3–3.5
+      src:
+      - ssp:unimodal
+      cite: Vazdekis et al. 1996, ApJS 106, 307
+      cite_status: unverified
+    - label: Bimodal Γb 0.3–3.5
+      src:
+      - ssp:bimodal
+      cite: Vazdekis et al. 1996, ApJS 106, 307
+      cite_status: unverified
+    - label: BPASS broken power law
+      src:
+      - ssp:^bpss_v2.*_imf(1\d\d)
+      cite: Eldridge et al. 2017, PASA 34, e058
+  - id: multiplicity
+    label: Stellar multiplicity
+    short: Multiplicity
+    models:
+    - label: Single stars
+      src:
+      - ssp:^(?!bpss_v2\d*_bin)
+      cite: Eldridge et al. 2017, PASA 34, e058
+    - label: Binary evolution
+      src:
+      - ssp:^bpss_v2\d*_bin_
+      cite: Eldridge et al. 2017, PASA 34, e058
+- id: sfh
+  label: Star-formation history
+  short: SFH
+  color: '#f28e52'
+  groups:
+  - id: parametric
+    label: Parametric
+    models:
+    - label: Constant
+      src:
+      - list_sfh_models:const
+    - label: Exponential rise
+      src:
+      - list_sfh_models:exp
+    - label: Declining τ
+      src:
+      - list_sfh_models:declining_exp
+    - label: Truncated τ
+      src:
+      - list_sfh_models:trunc_exp
+    - label: Delayed τ
+      src:
+      - list_sfh_models:delayed
+    - label: Delayed exponential
+      src:
+      - list_sfh_models:dexp
+    - label: Log-normal
+      src:
+      - list_sfh_models:lnorm
+    - label: Gaussian
+      src:
+      - list_sfh_models:norm
+    - label: Skew-normal
+      src:
+      - list_sfh_models:snorm
+    - label: Truncated skew-normal
+      src:
+      - list_sfh_models:tsnorm
+    - label: Double power law
+      src:
+      - list_sfh_models:dpl
+    - label: DPL in lookback
+      src:
+      - list_sfh_models:dpl_lookback
+    - label: Buat+08
+      src:
+      - list_sfh_models:buat08
+    - label: Constant → quench
+      src:
+      - list_sfh_models:const_exp
+      - list_sfh_models:constant_then_exponential
+    - label: Double exponential
+      src:
+      - list_sfh_models:sfh2exp
+    - label: Periodic
+      src:
+      - list_sfh_models:periodic
+  - id: bursts
+    label: Bursts & quenching
+    short: Bursts
+    models:
+    - label: Triweight burst
+      src:
+      - list_sfh_models:burst
+    - label: Gaussian burst
+      src:
+      - list_sfh_models:gaussian_burst
+    - label: Top hat
+      src:
+      - list_sfh_models:top_hat
+    - label: Delayed τ + burst/quench
+      src:
+      - list_sfh_models:delayed_bq
+      short: Delayed τ + BQ
+    - label: PSB (Wild+20)
+      src:
+      - list_sfh_models:psb
+      - list_sfh_models:psb_wild2020
+    - label: PSB (Suess+22)
+      src:
+      - list_sfh_models:psb_suess2022
+    - label: PSB flex
+      src:
+      - list_sfh_models:psb_flex
+    - label: Recent episode (BEAGLE)
+      src:
+      - list_sfh_models:recent
+    - label: Recent sSFR episode
+      src:
+      - list_sfh_models:recent_ssfr
+    - label: Skew-normal + burst
+      src:
+      - list_sfh_models:snorm_burst
+    - label: Trunc. skew-normal + burst
+      src:
+      - list_sfh_models:tsnorm_burst
+      short: TSN + burst
+  - id: nonparametric
+    label: Non-parametric
+    short: Non-param.
+    models:
+    - label: Continuity (Leja+19)
+      src:
+      - list_sfh_models:continuity
+    - label: Continuity, flexible bins
+      src:
+      - list_sfh_models:continuity_flex
+      short: Continuity, flex
+    - label: Continuity, young fraction
+      src:
+      - list_sfh_models:continuity_young_fraction
+      short: Continuity, young f
+    - label: Bursty continuity
+      src:
+      - list_sfh_models:bursty_continuity
+    - label: Prospector-β
+      src:
+      - list_sfh_models:prospector_beta
+    - label: Dirichlet (Leja+17)
+      src:
+      - list_sfh_models:dirichlet
+    - label: Dense basis (Iyer+19)
+      src:
+      - list_sfh_models:dense_basis
+      - list_sfh_models:db
+    - label: Dense basis, no GP
+      src:
+      - list_sfh_models:dense_basis_pure
+      - list_sfh_models:dbp
+  - id: stochastic
+    label: Stochastic & tabulated
+    short: Stochastic
+    models:
+    - label: GP field (DRW)
+      src:
+      - list_sfh_models:field
+    - label: Tabulated SFH(t)
+      src:
+      - list_sfh_models:table
+- id: metallicity
+  label: Metallicity & [α/Fe]
+  short: Z & [α/Fe]
+  color: '#ec6f6f'
+  groups:
+  - id: z_history
+    label: Z history
+    models:
+    - label: Single Z
+      src:
+      - list_metallicity_modes:delta
+    - label: Linear ramp
+      src:
+      - list_metallicity_modes:ramp
+    - label: Two-step
+      src:
+      - list_metallicity_modes:two_step
+    - label: PSB two-step
+      src:
+      - list_metallicity_modes:psb_two_step
+    - label: Per-bin Z
+      src:
+      - list_metallicity_modes:bins
+    - label: Continuity Δlog Z
+      src:
+      - list_metallicity_modes:bins_continuity
+    - label: Closed box (mass map)
+      src:
+      - list_metallicity_modes:massmap_box
+    - label: Linear mass map
+      src:
+      - list_metallicity_modes:massmap_lin
+    - label: Gas regulator
+      src:
+      - list_metallicity_modes:chem_evol
+    - label: Tabulated Z(t)
+      src:
+      - list_metallicity_modes:table
+  - id: alpha_modes
+    label: α enhancement
+    short: '[α/Fe]'
+    models:
+    - label: Solar-scaled
+      src:
+      - param:met_alpha_fe=Fixed(0) (default)
+    - label: Uniform [α/Fe]
+      src:
+      - 'param:met={''alpha_fe'': <prior>}'
+    - label: Evolving [α/Fe]
+      src:
+      - 'param:met={''alpha_fe_evolving'': True}'
+  - id: alpha_grids
+    label: '[α/Fe] grids'
+    short: α grids
+    models:
+    - label: sMILES
+      src:
+      - ssp:^smiles_.*_afe
+      cite: Knowles et al. 2023, MNRAS 523, 3450
+      cite_status: unverified
+    - label: MILES [α/Fe]
+      src:
+      - ssp:^miles_.*_afe
+      cite: Vazdekis et al. 2015, MNRAS 449, 1177
+      cite_status: unverified
+    - label: α-MC
+      src:
+      - ssp:amist_c3k_hr_.*_afe
+      cite: Park et al. 2025 — full reference missing from the repo
+      cite_status: unverified
+    - label: BPASS v2.3
+      src:
+      - ssp:^bpss_v23_.*_afe
+      cite: Byrne et al. 2022, MNRAS 512, 5329
+      cite_status: unverified
+- id: nebular
+  label: Nebular emission
+  short: Nebular
+  color: '#e35fa6'
+  groups:
+  - id: photoionization
+    label: Photoionization
+    short: Photoion.
+    models:
+    - label: Baked into SSP
+      src:
+      - list_nebular_backends:ssp
+    - label: Cloudy grid (Byler+17)
+      src:
+      - list_nebular_backends:cloudy
+    - label: Cue emulator (Li+25)
+      src:
+      - list_nebular_backends:cue
+    - label: NEOGAL (Gutkin+16)
+      src:
+      - list_nebular_backends:gutkin16
+    - label: CB19 (3MdB)
+      src:
+      - list_nebular_backends:cb19
+    - label: MAPPINGS V
+      src:
+      - list_nebular_backends:mappings
+  - id: shocks
+    label: Shocks
+    models:
+    - label: MAPPINGS shock + precursor
+      src:
+      - list_shock_models:mappings
+      short: MAPPINGS shocks
+- id: dust_attenuation
+  label: Dust attenuation
+  short: Attenuation
+  color: '#b483ec'
+  groups:
+  - id: geometry
+    label: Geometry
+    models:
+    - label: Single screen
+      src:
+      - list_dust_models:single_component
+    - label: Birth cloud + diffuse
+      src:
+      - list_dust_models:two_component
+    - label: Age-binned N screens
+      src:
+      - list_dust_models:age_binned
+    - label: WG00 radiative transfer
+      src:
+      - list_dust_models:wg00
+  - id: attenuation_curves
+    label: Attenuation curves
+    short: Curves
+    models:
+    - label: Calzetti+00
+      src:
+      - list_dust_laws:calzetti
+    - label: Kriek & Conroy 13
+      src:
+      - list_dust_laws:kriek_conroy
+    - label: Noll+09
+      src:
+      - list_dust_laws:noll09
+    - label: Salim+18
+      src:
+      - list_dust_laws:salim
+    - label: Salim, Boquien & Lee 18
+      src:
+      - list_dust_laws:salim_sbl18
+    - label: Reddy+15
+      src:
+      - list_dust_laws:reddy15
+    - label: Leitherer+02
+      src:
+      - list_dust_laws:leitherer02
+    - label: Li+08
+      src:
+      - list_dust_laws:li08
+    - label: Power law
+      src:
+      - list_dust_laws:power_law
+    - label: Chevallard+13
+      src:
+      - list_dust_laws:chevallard13
+    - label: Wild+07 birth cloud
+      src:
+      - list_dust_laws:vw07_bc
+    - label: Wild+07 diffuse
+      src:
+      - list_dust_laws:vw07_diff
+    - label: Narayanan+18 (z)
+      src:
+      - list_dust_laws:narayanan_z
+    - label: TEA (Haskell+24)
+      src:
+      - list_dust_laws:tea
+    - label: Conroy+10 bump
+      src:
+      - list_dust_laws:conroy2010
+  - id: extinction_curves
+    label: Extinction curves
+    short: Extinction
+    models:
+    - label: Cardelli+89 (MW)
+      src:
+      - list_dust_laws:cardelli
+    - label: Fitzpatrick 99 (MW)
+      src:
+      - list_dust_laws:fitzpatrick99
+    - label: LMC (Pei 92)
+      src:
+      - list_dust_laws:lmc
+    - label: SMC (Pei 92)
+      src:
+      - list_dust_laws:smc
+    - label: SMC (Prévot+84)
+      src:
+      - list_dust_laws:prevot_smc
+    - label: SMC bar (Gordon+03)
+      src:
+      - list_dust_laws:gordon03_smcbar
+  - id: grain_models
+    label: Grain models
+    short: Grains
+    models:
+    - label: WD01 MW
+      src:
+      - list_dust_laws:wd01_mwrv31
+    - label: WD01 SMC
+      src:
+      - list_dust_laws:wd01_smcbar
+    - label: Draine 03 MW
+      src:
+      - list_dust_laws:d03_mwrv31
+    - label: Hensley & Draine 23
+      src:
+      - list_dust_laws:hd23_mwrv31
+- id: dust_emission
+  label: Dust emission
+  color: '#8792f4'
+  groups:
+  - id: analytic
+    label: Analytic
+    models:
+    - label: Modified blackbody
+      src:
+      - list_dust_emission_models:modified_blackbody
+      - list_dust_emission_models:mbb
+    - label: General-opacity graybody
+      src:
+      - list_dust_emission_models:graybody
+    - label: Casey 12 MBB + power law
+      src:
+      - list_dust_emission_models:casey2012
+    - label: Warm + cold split
+      src:
+      - list_dust_emission_models:energy_balance_split
+  - id: templates
+    label: Empirical templates
+    short: Templates
+    models:
+    - label: Dale+14
+      src:
+      - list_dust_emission_models:dale2014
+    - label: Dale+14 (CIGALE)
+      src:
+      - list_dust_emission_models:dale2014_cigale
+    - label: Dale & Helou 02 + CE01
+      src:
+      - list_dust_emission_models:dh02_ce01
+      short: DH02 + CE01
+    - label: Schreiber+18
+      src:
+      - list_dust_emission_models:schreiber2016
+    - label: Schreiber+18 (AGNfitter)
+      src:
+      - list_dust_emission_models:schreiber2018
+    - label: BOSA
+      src:
+      - list_dust_emission_models:bosa
+  - id: grain_physics
+    label: Grain physics
+    short: Grains
+    models:
+    - label: Draine & Li 07
+      src:
+      - list_dust_emission_models:draine_li2007
+      - list_dust_emission_models:dl07
+      - list_dust_emission_models:dl07_tabulated
+    - label: Draine+14
+      src:
+      - list_dust_emission_models:draine_li2014
+      - list_dust_emission_models:dl14
+    - label: Draine+21 PAH
+      src:
+      - list_dust_emission_models:draine2021_pah
+    - label: Astrodust (HD23)
+      src:
+      - list_dust_emission_models:astrodust
+    - label: THEMIS
+      src:
+      - list_dust_emission_models:themis
+    - label: Drude PAH profiles
+      src:
+      - list_dust_emission_models:pah_drude
+- id: agn
+  label: AGN
+  color: '#4fb6ea'
+  groups:
+  - id: disc
+    label: Accretion disc
+    short: Disc
+    models:
+    - label: Shakura–Sunyaev
+      src:
+      - list_agn_blocks:disc/multicolor
+    - label: Power law + UV cutoff
+      src:
+      - list_agn_blocks:disc/powerlaw
+    - label: Kubota & Done 18
+      src:
+      - list_agn_blocks:disc/kubota_done
+    - label: KD18 (AGNfitter-rX)
+      src:
+      - list_agn_blocks:disc/kd18_agnfitter
+    - label: KD18 + warm index
+      src:
+      - list_agn_blocks:disc/kd18_agnfitter_warmindex
+    - label: RELAGN
+      src:
+      - list_agn_blocks:disc/relagn
+    - label: ADAF (Mahadevan 97)
+      src:
+      - list_agn_blocks:disc/adaf
+    - label: ADAF–thin blend
+      src:
+      - list_agn_blocks:disc/adaf_lopez2024
+    - label: Slone & Netzer 12
+      src:
+      - list_agn_blocks:disc/slone_netzer
+    - label: Schartmann 05
+      src:
+      - list_agn_blocks:disc/schartmann2005
+    - label: Schartmann 05 + self-atten.
+      src:
+      - list_agn_blocks:disc/schartmann2005_skirtor_atten
+      short: Schartmann 05 + SA
+    - label: SKIRTOR disc
+      src:
+      - list_agn_blocks:disc/skirtor
+    - label: GRAHSP bending PL
+      src:
+      - list_agn_blocks:disc/grahsp_sbpl
+    - label: GRAHSP Netzer
+      src:
+      - list_agn_blocks:disc/grahsp_netzer
+    - label: QSOgen continuum
+      src:
+      - list_agn_blocks:disc/qsogen
+    - label: Richards+06 composite
+      src:
+      - list_agn_blocks:disc/richards2006
+  - id: torus
+    label: Torus
+    models:
+    - label: SKIRTOR
+      src:
+      - list_agn_blocks:torus/skirtor
+    - label: SKIRTOR (AGNfitter) 1p
+      src:
+      - list_agn_blocks:torus/skirtor_agnfitter_1p
+    - label: SKIRTOR (AGNfitter) 2p
+      src:
+      - list_agn_blocks:torus/skirtor_agnfitter_2p
+    - label: SKIRTOR (AGNfitter) 3p
+      src:
+      - list_agn_blocks:torus/skirtor_agnfitter
+    - label: CLUMPY (Nenkova+08)
+      src:
+      - list_agn_blocks:torus/nenkova
+    - label: CLUMPY (AGNfitter) 1p
+      src:
+      - list_agn_blocks:torus/nenkova_agnfitter
+    - label: CLUMPY (AGNfitter) 2p
+      src:
+      - list_agn_blocks:torus/nenkova_agnfitter_2p
+    - label: CLUMPY (AGNfitter) 3p
+      src:
+      - list_agn_blocks:torus/nenkova_agnfitter_3p
+    - label: Fritz+06
+      src:
+      - list_agn_blocks:torus/fritz
+    - label: Silva+04
+      src:
+      - list_agn_blocks:torus/silva04
+    - label: CAT3D-wind
+      src:
+      - list_agn_blocks:torus/cat3d_wind
+    - label: CAT3D-wind low f_wd
+      src:
+      - list_agn_blocks:torus/cat3d_wind_lowfwd
+    - label: Mor & Netzer 12
+      src:
+      - list_agn_blocks:torus/grahsp_mn12
+    - label: GRAHSP torus
+      src:
+      - list_agn_blocks:torus/grahsp
+    - label: QSOgen hot dust
+      src:
+      - list_agn_blocks:torus/qsogen
+    - label: Graybody
+      src:
+      - list_agn_blocks:torus/simple
+    - label: Two-temperature
+      src:
+      - list_agn_blocks:torus/two_temperature
+  - id: nlr
+    label: Narrow-line region
+    short: NLR
+    models:
+    - label: Analytic (Richardson+14)
+      src:
+      - list_agn_blocks:nlr/analytic
+    - label: GRAHSP
+      src:
+      - list_agn_blocks:nlr/grahsp
+    - label: Synthesizer grid
+      src:
+      - list_agn_blocks:nlr/synthesizer
+    - label: Synthesizer spectra
+      src:
+      - list_agn_blocks:nlr/synthesizer_spectra
+    - label: Feltre+16
+      src:
+      - list_agn_blocks:nlr/feltre
+    - label: Cue AGN
+      src:
+      - list_agn_blocks:nlr/cue
+    - label: MAPPINGS V AGN
+      src:
+      - list_nebular_backends:mappings_agn
+  - id: blr
+    label: Broad-line region
+    short: BLR
+    models:
+    - label: Analytic (Krawczyk+13)
+      src:
+      - list_agn_blocks:blr/analytic
+    - label: GRAHSP
+      src:
+      - list_agn_blocks:blr/grahsp
+    - label: QSOgen
+      src:
+      - list_agn_blocks:blr/qsogen
+    - label: Synthesizer grid
+      src:
+      - list_agn_blocks:blr/synthesizer
+    - label: Synthesizer spectra
+      src:
+      - list_agn_blocks:blr/synthesizer_spectra
+  - id: feii
+    label: FeII & Balmer
+    short: FeII
+    models:
+    - label: Boroson & Green 92
+      src:
+      - list_agn_blocks:feii/boroson_green
+    - label: GRAHSP FeII
+      src:
+      - list_agn_blocks:feii/grahsp
+    - label: Véron-Cetty+04
+      src:
+      - list_agn_blocks:feii/grahsp_veroncetty
+    - label: QSOgen Balmer
+      src:
+      - list_agn_blocks:feii/qsogen_balmer
+  - id: agn_attenuation
+    label: AGN attenuation
+    short: Atten.
+    models:
+    - label: Polar dust
+      src:
+      - list_agn_blocks:attenuation/polar_dust
+    - label: GRAHSP bi-attenuation
+      src:
+      - list_agn_blocks:attenuation/grahsp_biatten
+    - label: QSOgen curve
+      src:
+      - list_agn_blocks:attenuation/qsogen
+    - label: QSOgen SMC
+      src:
+      - list_agn_blocks:attenuation/qsogen_smc
+    - label: SMC (Prévot+84)
+      src:
+      - list_agn_blocks:attenuation/smc_prevot
+- id: xray
+  label: X-ray
+  color: '#4fd3c6'
+  groups:
+  - id: corona
+    label: AGN corona
+    short: Corona
+    models:
+    - label: α_ox (Yang+20)
+      src:
+      - list_xray_models:simple
+      - list_xray_models:yang20
+    - label: IR-tied (Lopez+24)
+      src:
+      - list_xray_models:lopez24
+    - label: Generic corona
+      src:
+      - list_xray_models:agn_xray_corona
+  - id: galaxy_xray
+    label: Binaries & hot gas
+    short: XRB & gas
+    models:
+    - label: X-ray binaries (Fragos+13)
+      src:
+      - list_xray_models:xray_aird
+    - label: Hot gas
+      src:
+      - list_xray_models:simple
+- id: radio
+  label: Radio
+  color: '#6fca8d'
+  groups:
+  - id: sf
+    label: Star-forming
+    short: SF
+    models:
+    - label: Bell 03 FIRRC
+      src:
+      - list_radio_blocks:sf/bell2003
+    - label: Bell 03 thermal split
+      src:
+      - list_radio_blocks:sf/bell2003_split
+    - label: Delvecchio+21
+      src:
+      - list_radio_blocks:sf/delvecchio2021
+    - label: McCheyne+22 (LOFAR)
+      src:
+      - list_radio_blocks:sf/mccheyne2022
+    - label: Condon 92
+      src:
+      - list_radio_models:condon92
+  - id: jets
+    label: AGN jets
+    short: Jets
+    models:
+    - label: Power law
+      src:
+      - list_radio_blocks:agn/powerlaw
+      - list_radio_models:radio_powerlaw
+    - label: Aged double power law
+      src:
+      - list_radio_blocks:agn/dpl
+      - list_radio_models:radio_dpl
+  - id: thermal
+    label: Thermal
+    models:
+    - label: Free–free
+      src:
+      - list_radio_blocks:sf/bell2003_split
+      cite: Condon 1992, ARA&A 30, 575
+- id: igm
+  label: IGM & CGM
+  short: IGM
+  color: '#b2d36a'
+  groups:
+  - id: absorption
+    label: Absorption
+    models:
+    - label: Madau 95
+      src:
+      - list_igm_models:madau
+    - label: Inoue+14
+      src:
+      - list_igm_models:inoue14
+      - list_igm_models:inoue
+    - label: Meiksin 06
+      src:
+      - list_igm_models:meiksin06
+    - label: Asada+25 CGM damping wing
+      src:
+      - list_igm_models:asada25
+      short: Asada+25 CGM
+    - label: DLA
+      src:
+      - param:igm DLA absorption (see docs/model_reference/igm.md)
+- id: inference
+  label: Inference
+  color: '#c4c9d8'
+  groups:
+  - id: optimization
+    label: Optimization
+    short: Optim.
+    models:
+    - label: 'MAP: L-BFGS (default)'
+      short: L-BFGS (default)
+      src:
+      - list_inference_methods:map
+      - 'param:fitter.run("map")  # optimizer="lbfgs" (alias "lbfgs_scipy"), SciPy L-BFGS-B'
+      cite: Liu & Nocedal 1989, Math. Program. 45, 503; Byrd et al. 1995, SIAM J. Sci. Comput. 16, 1190 (L-BFGS-B, via SciPy)
+      cite_status: unverified
+    - label: 'MAP: Adam'
+      src:
+      - 'param:fitter.run("map", optimizer="adam")'
+      cite: Kingma & Ba 2015, arXiv:1412.6980
+      cite_status: unverified
+    - label: 'MAP: AdamW'
+      src:
+      - 'param:fitter.run("map", optimizer="adamw")'
+      cite: Loshchilov & Hutter 2019, arXiv:1711.05101
+      cite_status: unverified
+    - label: 'MAP: SGD'
+      src:
+      - 'param:fitter.run("map", optimizer="sgd")'
+    - label: Laplace
+      src:
+      - list_inference_methods:laplace
+  - id: gradient_mcmc
+    label: Gradient MCMC
+    short: Grad. MCMC
+    models:
+    - label: HMC
+      src:
+      - list_inference_methods:mcmc_hmc
+    - label: HMC low-rank mass
+      src:
+      - list_inference_methods:mcmc_hmc_lowrank
+    - label: NUTS
+      src:
+      - list_inference_methods:mcmc_nuts
+    - label: NUTS fast
+      src:
+      - list_inference_methods:mcmc_nuts_fast
+    - label: Dynamic HMC
+      src:
+      - list_inference_methods:mcmc_dynamic_hmc
+    - label: ChEES-HMC
+      src:
+      - list_inference_methods:mcmc_chees
+    - label: Adjusted MCLMC
+      src:
+      - list_inference_methods:mcmc_adjusted_mclmc
+    - label: MALA
+      src:
+      - list_inference_methods:mcmc_mala
+    - label: Barker
+      src:
+      - list_inference_methods:mcmc_barker
+  - id: other_samplers
+    label: Other samplers
+    short: Other
+    models:
+    - label: Ray-trace ensemble
+      src:
+      - list_inference_methods:mcmc_raytrace
+    - label: Elliptical slice
+      src:
+      - list_inference_methods:mcmc_ess
+    - label: Tempered SMC
+      src:
+      - list_inference_methods:mcmc_smc
+  - id: evidence
+    label: Evidence
+    models:
+    - label: Nested sampling
+      src:
+      - list_inference_methods:nss
+    - label: HMC + importance sampling
+      src:
+      - list_inference_methods:hmc_is
+      short: HMC + IS
+  - id: variational
+    label: Variational
+    short: VI
+    models:
+    - label: geoVI (NIFTy)
+      src:
+      - list_inference_methods:vi
+      - list_inference_methods:vi_nonlinear_fast
+    - label: MGVI (NIFTy)
+      src:
+      - list_inference_methods:vi_linear
+      - list_inference_methods:vi_linear_fast
+    - label: Full-rank VI
+      src:
+      - list_inference_methods:vi_fullrank
+    - label: Mean-field VI
+      src:
+      - list_inference_methods:vi_meanfield
+    - label: Pathfinder
+      src:
+      - list_inference_methods:pathfinder
+excluded:
+  reason: 'Registry entries deliberately not drawn: switch-offs, auto-dispatch wrappers, and deprecated/legacy umbrella spellings covered by their blocks.'
+  entries:
+  - list_nebular_backends:none
+  - list_shock_models:none
+  - list_xray_models:none
+  - list_radio_blocks:agn/none
+  - list_radio_blocks:sf/none
+  - list_radio_models:none
+  - list_igm_models:none
+  - list_agn_blocks:*/none
+  - list_agn_models:*
+  - list_inference_methods:mcmc
+  - list_age_kernels:*
+  - list_components:*
+  - list_recipes:*
+  - list_instruments:*
+  - list_plots:*
+  - list_filters:*

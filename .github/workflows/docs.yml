@@ -41,6 +41,9 @@ jobs:
       # Verify every registered component appears in the published reference.
       # This guard needs the docs extra (sphinx-gallery) to execute docs/conf.py.
       - run: python tools/check_component_page.py
+      # Every registry entry is placed on the Model Catalog wheel or excluded
+      # by name, so a newly registered model cannot go missing from it.
+      - run: python tools/check_model_wheel.py
       # A documented listing is the first code a reader copies, and nothing ran
       # them: one carried eight defects (names that do not exist, an inverted
       # Observation/Data split) that every check missed (#2430). This executes
