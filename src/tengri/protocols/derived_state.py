@@ -461,6 +461,10 @@ class DerivedState:
     # ``(n_filters, max_len)``; ``phot_filter_waves_padded`` units Å.
     phot_filter_waves_padded: jnp.ndarray | None = None
     phot_filter_trans_padded: jnp.ndarray | None = None
+    # The band spec those padded curves belong to: filter curves, convention and sub-band scheme,
+    # published once by the observation's stellar block. The additive projections read the
+    # convention from it. A ``BandSpec`` is a childless pytree, so it adds no traced leaves.
+    phot_band_spec: Any | None = None
     # Spectrum pixel effective wavelengths in the rest frame (published
     # when approx=SpectrumPrecomp() is set). Per-pixel effective
     # wavelengths in the galaxy rest frame, computed as observed wavelengths

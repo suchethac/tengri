@@ -16,6 +16,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from tengri.utils.filter_convention import FilterConvention
+
 pytestmark = pytest.mark.contract
 
 _GRID = Path(__file__).resolve().parents[2] / "data" / "feltre_grid.h5"
@@ -51,7 +53,9 @@ def _adapter_and_exact(grid_path):
     from tengri.components.nebular.agn_nebular import FeltreNLRBackend
 
     fw, ft = _top_hat_filter()
-    preint = feltre_precompute.precompute(fw, ft, redshift=0.0, parameters=None)
+    preint = feltre_precompute.precompute(
+        fw, ft, redshift=0.0, parameters=None, convention=FilterConvention.BESSELL
+    )
     lookup = feltre_precompute.build_lookup(preint)
     exact = FeltreNLRBackend(grid_path)
     return feltre_precompute, lookup, exact
@@ -69,7 +73,9 @@ def test_precompute_carries_five_grid_axes():
     fw, ft = _top_hat_filter()
     from tengri.components.nebular import feltre_precompute
 
-    preint = feltre_precompute.precompute(fw, ft, redshift=0.0, parameters=None)
+    preint = feltre_precompute.precompute(
+        fw, ft, redshift=0.0, parameters=None, convention=FilterConvention.BESSELL
+    )
     assert len(preint["grid_axes"]) == 5
     assert len(preint["axes"]) == 5
 

@@ -43,6 +43,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.utils.filter_convention import FilterConvention
 from tests._data_skip import DATA_DIR as _REPO_DATA  # root computed once; see #1431
 from tests.contract._heap import release_heap
 
@@ -353,7 +354,9 @@ def test_silva04_precompute_matches_exact_pchip(where) -> None:
     filter_waves = [np.geomspace(1.0e5, 1.0e6, 300), np.geomspace(1.0e6, 1.0e7, 300)]
     filter_trans = [np.ones(300), np.ones(300)]
 
-    precomp = precompute_silva04_photometry(grid_path, filter_waves, filter_trans, redshift=0.0)
+    precomp = precompute_silva04_photometry(
+        grid_path, filter_waves, filter_trans, redshift=0.0, convention=FilterConvention.BESSELL
+    )
     lookup = build_silva04_photometry_lookup(precomp)
     phot_precomp = np.asarray(lookup(0.0, log_nh_value, 1.0))
 
@@ -600,7 +603,16 @@ def _exact_grid_torus_photometry(sed_fn, grid, axis_kwargs, values, waves, trans
     wave = _runtime_wave(grid, waves)
     L_nu = sed_fn(grid, wave, agn_log_lbol=0.0, agn_torus_frac=1.0, **kwargs)
     out = [
-        float(lnu_filter_integral(L_nu, wave, jnp.asarray(w), jnp.asarray(t), 0.0))
+        float(
+            lnu_filter_integral(
+                L_nu,
+                wave,
+                jnp.asarray(w),
+                jnp.asarray(t),
+                0.0,
+                convention=FilterConvention.BESSELL,
+            )
+        )
         for w, t in zip(waves, trans, strict=True)
     ]
     return np.asarray(out)
@@ -611,7 +623,12 @@ def _precompute_grid_torus_photometry(
 ):
     """Filter-integrated photometry via the adapter's own Protocol entry points."""
     preint = precompute_mod.precompute(
-        list(waves), list(trans), 0.0, None, grid_path=str(grid_path)
+        list(waves),
+        list(trans),
+        0.0,
+        None,
+        grid_path=str(grid_path),
+        convention=FilterConvention.BESSELL,
     )
     lookup = precompute_mod.build_lookup(preint)
     kwargs = dict(zip(axis_kwargs, values, strict=True))
@@ -791,7 +808,12 @@ def test_skirtor_agnfitter_precompute_interpolates_inclination_in_degrees(
     precompute_mod = importlib.import_module(spec["precompute_mod"])
     waves, trans = grid_torus_filters
     preint = precompute_mod.precompute(
-        list(waves), list(trans), 0.0, None, grid_path=str(spec["grid_path"])
+        list(waves),
+        list(trans),
+        0.0,
+        None,
+        grid_path=str(spec["grid_path"]),
+        convention=FilterConvention.BESSELL,
     )
     lookup = precompute_mod.build_lookup(preint)
     axes = [np.asarray(a, dtype=float) for a in preint["axes"]]
@@ -848,7 +870,12 @@ def test_skirtor_agnfitter_fixed_cos_inc_collapses_at_its_degree_coordinate(
     cos_inc = float(np.cos(np.radians(55.0)))
     full = precompute_mod.build_lookup(
         precompute_mod.precompute(
-            list(waves), list(trans), 0.0, None, grid_path=str(spec["grid_path"])
+            list(waves),
+            list(trans),
+            0.0,
+            None,
+            grid_path=str(spec["grid_path"]),
+            convention=FilterConvention.BESSELL,
         )
     )
     collapsed_preint = precompute_mod.precompute(
@@ -857,6 +884,7 @@ def test_skirtor_agnfitter_fixed_cos_inc_collapses_at_its_degree_coordinate(
         0.0,
         _FixedInclination(cos_inc),
         grid_path=str(spec["grid_path"]),
+        convention=FilterConvention.BESSELL,
     )
     incl_axis = _SKIRTOR_DENSE[spec["name"]]
     assert collapsed_preint["_collapsed_axes"] == {incl_axis: pytest.approx(55.0, abs=1e-9)}
@@ -1043,7 +1071,14 @@ def _exact_photometry_fn(sed_fn, grid, names, waves, trans, redshift=0.0):
         lnu = sed_fn(grid, wave, agn_log_lbol=0.0, agn_torus_frac=1.0, **kwargs)
         return jnp.stack(
             [
-                lnu_filter_integral(lnu, wave, jnp.asarray(w), jnp.asarray(t), redshift)
+                lnu_filter_integral(
+                    lnu,
+                    wave,
+                    jnp.asarray(w),
+                    jnp.asarray(t),
+                    redshift,
+                    convention=FilterConvention.BESSELL,
+                )
                 for w, t in zip(waves, trans, strict=True)
             ]
         )
@@ -1085,7 +1120,12 @@ def _compare_over(spec, library, lookup_fn, exact_fn, label):
 def _full_lookup(spec, precompute_mod, waves, trans):
     lookup = precompute_mod.build_lookup(
         precompute_mod.precompute(
-            list(waves), list(trans), 0.0, None, grid_path=str(spec["grid_path"])
+            list(waves),
+            list(trans),
+            0.0,
+            None,
+            grid_path=str(spec["grid_path"]),
+            convention=FilterConvention.BESSELL,
         )
     )
     names = spec["axis_kwargs"]
@@ -1164,6 +1204,7 @@ def test_torus_table_fixed_axis_lookup_matches_exact(spec, fixed_axis, grid_toru
             0.0,
             _FixedAxes({names[fixed_axis]: fixed_param}),
             grid_path=str(spec["grid_path"]),
+            convention=FilterConvention.BESSELL,
         )
         assert set(preint["_collapsed_axes"]) == {fixed_axis}
         collapsed = precompute_mod.build_lookup(preint)
@@ -1213,7 +1254,12 @@ def test_torus_table_is_power_weighted(spec, grid_torus_filters):
     waves, trans = grid_torus_filters
     lookup = precompute_mod.build_lookup(
         precompute_mod.precompute(
-            list(waves), list(trans), 0.0, None, grid_path=str(spec["grid_path"])
+            list(waves),
+            list(trans),
+            0.0,
+            None,
+            grid_path=str(spec["grid_path"]),
+            convention=FilterConvention.BESSELL,
         )
     )
     axes = _library_axes(grid)
@@ -1233,6 +1279,7 @@ def test_torus_table_is_power_weighted(spec, grid_torus_filters):
                             jnp.asarray(w),
                             jnp.asarray(t),
                             0.0,
+                            convention=FilterConvention.BESSELL,
                         )
                     )
                     for w, t in zip(waves, trans, strict=True)
@@ -1318,7 +1365,12 @@ def test_torus_table_nodes_match_runtime(spec, redshift):
     )
     lookup = precompute_mod.build_lookup(
         precompute_mod.precompute(
-            list(waves), list(trans), redshift, None, grid_path=str(spec["grid_path"])
+            list(waves),
+            list(trans),
+            redshift,
+            None,
+            grid_path=str(spec["grid_path"]),
+            convention=FilterConvention.BESSELL,
         )
     )
 

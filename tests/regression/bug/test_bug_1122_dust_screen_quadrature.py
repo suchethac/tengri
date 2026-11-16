@@ -16,6 +16,7 @@ import pytest
 
 import tengri
 from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel, WavePrecomp
+from tests._band_keys import ztable_key
 from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.regression_bug
@@ -247,7 +248,6 @@ def test_ztable_disk_cache_key_includes_n_subbands(ssp):
     no-ops across processes, persistently, which is worse than the in-process
     kernel-cache leak.
     """
-    from tengri.components.stellar.sps.precompute import _ztable_cache_key
     from tengri.observation.filters import load_filter
     from tengri.utils.filter_convention import FilterConvention
 
@@ -261,5 +261,5 @@ def test_ztable_disk_cache_key_includes_n_subbands(ssp):
         False,
         FilterConvention.BESSELL,
     )
-    assert _ztable_cache_key(*args, 0) != _ztable_cache_key(*args, 5)
-    assert _ztable_cache_key(*args, 3) != _ztable_cache_key(*args, 5)
+    assert ztable_key(*args, 0) != ztable_key(*args, 5)
+    assert ztable_key(*args, 3) != ztable_key(*args, 5)

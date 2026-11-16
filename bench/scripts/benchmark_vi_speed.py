@@ -76,9 +76,9 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import jax  # noqa: E402
+from benchmark_notebook_sampler import NOTEBOOKS  # noqa: E402
 
 import tengri  # noqa: E402
-from benchmark_notebook_sampler import NOTEBOOKS  # noqa: E402
 from tengri import Data, ForwardModel, generate_mock  # noqa: E402
 from tengri.analysis.diagnostics.autocorrelation import effective_sample_size  # noqa: E402
 
@@ -316,7 +316,9 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--notebook", choices=sorted(NOTEBOOKS), required=True)
     ap.add_argument("--only", default=None, help="comma-separated subset of the row labels")
-    ap.add_argument("--seeds", type=int, default=1, help="consecutive seeds from the fixture's own")
+    ap.add_argument(
+        "--seeds", type=int, default=1, help="consecutive seeds from the fixture's own"
+    )
     ap.add_argument("--reference", action="store_true", help="run the NUTS reference instead")
     ap.add_argument("--ref-warmup", type=int, default=1000)
     ap.add_argument("--ref-samples", type=int, default=2000)
@@ -381,8 +383,16 @@ def main() -> None:
                     f"{label:<24}{'--':>9}{'--':>9}{'--':>9}{'--':>8}{'--':>7}  rc={rc} {msg}",
                     flush=True,
                 )
-                rows.append({"label": label, "seed": seed, "status": "no_output", "rc": rc,
-                             "detail": msg, "notebook": args.notebook})
+                rows.append(
+                    {
+                        "label": label,
+                        "seed": seed,
+                        "status": "no_output",
+                        "rc": rc,
+                        "detail": msg,
+                        "notebook": args.notebook,
+                    }
+                )
                 continue
             r = json.loads(tmp.read_text())
             tmp.unlink()

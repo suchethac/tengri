@@ -40,6 +40,7 @@ from tengri.components.nebular._shared import (
     render_nebular_lines,
 )
 from tengri.observation.photometry import lnu_filter_integral
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid_interp import interp_nd_pchip
 from tengri.utils.scale import pow10
 
@@ -93,25 +94,34 @@ class CloudyBandTable(NamedTuple):
     redshift: float
 
 
-def _band_row(sed, wave, filter_waves, filter_trans, redshift):
+def _band_row(sed, wave, filter_waves, filter_trans, redshift, *, convention: FilterConvention):
     """Filter-integrated L_nu of one SED through every filter, shape (n_filt,)."""
     return jnp.stack(
         [
-            lnu_filter_integral(sed, wave, fw, ft, redshift=redshift)
+            lnu_filter_integral(sed, wave, fw, ft, redshift=redshift, convention=convention)
             for fw, ft in zip(filter_waves, filter_trans, strict=True)
         ]
     )
 
 
-def _band_both_frames(sed, wave, filter_waves, filter_trans, redshift):
+def _band_both_frames(
+    sed, wave, filter_waves, filter_trans, redshift, *, convention: FilterConvention
+):
     """Observed (index 0) and rest (index 1) band rows, shape (2, n_filt)."""
-    obs = _band_row(sed, wave, filter_waves, filter_trans, redshift)
-    rest = _band_row(sed, wave, filter_waves, filter_trans, 0.0)
+    obs = _band_row(sed, wave, filter_waves, filter_trans, redshift, convention=convention)
+    rest = _band_row(sed, wave, filter_waves, filter_trans, 0.0, convention=convention)
     return jnp.stack([obs, rest])
 
 
 def _line_band_coefficients(
-    wave, line_wavelengths, sigma_kms, filter_waves, filter_trans, redshift
+    wave,
+    line_wavelengths,
+    sigma_kms,
+    filter_waves,
+    filter_trans,
+    redshift,
+    *,
+    convention: FilterConvention,
 ) -> np.ndarray:
     """Band of one unit-luminosity line per line, shape (n_lines, 2, n_filt).
 
@@ -123,7 +133,9 @@ def _line_band_coefficients(
 
     def _one(lum_vec):
         sed = render_nebular_lines(line_wavelengths, lum_vec, wave, 0.0, sigma_kms) * _LSUN_ERG
-        return _band_both_frames(sed, wave, filter_waves, filter_trans, redshift)
+        return _band_both_frames(
+            sed, wave, filter_waves, filter_trans, redshift, convention=convention
+        )
 
     return np.asarray(jax.vmap(_one)(eye))
 
@@ -148,6 +160,8 @@ def build_cloudy_band_table(
     filter_trans,
     redshift: float,
     line_sigma_kms: float,
+    *,
+    convention: FilterConvention,
 ) -> CloudyBandTable:
     """Tabulate the CLOUDY nebular band projection per age and node.
 
@@ -199,7 +213,9 @@ def build_cloudy_band_table(
         """Continuum band (2, n_filt) at one (Z, U) node for one age."""
         lum = pow10(interp_cont(p[0], age, p[1]) + scale)
         sed = interp_continuum_with_freefree_tail(wave, cont_wave, lum) * _LSUN_ERG
-        return _band_both_frames(sed, wave, filter_waves, filter_trans, redshift)
+        return _band_both_frames(
+            sed, wave, filter_waves, filter_trans, redshift, convention=convention
+        )
 
     def _line_lum(p, age):
         """Unit-Q_H per-line luminosity (n_lines,) at one (Z, U) node for one age."""
@@ -218,7 +234,13 @@ def build_cloudy_band_table(
         line_tab.append(np.asarray(line_block(line_nodes, age)).reshape(len(lz), len(lu), -1))
 
     coeff = _line_band_coefficients(
-        wave, jnp.asarray(line_wave), line_sigma_kms, filter_waves, filter_trans, redshift
+        wave,
+        jnp.asarray(line_wave),
+        line_sigma_kms,
+        filter_waves,
+        filter_trans,
+        redshift,
+        convention=convention,
     )
     # (n_young, n_cont_z, n_cont_u, 2, n_filt) -> (2, n_young, n_cont_z, n_cont_u, n_filt)
     log_cont = np.moveaxis(_to_log(np.stack(cont_tab)), 3, 0)

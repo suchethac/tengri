@@ -18,6 +18,7 @@ from tengri.analysis.diagnostics.green_functions import (
     compute_window_function,
     compute_window_function_fourier,
 )
+from tengri.utils.filter_convention import FilterConvention
 from tests._bounds import assert_non_negative
 
 pytestmark = pytest.mark.regression_paper
@@ -61,7 +62,9 @@ class TestComputeGreenFunctionMonochromatic:
     def test_values_positive_for_positive_flux(self, synthetic_ssp):
         """Green function must be positive and finite for positive flux (positivity bound)."""
         ssp_flux, ssp_wave, _ = synthetic_ssp
-        g = compute_green_function(ssp_flux, ssp_wave, wave_target=5000.0)
+        g = compute_green_function(
+            ssp_flux, ssp_wave, wave_target=5000.0, convention=FilterConvention.BESSELL
+        )
         chex.assert_shape(g, (ssp_flux.shape[0],))
         chex.assert_tree_all_finite(g)
         assert jnp.all(g > 0)
@@ -69,14 +72,18 @@ class TestComputeGreenFunctionMonochromatic:
     def test_decreasing_with_age_for_decreasing_ssp(self, synthetic_ssp):
         """synthetic_ssp has flux decreasing with age — so should G."""
         ssp_flux, ssp_wave, _ = synthetic_ssp
-        g = compute_green_function(ssp_flux, ssp_wave, wave_target=5000.0)
+        g = compute_green_function(
+            ssp_flux, ssp_wave, wave_target=5000.0, convention=FilterConvention.BESSELL
+        )
         # All values should decrease monotonically
         assert jnp.all(jnp.diff(g) < 0)
 
     def test_uniform_ssp_constant_green_function(self, uniform_ssp):
         """Flat SSP → G(t) is the same at every age."""
         ssp_flux, ssp_wave, _ = uniform_ssp
-        g = compute_green_function(ssp_flux, ssp_wave, wave_target=5000.0)
+        g = compute_green_function(
+            ssp_flux, ssp_wave, wave_target=5000.0, convention=FilterConvention.BESSELL
+        )
         assert jnp.allclose(g, g[0], rtol=1e-5)
 
     def test_wavelength_outside_grid_clamps_to_boundary(self, uniform_ssp):
@@ -87,14 +94,18 @@ class TestComputeGreenFunctionMonochromatic:
         """
         ssp_flux, ssp_wave, _ = uniform_ssp
         # Below the grid — should return ssp_flux[:, 0] = 1.0 (the left boundary)
-        g = compute_green_function(ssp_flux, ssp_wave, wave_target=100.0)
+        g = compute_green_function(
+            ssp_flux, ssp_wave, wave_target=100.0, convention=FilterConvention.BESSELL
+        )
         assert jnp.allclose(g, ssp_flux[:, 0], rtol=1e-5)
 
     def test_interpolation_at_exact_grid_point(self, uniform_ssp):
         """At an exact grid wavelength, interpolation should be exact."""
         ssp_flux, ssp_wave, _ = uniform_ssp
         wave_exact = float(ssp_wave[40])
-        g = compute_green_function(ssp_flux, ssp_wave, wave_target=wave_exact)
+        g = compute_green_function(
+            ssp_flux, ssp_wave, wave_target=wave_exact, convention=FilterConvention.BESSELL
+        )
         assert jnp.allclose(g, 1.0, rtol=1e-5)
 
 
@@ -108,7 +119,11 @@ class TestComputeGreenFunctionFilter:
         filter_wave = jnp.linspace(3000.0, 7000.0, 50)
         filter_trans = jnp.ones(50)
         g = compute_green_function(
-            ssp_flux, ssp_wave, filter_wave=filter_wave, filter_trans=filter_trans
+            ssp_flux,
+            ssp_wave,
+            filter_wave=filter_wave,
+            filter_trans=filter_trans,
+            convention=FilterConvention.BESSELL,
         )
         chex.assert_shape(g, (ssp_flux.shape[0],))
         chex.assert_tree_all_finite(g)
@@ -120,7 +135,11 @@ class TestComputeGreenFunctionFilter:
         filter_wave = jnp.linspace(100.0, 200.0, 20)  # far UV, outside 2000–9000 Å grid
         filter_trans = jnp.ones(20)
         g = compute_green_function(
-            ssp_flux, ssp_wave, filter_wave=filter_wave, filter_trans=filter_trans
+            ssp_flux,
+            ssp_wave,
+            filter_wave=filter_wave,
+            filter_trans=filter_trans,
+            convention=FilterConvention.BESSELL,
         )
         assert jnp.all(jnp.abs(g) < 1e-10)
 
@@ -128,7 +147,7 @@ class TestComputeGreenFunctionFilter:
         """Calling without either wave_target or filter args raises ValueError."""
         ssp_flux, ssp_wave, _ = synthetic_ssp
         with pytest.raises(ValueError, match="Provide either"):
-            compute_green_function(ssp_flux, ssp_wave)
+            compute_green_function(ssp_flux, ssp_wave, convention=FilterConvention.BESSELL)
 
 
 # ── compute_window_function ───────────────────────────────────────
@@ -219,25 +238,33 @@ class TestComputeTimeSensitivityMatrix:
         """
         ssp_flux, ssp_wave, _ = synthetic_ssp
         wavelengths = jnp.array([3500.0, 5500.0, 7000.0])
-        s = compute_time_sensitivity_matrix(ssp_flux, ssp_wave, wavelengths)
+        s = compute_time_sensitivity_matrix(
+            ssp_flux, ssp_wave, wavelengths, convention=FilterConvention.BESSELL
+        )
         n_age = ssp_flux.shape[0]
         chex.assert_shape(s, (3, n_age))
         chex.assert_tree_all_finite(s)
         for i, wave in enumerate(wavelengths):
-            g = compute_green_function(ssp_flux, ssp_wave, wave_target=float(wave))
+            g = compute_green_function(
+                ssp_flux, ssp_wave, wave_target=float(wave), convention=FilterConvention.BESSELL
+            )
             assert jnp.allclose(s[i], g, rtol=1e-6), f"Row {i} mismatch for λ={wave} Å"
 
     def test_single_wavelength(self, synthetic_ssp):
         ssp_flux, ssp_wave, _ = synthetic_ssp
         wavelengths = jnp.array([5000.0])
-        s = compute_time_sensitivity_matrix(ssp_flux, ssp_wave, wavelengths)
+        s = compute_time_sensitivity_matrix(
+            ssp_flux, ssp_wave, wavelengths, convention=FilterConvention.BESSELL
+        )
         chex.assert_shape(s, (1, ssp_flux.shape[0]))
 
     def test_uniform_ssp_all_rows_equal(self, uniform_ssp):
         """Uniform SSP flux → G(t) is the same for every wavelength within the grid."""
         ssp_flux, ssp_wave, _ = uniform_ssp
         wavelengths = jnp.array([3000.0, 5000.0, 7000.0, 8000.0])
-        s = compute_time_sensitivity_matrix(ssp_flux, ssp_wave, wavelengths)
+        s = compute_time_sensitivity_matrix(
+            ssp_flux, ssp_wave, wavelengths, convention=FilterConvention.BESSELL
+        )
         # All rows should be identical (G = 1 at every age, every wavelength)
         for i in range(1, s.shape[0]):
             assert jnp.allclose(s[0], s[i], rtol=1e-5)

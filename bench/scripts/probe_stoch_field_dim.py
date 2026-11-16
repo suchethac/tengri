@@ -29,8 +29,9 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import tengri  # noqa: E402
 from benchmark_notebook_sampler import NOTEBOOKS  # noqa: E402
+
+import tengri  # noqa: E402
 from tengri import Fitter  # noqa: E402
 from tengri.analysis.mock import generate_mock  # noqa: E402
 from tengri.inference._sample_utils import _maybe_map_init  # noqa: E402

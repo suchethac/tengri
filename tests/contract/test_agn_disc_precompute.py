@@ -20,6 +20,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.utils.filter_convention import FilterConvention
 from tests._jit_parity import assert_jit_matches_eager
 
 pytestmark = pytest.mark.contract
@@ -46,7 +47,12 @@ class TestPowerlawDiscAdapter:
 
         waves, trans = filter_set
         result = disc_precompute.precompute(
-            waves, trans, redshift=1.0, parameters=None, model="powerlaw_disc"
+            waves,
+            trans,
+            redshift=1.0,
+            parameters=None,
+            model="powerlaw_disc",
+            convention=FilterConvention.BESSELL,
         )
         phot = np.asarray(result["grid_phot"])
         assert phot.shape[-1] == len(waves)
@@ -57,7 +63,12 @@ class TestPowerlawDiscAdapter:
 
         waves, trans = filter_set
         result = disc_precompute.precompute(
-            waves, trans, redshift=1.0, parameters=None, model="powerlaw_disc"
+            waves,
+            trans,
+            redshift=1.0,
+            parameters=None,
+            model="powerlaw_disc",
+            convention=FilterConvention.BESSELL,
         )
         lookup = disc_precompute.build_lookup(result, model="powerlaw_disc")
         out = assert_jit_matches_eager(lookup, jnp.float64(1.0), jnp.float64(-1.5))
@@ -70,7 +81,12 @@ class TestSSDiscAdapter:
 
         waves, trans = filter_set
         result = disc_precompute.precompute(
-            waves, trans, redshift=0.5, parameters=None, model="ss_disc"
+            waves,
+            trans,
+            redshift=0.5,
+            parameters=None,
+            model="ss_disc",
+            convention=FilterConvention.BESSELL,
         )
         phot = np.asarray(result["grid_phot"])
         assert phot.shape[-1] == len(waves)
@@ -81,7 +97,12 @@ class TestSSDiscAdapter:
 
         waves, trans = filter_set
         result = disc_precompute.precompute(
-            waves, trans, redshift=0.5, parameters=None, model="ss_disc"
+            waves,
+            trans,
+            redshift=0.5,
+            parameters=None,
+            model="ss_disc",
+            convention=FilterConvention.BESSELL,
         )
         lookup = disc_precompute.build_lookup(result, model="ss_disc")
         # Axes are (agn_log_mbh, agn_log_lbol) after #902; query at M_bh=1e8,
@@ -106,7 +127,12 @@ class TestSSDiscAdapter:
 
         waves, trans = filter_set
         result = disc_precompute.precompute(
-            waves, trans, redshift=0.5, parameters=None, model="ss_disc"
+            waves,
+            trans,
+            redshift=0.5,
+            parameters=None,
+            model="ss_disc",
+            convention=FilterConvention.BESSELL,
         )
         phot = np.asarray(result["grid_phot"])  # (n_mbh, n_lbol, n_filters)
         assert phot.ndim == 3, f"expected (n_mbh, n_lbol, n_filters), got {phot.shape}"
@@ -128,7 +154,12 @@ class TestCigaleDiscAdapter:
 
         waves, trans = filter_set
         result = disc_precompute.precompute(
-            waves, trans, redshift=2.0, parameters=None, model="cigale_disc"
+            waves,
+            trans,
+            redshift=2.0,
+            parameters=None,
+            model="cigale_disc",
+            convention=FilterConvention.BESSELL,
         )
         phot = np.asarray(result["grid_phot"])
         chex.assert_tree_all_finite(phot)
@@ -141,7 +172,12 @@ class TestCigaleDiscAdapter:
 
         waves, trans = filter_set
         result = disc_precompute.precompute(
-            waves, trans, redshift=2.0, parameters=None, model="cigale_disc"
+            waves,
+            trans,
+            redshift=2.0,
+            parameters=None,
+            model="cigale_disc",
+            convention=FilterConvention.BESSELL,
         )
         lookup = disc_precompute.build_lookup(result, model="cigale_disc")
         out = jax.jit(lookup)(jnp.float64(1.0), jnp.float64(0.0))

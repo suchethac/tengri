@@ -56,6 +56,7 @@ from tengri.components.stellar.sps.dsps_wrapper import SSPData
 from tengri.cosmology import age_at_z
 from tengri.observation.photometry import FilterCurve
 from tengri.observation.spectroscopy import Spectroscopy
+from tests._band_keys import ztable_key
 from tests._data_skip import requires_cue_weights
 
 pytestmark = [pytest.mark.contract, pytest.mark.regression_bug]
@@ -913,7 +914,6 @@ def test_ztable_cache_rejects_entry_missing_lyc_table(lyc_ssp, tmp_path, monkeyp
     """
     from tengri.components.stellar.sps.precompute import (
         _ztable_cache_dir,
-        _ztable_cache_key,
         precompute_photometry_ztable,
     )
     from tengri.utils.filter_convention import FilterConvention
@@ -941,7 +941,7 @@ def test_ztable_cache_rejects_entry_missing_lyc_table(lyc_ssp, tmp_path, monkeyp
     )
 
     cache_dir = _ztable_cache_dir()
-    key = _ztable_cache_key(
+    key = ztable_key(
         lyc_ssp,
         filter_waves,
         filter_trans,

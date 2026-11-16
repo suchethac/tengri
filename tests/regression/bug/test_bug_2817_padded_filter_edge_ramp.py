@@ -19,6 +19,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.utils.filter_convention import FilterConvention
+
 pytestmark = pytest.mark.regression_bug
 
 
@@ -50,8 +52,17 @@ def test_padded_batch_row_equals_per_filter_integral_at_table_edge():
     sed, wave_rest = _sed()
     z = 0.3
 
-    single = lnu_filter_integral(sed, wave_rest, jnp.asarray(short_w), jnp.asarray(short_t), z)
-    batch = lnu_filter_integral_batch(sed, wave_rest, fw_p, ft_p, z)
+    single = lnu_filter_integral(
+        sed,
+        wave_rest,
+        jnp.asarray(short_w),
+        jnp.asarray(short_t),
+        z,
+        convention=FilterConvention.BESSELL,
+    )
+    batch = lnu_filter_integral_batch(
+        sed, wave_rest, fw_p, ft_p, z, convention=FilterConvention.BESSELL
+    )
 
     np.testing.assert_allclose(np.asarray(batch[0]), np.asarray(single), rtol=1e-12, atol=0.0)
 
@@ -63,7 +74,13 @@ def test_padded_batch_gradient_in_redshift_is_finite():
     fw_p, ft_p, _ = pad_filters([short_w, long_w], [short_t, long_t])
     sed, wave_rest = _sed()
 
-    grad = jax.grad(lambda z: jnp.sum(lnu_filter_integral_batch(sed, wave_rest, fw_p, ft_p, z)))
+    grad = jax.grad(
+        lambda z: jnp.sum(
+            lnu_filter_integral_batch(
+                sed, wave_rest, fw_p, ft_p, z, convention=FilterConvention.BESSELL
+            )
+        )
+    )
     value = float(grad(0.3))
     assert np.isfinite(value)
     assert np.any(np.asarray(value) != 0.0), "padded batch redshift gradient is identically zero"

@@ -14,6 +14,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.utils.filter_convention import FilterConvention
 from tests._bounds import assert_non_negative
 
 pytestmark = pytest.mark.contract
@@ -41,7 +42,14 @@ def test_xray_lookups_jit_compatible(model_name, filter_set):
     from tengri.components.xray import xray_precompute as adapter
 
     waves, trans = filter_set
-    result = adapter.precompute(waves, trans, redshift=0.1, parameters=None, model=model_name)
+    result = adapter.precompute(
+        waves,
+        trans,
+        redshift=0.1,
+        parameters=None,
+        model=model_name,
+        convention=FilterConvention.BESSELL,
+    )
     lookup = adapter.build_lookup(result, model=model_name)
 
     # Test JIT compilation
@@ -81,7 +89,14 @@ def test_xray_xrb_scale_invariance(filter_set):
     from tengri.components.xray import xray_precompute as adapter
 
     waves, trans = filter_set
-    result = adapter.precompute(waves, trans, redshift=0.1, parameters=None, model="xray_xrb")
+    result = adapter.precompute(
+        waves,
+        trans,
+        redshift=0.1,
+        parameters=None,
+        model="xray_xrb",
+        convention=FilterConvention.BESSELL,
+    )
     lookup = adapter.build_lookup(result, model="xray_xrb")
 
     gamma_h_test = 2.0
@@ -115,7 +130,14 @@ def test_xray_precompute_linearity_in_axis_params(filter_set):
     waves, trans = filter_set
 
     # Build precompute lookup for XRB
-    result = adapter.precompute(waves, trans, redshift=0.1, parameters=None, model="xray_xrb")
+    result = adapter.precompute(
+        waves,
+        trans,
+        redshift=0.1,
+        parameters=None,
+        model="xray_xrb",
+        convention=FilterConvention.BESSELL,
+    )
     lookup = adapter.build_lookup(result, model="xray_xrb")
 
     # Test that varying gamma produces smooth changes

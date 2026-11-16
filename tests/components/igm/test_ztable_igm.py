@@ -20,6 +20,7 @@ from tengri.components.stellar.sps.precompute import (
     interpolate_igm_ztable,
     precompute_photometry_ztable,
 )
+from tengri.utils.filter_convention import FilterConvention
 from tests._bounds import assert_non_negative
 from tests._grad_parity import assert_grad_matches_fd
 
@@ -67,7 +68,9 @@ class TestIGMPrecomputation:
         leading dimension always equals len(z_grid).
         """
         fw, ft = filters
-        zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=10, apply_igm=True)
+        zt = precompute_photometry_ztable(
+            ssp_data, fw, ft, n_z=10, apply_igm=True, convention=FilterConvention.BESSELL
+        )
         n_z_uniform = 10
         n_z_actual = len(zt.z_grid)
 
@@ -86,7 +89,9 @@ class TestIGMPrecomputation:
     def test_igm_values_in_range(self, ssp_data, filters):
         """IGM transmission is in [0, 1]."""
         fw, ft = filters
-        zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=20, apply_igm=True)
+        zt = precompute_photometry_ztable(
+            ssp_data, fw, ft, n_z=20, apply_igm=True, convention=FilterConvention.BESSELL
+        )
         assert_non_negative(zt.igm_trans_table, name="output")
         assert jnp.all(zt.igm_trans_table <= 1.0)
 
@@ -94,7 +99,9 @@ class TestIGMPrecomputation:
         """Precomputed IGM matches direct igm_transmission() call at each z."""
         fw, ft = filters
         z_grid = jnp.array([0.1, 0.5, 1.0, 2.0])
-        zt = precompute_photometry_ztable(ssp_data, fw, ft, z_grid=z_grid, apply_igm=True)
+        zt = precompute_photometry_ztable(
+            ssp_data, fw, ft, z_grid=z_grid, apply_igm=True, convention=FilterConvention.BESSELL
+        )
 
         for zi, z_val in enumerate(z_grid):
             # Compute effective observed wavelengths at this z
@@ -110,7 +117,9 @@ class TestIGMPrecomputation:
     def test_igm_all_finite(self, ssp_data, filters):
         """All IGM values are finite."""
         fw, ft = filters
-        zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=15, apply_igm=True)
+        zt = precompute_photometry_ztable(
+            ssp_data, fw, ft, n_z=15, apply_igm=True, convention=FilterConvention.BESSELL
+        )
         chex.assert_tree_all_finite(zt.igm_trans_table)
 
     def test_igm_unity_at_low_z_red_filters(self, ssp_data, filters):
@@ -121,7 +130,9 @@ class TestIGMPrecomputation:
         """
         fw, ft = filters
         z_grid = jnp.array([0.05, 0.1])
-        zt = precompute_photometry_ztable(ssp_data, fw, ft, z_grid=z_grid, apply_igm=True)
+        zt = precompute_photometry_ztable(
+            ssp_data, fw, ft, z_grid=z_grid, apply_igm=True, convention=FilterConvention.BESSELL
+        )
         # The reddest filter (7500-9000 A) at z=0.1 is far from Ly-alpha
         assert_allclose(zt.igm_trans_table[:, 2], 1.0, atol=1e-10)
 
@@ -135,13 +146,17 @@ class TestIGMDisabled:
     def test_igm_table_all_ones_by_default(self, ssp_data, filters):
         """Default (apply_igm=False) gives igm_trans_table of all ones."""
         fw, ft = filters
-        zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=10)
+        zt = precompute_photometry_ztable(
+            ssp_data, fw, ft, n_z=10, convention=FilterConvention.BESSELL
+        )
         assert_allclose(zt.igm_trans_table, 1.0, atol=1e-15)
 
     def test_igm_table_all_ones_explicit_false(self, ssp_data, filters):
         """Explicit apply_igm=False gives igm_trans_table of all ones."""
         fw, ft = filters
-        zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=10, apply_igm=False)
+        zt = precompute_photometry_ztable(
+            ssp_data, fw, ft, n_z=10, apply_igm=False, convention=FilterConvention.BESSELL
+        )
         assert_allclose(zt.igm_trans_table, 1.0, atol=1e-15)
 
     def test_ssp_phot_unchanged_by_igm_flag(self, ssp_data, filters):
@@ -151,8 +166,12 @@ class TestIGMDisabled:
         """
         fw, ft = filters
         z_grid = jnp.array([0.1, 0.5, 1.0])
-        zt_no = precompute_photometry_ztable(ssp_data, fw, ft, z_grid=z_grid, apply_igm=False)
-        zt_yes = precompute_photometry_ztable(ssp_data, fw, ft, z_grid=z_grid, apply_igm=True)
+        zt_no = precompute_photometry_ztable(
+            ssp_data, fw, ft, z_grid=z_grid, apply_igm=False, convention=FilterConvention.BESSELL
+        )
+        zt_yes = precompute_photometry_ztable(
+            ssp_data, fw, ft, z_grid=z_grid, apply_igm=True, convention=FilterConvention.BESSELL
+        )
         assert_allclose(zt_no.ssp_phot_table, zt_yes.ssp_phot_table, rtol=1e-10)
 
 
@@ -166,14 +185,18 @@ class TestIGMInterpolation:
         """At a z grid point, interpolation returns the exact value."""
         fw, ft = filters
         z_grid = jnp.array([0.1, 0.5, 1.0, 2.0])
-        zt = precompute_photometry_ztable(ssp_data, fw, ft, z_grid=z_grid, apply_igm=True)
+        zt = precompute_photometry_ztable(
+            ssp_data, fw, ft, z_grid=z_grid, apply_igm=True, convention=FilterConvention.BESSELL
+        )
         igm_interp = interpolate_igm_ztable(zt.igm_trans_table, zt.z_grid, 0.5)
         assert_allclose(igm_interp, zt.igm_trans_table[1], rtol=1e-6)
 
     def test_interpolation_between_grid_points(self, ssp_data, filters):
         """Interpolation between grid points is reasonable (bounded by neighbors)."""
         fw, ft = filters
-        zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=200, apply_igm=True)
+        zt = precompute_photometry_ztable(
+            ssp_data, fw, ft, n_z=200, apply_igm=True, convention=FilterConvention.BESSELL
+        )
         z_test = 0.75
         igm_interp = interpolate_igm_ztable(zt.igm_trans_table, zt.z_grid, z_test)
         # Should be in [0, 1]
@@ -197,7 +220,9 @@ class TestIGMInterpolation:
         """Interpolation clamps to grid boundaries."""
         fw, ft = filters
         z_grid = jnp.array([0.1, 0.5, 1.0])
-        zt = precompute_photometry_ztable(ssp_data, fw, ft, z_grid=z_grid, apply_igm=True)
+        zt = precompute_photometry_ztable(
+            ssp_data, fw, ft, z_grid=z_grid, apply_igm=True, convention=FilterConvention.BESSELL
+        )
         # Below minimum
         igm_low = interpolate_igm_ztable(zt.igm_trans_table, zt.z_grid, 0.01)
         assert_allclose(igm_low, zt.igm_trans_table[0], rtol=1e-6)
@@ -216,7 +241,9 @@ class TestIGMGradients:
     def test_gradient_wrt_z_finite(self, ssp_data, filters):
         """Gradient of IGM interpolation w.r.t. z is finite."""
         fw, ft = filters
-        zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=20, apply_igm=True)
+        zt = precompute_photometry_ztable(
+            ssp_data, fw, ft, n_z=20, apply_igm=True, convention=FilterConvention.BESSELL
+        )
 
         def loss(z):
             return jnp.sum(interpolate_igm_ztable(zt.igm_trans_table, zt.z_grid, z))
@@ -241,7 +268,14 @@ class TestIGMGradients:
         uv_fw = [jnp.linspace(2000.0, 3000.0, 30)]
         uv_ft = [jnp.ones(30) * 0.5]
         zt = precompute_photometry_ztable(
-            ssp_data, uv_fw, uv_ft, n_z=50, z_min=0.5, z_max=5.0, apply_igm=True
+            ssp_data,
+            uv_fw,
+            uv_ft,
+            n_z=50,
+            z_min=0.5,
+            z_max=5.0,
+            apply_igm=True,
+            convention=FilterConvention.BESSELL,
         )
 
         def loss(z):
@@ -253,7 +287,9 @@ class TestIGMGradients:
     def test_gradient_combined_ssp_and_igm(self, ssp_data, filters):
         """Gradient through combined SSP + IGM z-table interpolation is finite."""
         fw, ft = filters
-        zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=20, apply_igm=True)
+        zt = precompute_photometry_ztable(
+            ssp_data, fw, ft, n_z=20, apply_igm=True, convention=FilterConvention.BESSELL
+        )
 
         def loss(z):
             # Interpolate both SSP photometry and IGM
@@ -278,7 +314,9 @@ class TestIGMGradients:
     def test_jit_compatible(self, ssp_data, filters):
         """IGM interpolation works inside jax.jit."""
         fw, ft = filters
-        zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=10, apply_igm=True)
+        zt = precompute_photometry_ztable(
+            ssp_data, fw, ft, n_z=10, apply_igm=True, convention=FilterConvention.BESSELL
+        )
 
         @jax.jit
         def fn(z):

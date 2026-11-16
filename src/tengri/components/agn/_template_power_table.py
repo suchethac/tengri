@@ -86,6 +86,7 @@ import numpy as np
 from tengri.components.agn._template_grid import native_bolometric_nu_np
 from tengri.forward.precompute.templates import precompute_template_photometry
 from tengri.observation.photometry import lnu_filter_integral
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid_interp import PreintegratedGrid, interp_nd_pchip, resample_template
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
@@ -129,7 +130,12 @@ def quadrature_grid(
 
 
 def band_fold(
-    wave_quad: np.ndarray, filter_waves: list, filter_trans: list, redshift: float
+    wave_quad: np.ndarray,
+    filter_waves: list,
+    filter_trans: list,
+    redshift: float,
+    *,
+    convention: FilterConvention,
 ) -> jnp.ndarray:
     """The runtime's filter quadrature on ``wave_quad`` as a matrix.
 
@@ -156,7 +162,9 @@ def band_fold(
     def bands(lnu):
         return jnp.stack(
             [
-                lnu_filter_integral(lnu, wq, jnp.asarray(fw), jnp.asarray(ft), redshift)
+                lnu_filter_integral(
+                    lnu, wq, jnp.asarray(fw), jnp.asarray(ft), redshift, convention=convention
+                )
                 for fw, ft in zip(filter_waves, filter_trans, strict=True)
             ]
         )
@@ -170,6 +178,8 @@ def runtime_band_photometry(
     filter_waves: list,
     filter_trans: list,
     redshift: float,
+    *,
+    convention: FilterConvention,
 ) -> np.ndarray:
     r"""Band photometry of every template, emitted and integrated as the runtime does.
 
@@ -208,7 +218,7 @@ def runtime_band_photometry(
     peak = np.where(peak > 0.0, peak, 1.0)
 
     read, wave_quad = quadrature_grid(wave_rest, filter_waves, redshift)
-    fold = band_fold(wave_quad, filter_waves, filter_trans, redshift)
+    fold = band_fold(wave_quad, filter_waves, filter_trans, redshift, convention=convention)
     wave_read = jnp.asarray(wave_rest[read])
     wq = jnp.asarray(wave_quad)
 
@@ -228,6 +238,8 @@ def runtime_preintegrated_grid(
     filter_trans: list,
     redshift: float,
     axes: tuple[np.ndarray, ...],
+    *,
+    convention: FilterConvention,
 ) -> PreintegratedGrid:
     r"""A :class:`PreintegratedGrid` whose band photometry is the runtime's.
 
@@ -266,8 +278,11 @@ def runtime_preintegrated_grid(
         axes=axes,
         energy_normalize=False,
         units="lnu",
+        convention=convention,
     )
-    phot = runtime_band_photometry(templates, wave_rest, filter_waves, filter_trans, redshift)
+    phot = runtime_band_photometry(
+        templates, wave_rest, filter_waves, filter_trans, redshift, convention=convention
+    )
     return dataclasses.replace(
         bookkeeping, phot=jnp.asarray(phot, dtype=jnp.asarray(bookkeeping.phot).dtype)
     )
@@ -294,6 +309,8 @@ def power_weighted_template_photometry(
     filter_trans: list,
     redshift: float,
     axes: tuple[np.ndarray, ...],
+    *,
+    convention: FilterConvention,
 ) -> PowerWeightedTable:
     r"""Band photometry of the raw templates plus their bolometric power as a last channel.
 
@@ -356,6 +373,7 @@ def power_weighted_template_photometry(
         filter_trans,
         redshift,
         axes,
+        convention=convention,
     )
     weight = jnp.asarray(power / float(np.median(power)), dtype=jnp.asarray(preint.phot).dtype)
     table = jnp.concatenate([preint.phot * weight[..., None], weight[..., None]], axis=-1)

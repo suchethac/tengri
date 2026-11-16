@@ -22,6 +22,7 @@ import numpy as np
 import pytest
 
 from tengri._data_setup import find_data_str
+from tengri.utils.filter_convention import FilterConvention
 from tests._cloudy_grid import synthetic_ionizing_ssp, write_synthetic_cloudy_grid
 
 pytestmark = pytest.mark.contract
@@ -93,7 +94,9 @@ def setup(cloudy_source):
     weights = jnp.asarray(t_gyr / tau**2 * np.exp(-t_gyr / tau) * dt * 1e9)
 
     t0 = time.perf_counter()
-    table = build_cloudy_band_table(backend, wave, fw, ft, _REDSHIFT, _LINE_SIGMA_KMS)
+    table = build_cloudy_band_table(
+        backend, wave, fw, ft, _REDSHIFT, _LINE_SIGMA_KMS, convention=FilterConvention.BESSELL
+    )
     build_s = time.perf_counter() - t0
     return {
         "backend": backend,
@@ -127,13 +130,17 @@ def _per_call_bands(s, log_z, log_z_gas, log_u, fesc_lya=0.0):
     )
     obs = jnp.stack(
         [
-            lnu_filter_integral(sed, s["wave"], f, t, redshift=_REDSHIFT)
+            lnu_filter_integral(
+                sed, s["wave"], f, t, redshift=_REDSHIFT, convention=FilterConvention.BESSELL
+            )
             for f, t in zip(s["fw"], s["ft"], strict=True)
         ]
     )
     rest = jnp.stack(
         [
-            lnu_filter_integral(sed, s["wave"], f, t, redshift=0.0)
+            lnu_filter_integral(
+                sed, s["wave"], f, t, redshift=0.0, convention=FilterConvention.BESSELL
+            )
             for f, t in zip(s["fw"], s["ft"], strict=True)
         ]
     )

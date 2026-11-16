@@ -1,7 +1,12 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Precompute adapter for MAPPINGS V photoionization grid (Flury et al. 2024).
 
-Implements :class:`~tengri.forward.precompute.protocol.PrecomputeModule` for
+.. note::
+   This module is not registered in ``tengri.forward.precompute.registry`` and no ``src``
+   module imports it; the model does not use it yet. Wiring it is tracked in #3074. Its
+   builders are tested in isolation only.
+
+Written to :class:`~tengri.forward.precompute.protocol.PrecomputeModule` for
 the Flury et al. (2024) MAPPINGS V photoionization grids with stellar (SB99/BPASS)
 and AGN (OPTXAGNF) modes. This adapter wraps stellar mode with 4D grid axes:
 
@@ -42,6 +47,8 @@ from tengri.components.nebular.mappings_photo import (
     _DEFAULT_GRID_PATH,
     _load_stellar_grid,
 )
+from tengri.utils.band_projection import delta_line_matrix
+from tengri.utils.filter_convention import FilterConvention
 
 # Continuous axes of the stellar MAPPINGS V grid. (The discrete
 # stellar_lib axis (sb99 or bpass) is selected at build time.)
@@ -68,6 +75,7 @@ def precompute(
     grid_path: str | Path | None = None,
     stellar_lib: str = "sb99",
     density_structure: str = "cpr",
+    convention: FilterConvention,
 ) -> dict:
     """Build preintegrated MAPPINGS V stellar grid, auto-collapsing Fixed axes.
 
@@ -122,21 +130,11 @@ def precompute(
     grid = loaded.grid
 
     # Build the (n_lines, n_filt) filter projection matrix
-    n_lines = len(grid.line_wavelengths)
-    n_filt = len(filter_waves)
-    line_weight_matrix = np.zeros((n_lines, n_filt), dtype=np.float64)
-
-    for i_line, line_wave_aa in enumerate(grid.line_wavelengths):
-        # Redshift line wavelength to observed frame
-        line_wave_obs = line_wave_aa * (1.0 + redshift)
-
-        # Integrate line (delta function) through each filter
-        for i_filt, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
-            fw = np.asarray(fw)
-            ft = np.asarray(ft)
-            line_weight_matrix[i_line, i_filt] = np.interp(
-                line_wave_obs, fw, ft, left=0.0, right=0.0
-            )
+    len(grid.line_wavelengths)
+    len(filter_waves)
+    line_weight_matrix = delta_line_matrix(
+        grid.line_wavelengths, filter_waves, filter_trans, redshift, convention
+    )
 
     # Grid axes: (ζ_O, log_age, logU, logn)
     # Convert ζ_O back to absolute log10(Z) for AXIS_PARAMS consistency

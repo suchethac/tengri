@@ -36,6 +36,7 @@ from tengri.components.dust.emission._physics import (
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.resolve import require_redshift
 from tengri.protocols.component import BARE_NAME_ALLOWLIST, ForwardState
+from tengri.utils.band_projection import project_bands
 
 __all__ = ["EmissionComponent"]
 
@@ -669,17 +670,14 @@ class EmissionComponent(SEDModelComponent):
             phot_lnu = jnp.interp(filter_eff_waves, state.wave, sed_ir)
         else:
             # Exact path: full filter integral (when padded curves are available)
-            fw_pad = state.derived.get("phot_filter_waves_padded")
-            ft_pad = state.derived.get("phot_filter_trans_padded")
-            if fw_pad is not None:
-                from tengri.observation.photometry import lnu_filter_integral_batch
-
+            bands = state.derived.get("phot_band_spec")
+            if bands is not None:
                 redshift = jnp.asarray(
                     require_redshift(
                         p, "components.dust.emission._component_base._apply_photometry_precomp"
                     )
                 )
-                phot_lnu = lnu_filter_integral_batch(sed_ir, state.wave, fw_pad, ft_pad, redshift)
+                phot_lnu = project_bands(sed_ir, state.wave, bands, redshift)
             else:
                 # Fallback: effective wavelength sample (no padded curves)
                 phot_lnu = jnp.interp(filter_eff_waves, state.wave, sed_ir)
@@ -690,7 +688,11 @@ class EmissionComponent(SEDModelComponent):
             restband_lnu = self._shape_table_phot(p, shape_table, L_ir, rest=True)
         else:
             restband_lnu = self._restband_phot_lnu(
-                sed_ir, state, band_response, L_ir, filter_eff_waves
+                sed_ir,
+                state,
+                band_response,
+                L_ir,
+                filter_eff_waves,
             )
         return {
             "dust_emission_phot_lnu_precomp": phot_lnu,
@@ -720,12 +722,9 @@ class EmissionComponent(SEDModelComponent):
         table = None if band_response is None else band_response.get("rest_values")
         if table is not None:
             return L_ir * table
-        fw_pad = state.derived.get("phot_filter_waves_padded")
-        ft_pad = state.derived.get("phot_filter_trans_padded")
-        if fw_pad is not None:
-            from tengri.observation.photometry import lnu_filter_integral_batch
-
-            return lnu_filter_integral_batch(sed_ir, state.wave, fw_pad, ft_pad, 0.0)
+        bands = state.derived.get("phot_band_spec")
+        if bands is not None:
+            return project_bands(sed_ir, state.wave, bands, 0.0)
         rest_eff = state.derived.get("filter_restband_eff_waves")
         if rest_eff is None:
             rest_eff = filter_eff_waves

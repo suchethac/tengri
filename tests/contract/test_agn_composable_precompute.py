@@ -26,6 +26,7 @@ from tengri.components.agn.blocks import (
     composable_agn_l_nu,
     composable_precompute,
 )
+from tengri.utils.filter_convention import FilterConvention
 from tests._data_skip import requires_grahsp
 from tests._jit_parity import assert_jit_matches_eager
 
@@ -131,6 +132,7 @@ def test_precompute_returns_documented_keys():
         parameters=None,
         recipe=recipe,
         axis_grids={"agn_grahsp_log_l5100": np.linspace(43, 46, 4)},
+        convention=FilterConvention.BESSELL,
     )
     assert "grid_phot" in out
     assert "axes" in out
@@ -149,6 +151,7 @@ def test_precompute_requires_axis_params():
             parameters=None,
             recipe=recipe,
             axis_grids={},
+            convention=FilterConvention.BESSELL,
         )
 
 
@@ -173,6 +176,7 @@ def test_precompute_rejects_a_non_cigale_joint_agn_norm_in_fixed_values():
             recipe=recipe,
             axis_grids={"agn_log_lbol": np.linspace(43.0, 46.0, 3)},
             fixed_values={"agn_norm": "independent"},
+            convention=FilterConvention.BESSELL,
         )
 
 
@@ -215,6 +219,7 @@ def test_auto_collapse_fixed_axis():
             "agn_grahsp_log_l5100": np.linspace(43, 46, 3),
             "agn_grahsp_ebv": np.array([0.0, 0.05, 0.1]),
         },
+        convention=FilterConvention.BESSELL,
     )
     # ebv axis collapsed -> 1-D grid over l5100 only
     assert "_collapsed_axes" in out
@@ -261,6 +266,7 @@ def test_parity_at_grid_center():
         axis_grids={"agn_grahsp_log_l5100": axis_grid},
         # Match the runtime call exactly:
         wave_rest=np.logspace(2.0, 6.0, 1500, dtype=np.float64),
+        convention=FilterConvention.BESSELL,
     )
     fn = composable_precompute.build_lookup(out)
 
@@ -323,6 +329,7 @@ def test_lookup_jit_compiles_and_caches():
             "agn_grahsp_log_l5100": np.linspace(43, 46, 4),
             "agn_grahsp_ebv": np.array([0.0, 0.05, 0.1, 0.3]),
         },
+        convention=FilterConvention.BESSELL,
     )
     fn = composable_precompute.build_lookup(pre)
 
@@ -360,6 +367,7 @@ def test_build_lookup_returns_composable_lookup_with_axis_names():
         parameters=None,
         recipe=recipe,
         axis_grids={"agn_grahsp_log_l5100": np.linspace(43, 46, 3)},
+        convention=FilterConvention.BESSELL,
     )
     fn = composable_precompute.build_lookup(pre)
     assert hasattr(fn, "axis_names")
@@ -461,6 +469,7 @@ def test_lookup_works_with_explicit_jit_wrapper():
         parameters=None,
         recipe=recipe,
         axis_grids={"agn_grahsp_log_l5100": np.linspace(43, 46, 4)},
+        convention=FilterConvention.BESSELL,
     )
     fn = composable_precompute.build_lookup(pre)
     out = assert_jit_matches_eager(fn, jnp.array(1.0), jnp.array(44.0))

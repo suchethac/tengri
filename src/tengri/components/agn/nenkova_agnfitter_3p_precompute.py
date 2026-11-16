@@ -42,6 +42,7 @@ from tengri.components.agn.nenkova_agnfitter_3p import (
     load_nenkova_agnfitter_3p_grid,
 )
 from tengri.forward.precompute.templates import collapse_fixed_axes
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
     interp_nd_pchip,
@@ -57,6 +58,8 @@ def precompute_nenkova_agnfitter_3p_photometry(
     filter_waves: list[jnp.ndarray],
     filter_trans: list[jnp.ndarray],
     redshift: float = 0.0,
+    *,
+    convention: FilterConvention,
 ) -> dict:
     """Pre-integrate ``NK0_mean_3p`` torus templates through filter curves.
 
@@ -129,6 +132,7 @@ def precompute_nenkova_agnfitter_3p_photometry(
         filter_trans,
         redshift,
         axes=(cos_inc_axis, oa_axis, tv_axis),
+        convention=convention,
     )
 
     axes_jax = (jnp.asarray(cos_inc_axis), jnp.asarray(oa_axis), jnp.asarray(tv_axis))
@@ -199,6 +203,7 @@ def precompute(
     parameters: Any,
     *,
     grid_path: str,
+    convention: FilterConvention,
 ) -> dict:
     """Build preintegrated ``NK0_mean_3p`` grid, recording Fixed axes.
 
@@ -227,7 +232,11 @@ def precompute(
     **JIT-compatible**: no, this is a build-time function using NumPy.
     """
     result = precompute_nenkova_agnfitter_3p_photometry(
-        grid_path, filter_waves, filter_trans, redshift=redshift
+        grid_path,
+        filter_waves,
+        filter_trans,
+        redshift=redshift,
+        convention=convention,
     )
     preint: PreintegratedGrid = result["_preint"]
     _, _, fixed = collapse_fixed_axes(

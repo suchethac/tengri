@@ -23,12 +23,14 @@ def _toy_filter():
 
 def test_precompute_returns_expected_shapes():
     from tengri.components.agn.grahsp.precompute import precompute
+    from tengri.utils.filter_convention import FilterConvention
 
     fw, ft = _toy_filter()
     out = precompute(
         filter_waves=[fw, fw],
         filter_trans=[ft, ft],
         redshift=0.0,
+        convention=FilterConvention.BESSELL,
     )
     # Default grid is plslope (3) x ebv (5) x n_filters (2)
     assert out["grid_phot"].shape == (3, 5, 2)
@@ -38,6 +40,7 @@ def test_precompute_returns_expected_shapes():
 def test_precompute_collapses_fixed_axes():
     """When the user pins a parameter, the corresponding axis collapses."""
     from tengri.components.agn.grahsp.precompute import precompute
+    from tengri.utils.filter_convention import FilterConvention
 
     fw, ft = _toy_filter()
 
@@ -68,6 +71,7 @@ def test_precompute_collapses_fixed_axes():
         filter_waves=[fw],
         filter_trans=[ft],
         redshift=0.0,
+        convention=FilterConvention.BESSELL,
         parameters=params,
     )
     # ebv axis collapsed -> plslope remains, widened from 3 to 4 nodes to reach -2.7
@@ -77,12 +81,14 @@ def test_precompute_collapses_fixed_axes():
 
 def test_runtime_lookup_returns_finite_photometry():
     from tengri.components.agn.grahsp.precompute import build_lookup, precompute
+    from tengri.utils.filter_convention import FilterConvention
 
     fw, ft = _toy_filter()
     pre = precompute(
         filter_waves=[fw],
         filter_trans=[ft],
         redshift=0.0,
+        convention=FilterConvention.BESSELL,
     )
     fn = build_lookup(pre)
     # Default lookup: (scale, *grid_params). GRAHSP normalizes internally so
@@ -96,12 +102,14 @@ def test_runtime_lookup_jit():
     import jax
 
     from tengri.components.agn.grahsp.precompute import build_lookup, precompute
+    from tengri.utils.filter_convention import FilterConvention
 
     fw, ft = _toy_filter()
     pre = precompute(
         filter_waves=[fw, fw, fw],
         filter_trans=[ft, ft, ft],
         redshift=0.5,
+        convention=FilterConvention.BESSELL,
     )
     fn = build_lookup(pre)
     fn_jit = jax.jit(fn)

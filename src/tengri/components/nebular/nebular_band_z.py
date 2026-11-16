@@ -31,9 +31,8 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components._z_response import z_bracket as _hull_z_bracket
-from tengri.utils.filter_convention import FilterConvention, filter_weight, filter_weight_np
-from tengri.utils.grid_interp import filter_support_slice
-from tengri.utils.physics_constants import C_AA
+from tengri.utils.band_projection import BandSpec, line_band_weights, project_bands
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.scale import pow10
 
 __all__ = [
@@ -79,48 +78,14 @@ def ln1pz_grid(z_lo: float, z_hi: float, n_z: int) -> np.ndarray:
     return np.linspace(np.log1p(z_lo), np.log1p(z_hi), int(n_z))
 
 
-def _union_kernel(wave_obs, fw, ft, convention):
-    """Sparse linear functional of an SED that ``lnu_filter_integral`` evaluates.
-
-    The exact projector interpolates the SED linearly onto the sorted union of the
-    SED nodes and the filter nodes, then integrates with the trapezoid rule. Every
-    step is linear in the SED values, so the band value is ``K . sed``; this
-    returns ``K`` (over the SED nodes it touches) so many SEDs can share one
-    kernel. Nodes outside the filter support carry zero weight and are dropped
-    (the support is the filter's own range, as in ``lnu_filter_integral``, #2817).
-
-    Returns
-    -------
-    lo : int
-        First SED node ``K`` touches.
-    kernel : ndarray, shape (n_touched,)
-        Weights on ``sed[lo : lo + n_touched]``.
-    """
-    n = wave_obs.size
-    grid = np.sort(np.concatenate([wave_obs, fw]))
-    g_lo, g_hi = filter_support_slice(grid, fw)
-    grid = grid[g_lo:g_hi]
-    trans = np.interp(grid, fw, ft, left=0.0, right=0.0)
-    tw = trans * filter_weight_np(grid, convention)
-    dg = np.diff(grid)
-    omega = np.zeros_like(grid)
-    omega[:-1] += 0.5 * dg
-    omega[1:] += 0.5 * dg
-    denom = float(np.sum(omega * tw))
-    inside = (grid >= wave_obs[0]) & (grid <= wave_obs[-1])
-    idx = np.clip(np.searchsorted(wave_obs, grid, side="right") - 1, 0, n - 2)
-    frac = (grid - wave_obs[idx]) / (wave_obs[idx + 1] - wave_obs[idx])
-    coef = omega * tw * inside
-    touched = coef != 0.0
-    if not np.any(touched):
-        return 0, np.zeros(1)
-    idx, frac, coef = idx[touched], frac[touched], coef[touched]
-    lo = int(idx.min())
-    hi = int(idx.max()) + 2
-    kernel = np.bincount(idx - lo, weights=coef * (1.0 - frac), minlength=hi - lo) + np.bincount(
-        idx + 1 - lo, weights=coef * frac, minlength=hi - lo
+def _band_spec(filter_waves, filter_trans, convention):
+    """The :class:`BandSpec` of one filter set under ``convention`` (no sub-bands)."""
+    return BandSpec(
+        filters=(list(filter_waves), list(filter_trans)),
+        convention=convention,
+        n_subbands=None,
+        lyc_gate=False,
     )
-    return lo, kernel[: hi - lo] / max(denom, 1e-300)
 
 
 def continuum_ztable(
@@ -129,7 +94,7 @@ def continuum_ztable(
     filter_waves,
     filter_trans,
     lnz_grid,
-    convention: FilterConvention = FilterConvention.BESSELL,
+    convention: FilterConvention,
 ):
     """Band-project per-node continuum SEDs at every redshift of a grid.
 
@@ -160,21 +125,20 @@ def continuum_ztable(
     -----
     **JIT-compatible**: no; build-time numpy.
     """
-    cont = np.asarray(cont_nodes, dtype=np.float64)
+    cont_T = np.ascontiguousarray(np.asarray(cont_nodes, dtype=np.float64).T)
     wave = np.asarray(wave, dtype=np.float64)
     zs = np.expm1(np.asarray(lnz_grid, dtype=np.float64))
-    fws = [np.asarray(fw, dtype=np.float64) for fw in filter_waves]
-    fts = [np.asarray(ft, dtype=np.float64) for ft in filter_trans]
-    out = np.zeros((cont.shape[0], zs.size, len(fws)))
+    spec = _band_spec(filter_waves, filter_trans, convention)
+    out = np.zeros((cont_T.shape[1], zs.size, spec.n_filters))
     for iz, z in enumerate(zs):
-        wave_obs = wave * (1.0 + z)
-        for jf, (fw, ft) in enumerate(zip(fws, fts, strict=True)):
-            lo, kernel = _union_kernel(wave_obs, fw, ft, convention)
-            out[:, iz, jf] = cont[:, lo : lo + kernel.size] @ kernel
+        grid = project_bands(cont_T, wave, spec, float(z), grid_dims=(cont_T.shape[1],))
+        out[:, iz, :] = np.asarray(grid.phot, dtype=np.float64)
     return out
 
 
-def rendered_line_band_kernel(profiles, wave, filter_waves, filter_trans, redshift):
+def rendered_line_band_kernel(
+    profiles, wave, filter_waves, filter_trans, redshift, *, convention: FilterConvention
+):
     """Band response of each rendered unit-luminosity line at one redshift.
 
     The exact response of a line to a filter, for a build-time-constant redshift:
@@ -200,20 +164,10 @@ def rendered_line_band_kernel(profiles, wave, filter_waves, filter_trans, redshi
         Band response [1/Hz] (rest-frame band :math:`L_\\nu` per unit line
         luminosity [erg/s]).
     """
-    from tengri.observation.photometry import lnu_filter_integral
-
     profiles = jnp.asarray(profiles)
     wave = jnp.asarray(wave)
-
-    def _one(profile):
-        return jnp.stack(
-            [
-                lnu_filter_integral(profile, wave, jnp.asarray(fw), jnp.asarray(ft), redshift)
-                for fw, ft in zip(filter_waves, filter_trans, strict=True)
-            ]
-        )
-
-    return jax.vmap(_one)(profiles)
+    spec = _band_spec(filter_waves, filter_trans, convention)
+    return jax.vmap(lambda profile: project_bands(profile, wave, spec, redshift))(profiles)
 
 
 def delta_line_band_kernel(
@@ -221,21 +175,26 @@ def delta_line_band_kernel(
     line_waves,
     filter_waves,
     filter_trans,
-    convention: FilterConvention = FilterConvention.BESSELL,
+    convention: FilterConvention,
 ):
     r"""Band response of a delta line at the evaluation redshift.
 
     A line of integrated luminosity :math:`L` at rest wavelength
     :math:`\lambda_0` is :math:`L_\nu = L\,\delta(\nu-\nu_0)`. Through the
-    observed-frame bandpass :math:`T_b` with weight :math:`w=1/\lambda`
+    observed-frame bandpass :math:`T_b` with weight :math:`w`
     (:func:`~tengri.observation.photometry.lnu_filter_integral`), substituting
     :math:`\lambda_{\rm obs}=(1+z)\lambda_{\rm rest}`,
 
     .. math::
 
-        \frac{L_b}{L} = \frac{\lambda_0\,T_b\big((1+z)\lambda_0\big)}
-                             {c\,\int T_b\,\mathrm{d}\lambda/\lambda},
+        \frac{L_b}{L} = \frac{\lambda_0\,T_b\big((1+z)\lambda_0\big)\,
+                              w_\lambda\big((1+z)\lambda_0\big)}
+                             {c\,\int T_b\,w\,\mathrm{d}\lambda},
+        \qquad w_\lambda = w\,\lambda,
 
+    where :math:`w_\lambda=1` for the photon-counting weight :math:`w=1/\lambda` and
+    :math:`1/\lambda` for the energy weight :math:`w=1/\lambda^2`
+    (:func:`~tengri.utils.filter_convention.photon_relative_weight`),
     with :math:`\lambda_0` in Angstrom and :math:`c` in Angstrom/s (so the
     result has units of 1/Hz). There is no :math:`d_L` here: the cosmological
     dimming is applied downstream, as for the exact path.
@@ -248,8 +207,8 @@ def delta_line_band_kernel(
         Rest wavelengths of the lines **as the SED renders them** [Angstrom].
     filter_waves, filter_trans : sequence of array_like
         Observed-frame filter curves [Angstrom], [dimensionless].
-    convention : FilterConvention, optional
-        Bandpass weight; ``BESSELL`` (1/lambda) is what the exact path uses.
+    convention : FilterConvention
+        Bandpass weight, the observation's (``BandSpec.convention``).
 
     Returns
     -------
@@ -268,16 +227,8 @@ def delta_line_band_kernel(
     median 1.3e-4, p95 1.4e-2 of the nebular band, at most 6e-3 of the total
     flux).
     """
-    line_waves = jnp.asarray(line_waves)
-    obs = (1.0 + jnp.asarray(redshift)) * line_waves
-    cols = []
-    for fw, ft in zip(filter_waves, filter_trans, strict=True):
-        fw = jnp.asarray(fw)
-        ft = jnp.asarray(ft)
-        trans = jnp.interp(obs, fw, ft, left=0.0, right=0.0)
-        norm = jnp.trapezoid(ft * filter_weight(fw, convention), fw)
-        cols.append(line_waves * trans / (C_AA * norm))
-    return jnp.stack(cols, axis=-1)
+    spec = _band_spec(filter_waves, filter_trans, convention)
+    return line_band_weights(line_waves, spec, redshift, per_hz=True)
 
 
 def continuum_z_slab(log_table, lnz_grid, redshift):

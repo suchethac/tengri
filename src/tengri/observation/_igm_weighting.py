@@ -37,6 +37,8 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
+from tengri.utils.band_projection import project_bands
+
 __all__ = [
     "igm_weighted_parts",
     "spectral_igm_correction",
@@ -111,9 +113,7 @@ def igm_weighted_parts(derived, dust_mode: str) -> list[tuple]:
     return parts
 
 
-def spectral_igm_correction(
-    parts, transmission, reach, wave, fw_pad, ft_pad, z, band_factor, *, convention
-):
+def spectral_igm_correction(parts, transmission, reach, wave, bands, z, band_factor):
     r"""Correction from the band-averaged transmission to each spectrum's own :math:`T_{c,b}`.
 
     Parameters
@@ -126,14 +126,12 @@ def spectral_igm_correction(
         Filters the IGM can reach; every other band is left untouched.
     wave : ndarray, shape (n_wave,)
         Rest wavelength grid [Angstrom].
-    fw_pad, ft_pad : ndarray, shape (n_filters, n_pad)
-        Padded filter curves, as the band fluxes were integrated with.
+    bands : BandSpec
+        The observation's band spec, the one the band fluxes were integrated with.
     z : float
         Redshift.
     band_factor : ndarray, shape (n_filters,)
         :math:`\langle T\rangle_b`, which the caller has already applied.
-    convention : FilterConvention
-        Bandpass weight.
 
     Returns
     -------
@@ -145,19 +143,14 @@ def spectral_igm_correction(
     -----
     **JIT-compatible**: yes.
     """
-    from tengri.observation.photometry import lnu_filter_integral_batch
-
     n_filters = band_factor.shape[0]
-    fw_r, ft_r = fw_pad[reach], ft_pad[reach]
     t_avg = band_factor[reach]
     correction = jnp.zeros(n_filters, dtype=band_factor.dtype)
     for band_flux, sed in parts:
         if sed is None:
             continue
-        num = lnu_filter_integral_batch(
-            sed * transmission, wave, fw_r, ft_r, z, convention=convention
-        )
-        den = lnu_filter_integral_batch(sed, wave, fw_r, ft_r, z, convention=convention)
+        num = project_bands(sed, wave, bands, z, node_transmission=transmission, select=reach)
+        den = project_bands(sed, wave, bands, z, select=reach)
         live = den != 0.0
         t_own = jnp.where(live, num / jnp.where(live, den, 1.0), t_avg)
         correction = correction.at[reach].add(band_flux[reach] * (t_own - t_avg))

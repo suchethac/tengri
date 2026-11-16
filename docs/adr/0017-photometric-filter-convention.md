@@ -71,6 +71,25 @@ requires that convention to be available.
    and the Taylor dust moment are recomputed consistently with `w(λ)` (so the
    moment vanishes for a flat template).
 
+   **Amendment (2026-11-15, #3505): one band-projection contract.** The choice is carried
+   by `tengri.utils.band_projection.BandSpec` (filter curves, `convention`, sub-band
+   scheme, Lyman-continuum gate; `convention` has no default). The observation builds one
+   spec; every band-table provider reads it from `BandTableContext.bands`, the stellar,
+   AGN and nebular states carry it (`phot_band_spec`, `band_spec`), and the runtime
+   projections (additive emitters, dust emission, shock, the IGM band factors) read it from
+   `state.derived['phot_band_spec']`. `project_bands` is the single band integral: a NumPy
+   basis with `grid_dims` runs the union-grid preintegration engine, a JAX SED runs the
+   exact union-grid integral, `line_band_weights` is the one delta-line response, and every
+   cache key that depends on a band integral includes `BandSpec.key()`. No function in the
+   package defaults `convention`, except the three public entry points where a user first
+   declares it (`Photometry.from_names`, `Photometry.from_filter_set`,
+   `tengri.measure.photometry`). `approx=WavePrecomp(...)` serves both conventions in every
+   emitter; the earlier refusal of the energy convention is removed. A delta line carries
+   the weight at its observed wavelength, $T_b(\lambda_{\rm obs})\,w(\lambda_{\rm obs})\,(1+z)\lambda_0^2/(c\int T_b w\,d\lambda)$; the photon-counting form
+   $\lambda_0 T_b/(c\int T_b/\lambda\,d\lambda)$ is its special case, and applying it
+   under the energy weight is wrong by a factor of $\lambda_{\rm obs}$
+   (`tengri.utils.filter_convention.photon_relative_weight`).
+
 4. **Do not keep the `λ` weight as a blessed option** — it is simply removed.
    Supersede the "three conventions" framing of #443/#515: there are two
    *legitimate* conventions (a bug + one alternative definition), not three.

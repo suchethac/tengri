@@ -53,7 +53,7 @@ pyright	src/tengri/observation/linear_marginal.py	3
 pyright	src/tengri/observation/noise.py	2
 pyright	src/tengri/observation/noise_model.py	1
 pyright	src/tengri/observation/observables.py	1
-pyright	src/tengri/observation/observation.py	32
+pyright	src/tengri/observation/observation.py	30
 pyright	src/tengri/observation/photometry.py	3
 pyright	src/tengri/observation/photometry_config.py	6
 pyright	src/tengri/observation/photometry_model.py	1

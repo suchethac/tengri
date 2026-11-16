@@ -19,6 +19,7 @@ import numpy as np
 import pytest
 
 from tengri.components.igm import _subband_cache as sc
+from tests._band_keys import band_key
 
 pytestmark = pytest.mark.regression_bug
 
@@ -106,19 +107,19 @@ def test_band_factor_scalar_and_array_inputs_are_keyed(bf, field):
     if field == "igm_model":
         mutated[field] = "madau"
     elif field == "convention":
-        mutated[field] = "photon"
+        mutated[field] = "energy"
     else:
         mutated[field] = np.asarray(bf[field]) + 1.0
-    assert sc.band_factor_key(**mutated) != sc.band_factor_key(**bf), field
+    assert band_key(**mutated) != band_key(**bf), field
 
 
 def test_band_factor_key_covers_the_filter_curves(bf):
     """The input the node-table key does not have, and the easiest to omit."""
     moved = dict(bf, filter_waves=[bf["filter_waves"][0] + 5.0, bf["filter_waves"][1]])
-    assert sc.band_factor_key(**moved) != sc.band_factor_key(**bf)
+    assert band_key(**moved) != band_key(**bf)
 
     retrans = dict(bf, filter_trans=[bf["filter_trans"][0] * 0.5, bf["filter_trans"][1]])
-    assert sc.band_factor_key(**retrans) != sc.band_factor_key(**bf)
+    assert band_key(**retrans) != band_key(**bf)
 
 
 def test_band_factor_key_is_order_sensitive(bf):
@@ -128,12 +129,12 @@ def test_band_factor_key_is_order_sensitive(bf):
         filter_waves=list(reversed(bf["filter_waves"])),
         filter_trans=list(reversed(bf["filter_trans"])),
     )
-    assert sc.band_factor_key(**swapped) != sc.band_factor_key(**bf)
+    assert band_key(**swapped) != band_key(**bf)
 
 
 def test_the_two_key_functions_do_not_collide(base, bf):
     """A node table must never be served for a band-factor lookup."""
-    assert sc.cache_key(**base) != sc.band_factor_key(**bf)
+    assert sc.cache_key(**base) != band_key(**bf)
 
 
 # ── round-trip and fail-soft ───────────────────────────────────────────────

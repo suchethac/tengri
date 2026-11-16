@@ -40,6 +40,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.utils.filter_convention import FilterConvention
+
 pytestmark = pytest.mark.regression_bug
 
 _LBOLS = np.array([6.0, 8.0, 10.0, 12.0, 14.0])
@@ -213,7 +215,11 @@ def _evaluate(name, x64):
             )
         if pre is not None:
             waves, trans = _filters()
-            lookup = pre.build_lookup(pre.precompute(waves, trans, _Z, None, grid_path=path))
+            lookup = pre.build_lookup(
+                pre.precompute(
+                    waves, trans, _Z, None, grid_path=path, convention=FilterConvention.BESSELL
+                )
+            )
             out["lookup"] = np.stack(
                 [
                     np.asarray(lookup(**kwargs(jnp.asarray(lb, dtype), jnp.asarray(s, dtype))))

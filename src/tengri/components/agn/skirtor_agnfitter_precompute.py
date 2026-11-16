@@ -51,6 +51,7 @@ from tengri.components.agn._template_power_table import (
 )
 from tengri.components.agn.skirtor_agnfitter import _load_skirtor_agnfitter_arrays
 from tengri.forward.precompute.templates import collapse_fixed_axes
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
     interp_nd_pchip,
@@ -73,6 +74,8 @@ def precompute_skirtor_agnfitter_photometry(
     filter_waves: list[jnp.ndarray],
     filter_trans: list[jnp.ndarray],
     redshift: float = 0.0,
+    *,
+    convention: FilterConvention,
 ) -> dict:
     """Pre-integrate SKIRTOR_mean_3p torus templates through filter curves.
 
@@ -149,6 +152,7 @@ def precompute_skirtor_agnfitter_photometry(
         filter_trans,
         redshift,
         axes=(oa_axis, incl_axis, tv_axis),
+        convention=convention,
     )
 
     axes_jax = (
@@ -253,6 +257,7 @@ def precompute(
     parameters: Any,
     *,
     grid_path: str,
+    convention: FilterConvention,
 ) -> dict:
     """Build the preintegrated SKIRTOR_mean_3p grid, recording Fixed axes.
 
@@ -281,7 +286,11 @@ def precompute(
     **JIT-compatible**: no, this is a build-time function using NumPy.
     """
     result = precompute_skirtor_agnfitter_photometry(
-        grid_path, filter_waves, filter_trans, redshift=redshift
+        grid_path,
+        filter_waves,
+        filter_trans,
+        redshift=redshift,
+        convention=convention,
     )
     preint: PreintegratedGrid = result["_preint"]
     _, _, fixed = collapse_fixed_axes(

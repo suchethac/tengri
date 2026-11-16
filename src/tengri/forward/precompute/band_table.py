@@ -59,8 +59,10 @@ class BandTableContext:
         The model's parameter specification.
     wave : ndarray, shape (n_wave,)
         Rest-frame wavelength grid [Angstrom].
-    filters : tuple
-        The raw filter curves of the observation.
+    bands : BandSpec
+        The observation's filter curves, convention and sub-band scheme: the one spec every
+        provider integrates with, so a table can never carry a convention the runtime
+        projection does not.
     padded_filters : tuple
         The filter curves padded to the shared wavelength grid.
     z_nodes : ndarray, shape (n_z,), or None
@@ -82,7 +84,7 @@ class BandTableContext:
 
     spec: Any
     wave: Any
-    filters: Any
+    bands: Any
     padded_filters: Any
     z_nodes: Any
     wave_precomp: Any
