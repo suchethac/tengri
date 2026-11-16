@@ -55,7 +55,7 @@ def _template(
     wave,
     *,
     eline_mode="fitted",
-    eline_broad=False,
+    kinematics=None,
     lines=_LINES,
     banded=False,
     prior=None,
@@ -82,7 +82,7 @@ def _template(
         eline_mode=eline_mode,
         eline_catalog=LineList.from_names(list(lines)),
         eline_prior_sigma=_PRIOR_SIGMA if prior is None else prior,
-        eline_broad=eline_broad,
+        eline_kinematics=kinematics,
     )
     model = SEDModel.build(
         ssp_data=ssp,
@@ -285,14 +285,16 @@ def test_padding_quantum_leaves_loglik_unchanged_with_lines(synthetic_ssp):
 
 
 def test_refusals_marginalized_broad_and_line_count(synthetic_ssp):
-    """(e): eline_broad and a different line count are refused; flat marginalized lines pass."""
+    """(e): kinematic groups and a different line count are refused; flat lines pass."""
     wave = _grid(160, 4000.0, 7500.0)
     marginalized = _template(synthetic_ssp, wave, eline_mode="marginalized")
     check_template_model(marginalized)
 
-    broad = _template(synthetic_ssp, wave, eline_broad=True)
-    with pytest.raises(ValueError, match="eline_broad=False"):
-        check_template_model(broad)
+    grouped = _template(
+        synthetic_ssp, wave, kinematics={"broad": {"lines": ["Halpha"], "add": True}}
+    )
+    with pytest.raises(ValueError, match="kinematic groups"):
+        check_template_model(grouped)
 
     fitted = _template(synthetic_ssp, wave)
     three = _template(synthetic_ssp, wave, lines=("Hbeta", "OIII_5007", "Halpha"))

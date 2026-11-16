@@ -895,7 +895,7 @@ def apply_lsf(
     resolution: jnp.ndarray | float,
     sigma_lib_kms: jnp.ndarray | float = 0.0,
     n_bins: int = 16,
-    sigma_v_kms: float = 0.0,
+    sigma_v_kms: jnp.ndarray | float = 0.0,
     *,
     pad_pixels: int | None = None,
 ) -> jnp.ndarray:
@@ -958,7 +958,7 @@ def apply_lsf(
         Number of piecewise-constant segments for variable-R approximation.
         Ignored for scalar R. Higher values are more accurate but slower.
         Typical: 10–20. Default 16.
-    sigma_v_kms : float, optional
+    sigma_v_kms : float or ndarray, optional
         Intrinsic galaxy velocity dispersion :math:`\\sigma_v` [km/s] added
         in quadrature to :math:`\\sigma_{\\rm eff}`. This is the broadening
         from stellar dynamics, distinct from instrument LSF
@@ -1039,7 +1039,10 @@ def apply_lsf(
     # for callers that pass sigma_v_kms in via the params dict, the prior
     # guards against negatives, so this is purely defensive).
     sigma_bound = _lsf_sigma_bound_kms(resolution, sigma_v_kms)
-    sigma_v_kms = jnp.maximum(jnp.asarray(sigma_v_kms), 0.0)
+    # ``where`` rather than ``maximum``: at sigma_v = 0 it passes the full
+    # derivative, where ``maximum`` passes half of it.
+    sigma_v_kms = jnp.asarray(sigma_v_kms)
+    sigma_v_kms = jnp.where(sigma_v_kms >= 0.0, sigma_v_kms, 0.0)
 
     resolution = jnp.asarray(resolution)
     sigma_lib_kms = jnp.asarray(sigma_lib_kms)
@@ -1057,8 +1060,15 @@ def apply_lsf(
 
     # Compute the effective broadening kernel, clamping to zero when
     # the library resolution exceeds the instrument resolution at some pixels.
+    # Where the library is at least as coarse as the instrument the width is
+    # sigma_v itself. Taking it directly, instead of as sqrt(0 + sigma_v**2),
+    # keeps the derivative finite at sigma_v = 0 (the root's is infinite there)
+    # and equal to the one-sided derivative with respect to sigma_v.
     deficit = sigma_inst_kms**2 - sigma_lib2
-    sigma_eff_kms = jnp.sqrt(jnp.maximum(deficit, 0.0) + sigma_v2)
+    resolved = deficit > 0.0
+    sigma_eff_kms = jnp.where(
+        resolved, jnp.sqrt(jnp.where(resolved, deficit, 1.0) + sigma_v2), sigma_v_kms
+    )
 
     # The single-FFT path reads one pixel scale, ``log(wave[1]/wave[0])``, which
     # describes the whole array only on a grid uniform in ln(lambda). On any other

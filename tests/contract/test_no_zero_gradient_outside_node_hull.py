@@ -267,6 +267,11 @@ PHYSICAL_ROWS: tuple[tuple[str, str, str, tuple[float, float], float, str], ...]
 #: or could not be traced.
 CENSUS: dict[str, str] = {
     "components/stellar/component.py": "fitted-fixed (z-table, numerical gap 0.001 in z)",
+    "components/stellar/sps/met_pchip.py": (
+        "fitted-ok (log Z read; the declared met_logzsol prior, -3.85 to -1.65 in log Z, sits "
+        "inside every shipped grid's hull, -4.0 to -1.22 or wider; held at the hull by a "
+        "where, which keeps the one-sided slope)"
+    ),
     "components/_z_response.py": "fitted-fixed (z-table read, extrapolate flag)",
     "components/_term_response.py": "fitted-fixed (redshift table read)",
     "components/radio/component.py": (
