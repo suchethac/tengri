@@ -122,7 +122,10 @@ def test_band_factor_is_bit_identical_to_the_runtime_band_average():
         : phot.n_filters
     ]
 
-    np.testing.assert_array_equal(np.asarray(tabulated), np.asarray(reference))
+    # Same arithmetic in both routes, but XLA may fuse it differently per platform: Linux CI
+    # differed by one ulp in one band (0.5031952403869955 vs ...954, #3483), macOS is bit-equal.
+    # rtol 1e-12 admits only that platform noise, the platform-honest rule of #3329.
+    np.testing.assert_allclose(np.asarray(tabulated), np.asarray(reference), rtol=1e-12, atol=0)
 
 
 @pytest.mark.regression_bug

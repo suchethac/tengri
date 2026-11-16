@@ -32,6 +32,9 @@ ROUND_OFF = 1e-10
 
 
 def _grid(ssp, factor):
+    # A derived grid is not the hosted file it came from: renaming it keeps the nebular
+    # pairing from swapping in that file's bare twin, whose axes this 4-D grid no longer
+    # shares (#3465).
     flux4 = ssp.ssp_flux[:, None, :, :] * factor[:, :, None, None]
     return ssp._replace(
         ssp_flux=flux4,

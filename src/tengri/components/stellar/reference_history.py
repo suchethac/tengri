@@ -117,10 +117,15 @@ def reference_history_params(model, *, redshift=0.0, n_nodes=_N_NODES):
     **JIT-compatible**: no, numpy, once per build.
 
     The stand-in is a **constant SFR** over cosmic time, anchored to zero at
-    ``t=0`` so nothing extrapolates past the Big Bang. Constant is the deliberate
-    choice: of the SFHs measured in this module's table it sits at the center of
-    the (tiny) per-Q_H spread, where a burst sits at the edge. Its amplitude is
-    arbitrary and divides out with Q_H.
+    ``t=0`` so nothing extrapolates past the Big Bang. Its amplitude is arbitrary
+    and divides out with Q_H. Constant is not a center of the per-Q_H spread on
+    every grid. On the PRSC/MILES grid the spread is small (the table above). On the
+    MIST C3K default, whose old populations ionize harder, a quenched delayed-tau =
+    0.5 Gyr history has a per-photon [OIII]_5007 3.2x the stand-in's at the #1718 test
+    point (1.85x at the grid center), and Padova agrees within 0.27 % (#3526). The
+    shape probe ``probe_ionizing_shape_drift`` in
+    ``components/nebular/nebular_grid_precompute.py`` measures this at build and
+    refuses the table where it exceeds the tolerance (see #3526).
     """
     return reference_history_for_config(
         stellar_config_of(model), redshift=redshift, n_nodes=n_nodes

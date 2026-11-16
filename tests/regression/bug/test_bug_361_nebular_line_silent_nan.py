@@ -124,11 +124,13 @@ class TestBug361C_cb19_per_line_variation:
     variation. Real Martinez-Paredes+2023 data is even more diverse.
     """
 
-    def test_cb19_lines_have_distinct_luminosities(self, ssp):
+    def test_cb19_lines_have_distinct_luminosities(self, ssp_data_bc03):
         import jax.numpy as jnp
 
         from tengri.components.nebular import CB19Backend
 
+        # Bare grid (#3465): CB19Backend on a wNE grid is refused by design (CB19WNESSPError).
+        ssp = ssp_data_bc03
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             backend = CB19Backend(ssp_data=ssp)
@@ -149,12 +151,14 @@ class TestBug361C_cb19_per_line_variation:
         n_unique = int(jnp.unique(lums).shape[0])
         assert n_unique >= 5, f"#361 Bug C: only {n_unique} unique line luminosities (expected ≥5)"
 
-    def test_balmer_decrement_matches_case_b_synthetic(self, ssp):
+    def test_balmer_decrement_matches_case_b_synthetic(self, ssp_data_bc03):
         """Hα/Hβ in the synthetic CB19 fixture is the Case B value 2.87."""
         import jax.numpy as jnp
 
         from tengri.components.nebular import CB19Backend
 
+        # Bare grid (#3465): see test_cb19_lines_have_distinct_luminosities.
+        ssp = ssp_data_bc03
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             backend = CB19Backend(ssp_data=ssp)
