@@ -14,12 +14,43 @@ column by column. Outside the grid the query is held at the edge node.
 
 from __future__ import annotations
 
+import threading
+from contextlib import contextmanager
+
 import jax
 import jax.numpy as jnp
+from jax import lax
 
-from tengri.utils.grid_interp import pchip_interp_1d, pchip_interp_local
+from tengri.utils.grid_interp import _pchip_slopes, pchip_interp_1d, pchip_interp_local
 
-__all__ = ["met_collapsed", "met_weights", "read_met", "read_met_per_age"]
+__all__ = [
+    "met_collapsed",
+    "met_collapsed_hermite",
+    "met_weights",
+    "native_slope_flux",
+    "native_slope_scope",
+    "pchip_node_slopes",
+    "read_met",
+    "read_met_hermite",
+    "read_met_hermite_per_age",
+    "read_met_per_age",
+]
+
+#: Wavelength columns per tangent call. The PCHIP tangents are eager, so a whole-grid call
+#: holds about ten cubes of the slope shape at once (a 600 MB transient on the wNE grid,
+#: #3541). Each column is an independent map along the last axis, so the chunked result is
+#: bit-identical to the whole-grid one.
+_SLOPE_CHUNKS = 16
+
+#: Per-thread stack of open :func:`native_slope_scope` memos, innermost last.
+_SLOPE_STATE = threading.local()
+
+
+def _open_scopes() -> list[dict]:
+    """The calling thread's stack of open slope scopes."""
+    if not hasattr(_SLOPE_STATE, "scopes"):
+        _SLOPE_STATE.scopes = []
+    return _SLOPE_STATE.scopes
 
 
 def _clamp_to_grid(log_z, x):
@@ -150,3 +181,119 @@ def met_weights(log_z, ssp_lgmet):
         return raw / jnp.sum(raw)
     raw = jax.vmap(lambda z: read_met(eye, x, z))(jnp.asarray(log_z))
     return (raw / jnp.sum(raw, axis=1, keepdims=True)).T
+
+
+def pchip_node_slopes(table, ssp_lgmet):
+    """Native PCHIP tangents along the metallicity axis (#3541).
+
+    The tangents depend only on the node values, not on the query Z, so they are
+    computed once on the native grid and carried through each table's linear build.
+    Same formula as :func:`read_met`: :func:`pchip_interp_local` uses the global
+    Fritsch-Carlson tangents for ``n_met >= 4``, :func:`pchip_interp_1d` for 2 or 3,
+    and the secant for 2. ``n_met == 1`` gives zeros.
+    """
+    table = jnp.asarray(table)
+    x = jnp.asarray(ssp_lgmet)
+    if x.shape[0] == 1:
+        return jnp.zeros_like(table)
+    n_wave = table.shape[-1]
+    k = min(_SLOPE_CHUNKS, n_wave)
+    if k <= 1:
+        return _pchip_slopes(x, table)
+    # Fixed-width windows: every call has one shape, so the eager ops compile once. The last
+    # window is clamped to the grid end and trimmed to the columns it owns.
+    width = -(-n_wave // k)
+    pieces = []
+    for i in range(k):
+        lo = i * width
+        if lo >= n_wave:
+            break
+        hi = min(lo + width, n_wave)
+        start = min(lo, n_wave - width)
+        window = _pchip_slopes(x, lax.dynamic_slice_in_dim(table, start, width, axis=-1))
+        pieces.append(window[..., lo - start : hi - start])
+    return jnp.concatenate(pieces, axis=-1)
+
+
+@contextmanager
+def native_slope_scope():
+    """Compute each SSP grid's native PCHIP tangents once while this scope is open (#3541).
+
+    Reentrant: a scope opened inside an open one shares its memo, so a whole model build
+    takes the tangents once per grid, and the memo (one slope cube per grid) is released
+    when the outermost scope exits. Outside any scope nothing is cached.
+    """
+    scopes = _open_scopes()
+    if scopes:
+        yield
+        return
+    scopes.append({})
+    try:
+        yield
+    finally:
+        scopes.pop()
+
+
+def native_slope_flux(ssp_flux, ssp_lgmet):
+    """Native PCHIP tangents of an SSP flux cube, shared within an open scope (#3541).
+
+    The one place the native slopes are formed. Inside :func:`native_slope_scope` the cube is
+    keyed on the identity of the flux and grid objects it was built from, so a second request
+    for the same grid returns the first result instead of recomputing it.
+    """
+    scopes = _open_scopes()
+    if not scopes:
+        return pchip_node_slopes(ssp_flux, ssp_lgmet)
+    memo = scopes[-1]
+    hit = memo.get(id(ssp_flux))
+    if hit is not None and hit[0] is ssp_flux and hit[1] is ssp_lgmet:
+        return hit[2]
+    slopes = pchip_node_slopes(ssp_flux, ssp_lgmet)
+    memo[id(ssp_flux)] = (ssp_flux, ssp_lgmet, slopes)
+    return slopes
+
+
+def read_met_hermite(values, slopes, ssp_lgmet, log_z):
+    """Cubic Hermite read of (node values, native slopes) at one log Z (#3541).
+
+    Equals :func:`read_met` on the table the slopes came from, to round-off: the
+    Hermite basis in the bracketing cell, clamped outside the grid as :func:`read_met`
+    clamps, and node-exact. Linear in ``values`` and in ``slopes``, so a table and its
+    slope sibling can be built by the same linear code.
+    """
+    values = jnp.asarray(values)
+    slopes = jnp.asarray(slopes)
+    x = jnp.asarray(ssp_lgmet)
+    n = x.shape[0]
+    if n == 1:
+        return values[0]
+    zc = _clamp_to_grid(jnp.asarray(log_z, dtype=x.dtype), x)
+    i = jnp.clip(jnp.searchsorted(x, zc) - 1, 0, n - 2)
+    h = x[i + 1] - x[i]
+    t = (zc - x[i]) / h
+    t2 = t * t
+    t3 = t2 * t
+    val = (
+        (2.0 * t3 - 3.0 * t2 + 1.0) * values[i]
+        + (t3 - 2.0 * t2 + t) * h * slopes[i]
+        + (-2.0 * t3 + 3.0 * t2) * values[i + 1]
+        + (t3 - t2) * h * slopes[i + 1]
+    )
+    return _pin_to_node(val, values, x, zc)
+
+
+def read_met_hermite_per_age(values, slopes, ssp_lgmet, log_z_age, *, age_axis=1):
+    """Per-age :func:`read_met_hermite`, the twin of :func:`read_met_per_age` (#3541)."""
+    mv = jnp.moveaxis(jnp.asarray(values), age_axis, 1)
+    ms = jnp.moveaxis(jnp.asarray(slopes), age_axis, 1)
+    per_age = jax.vmap(lambda v, s, z: read_met_hermite(v, s, ssp_lgmet, z), in_axes=(1, 1, 0))(
+        mv, ms, jnp.asarray(log_z_age)
+    )
+    return jnp.moveaxis(per_age, 0, age_axis - 1)
+
+
+def met_collapsed_hermite(values, slopes, ssp_lgmet, log_z, *, age_axis=1):
+    """Hermite twin of :func:`met_collapsed`: ``[1, ...]`` for scalar or per-age log Z."""
+    if jnp.ndim(log_z) == 0:
+        return read_met_hermite(values, slopes, ssp_lgmet, log_z)[None]
+    return read_met_hermite_per_age(values, slopes, ssp_lgmet, log_z, age_axis=age_axis)[None]
