@@ -318,7 +318,7 @@ def lyc_augment_fold(
     filter_wave: np.ndarray,
     filter_trans: np.ndarray,
     edge_aa: float,
-    convention: FilterConvention = FilterConvention.BESSELL,
+    convention: FilterConvention,
 ) -> tuple[np.ndarray, _FoldedIntegrand, np.ndarray]:
     """Folded sibling of :func:`lyc_augment_grid_for_step`.
 
@@ -344,7 +344,7 @@ def lyc_augment_fold_T(
     filter_wave: np.ndarray,
     filter_trans: np.ndarray,
     edge_aa: float,
-    convention: FilterConvention = FilterConvention.BESSELL,
+    convention: FilterConvention,
 ) -> tuple[np.ndarray, _FoldedIntegrand, np.ndarray]:
     """:func:`lyc_augment_fold` on a pre-transposed template layout (no per-call copy)."""
     g, tw, c1, w1, c2, w2 = _lyc_augmented_operator(
@@ -464,7 +464,8 @@ def subband_quadrature(
     n_subbands: int,
     eff_wave_obs: float,
     lyc_edge_obs: float | None = None,
-) -> tuple[np.ndarray, np.ndarray]:
+    with_numerator: bool = False,
+) -> tuple[np.ndarray, ...]:
     r"""Sub-band weights and quadrature nodes for one filter (#1122).
 
     Splits the band into ``K`` sub-bands of equal filter mass and returns, per
@@ -528,6 +529,11 @@ def subband_quadrature(
         integral. K+1-wide when ``lyc_edge_obs`` is given.
     nodes : ndarray, shape (..., K) or (..., K+1)
         Quadrature nodes, observed frame [Angstrom]. Same width as ``phi``.
+    numerator : ndarray, same shape, only when ``with_numerator``
+        The flux-weighted wavelength integral over each sub-band divided by the same
+        filter normalization as ``phi``: ``int_k lambda L T w / denom`` [Angstrom].
+        Linear in the template, so it is a table in its own right; ``nodes`` is the
+        ratio ``numerator / phi`` (#3541).
 
     Raises
     ------
@@ -558,7 +564,11 @@ def subband_quadrature(
 
     total = sums[..., -1]
     resid = np.abs(i_k.sum(axis=-1) - total)
-    scale = np.maximum(np.abs(total), 1e-300)
+    # Scaled by the magnitude of the summed terms, not by |total|: a signed integrand (the
+    # native PCHIP slope across Z, #3541) can cancel to a total far below its terms, and the
+    # rounding of those terms is then large relative to the total alone. For a positive flux
+    # the two scales agree to rounding, so the check is unchanged there.
+    scale = np.maximum(np.abs(i_k).sum(axis=-1), 1e-300)
     if not np.all(resid / scale < 1e-10):
         raise AssertionError(
             "sub-band partition is not flux-conserving (max relative residual "
@@ -574,7 +584,12 @@ def subband_quadrature(
     # law, which goes as 1/lambda, so it must stay finite and positive.
     live = i_k != 0.0
     nodes = np.where(live, l_k / np.where(live, i_k, 1.0), eff_wave_obs)
-    return i_k / np.maximum(denom, representable_denominator(1e-30)), nodes
+    phi = i_k / np.maximum(denom, representable_denominator(1e-30))
+    if with_numerator:
+        # The numerator shares phi's clamped normalization; written inline so the
+        # zero-hiding-clamp inventory sees this second division (#3541).
+        return phi, nodes, l_k / np.maximum(denom, representable_denominator(1e-30))
+    return phi, nodes
 
 
 def lyc_augment_grid_for_step(
@@ -585,7 +600,7 @@ def lyc_augment_grid_for_step(
     filter_wave: np.ndarray,
     filter_trans: np.ndarray,
     edge_aa: float,
-    convention: FilterConvention = FilterConvention.BESSELL,
+    convention: FilterConvention,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     r"""Augment a union grid so an ORDINARY trapezoid integrates the Lyman step exactly.
 
@@ -768,6 +783,10 @@ class PreintegratedGrid:
     subband_waves_rest: jnp.ndarray | None = None
     lyc_phot: jnp.ndarray | None = None
     nolyc_phot: jnp.ndarray | None = None
+    #: Rest-frame sub-band numerator ``subband_waves_rest * subband_phot`` taken from
+    #: the quadrature's own ``int lambda L T w`` (not as that product), so it is linear
+    #: in the template and can be read by its own native-slope sibling (#3541).
+    subband_num_rest: jnp.ndarray | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -881,7 +900,8 @@ def preintegrate_grid(
     taylor: bool = False,
     n_subbands: int = 0,
     energy_normalize: bool = False,
-    convention: FilterConvention = FilterConvention.BESSELL,
+    *,
+    convention: FilterConvention,
     lyc_gate: bool = False,
 ) -> PreintegratedGrid:
     """Precompute filter-integrated photometry from a template grid.
@@ -1041,7 +1061,8 @@ def preintegrate_transposed(
     axes: tuple[np.ndarray, ...] = (),
     taylor: bool = False,
     n_subbands: int = 0,
-    convention: FilterConvention = FilterConvention.BESSELL,
+    *,
+    convention: FilterConvention,
     lyc_gate: bool = False,
 ) -> PreintegratedGrid:
     """:func:`preintegrate_grid` on templates already in the transposed layout (#2769).
@@ -1075,6 +1096,7 @@ def preintegrate_transposed(
     K_sub = K + 1 if (K > 0 and lyc_gate) else K
     sub_phot = np.zeros((n_grid_points, n_filters, K_sub)) if K > 0 else None
     sub_waves = np.zeros((n_grid_points, n_filters, K_sub)) if K > 0 else None
+    sub_num = np.zeros((n_grid_points, n_filters, K_sub)) if K > 0 else None
 
     for f_idx, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
         fw_np = np.asarray(fw, dtype=np.float64)
@@ -1158,14 +1180,17 @@ def preintegrate_transposed(
         # (possibly edge-augmented) ``grid_q``/``tw_grid_q``/``integrand_q``
         # keep its own chunks exact at that boundary too.
         if K > 0:
-            sub_phot[:, f_idx, :], sub_waves[:, f_idx, :] = subband_quadrature(
-                grid_q,
-                tw_grid_q,
-                fold_q,
-                denom_q,
-                K,
-                float(eff_waves_obs[f_idx]),
-                lyc_edge_obs=lyc_wave_obs if lyc_gate else None,
+            sub_phot[:, f_idx, :], sub_waves[:, f_idx, :], sub_num[:, f_idx, :] = (
+                subband_quadrature(
+                    grid_q,
+                    tw_grid_q,
+                    fold_q,
+                    denom_q,
+                    K,
+                    float(eff_waves_obs[f_idx]),
+                    lyc_edge_obs=lyc_wave_obs if lyc_gate else None,
+                    with_numerator=True,
+                )
             )
 
     eff_waves_rest = eff_waves_obs / (1.0 + redshift)
@@ -1179,8 +1204,11 @@ def preintegrate_transposed(
         sub_phot_j = jnp.array(sub_phot.reshape(*grid_dims, n_filters, K_sub))
         sub_waves_j = jnp.array(sub_waves.reshape(*grid_dims, n_filters, K_sub))
         sub_waves_rest_j = sub_waves_j / (1.0 + redshift)
+        sub_num_rest_j = jnp.array(sub_num.reshape(*grid_dims, n_filters, K_sub)) / (
+            1.0 + redshift
+        )
     else:
-        sub_phot_j = sub_waves_j = sub_waves_rest_j = None
+        sub_phot_j = sub_waves_j = sub_waves_rest_j = sub_num_rest_j = None
 
     # Geometric factor, as a log10 offset. Not ``lnu_to_fnu`` + ``float()``:
     # under a surrounding jit trace ``dl_cm`` and ``redshift`` arrive as tracers
@@ -1208,6 +1236,7 @@ def preintegrate_transposed(
         subband_waves_rest=sub_waves_rest_j,
         lyc_phot=lyc_phot,
         nolyc_phot=nolyc_phot,
+        subband_num_rest=sub_num_rest_j,
     )
 
 
@@ -1217,7 +1246,8 @@ def preintegrate_lines(
     filter_trans: list[np.ndarray],
     redshift: float,
     axes: tuple[np.ndarray, ...] = (),
-    convention: FilterConvention = FilterConvention.BESSELL,
+    *,
+    convention: FilterConvention,
 ) -> PreintegratedLines:
     """Precompute emission line weights through filters.
 
@@ -1251,38 +1281,18 @@ def preintegrate_lines(
     PreintegratedLines
         Weights (n_lines, n_filters) and grid information.
     """
-    line_wavelengths = np.asarray(line_wavelengths)
-    n_lines = len(line_wavelengths)
-    n_filters = len(filter_waves)
+    from tengri.utils.band_projection import BandSpec, line_band_weights
 
-    # Redshift line wavelengths to observed frame
-    line_wavelengths_obs = line_wavelengths * (1.0 + redshift)
-
-    # Compute filter denominators (normalization): ∫ T w dλ
-    filter_denoms = np.zeros(n_filters)
-    for f_idx, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
-        fw_np = np.asarray(fw, dtype=np.float64)
-        ft_np = np.asarray(ft, dtype=np.float64)
-        filter_denoms[f_idx] = _np_trapezoid(ft_np * _filter_weight_np(fw_np, convention), fw_np)
-
-    # Compute line weights via point-sampling: T(λ_line) w(λ_line) / ∫ T w dλ
-    line_filter_weights = np.zeros((n_lines, n_filters))
-    for line_idx, lam_obs in enumerate(line_wavelengths_obs):
-        lam_arr = np.asarray([lam_obs], dtype=np.float64)
-        w_at_line = float(_filter_weight_np(lam_arr, convention)[0])
-        for f_idx, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
-            fw_np = np.asarray(fw, dtype=np.float64)
-            ft_np = np.asarray(ft, dtype=np.float64)
-
-            # Interpolate transmission at the line's observed wavelength.
-            # ``left=right=0`` zeroes lines outside the filter passband (np.interp
-            # otherwise returns the edge value, which the 1/λ weight would
-            # amplify for blue out-of-band lines).
-            T_at_line = np.interp(lam_obs, fw_np, ft_np, left=0.0, right=0.0)
-            denom = filter_denoms[f_idx]
-            line_filter_weights[line_idx, f_idx] = (
-                T_at_line * w_at_line / np.maximum(denom, representable_denominator(1e-30))
-            )
+    spec = BandSpec(
+        filters=([np.asarray(fw) for fw in filter_waves], [np.asarray(ft) for ft in filter_trans]),
+        convention=convention,
+        n_subbands=None,
+        lyc_gate=False,
+    )
+    line_filter_weights = np.asarray(
+        line_band_weights(np.asarray(line_wavelengths), spec, redshift, per_hz=False),
+        dtype=np.float64,
+    )
 
     # Convert axes and precompute edges
     axes_jax = tuple(jnp.asarray(ax) for ax in axes)

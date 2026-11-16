@@ -20,7 +20,7 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
-from tengri.utils.physics_constants import C_KM_S as _C_KMS
+from tengri.utils.physics_constants import C_KM_S as _C_KMS, GAUSSIAN_FWHM_PER_SIGMA
 
 
 @jax.jit
@@ -69,7 +69,7 @@ def compute_line_fluxes(
         \sigma_{\rm ang} = \lambda_z \sqrt{
             \left(\frac{\sigma_{\rm kms}}{c}\right)^2
             +
-            \left(\frac{1}{2.355\,R}\right)^2
+            \left(\frac{1}{2\sqrt{2\ln 2}\,R}\right)^2
         }
 
     where the second term is the LSF contribution (Gaussian FWHM = :math:`\lambda/R`).
@@ -93,7 +93,7 @@ def compute_line_fluxes(
     """
     z_waves = line_rest_waves * (1.0 + redshift)
     sigma_vel_sq = (sigma_kms / _C_KMS) ** 2
-    sigma_lsf_sq = (1.0 / (2.355 * spectral_resolution)) ** 2
+    sigma_lsf_sq = (1.0 / (GAUSSIAN_FWHM_PER_SIGMA * spectral_resolution)) ** 2
     sigma_ang = z_waves * jnp.sqrt(sigma_vel_sq + sigma_lsf_sq)
     return amplitudes * jnp.sqrt(2.0 * jnp.pi) * sigma_ang
 

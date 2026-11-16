@@ -30,13 +30,10 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.inference._batching import AUTO, resolve_forward_chunk_size
-from tengri.inference._hierarchical_flat import (
-    FLAT_SAMPLERS,
-    FLAT_UNSUPPORTED,
-    run_flat_sampler,
-)
+from tengri.inference._hierarchical_flat import run_flat_sampler
 from tengri.inference.fitter import _resolve_batch_fit_approx, resolve_method
 from tengri.inference.likelihoods.gaussian import diag_noise_operators
+from tengri.inference.sampling.driver import method_map as flat_method_map
 from tengri.utils.transforms import to_bounded, to_unbounded
 
 #: Acceptance below which a Ray Tracing chain is treated as not having sampled.
@@ -655,14 +652,9 @@ class PopulationFitter:
         here. Deriving from ``method_map`` alone was complete when this helper
         was written and stopped being so the moment the flat seam landed: it
         would silently under-report every sampler reachable only through
-        ``tengri.inference._hierarchical_flat.FLAT_SAMPLERS`` (``map``,
+        ``tengri.inference.sampling.driver.method_map`` (``map``,
         ``mcmc_nuts``, ``mcmc_hmc``, …), the same class of omission this
         helper exists to prevent, one layer further out.
-
-        Names in ``tengri.inference._hierarchical_flat.FLAT_UNSUPPORTED``
-        are deliberately *not* listed. ``run`` raises ``NotImplementedError``
-        with a per-name reason for those, which is more useful than appearing
-        in a list of things that work.
 
         Parameters
         ----------
@@ -685,7 +677,7 @@ class PopulationFitter:
         from tengri.inference._backend_registry import lookup_backend
 
         default = inspect.signature(cls.run).parameters["method"].default
-        reachable = set(method_map) | set(FLAT_SAMPLERS) | {"evi_nifty"}
+        reachable = set(method_map) | set(flat_method_map()) | {"evi_nifty"}
         # A name absent from the registry (evi_nifty) is dispatched anyway, so
         # keep it, the same fail-open that refuse_if_broken applies.
         supported = sorted(
@@ -891,19 +883,9 @@ class PopulationFitter:
             # _hierarchical_flat), so a sampler being "hierarchical" is a
             # property of the problem, not of the sampler; there is nothing
             # left to special-case per backend.
-            if method in FLAT_SAMPLERS:
+            if method in flat_method_map():
                 return run_flat_sampler(
                     self, method, key=key, allow_unvalidated=allow_unvalidated, **kwargs
-                )
-            # Refuse the ones the seam knowingly cannot drive with a specific
-            # reason rather than a generic "unknown method". A backend that is
-            # absent because nobody wired it up and one that is absent because
-            # its naive implementation returns biased samples deserve different
-            # errors, the second is a warning to whoever tries to add it.
-            if method in FLAT_UNSUPPORTED:
-                raise NotImplementedError(
-                    f"method={method!r} is not available for hierarchical fits. "
-                    f"{FLAT_UNSUPPORTED[method]}"
                 )
             # Derive the advertised list; never hand-write it. The literal this
             # replaced named 'vi_nonlinear_fast' as "(default)" for months after

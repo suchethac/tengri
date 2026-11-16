@@ -15,7 +15,6 @@ import functools
 import logging
 import math
 import time
-import types
 import warnings
 from dataclasses import dataclass, field
 
@@ -770,6 +769,27 @@ def _all_absent(presence) -> bool:
     return presence is not None and not np.any(np.asarray(presence) != 0)
 
 
+def _vmapped_mcmc_tags() -> dict[str, str]:
+    """Return ``registry method -> engine sampler tag``, read from the backend registry now.
+
+    A method qualifies when its sampler's whole run -- adaptation included -- is a fixed-shape
+    traced program, so K galaxies fit under one ``vmap``, each adapting to its own posterior,
+    and ``forward_chunk_size`` vmaps K galaxies' chains per ``lax.map`` step. Membership is a
+    structural property, not a quality claim and not the tier: ``mcmc_chees`` qualifies and
+    stays ``tier="experimental"``, and a ``tier="broken"`` member (``mcmc_ghmc``) is refused by
+    the tier gate unless ``allow_unvalidated=True``. An auto-dispatching entry whose pinned
+    sampler is not always what its runner runs is left out.
+    """
+    from tengri.inference._backend_registry import _BACKENDS
+    from tengri.inference.sampling.driver import get_sampler, method_map
+
+    return {
+        method: get_sampler(method).engine or driver
+        for method, driver in method_map().items()
+        if get_sampler(method).vmappable and not _BACKENDS[method].sampler_is_pin
+    }
+
+
 class _CatalogFitterOriginal:
     """Per-galaxy catalog inference with optional K-way on-device parallelism.
 
@@ -821,28 +841,12 @@ class _CatalogFitterOriginal:
     """
 
     _NATIVE_VMAPPABLE: frozenset = frozenset({"native_vi_linear", "native_vi_nonlinear"})
-    #: Sampling methods that honor ``forward_chunk_size`` by vmapping K galaxies'
-    #: chains per ``lax.map`` step, each galaxy adapting to its own posterior.
-    #:
-    #: Membership is not a quality claim and it is not the tier. It is one
-    #: structural property: the sampler's whole run -- adaptation included --
-    #: is expressible as a fixed-shape traced program, so K of them fit under
-    #: one ``vmap``. ``mcmc_chees`` qualifies and stays ``tier="experimental"``;
-    #: ``mcmc_ghmc`` and ``mcmc_mclmc`` are ``tier="broken"`` and are deliberately
-    #: absent, because a backend that reports wrong answers reports them faster
-    #: here (``tests/contract/test_broken_backends_quarantined.py``).
-    _MCMC_VMAPPABLE: frozenset = frozenset({"mcmc_nuts", "mcmc_hmc", "mcmc_chees"})
-
-    #: ``method`` -> the ``sampler`` tag ``build_catalog_mcmc_engine`` takes.
-    _MCMC_SAMPLER_TAG: types.MappingProxyType = types.MappingProxyType(
-        {"mcmc_nuts": "nuts", "mcmc_hmc": "hmc", "mcmc_chees": "chees"}
-    )
 
     def _engine_kind(self, resolved: str) -> str:
         """Which of the three engines ``resolved`` dispatches to."""
         if resolved in self._NATIVE_VMAPPABLE:
             return NATIVE_VI
-        if resolved in self._MCMC_VMAPPABLE:
+        if resolved in _vmapped_mcmc_tags():
             return MCMC_VMAPPED
         return SEQUENTIAL
 
@@ -1296,7 +1300,7 @@ class _CatalogFitterOriginal:
                 properties=properties,
                 **kwargs,
             )
-        elif resolved in self._MCMC_VMAPPABLE:
+        elif resolved in _vmapped_mcmc_tags():
             return self._run_native_mcmc(
                 resolved,
                 key=key,
@@ -1312,13 +1316,13 @@ class _CatalogFitterOriginal:
         else:
             # Both lists are DERIVED from the dispatch frozensets above, never
             # written out by hand: the previous hard-coded text still named only
-            # the native pair long after `_MCMC_VMAPPABLE` was added, steering
+            # the native pair long after the vmapped set was added, steering
             # callers off the working path onto the broken one (#1394).
             if devices is not None:
                 warnings.warn(
                     f"devices={devices!r} is ignored for method={method!r}. "
                     "Multi-device sharding is currently supported for "
-                    f"{' / '.join(sorted(self._MCMC_VMAPPABLE))} only.",
+                    f"{' / '.join(sorted(_vmapped_mcmc_tags()))} only.",
                     UserWarning,
                     stacklevel=2,
                 )
@@ -1329,14 +1333,14 @@ class _CatalogFitterOriginal:
                 # Name the supported methods FROM the dispatch sets, not from a
                 # hand-written list. The literal this replaces said "only
                 # native_vi_linear and native_vi_nonlinear" long after
-                # _MCMC_VMAPPABLE gave mcmc_nuts/mcmc_hmc the same capability,
+                # the vmapped set gave mcmc_nuts/mcmc_hmc the same capability,
                 # so the advice steered callers off the working path onto a
                 # tier="broken" one.
                 #
                 # The two sets are named SEPARATELY rather than unioned: half of
                 # a combined list cannot be reached without allow_unvalidated,
                 # and a reader picking a name out of it would hit a refusal.
-                usable = " / ".join(sorted(self._MCMC_VMAPPABLE))
+                usable = " / ".join(sorted(_vmapped_mcmc_tags()))
                 gated = " / ".join(sorted(self._NATIVE_VMAPPABLE))
                 warnings.warn(
                     f"forward_chunk_size={forward_chunk_size} is ignored for "
@@ -1936,7 +1940,11 @@ class _CatalogFitterOriginal:
         reduction (galaxies are independent). Bit-parity with the single-device
         path holds up to float round-off.
         """
-        from tengri.inference.backends.mcmc._shared import _CHEES_JITTER_SCALE
+        self._refuse_all_absent_rows()
+        from tengri.inference.backends.mcmc._shared import (
+            _CHEES_JITTER_SCALE,
+            FIRST_ORDER_TARGET_ACCEPT_RATE,
+        )
         from tengri.inference.backends.mcmc.catalog import (
             build_catalog_mcmc_engine,
             build_catalog_metric_diagnostics,
@@ -1946,11 +1954,20 @@ class _CatalogFitterOriginal:
         from tengri.inference.backends.mcmc.nuts import resolve_dense_mass_gate
         from tengri.inference.posterior import Posterior
         from tengri.inference.preconditioning import _resolve_whitening_strength
+        from tengri.inference.sampling.driver import get_sampler
 
-        sampler = self._MCMC_SAMPLER_TAG[method_tag]
+        sampler = _vmapped_mcmc_tags()[method_tag]
+        if dense_mass_matrix is None and get_sampler(method_tag).dense_default:
+            dense_mass_matrix = True
         is_chees = sampler == "chees"
         if target_accept_rate is AUTO:
-            target_accept_rate = CHEES_TARGET_ACCEPT_RATE if is_chees else 0.85
+            target_accept_rate = (
+                CHEES_TARGET_ACCEPT_RATE
+                if is_chees
+                else FIRST_ORDER_TARGET_ACCEPT_RATE
+                if sampler in ("barker", "mala")
+                else 0.85
+            )
         if ensemble_jitter is None:
             ensemble_jitter = _CHEES_JITTER_SCALE
         n_chains = max(1, int(n_chains))
@@ -1961,27 +1978,6 @@ class _CatalogFitterOriginal:
             from tengri.inference.backends.mcmc._shared import _resolve_chees_ensemble
 
             n_ensemble = _resolve_chees_ensemble(n_ensemble, n_chains)
-        # Refused here, before the MAP warm start spends anything, and refused by
-        # name rather than ignored. ChEES's kernel metric is a *diagonal*
-        # inverse_mass_matrix -- the identity under the default
-        # ``mass_matrix_estimation=None`` -- so there is no dense option to take.
-        # A caller who set it and silently got a diagonal would have no way to
-        # find out, which is the failure ``run_ghmc``'s ``target_accept_rate``
-        # records.
-        if is_chees and dense_mass_matrix:
-            raise ValueError(
-                "dense_mass_matrix=True is not available for method='mcmc_chees': "
-                "the ChEES kernel's metric is a diagonal inverse_mass_matrix, and "
-                "under the default mass_matrix_estimation=None it is the identity "
-                "for the whole run. The non-identity geometry ChEES is designed to "
-                "use is the analytic J^T N^-1 J + I metric: pass precondition=True, "
-                "which this path threads per galaxy. Use "
-                "method='mcmc_nuts'/'mcmc_hmc' if you specifically want a dense "
-                "mass matrix estimated from warmup instead."
-            )
-        # Argument refusals first, then the data: a bad argument is named whatever
-        # the catalog holds.
-        self._refuse_all_absent_rows()
         t0 = time.time()
         n_gal = self.n_galaxies
         # K galaxies per dispatch (#1189). AUTO by default: one galaxy per
@@ -1993,7 +1989,12 @@ class _CatalogFitterOriginal:
             forward_chunk_size,
             n_gal=n_gal,
             n_data_per_gal=len(self.galaxies[0]["flux_obs"]) if n_gal else None,
-            n_chains=_catalog_live_chains(sampler, n_chains=n_chains, n_ensemble=n_ensemble),
+            n_chains=_catalog_live_chains(
+                sampler,
+                n_chains=n_chains,
+                n_ensemble=n_ensemble,
+                n_dim=getattr(getattr(self.model, "spec", None), "n_latent", None),
+            ),
         )
         dev_list = self._resolve_devices(devices)
         n_dev = len(dev_list) if dev_list else 1
@@ -2068,7 +2069,11 @@ class _CatalogFitterOriginal:
             verbose=verbose,
             spec=getattr(fitter, "spec", None),
         )
-        if is_chees:
+        # A sampler with no dense adaptation of its own (ChEES, GHMC, Barker, MALA) serves a
+        # dense request by the engine's pilot-whitening layer, not by use_dense.
+        layered = get_sampler(method_tag).metric_mode == "layer"
+        pilot_dense = bool(layered and dense_mass_matrix)
+        if layered:
             use_dense = False
         elif verbose and not user_set_dense:
             policy = "dense (D<=12, non-dense_basis)" if use_dense else "diagonal"
@@ -2092,7 +2097,9 @@ class _CatalogFitterOriginal:
             chain_jitter=chain_jitter,
             max_leapfrog_steps=max_leapfrog_steps,
             precondition=precondition,
+            metric="dense" if pilot_dense else "diag",
             mass_matrix_estimation=mass_matrix_estimation,
+            return_metric_info=True,
         )
 
         dummy_flat = ravel_pytree(fitter._initialize_unbounded(jax.random.PRNGKey(0)))[0]
@@ -2105,7 +2112,7 @@ class _CatalogFitterOriginal:
         precond_strength = _resolve_whitening_strength(precondition, d_params)
 
         if verbose:
-            tag = {"nuts": "NUTS", "hmc": "HMC", "chees": "ChEES-HMC"}[sampler]
+            tag = sampler
             extra = f", ensemble={n_ensemble} x {n_chains} chains/galaxy" if is_chees else ""
             whiten = "" if precond_strength is None else f", precondition={precond_strength}"
             print(
@@ -2227,15 +2234,30 @@ class _CatalogFitterOriginal:
             all_line_err,
         )
         if n_dev > 1:
-            all_positions, all_divergent = self._sharded_vmap(
+            all_positions, all_divergent, all_fallback = self._sharded_vmap(
                 run_one, xs, dev_list, fitter._data_args
             )
         else:
-            all_positions, all_divergent = map_with_shared(
+            all_positions, all_divergent, all_fallback = map_with_shared(
                 run_one, xs, fitter._data_args, batch_size=K
             )
         all_positions = all_positions[:n_gal]
+        n_returned = int(all_positions.shape[1]) // int(n_samples)
         all_divergent = all_divergent[:n_gal]
+        all_fallback = np.asarray(all_fallback[:n_gal])
+        if all_fallback.any():
+            from tengri.inference.sampling.driver import warn_dense_fallback
+
+            warn_dense_fallback(
+                "",
+                f"{int(all_fallback.sum())} of {n_gal} galaxies had a pilot that could not "
+                "define a covariance; their draws are the diagonal pass's own, so raise "
+                "n_samples or n_chains",
+                n_dim=d_params,
+                stacklevel=3,
+                n_fallback=int(all_fallback.sum()),
+                n_galaxies=int(n_gal),
+            )
         jax.block_until_ready(all_positions)
 
         # What the metric actually bought, per galaxy. A run that whitened but
@@ -2279,6 +2301,19 @@ class _CatalogFitterOriginal:
                     f"{n_precond_fallback} of {n_gal} fell back to identity"
                 )
 
+        # Convergence of each galaxy's chains, by the shared driver's estimators; one warning
+        # for the whole run naming the galaxies and what failed.
+        from tengri.inference.sampling import health
+
+        health_names = health.element_names(unravel_fn(jnp.zeros(d_params)))
+        health_records, flagged = health.catalog_diagnostics(
+            all_positions, all_divergent, n_returned, n_samples, health_names
+        )
+        if flagged:
+            shown = "; ".join(f"galaxy {i}: {', '.join(p)}" for i, p in list(flagged.items())[:5])
+            more = f" (and {len(flagged) - 5} more)" if len(flagged) > 5 else ""
+            health.warn_once(f"CatalogFitter/{method_tag}", [f"{shown}{more}"], stacklevel=2)
+
         posteriors = []
         for i in range(n_gal):
             samples_phys = _vmap_samples_to_physical(
@@ -2303,7 +2338,11 @@ class _CatalogFitterOriginal:
                 diagnostics={
                     "n_divergent": n_div,
                     "n_samples": n_samples,
-                    "n_chains": n_chains,
+                    "n_chains": n_returned,
+                    # True when the pilot of a dense metric could not define one for
+                    # this galaxy and its draws are the diagonal pass's own.
+                    "metric_fallback": bool(all_fallback[i]),
+                    **health_records[i],
                     # Same three keys ``run_chees`` records for a single fit, so
                     # a catalog galaxy and a single fit of it report their
                     # geometry the same way. ``metric_condition`` is 1.0 with
@@ -2383,7 +2422,8 @@ class _CatalogFitterOriginal:
                 "n_divergent_total": int(jnp.sum(all_divergent)),
                 "n_warmup": n_warmup,
                 "n_samples": n_samples,
-                "n_chains": n_chains,
+                "n_chains": n_returned,
+                "n_metric_fallback": int(np.sum(all_fallback)),
                 # ``preconditioned`` is the count of galaxies actually whitened,
                 # not a boolean: a lane whose metric could not be factorized
                 # falls back to the identity for that galaxy alone, and a

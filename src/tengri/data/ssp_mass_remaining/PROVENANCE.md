@@ -107,7 +107,7 @@ is therefore inconsistent with the grid's own spectra; the rebuild is the one co
 them, and tengri ships it. The committed repacked companion of the earlier release (which equalled
 the embedded table exactly) is replaced.
 
-**Effect on the default grid (`fsps_prsc_miles_chabrier`).** Surviving mass changes from the
+**Effect on the PARSEC grid (`fsps_prsc_miles_chabrier`, the default until #3465; the default is now `fsps_mist_c3k_a_chabrier`).** Surviving mass changes from the
 repack to the rebuild by: at 10 Gyr, solar Z (log10 Z = -1.854): 0.5549 -> 0.5717 (+0.0168,
 +3.0%); at ages >= 1 Gyr, max |change| 0.037; overall max |change| 0.132 at top Z, log10 age
 6.15 (1.000 -> 0.868).

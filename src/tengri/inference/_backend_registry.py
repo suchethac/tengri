@@ -13,6 +13,7 @@ if TYPE_CHECKING:
         ChainProgram,
         CompilePlan,
     )
+    from tengri.inference.sampling.driver import Sampler
 
 
 @dataclass(frozen=True)
@@ -94,6 +95,14 @@ class BackendEntry:
     # Builds the statics ``compile()`` warms, from (entry, n_dim, spec). None when
     # the entry has no compile plan, and ``compile()`` then refuses it by name.
     compile_plan: Callable[[Any, int, Any], CompilePlan] | None = None
+    # The sampler the shared driver (``sampling.run_sampler``) runs on a flat target for
+    # this method, for the engines that fit through it (catalog, hierarchical); None when
+    # the method has no flat-target form.
+    sampler: Sampler | None = None
+    # True when ``sampler`` is a pin, not what the runner always runs: an auto-dispatcher
+    # that may run another algorithm than the one the flat seam pins. Derived sets that
+    # promise "this method runs this sampler" leave such an entry out.
+    sampler_is_pin: bool = False
 
     def adaptation_for(self, kwargs: dict, *, path: str = "run") -> Adaptation | None:
         """Return the adaptation this entry runs on ``path`` for ``kwargs``.
@@ -177,6 +186,8 @@ def register_backend(
     adaptation_rule=None,
     compile_adaptation_rule=None,
     compile_plan=None,
+    sampler=None,
+    sampler_is_pin=False,
 ):
     """Decorator to register an inference backend.
 
@@ -203,6 +214,11 @@ def register_backend(
         uses ``diagonal_preconditioning=True``, or low-rank HMC learns a metric
         from warmup). When True, composing with ``precondition=`` raises ValueError
         before sampling starts (#2196).
+    sampler : Sampler or None
+        The shared driver's sampler for this method; see :class:`BackendEntry`.
+    sampler_is_pin : bool
+        Declare that ``sampler`` is pinned for the flat seam while the runner may dispatch
+        to another algorithm; see :class:`BackendEntry`.
 
     Raises
     ------
@@ -230,6 +246,8 @@ def register_backend(
             adaptation_rule=adaptation_rule,
             compile_adaptation_rule=compile_adaptation_rule,
             compile_plan=compile_plan,
+            sampler=sampler,
+            sampler_is_pin=sampler_is_pin,
         )
         _BACKENDS[name] = entry
         for a in aliases:

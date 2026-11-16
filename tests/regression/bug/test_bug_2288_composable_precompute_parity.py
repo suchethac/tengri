@@ -42,6 +42,7 @@ import pytest
 from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
 from tengri.components.agn.blocks import Recipe, composable_precompute
 from tengri.components.agn.blocks.runner import composable_agn_l_nu
+from tengri.utils.filter_convention import FilterConvention
 from tests._data_skip import requires_grahsp
 
 pytestmark = pytest.mark.regression_bug
@@ -81,6 +82,7 @@ def _standard_precompute():
         recipe=_standard_recipe(),
         axis_grids={"agn_grahsp_log_l5100": _AXIS_GRID},
         wave_rest=_WAVE_REST,
+        convention=FilterConvention.BESSELL,
     )
 
 

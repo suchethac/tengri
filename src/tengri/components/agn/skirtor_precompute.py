@@ -57,6 +57,7 @@ from tengri.forward.precompute.templates import (
     collapse_fixed_axes,
     precompute_template_photometry,
 )
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid_interp import interp_nd_pchip, loglog_integral
 
 # Parameter names corresponding to the 5 SKIRTOR grid axes, in order.
@@ -129,6 +130,8 @@ def precompute_skirtor_photometry(
     filter_waves: list[jnp.ndarray],
     filter_trans: list[jnp.ndarray],
     redshift: float = 0.0,
+    *,
+    convention: FilterConvention,
 ) -> dict:
     r"""Tabulate the SKIRTOR torus templates the filters read, with their quadrature.
 
@@ -217,7 +220,7 @@ def precompute_skirtor_photometry(
     )
     wave_read = jnp.asarray(wave[read])
     wq = jnp.asarray(wave_quad)
-    fold = band_fold(wave_quad, filter_waves, filter_trans, redshift)
+    fold = band_fold(wave_quad, filter_waves, filter_trans, redshift, convention=convention)
 
     rows = table.reshape(-1, table.shape[-1])
     node_sed = jax.jit(
@@ -232,6 +235,7 @@ def precompute_skirtor_photometry(
         redshift=redshift,
         dl_cm=1.0,
         energy_normalize=False,
+        convention=convention,
     )
     return {
         "grid_phot": table,
@@ -340,6 +344,7 @@ def precompute(
     parameters: Any,
     *,
     grid_path: str,
+    convention: FilterConvention,
 ) -> dict:
     """Build the SKIRTOR photometry table, recording Fixed-parameter axes.
 
@@ -369,7 +374,11 @@ def precompute(
     **JIT-compatible**: no, this is a build-time function.
     """
     result = precompute_skirtor_photometry(
-        grid_path, filter_waves, filter_trans, redshift=redshift
+        grid_path,
+        filter_waves,
+        filter_trans,
+        redshift=redshift,
+        convention=convention,
     )
     _, _, fixed = collapse_fixed_axes(
         result["_preint"], AXIS_PARAMS, parameters, origin="skirtor_precompute"

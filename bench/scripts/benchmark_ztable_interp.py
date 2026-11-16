@@ -42,6 +42,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.utils.filter_convention import FilterConvention
+
 jax.config.update("jax_enable_x64", True)
 
 # ---------------------------------------------------------------------------
@@ -189,7 +191,13 @@ def compute_errors(
 
     # Build z-table
     ztable = precompute_photometry_ztable(
-        ssp_data, filter_waves, filter_trans, z_min=z_min, z_max=z_max, n_z=n_z
+        ssp_data,
+        filter_waves,
+        filter_trans,
+        z_min=z_min,
+        z_max=z_max,
+        n_z=n_z,
+        convention=FilterConvention.BESSELL,
     )
     z_grid = np.asarray(ztable.z_grid)
     scatter = scatter_factor * float(z_grid[1] - z_grid[0])
@@ -212,7 +220,14 @@ def compute_errors(
 
     for i, z_test in enumerate(probe_zs):
         dl_cm = float(luminosity_distance(z_test))
-        exact = precompute_photometry(ssp_data, filter_waves, filter_trans, float(z_test), dl_cm)
+        exact = precompute_photometry(
+            ssp_data,
+            filter_waves,
+            filter_trans,
+            float(z_test),
+            dl_cm,
+            convention=FilterConvention.BESSELL,
+        )
         ssp_exact = np.asarray(exact.ssp_phot)
         ssp_interp = np.asarray(
             interpolate_ztable_smooth(
@@ -234,7 +249,14 @@ def compute_errors(
     on_grid_errs = []
     for z_test in on_grid_sample:
         dl_cm = float(luminosity_distance(float(z_test)))
-        exact = precompute_photometry(ssp_data, filter_waves, filter_trans, float(z_test), dl_cm)
+        exact = precompute_photometry(
+            ssp_data,
+            filter_waves,
+            filter_trans,
+            float(z_test),
+            dl_cm,
+            convention=FilterConvention.BESSELL,
+        )
         ssp_exact = np.asarray(exact.ssp_phot)
         ssp_interp = np.asarray(
             interpolate_ztable_smooth(

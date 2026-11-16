@@ -68,7 +68,11 @@ class TestFilterGridQuadrature:
         wave, sed = _jagged_sed()
         fw, ft = _coarse_filter()
         ref = _dense_reference(wave, sed, fw, ft)
-        got = float(lnu_filter_integral(sed, wave, fw, ft, redshift=0.0))
+        got = float(
+            lnu_filter_integral(
+                sed, wave, fw, ft, redshift=0.0, convention=FilterConvention.BESSELL
+            )
+        )
         # Pre-#960 quadrature errs by ~1-3 % on this configuration; the
         # union grid is exact to interpolation error.
         assert abs(got / ref - 1.0) < 1e-3, f"band mean {got:.6e} vs reference {ref:.6e}"
@@ -91,13 +95,19 @@ class TestFilterGridQuadrature:
         fw2, ft2 = _coarse_filter(5230.0, 7230.0, 50.0)  # r-like, different length
         fw_pad, ft_pad, _, n_real = pad_filters_to_bucket([fw1, fw2], [ft1, ft2])
         dl_cm = 3.086e26  # 100 Mpc
-        batch = np.asarray(compute_flux_density_batch(sed, wave, fw_pad, ft_pad, 0.1, dl_cm))[
-            :n_real
-        ]
+        batch = np.asarray(
+            compute_flux_density_batch(
+                sed, wave, fw_pad, ft_pad, 0.1, dl_cm, convention=FilterConvention.BESSELL
+            )
+        )[:n_real]
         from tengri.observation.photometry import compute_flux_density
 
         singles = [
-            float(compute_flux_density(sed, wave, fw, ft, 0.1, dl_cm))
+            float(
+                compute_flux_density(
+                    sed, wave, fw, ft, 0.1, dl_cm, convention=FilterConvention.BESSELL
+                )
+            )
             for fw, ft in [(fw1, ft1), (fw2, ft2)]
         ]
         np.testing.assert_allclose(batch, singles, rtol=1e-12)
@@ -108,7 +118,9 @@ class TestFilterGridQuadrature:
         wave, sed = _jagged_sed(seed=11)
         fw, ft = _coarse_filter(4800.0, 7500.0, 60.0)
         ref = _dense_reference(np.asarray(wave) * (1 + z), sed, fw, ft)
-        got = float(lnu_filter_integral(sed, wave, fw, ft, redshift=z))
+        got = float(
+            lnu_filter_integral(sed, wave, fw, ft, redshift=z, convention=FilterConvention.BESSELL)
+        )
         assert abs(got / ref - 1.0) < 1e-3
 
     def test_narrow_filter_on_coarse_sed_grid(self):
@@ -118,5 +130,9 @@ class TestFilterGridQuadrature:
         sed = jnp.ones_like(wave)
         fw = jnp.asarray(np.linspace(1.00e5, 1.02e5, 64))  # narrower than dlam
         ft = jnp.asarray(np.concatenate([[0.0], np.ones(62), [0.0]]))
-        got = float(lnu_filter_integral(sed, wave, fw, ft, redshift=0.0))
+        got = float(
+            lnu_filter_integral(
+                sed, wave, fw, ft, redshift=0.0, convention=FilterConvention.BESSELL
+            )
+        )
         assert abs(got - 1.0) < 1e-6  # flat SED: band mean must be exactly 1

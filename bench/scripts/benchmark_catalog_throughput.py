@@ -18,7 +18,7 @@ Reports, for a mock photometric catalog:
   ``bench/reports/2026-08-17_quickstart_nuts_vs_hmc.md``.
 * a **precision axis** (``--dtype f32|f64``) and an explicit **method axis**
   (``--method mcmc_nuts mcmc_hmc``, the two entries of
-  ``CatalogFitter._MCMC_VMAPPABLE``).
+  ``_vmapped_mcmc_tags()``).
 * **device scaling** (only when more than one device is visible): single-device
   vs ``devices="all"`` throughput, i.e. how well the galaxy axis shards.
 * ``--mode grad``: the log-posterior and its gradient in isolation, batched over
@@ -84,10 +84,6 @@ import warnings
 
 import numpy as np
 
-#: Kept identical to ``CatalogFitter._MCMC_VMAPPABLE`` by a contract test
-#: (``tests/contract/test_catalog_throughput_bench.py``), so a sampler that
-#: reaches the batched path cannot go unmeasured here.
-METHODS = ("mcmc_nuts", "mcmc_hmc", "mcmc_chees")
 DTYPES = ("f64", "f32")
 
 
@@ -141,6 +137,11 @@ import jax.numpy as jnp
 #: bar has to be the same object as the galaxy-level one or a row can pass a bar
 #: its own galaxies failed.
 from tengri.inference.catalog_convergence import CATALOG_MAX_RHAT as MAX_RHAT
+from tengri.inference.catalog_fitter import CatalogFitter, _vmapped_mcmc_tags
+
+#: Read from the sampler registry through ``_vmapped_mcmc_tags()``, so a
+#: sampler that reaches the batched path cannot go unmeasured here.
+METHODS = tuple(sorted(_vmapped_mcmc_tags()))
 
 
 def set_precision(dtype: str) -> dict:
@@ -607,7 +608,7 @@ def main(argv=None):
         nargs="+",
         default=["mcmc_nuts"],
         choices=list(METHODS),
-        help="catalog-vectorized samplers to sweep (CatalogFitter._MCMC_VMAPPABLE)",
+        help="catalog-vectorized samplers to sweep (_vmapped_mcmc_tags())",
     )
     ap.add_argument(
         "--dtype",
@@ -724,8 +725,6 @@ def main(argv=None):
         # tengri warns once that it is honoring the float32 request.
         warnings.filterwarnings("ignore", message=".*Explicitly requested dtype float64.*")
         warnings.filterwarnings("ignore", message=".*JAX_ENABLE_X64=.*")
-        from tengri.inference.catalog_fitter import CatalogFitter
-
         # AFTER the import, which is the step that would silently undo a
         # float32 request, and BEFORE the model is built.
         flags = set_precision(args.dtype)

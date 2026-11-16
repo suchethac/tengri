@@ -61,6 +61,7 @@ from tengri.forward.precompute.templates import (
     collapse_fixed_axes,
     precompute_template_photometry,
 )
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid_interp import PreintegratedGrid, interp_nd_pchip
 from tengri.utils.physics_constants import C_AA, L_SUN
 
@@ -121,6 +122,8 @@ def _build_grid_powerlaw(
     alpha_grid: np.ndarray,
     agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
     agn_T_max: float = DEFAULT_AGN_T_MAX,
+    *,
+    convention: FilterConvention,
 ) -> PreintegratedGrid:
     """Preintegrate powerlaw_disc over a 1D grid of alpha values.
 
@@ -176,6 +179,7 @@ def _build_grid_powerlaw(
         dl_cm=1.0,
         energy_normalize=False,  # per L_sun by construction (agn_log_lbol = 0 above)
         units="lnu",
+        convention=convention,
     )
 
 
@@ -198,6 +202,8 @@ def _build_grid_ss(
     mbh_grid: np.ndarray,
     lbol_grid: np.ndarray,
     agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
+    *,
+    convention: FilterConvention,
 ) -> PreintegratedGrid:
     """Preintegrate disc_ss (Shakura-Sunyaev) over 2D grid of (M_bh, L_bol).
 
@@ -273,6 +279,7 @@ def _build_grid_ss(
         # reintroduces the absolute scale (no double-count).
         energy_normalize=True,
         units="lnu",
+        convention=convention,
     )
 
 
@@ -313,6 +320,8 @@ def _build_grid_cigale(
     redshift: float,
     disk_type: int,
     delta_grid: np.ndarray,
+    *,
+    convention: FilterConvention,
 ) -> PreintegratedGrid:
     """Preintegrate the CIGALE disc of ``disk_type`` over a grid of the slope modulator delta.
 
@@ -349,6 +358,7 @@ def _build_grid_cigale(
         dl_cm=1.0,
         energy_normalize=True,
         units="lnu",
+        convention=convention,
     )
 
 
@@ -405,6 +415,7 @@ def precompute(
     lbol_grid: np.ndarray | None = None,
     delta_grid: np.ndarray | None = None,
     disk_type: int = 0,
+    convention: FilterConvention,
 ) -> dict:
     """Build preintegrated disc grid, auto-collapsing Fixed-parameter axes.
 
@@ -461,7 +472,9 @@ def precompute(
     """
     if model == "powerlaw_disc":
         alpha_grid = _axis("agn_alpha", alpha_grid, parameters)
-        preint = _build_grid_powerlaw(filter_waves, filter_trans, redshift, alpha_grid)
+        preint = _build_grid_powerlaw(
+            filter_waves, filter_trans, redshift, alpha_grid, convention=convention
+        )
         result = {
             "grid_phot": preint.phot,
             "axes": (jnp.asarray(alpha_grid),),
@@ -472,7 +485,9 @@ def precompute(
     elif model == "ss_disc":
         mbh_grid = _axis("agn_log_mbh", mbh_grid, parameters)
         lbol_grid = _axis("agn_log_lbol", lbol_grid, parameters)
-        preint = _build_grid_ss(filter_waves, filter_trans, redshift, mbh_grid, lbol_grid)
+        preint = _build_grid_ss(
+            filter_waves, filter_trans, redshift, mbh_grid, lbol_grid, convention=convention
+        )
         result = {
             "grid_phot": preint.phot,
             "axes": (jnp.asarray(mbh_grid), jnp.asarray(lbol_grid)),
@@ -487,7 +502,9 @@ def precompute(
                 f"got {disk_type!r}"
             )
         delta_grid = _axis("agn_cigale_disk_delta", delta_grid, parameters)
-        preint = _build_grid_cigale(filter_waves, filter_trans, redshift, disk_type, delta_grid)
+        preint = _build_grid_cigale(
+            filter_waves, filter_trans, redshift, disk_type, delta_grid, convention=convention
+        )
         result = {
             "grid_phot": preint.phot,
             "axes": (jnp.asarray(delta_grid),),

@@ -15,6 +15,8 @@ cloudy_grid.py:360-434).  This module documents the axis mapping.
 
 from __future__ import annotations
 
+from tengri.utils.filter_convention import FilterConvention
+
 # CLOUDY continuum grid axes: (log_met, log_age, log_U). The line grid uses
 # the same axes. Auto-collapse is currently done at backend init: see
 # CloudyGridBackend._preintegrate_photometry in cloudy_grid.py.
@@ -73,6 +75,7 @@ def precompute(
     backend: object = None,
     wave: object = None,
     line_sigma_kms: float | None = None,
+    convention: FilterConvention,
     **kwargs: object,
 ) -> object:
     """Build the age-resolved CLOUDY band table, or return None (#2324).
@@ -100,6 +103,8 @@ def precompute(
         SED wavelength grid the per-call path projects onto (``state.wave``).
     line_sigma_kms : float, keyword-only, optional
         Fixed line velocity width; required with ``backend``.
+    convention : FilterConvention, keyword-only
+        Bandpass weight of the table's band integrals, the observation's.
     **kwargs
         Ignored, for Protocol consistency.
 
@@ -122,7 +127,13 @@ def precompute(
     )
 
     table = build_cloudy_band_table(
-        backend, wave, filter_waves, filter_trans, float(redshift), float(line_sigma_kms)
+        backend,
+        wave,
+        filter_waves,
+        filter_trans,
+        float(redshift),
+        float(line_sigma_kms),
+        convention=convention,
     )
     if parameters is not None:
         z_range, u_range = nebular_axis_ranges(parameters)
@@ -229,6 +240,7 @@ def band_table(ctx, *, component: str, slot: str):
         backend=nebular.backend,
         wave=ctx.wave,
         line_sigma_kms=float(ctx.spec.fixed_value("neb_eline_sigma_kms")),
+        convention=ctx.bands.convention,
     )
     if table is None:
         return Decline(

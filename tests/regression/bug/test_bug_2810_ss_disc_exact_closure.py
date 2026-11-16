@@ -21,6 +21,7 @@ from tengri.components.agn import disc_precompute as adapter
 from tengri.components.agn.disc import multicolor_disc
 from tengri.forward.precompute.templates import precompute_template_photometry
 from tengri.parameters.parameters import Parameters
+from tengri.utils.filter_convention import FilterConvention
 
 pytestmark = pytest.mark.regression_bug
 
@@ -57,6 +58,7 @@ def _band_photometry(l_nu):
         dl_cm=1.0,
         energy_normalize=False,
         units="lnu",
+        convention=FilterConvention.BESSELL,
     )
     return np.asarray(preint.phot).reshape(-1)
 
@@ -75,7 +77,9 @@ def _ss_parameters():
 def ss_disc_lookup():
     fw = [f[0] for f in _FILTERS]
     ft = [f[1] for f in _FILTERS]
-    result = adapter.precompute(fw, ft, 0.0, _ss_parameters(), model="ss_disc")
+    result = adapter.precompute(
+        fw, ft, 0.0, _ss_parameters(), model="ss_disc", convention=FilterConvention.BESSELL
+    )
     return adapter.build_lookup(result, model="ss_disc")
 
 

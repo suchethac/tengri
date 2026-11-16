@@ -50,6 +50,8 @@ from tengri.components.nebular.agn_nebular import (
     _DEFAULT_FELTRE_GRID_PATH,
     _load_feltre_grid,
 )
+from tengri.utils.band_projection import delta_line_matrix
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
     library_lookup,
@@ -88,6 +90,7 @@ def precompute(
     parameters: Any,
     *,
     grid_path: str | Path | None = None,
+    convention: FilterConvention,
 ) -> dict:
     """Build preintegrated Feltre+2016 NLR grid, auto-collapsing Fixed axes.
 
@@ -147,24 +150,11 @@ def precompute(
 
     # Build the (n_lines, n_filt) filter projection matrix
     # Each row integrates one line's Gaussian through the filters
-    n_lines = len(grid.line_wavelengths_aa)
+    len(grid.line_wavelengths_aa)
     n_filt = len(filter_waves)
-    line_weight_matrix = np.zeros((n_lines, n_filt), dtype=np.float64)
-
-    for i_line, line_wave_aa in enumerate(grid.line_wavelengths_aa):
-        # Redshift line wavelength to observed frame
-        line_wave_obs = line_wave_aa * (1.0 + redshift)
-
-        # For each filter, integrate the line (delta or Gaussian) through the
-        # transmission curve. Using delta function: integrate transmission at
-        # the line wavelength via linear interpolation.
-        for i_filt, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
-            fw = np.asarray(fw)
-            ft = np.asarray(ft)
-            # Interpolate filter transmission at line wavelength
-            line_weight_matrix[i_line, i_filt] = np.interp(
-                line_wave_obs, fw, ft, left=0.0, right=0.0
-            )
+    line_weight_matrix = delta_line_matrix(
+        grid.line_wavelengths_aa, filter_waves, filter_trans, redshift, convention
+    )
 
     # Now build the continuum photometry grid (though Feltre has no continuum)
     # We still follow the protocol by returning a dummy continuum (zeros)

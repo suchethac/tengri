@@ -26,12 +26,9 @@ import re
 import pytest
 
 from tengri.inference._backend_registry import _BACKENDS
-from tengri.inference._hierarchical_flat import (
-    FLAT_SAMPLERS,
-    FLAT_UNSUPPORTED,
-    build_flat_problem,
-)
+from tengri.inference._hierarchical_flat import build_flat_problem
 from tengri.inference.hierarchical import PopulationFitter
+from tengri.inference.sampling.driver import method_map
 
 pytestmark = pytest.mark.regression_bug
 
@@ -51,13 +48,12 @@ def _tier(name):
 def test_every_registered_backend_is_accounted_for():
     """No backend is silently absent: it either has a runner or a stated reason.
 
-    Every registered backend is either driven (``_method_map`` or
-    ``FLAT_SAMPLERS``) or refused with an explanation (``FLAT_UNSUPPORTED``) —
-    that is the honest state; see the module docstring. The failure this
-    guards is a backend that is missing from BOTH tables, i.e. refused with a
-    generic error and no reason anyone can find later.
+    Every registered backend is driven (``_method_map`` or ``method_map()``,
+    which the sampler registry defines). The failure this guards is a backend
+    that is missing from both tables, i.e. refused with a generic error and no
+    reason anyone can find later.
     """
-    accounted = _method_map_keys() | set(FLAT_SAMPLERS) | set(FLAT_UNSUPPORTED)
+    accounted = _method_map_keys() | set(method_map())
     missing = sorted(set(_BACKENDS) - accounted)
     assert not missing, f"backends neither driven nor explained: {missing}"
 
@@ -82,9 +78,8 @@ def test_nss_is_driven_by_the_real_nested_slice_sampler(monkeypatch):
     log_likelihood + log_prior) is assumed correct; FlatProblem is declared to
     have these fields by test_flat_problem_exposes_a_separable_posterior.
     """
-    assert "nss" in FLAT_SAMPLERS, "the refusal is resolved; nss has a real driver (#1429)"
-    assert FLAT_SAMPLERS["nss"] == "nss"
-    assert "nss" not in FLAT_UNSUPPORTED
+    assert "nss" in method_map(), "the refusal is resolved; nss has a real driver (#1429)"
+    assert method_map()["nss"] == "nss"
     # The wiring must call the real sampler, not a rejection stand-in: the
     # driver builds the NSS algorithm and hands it the LIKELIHOOD alone (the
     # prior lives in the live-point draws and the probit transform).
@@ -288,7 +283,7 @@ def test_broken_tier_backends_stay_gated():
 
 
 def test_no_method_is_silently_substituted_for_another():
-    """A ``FLAT_SAMPLERS`` entry must run the algorithm its name promises.
+    """A ``method_map()`` entry must run the algorithm its name promises.
 
     ``mcmc_ess`` used to be rewritten to ``native_vi_linear`` with no warning.
     That silently handed back MGVI — and after #231 a tier="broken" backend — to
@@ -306,7 +301,7 @@ def test_no_method_is_silently_substituted_for_another():
 
     The _HIERARCHICAL_OVERRIDES grep is a defensible source check: it guards
     against a specific named anti-pattern (a dispatch table that renames
-    algorithms) reappearing. This is paired with the set(FLAT_SAMPLERS) ==
+    algorithms) reappearing. This is paired with the set(method_map()) ==
     assertion below, which enforces that every name runs the algorithm it
     promises — together they prevent silent substitution at the seam.
     """
@@ -325,7 +320,7 @@ def test_no_method_is_silently_substituted_for_another():
     # the iid N(0,1) its ellipse assumes; the MCLMC pair joined with their
     # blackjax (adjusted_)mclmc_find_L_and_step_size tuning, the piece whose
     # absence had kept them refused.
-    assert set(FLAT_SAMPLERS) == {
+    assert set(method_map()) == {
         "mcmc",
         "mcmc_nuts",
         "mcmc_hmc",
@@ -338,16 +333,26 @@ def test_no_method_is_silently_substituted_for_another():
         "laplace",
         "pathfinder",
         "nss",
+        # The nine names the seam used to refuse, driven by the shared sampler driver.
+        "mcmc_nuts_fast",
+        "mcmc_chees",
+        "mcmc_smc",
+        "hmc_is",
+        "vi_fullrank",
+        "vi_meanfield",
+        "mcmc_barker",
+        "mcmc_mala",
+        "mcmc_hmc_lowrank",
     }, (
-        "FLAT_SAMPLERS gained or lost a name; if the new name's driver truly "
+        "method_map() gained or lost a name; if the new name's driver truly "
         "implements that algorithm, update this set in the same commit"
     )
     # laplace joined once its driver computed what distinguishes it from map:
     # a Gaussian covariance from the negative Hessian at a GRADIENT-VERIFIED
     # mode (#1537: curvature off a mode is a plausible wrong answer). nss —
     # the founding refusal — joined last, when the in-tree Nested Slice
-    # Sampler was driven on the standardized problem (#1429), emptying
-    # FLAT_UNSUPPORTED for the first time.
+    # Sampler was driven on the standardized problem (#1429), leaving
+    # the refusal table empty; the table has since been removed.
 
 
 class _SentinelReached(Exception):
@@ -367,7 +372,7 @@ def _a_broken_tier_flat_method() -> str:
     because of what those cost.
     """
     for name in _BACKENDS:
-        if _tier(name) == "broken" and name in FLAT_SAMPLERS:
+        if _tier(name) == "broken" and name in method_map():
             return name
     pytest.skip("no tier='broken' backend is driven by this seam; the gate has no subject")
 
@@ -431,7 +436,7 @@ def test_the_unknown_method_error_derives_its_list():
 
     Asserted against the **produced message**. An earlier version of this test
     grepped ``run`` for the expression ``sorted(set(_method_map) |
-    set(FLAT_SAMPLERS)``, which pinned the shape of one particular fix rather
+    set(method_map())``, which pinned the shape of one particular fix rather
     than the property that matters: it went red when the derivation moved into
     ``_unknown_method_message`` even though the behavior was unchanged, and it
     could never have caught a message built correctly but never raised.
@@ -442,7 +447,7 @@ def test_the_unknown_method_error_derives_its_list():
     message = PopulationFitter._unknown_method_message("__nope__", {"vi_nonlinear_fast": None})
 
     assert "'vi_nonlinear_fast'" in message, "the NIFTy _method_map is missing from the advice"
-    assert "'mcmc_nuts'" in message, "the flat seam (FLAT_SAMPLERS) is missing from the advice"
+    assert "'mcmc_nuts'" in message, "the flat seam (method_map()) is missing from the advice"
 
     # And nothing the caller would be refused for taking.
     advertised_broken = sorted(
@@ -456,24 +461,14 @@ def test_the_unknown_method_error_derives_its_list():
     )
 
 
-@pytest.mark.parametrize("name", sorted(FLAT_SAMPLERS))
+@pytest.mark.parametrize("name", sorted(method_map()))
 def test_every_flat_sampler_names_a_real_backend_and_driver(name):
     """No entry may name a backend that does not exist or a driver that is not implemented."""
-    assert name in _BACKENDS, f"{name!r} is in FLAT_SAMPLERS but not registered"
-    driver = FLAT_SAMPLERS[name]
-    assert driver in {
-        "nuts",
-        "hmc",
-        "dynamic_hmc",
-        "ghmc",
-        "ess",
-        "mclmc",
-        "adjusted_mclmc",
-        "nuts_pathfinder",
-        "map",
-        "laplace",
-        "nss",
-    }, f"{name!r} declares unknown driver {driver!r}"
+    assert name in _BACKENDS, f"{name!r} is in method_map() but not registered"
+    driver = method_map()[name]
+    from tengri.inference.sampling.driver import sampler_names
+
+    assert driver in sampler_names(), f"{name!r} declares unknown driver {driver!r}"
 
 
 def test_declared_priors_map_exactly_through_the_seam():
@@ -618,7 +613,7 @@ def test_newton_polish_reaches_the_mode_adam_crawls_toward():
     """
     import jax.numpy as jnp
 
-    from tengri.inference._hierarchical_flat import _newton_polish
+    from tengri.inference.newton import newton_polish
 
     a = jnp.array([3.0, 0.5, 10.0])
     center = jnp.array([1.0, -2.0, 0.3])
@@ -631,7 +626,9 @@ def test_newton_polish_reaches_the_mode_adam_crawls_toward():
             return -0.5 * jnp.sum(a * (x - center) ** 2)
 
     start = center + jnp.array([0.8, -1.5, 0.2])
-    mode = _newton_polish(_Prob, start, tol=1e-8, max_iters=12)
+    mode, _, _, _ = newton_polish(
+        start, lambda x, _data: _Prob.log_prob(x), None, max_steps=12, tol=1e-8
+    )
     import jax
 
     gmax = float(jnp.max(jnp.abs(jax.grad(_Prob.log_prob)(mode))))
@@ -741,7 +738,7 @@ def test_nss_refuses_an_unconverged_evidence_integral():
     resampling then systematically misses the peak. Loud refusal naming the
     knob, not a diagnostics field nobody reads.
     """
-    from tengri.inference._hierarchical_flat import _require_converged_evidence
+    from tengri.inference.backends.evidence import _require_converged_evidence
 
     # converged: remaining evidence fraction below tolerance passes silently
     _require_converged_evidence(412, 10000, -3.5, -3.0, "nss")

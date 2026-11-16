@@ -39,6 +39,9 @@ from tengri.components.agn.nlr import (
     _RICHARDSON_FLUXES,
     _RICHARDSON_WAVES,
 )
+from tengri.utils.band_projection import delta_line_matrix
+from tengri.utils.filter_convention import FilterConvention
+from tengri.utils.physics_constants import GAUSSIAN_FWHM_PER_SIGMA
 
 # NLR Gaussian composer has no grid axes: all parameters are runtime.
 AXIS_PARAMS: tuple[str, ...] = ()
@@ -49,6 +52,7 @@ def precompute(
     filter_trans: list,
     redshift: float,
     parameters: Any,
+    convention: FilterConvention,
     **kwargs: Any,
 ) -> dict:
     """Build the NLR line filter-projection matrix.
@@ -80,16 +84,10 @@ def precompute(
     line_strengths = np.asarray(_RICHARDSON_FLUXES, dtype=np.float64)
     line_waves_obs = line_waves_rest * (1.0 + float(redshift))
 
-    n_lines = line_waves_obs.size
-    n_filt = len(filter_waves)
-    line_weight_matrix = np.zeros((n_lines, n_filt), dtype=np.float64)
-    for i_line, w_obs in enumerate(line_waves_obs):
-        for i_filt, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
-            fw_arr = np.asarray(fw)
-            ft_arr = np.asarray(ft)
-            line_weight_matrix[i_line, i_filt] = np.interp(
-                w_obs, fw_arr, ft_arr, left=0.0, right=0.0
-            )
+    len(filter_waves)
+    line_weight_matrix = delta_line_matrix(
+        line_waves_rest, filter_waves, filter_trans, redshift, convention
+    )
 
     return {
         "line_wavelengths_obs": jnp.asarray(line_waves_obs),
@@ -133,7 +131,7 @@ def build_lookup(preint: dict, **kwargs: Any):
     - ``l_disc_bol_erg``: bolometric disc luminosity [erg/s].
     - ``covering_fraction``: NLR covering fraction [0, 1].
     - ``sigma_nlr_kms``: Gaussian line width [km/s] (default
-      ``_NLR_FWHM_KMS / 2.355``).
+      ``_NLR_FWHM_KMS / GAUSSIAN_FWHM_PER_SIGMA``).
     - ``line_efficiency``: fraction of intercepted L converted to lines.
 
     """
@@ -146,7 +144,7 @@ def build_lookup(preint: dict, **kwargs: Any):
     def predict_nlr_photometry(
         l_disc_bol_erg,
         covering_fraction,
-        sigma_nlr_kms=_NLR_FWHM_KMS / 2.355,
+        sigma_nlr_kms=_NLR_FWHM_KMS / GAUSSIAN_FWHM_PER_SIGMA,
         line_efficiency=_NLR_LINE_EFFICIENCY,
     ):
         l_intercepted = covering_fraction * l_disc_bol_erg

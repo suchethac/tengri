@@ -45,7 +45,9 @@ def _green_loop_reference(ssp_flux, ssp_wave, filt_wave, filt_trans):
 def test_matches_per_age_loop():
     flux, wave = _ssp(37)
     fw, ft = _filter()
-    got = compute_green_function(flux, wave, filter_wave=fw, filter_trans=ft)
+    got = compute_green_function(
+        flux, wave, filter_wave=fw, filter_trans=ft, convention=FilterConvention.BESSELL
+    )
     want = _green_loop_reference(flux, wave, fw, ft)
     assert got.shape == (37,)
     np.testing.assert_allclose(np.asarray(got), np.asarray(want), rtol=1e-12)
@@ -58,7 +60,9 @@ def test_trace_size_independent_of_age_count():
         flux, wave = _ssp(n_age)
         return len(
             jax.make_jaxpr(
-                lambda f: compute_green_function(f, wave, filter_wave=fw, filter_trans=ft)
+                lambda f: compute_green_function(
+                    f, wave, filter_wave=fw, filter_trans=ft, convention=FilterConvention.BESSELL
+                )
             )(flux).eqns
         )
 

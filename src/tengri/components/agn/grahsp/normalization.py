@@ -46,6 +46,7 @@ from tengri.components.agn.grahsp.lines import (
 )
 from tengri.components.agn.grahsp.publication import bolometric_unit_nm
 from tengri.utils.host_array import device_table
+from tengri.utils.physics_constants import C_KM_S
 
 if TYPE_CHECKING:  # pragma: no cover
     from tengri.components.agn.grahsp.model import GRAHSPParams
@@ -160,7 +161,7 @@ def _line_power(line_wave_nm: Array, line_lumin_unit: Array, linewidth_kms: floa
     Its integral from the cut to infinity is ``L_i * 510 * erfc(x_i) / 2`` with
     ``x_i = (91.1753 - lam_i) / (sqrt(2) sigma_i)``, exact for any grid.
     """
-    width_nm = line_wave_nm * (linewidth_kms / 299792.458)
+    width_nm = line_wave_nm * (linewidth_kms / C_KM_S)
     sigma = width_nm * _FWHM_TO_SIGMA
     x = (BBB_BOL_CUT_NM - line_wave_nm) / (jnp.sqrt(2.0) * sigma)
     return jnp.sum(line_lumin_unit * LAMBDA_5100_NM * 0.5 * jsp_special.erfc(x))

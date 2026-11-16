@@ -453,13 +453,14 @@ class ShockNebular(SEDModelComponent):
 
                 z = jnp.asarray(p["redshift"])
                 shock_sed = published["sed_shock"]
+                convention = state.derived["phot_band_spec"].convention
                 published = {
                     **published,
                     "shock_phot_lnu_precomp": lnu_filter_integral_batch(
-                        shock_sed, state.wave, fw, ft, z
+                        shock_sed, state.wave, fw, ft, z, convention=convention
                     ),
                     "shock_restband_lnu_precomp": lnu_filter_integral_batch(
-                        shock_sed, state.wave, fw, ft, 0.0
+                        shock_sed, state.wave, fw, ft, 0.0, convention=convention
                     ),
                 }
 

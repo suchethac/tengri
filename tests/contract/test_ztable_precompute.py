@@ -23,6 +23,7 @@ from tengri.components.stellar.sps.precompute import (
     precompute_photometry_ztable,
 )
 from tengri.utils.cosmology import luminosity_distance
+from tengri.utils.filter_convention import FilterConvention
 from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.bounds
@@ -69,7 +70,9 @@ class TestZTablePrecomputation:
         leading dimension equals len(z_grid).
         """
         fw, ft = filters
-        zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=10)
+        zt = precompute_photometry_ztable(
+            ssp_data, fw, ft, n_z=10, convention=FilterConvention.BESSELL
+        )
         n_z_uniform = 10
         n_z_actual = len(zt.z_grid)
 
@@ -94,21 +97,27 @@ class TestZTablePrecomputation:
         """Custom z_grid is respected."""
         fw, ft = filters
         z_grid = jnp.array([0.01, 0.05, 0.1, 0.5, 1.0])
-        zt = precompute_photometry_ztable(ssp_data, fw, ft, z_grid=z_grid)
+        zt = precompute_photometry_ztable(
+            ssp_data, fw, ft, z_grid=z_grid, convention=FilterConvention.BESSELL
+        )
         assert_allclose(zt.z_grid, z_grid)
         assert zt.ssp_phot_table.shape[0] == 5
 
     def test_default_z_range(self, ssp_data, filters):
         """Default grid covers 0.001 to 3.0."""
         fw, ft = filters
-        zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=50)
+        zt = precompute_photometry_ztable(
+            ssp_data, fw, ft, n_z=50, convention=FilterConvention.BESSELL
+        )
         assert float(zt.z_grid[0]) == pytest.approx(0.001, abs=1e-6)
         assert float(zt.z_grid[-1]) == pytest.approx(3.0, abs=1e-6)
 
     def test_flux_scale_decreases_with_z(self, ssp_data, filters):
         """Flux scale decreases with redshift (farther = fainter)."""
         fw, ft = filters
-        zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=20)
+        zt = precompute_photometry_ztable(
+            ssp_data, fw, ft, n_z=20, convention=FilterConvention.BESSELL
+        )
         # flux_scale = (1+z)/(4π dL²) — dL grows faster than (1+z)
         # So flux_scale should generally decrease. Stored as log10 (#1859), and
         # log10 is monotone, so the ordering assertion is unchanged.
@@ -117,7 +126,9 @@ class TestZTablePrecomputation:
     def test_all_values_finite(self, ssp_data, filters):
         """All precomputed values are finite."""
         fw, ft = filters
-        zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=10)
+        zt = precompute_photometry_ztable(
+            ssp_data, fw, ft, n_z=10, convention=FilterConvention.BESSELL
+        )
         chex.assert_tree_all_finite(zt.ssp_phot_table)
         chex.assert_tree_all_finite(zt.eff_waves_rest_table)
         chex.assert_tree_all_finite(zt.log10_flux_scale_table)
@@ -136,11 +147,15 @@ class TestZTableInterpolationAccuracy:
 
         # Z-table with z_test on the grid
         z_grid = jnp.array([0.05, 0.1, 0.2, 0.5])
-        zt = precompute_photometry_ztable(ssp_data, fw, ft, z_grid=z_grid)
+        zt = precompute_photometry_ztable(
+            ssp_data, fw, ft, z_grid=z_grid, convention=FilterConvention.BESSELL
+        )
 
         # Fixed-z precomputation
         dl_cm = luminosity_distance(z_test)
-        fixed = precompute_photometry(ssp_data, fw, ft, z_test, dl_cm)
+        fixed = precompute_photometry(
+            ssp_data, fw, ft, z_test, dl_cm, convention=FilterConvention.BESSELL
+        )
 
         # Interpolate z-table
         ssp_phot_interp, eff_rest_interp, log10_flux_scale_interp = interpolate_ztable(
@@ -169,11 +184,15 @@ class TestZTableInterpolationAccuracy:
         z_test = 0.15  # between grid points
 
         # Dense z-table
-        zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=200)
+        zt = precompute_photometry_ztable(
+            ssp_data, fw, ft, n_z=200, convention=FilterConvention.BESSELL
+        )
 
         # Exact at z_test
         dl_cm = luminosity_distance(z_test)
-        fixed = precompute_photometry(ssp_data, fw, ft, z_test, dl_cm)
+        fixed = precompute_photometry(
+            ssp_data, fw, ft, z_test, dl_cm, convention=FilterConvention.BESSELL
+        )
 
         # Interpolated
         ssp_phot_interp, _, log10_flux_scale_interp = interpolate_ztable(
@@ -209,7 +228,9 @@ class TestZTableGradients:
     def test_gradient_wrt_z_finite(self, ssp_data, filters):
         """Gradient w.r.t. redshift is finite (z is differentiable)."""
         fw, ft = filters
-        zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=20)
+        zt = precompute_photometry_ztable(
+            ssp_data, fw, ft, n_z=20, convention=FilterConvention.BESSELL
+        )
 
         def loss(z):
             ssp_phot, eff_rest, flux_scale = interpolate_ztable(
@@ -233,7 +254,9 @@ class TestZTableGradients:
     def test_gradient_nonzero(self, ssp_data, filters):
         """Gradient w.r.t. z is nonzero (z actually affects the output)."""
         fw, ft = filters
-        zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=20)
+        zt = precompute_photometry_ztable(
+            ssp_data, fw, ft, n_z=20, convention=FilterConvention.BESSELL
+        )
 
         def loss(z):
             ssp_phot, eff_rest, _ = interpolate_ztable(
@@ -251,7 +274,9 @@ class TestZTableGradients:
     def test_jit_compatible(self, ssp_data, filters):
         """Z-table interpolation works inside jax.jit."""
         fw, ft = filters
-        zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=10)
+        zt = precompute_photometry_ztable(
+            ssp_data, fw, ft, n_z=10, convention=FilterConvention.BESSELL
+        )
 
         @jax.jit
         def fn(z):
@@ -280,7 +305,9 @@ class TestZTableSmoothInterpolation:
     def test_output_shapes(self, ssp_data, filters):
         """Smooth interpolation returns the same shapes as interpolate_ztable."""
         fw, ft = filters
-        zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=20)
+        zt = precompute_photometry_ztable(
+            ssp_data, fw, ft, n_z=20, convention=FilterConvention.BESSELL
+        )
         ssp_phot, eff_rest, flux_scale = interpolate_ztable_smooth(
             zt.ssp_phot_table,
             zt.eff_waves_rest_table,
@@ -296,7 +323,9 @@ class TestZTableSmoothInterpolation:
     def test_all_values_finite(self, ssp_data, filters):
         """Smooth interpolation returns only finite values."""
         fw, ft = filters
-        zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=20)
+        zt = precompute_photometry_ztable(
+            ssp_data, fw, ft, n_z=20, convention=FilterConvention.BESSELL
+        )
         ssp_phot, eff_rest, flux_scale = interpolate_ztable_smooth(
             zt.ssp_phot_table,
             zt.eff_waves_rest_table,
@@ -312,7 +341,9 @@ class TestZTableSmoothInterpolation:
     def test_gradient_wrt_z_finite(self, ssp_data, filters):
         """Gradient w.r.t. z is finite (z is differentiable through the kernel)."""
         fw, ft = filters
-        zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=20)
+        zt = precompute_photometry_ztable(
+            ssp_data, fw, ft, n_z=20, convention=FilterConvention.BESSELL
+        )
         scatter = self._scatter(zt)
 
         def loss(z):
@@ -344,7 +375,9 @@ class TestZTableSmoothInterpolation:
         should be much quieter (lower std of consecutive differences).
         """
         fw, ft = filters
-        zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=20)
+        zt = precompute_photometry_ztable(
+            ssp_data, fw, ft, n_z=20, convention=FilterConvention.BESSELL
+        )
         scatter = self._scatter(zt)
 
         # Dense z sweep covering 6 full grid intervals
@@ -392,12 +425,16 @@ class TestZTableSmoothInterpolation:
         use a dense grid (n_z ≥ 200) in production to keep errors small.
         """
         fw, ft = filters
-        zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=200)
+        zt = precompute_photometry_ztable(
+            ssp_data, fw, ft, n_z=200, convention=FilterConvention.BESSELL
+        )
         scatter = self._scatter(zt)
 
         z_test = 0.15
         dl_cm = luminosity_distance(z_test)
-        fixed = precompute_photometry(ssp_data, fw, ft, z_test, dl_cm)
+        fixed = precompute_photometry(
+            ssp_data, fw, ft, z_test, dl_cm, convention=FilterConvention.BESSELL
+        )
 
         ssp_phot, _, _ = interpolate_ztable_smooth(
             zt.ssp_phot_table,
@@ -415,7 +452,9 @@ class TestZTableSmoothInterpolation:
     def test_jit_compatible(self, ssp_data, filters):
         """Smooth interpolation works inside jax.jit."""
         fw, ft = filters
-        zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=20)
+        zt = precompute_photometry_ztable(
+            ssp_data, fw, ft, n_z=20, convention=FilterConvention.BESSELL
+        )
         scatter = self._scatter(zt)
 
         @jax.jit

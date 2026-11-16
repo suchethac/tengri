@@ -63,16 +63,17 @@ __all__ = [
 #: layout, dtype convention). Entries keyed with an older version are ignored.
 #: 3 -> 4: the sub-band node table is evaluated in one jitted program over z
 #: (#2769); values move by up to ~4e-14 relative from the eager per-z loop.
-_CACHE_VERSION = 4
+_CACHE_VERSION = 5
 
 #: Version of the exact-fold ratio table (:class:`ExactFoldRequest`), separate
 #: from :data:`_CACHE_VERSION` because the two tables change for different
 #: reasons. Bump when :mod:`tengri.components.igm.exact_fold` changes what it stores.
-_EXACT_FOLD_CACHE_VERSION = 4
+_EXACT_FOLD_CACHE_VERSION = 5
 #: 1 -> 2: the entry stores (ratio, with-IGM nodes) stacked, not the ratio alone.
 #: 2 -> 3: the cached with-IGM stellar nodes are weighted by the exact young/old split.
 #: 3 -> 4: sub-band integrals are read off node weights, not as differences of one
 #: running total (#2769); faint-chunk ratios and nodes move by up to 2.5e-7 relative.
+#: 4 -> 5: the entry stores (ratio, nodes, folded integral, folded numerator) stacked (#3541).
 
 #: File prefix of the exact-fold ratio tables; the node tables use the default.
 EXACT_FOLD_PREFIX = "igm_exact_fold"
@@ -120,19 +121,17 @@ class SubbandBandRequest(SubbandRequest):
     than dropped from the key.
     """
 
-    #: Tuple of (wave_key, trans_key) per filter, in order
-    filters: tuple
-    #: Filter convolution convention (str)
-    convention: str
+    #: ``BandSpec.key()``: filter curves, convention, sub-band scheme and Lyman gate
+    bands: str
 
 
 @dataclasses.dataclass(frozen=True)
 class ExactFoldRequest:
     """Every input of the exact-fold ratio table (``exact_fold.subband_fold_table``).
 
-    ``n_subbands``, ``lyc_gate`` and ``convention`` fix the sub-band partition
-    the ratio is taken over; a table built under one partition multiplies a
-    tensor built under another with no shape error, so each is its own field.
+    The ``bands`` digest (``BandSpec.key()``) fixes the sub-band partition the ratio is
+    taken over; a table built under one partition multiplies a tensor built under another
+    with no shape error, so every field of the spec is part of it.
     """
 
     #: Schema version (:data:`_EXACT_FOLD_CACHE_VERSION`)
@@ -141,18 +140,12 @@ class ExactFoldRequest:
     ssp_wave: tuple
     #: Array key for the SSP template cube
     ssp_flux: tuple
-    #: Tuple of (wave_key, trans_key) per filter, in order
-    filters: tuple
+    #: ``BandSpec.key()``: filter curves, convention, sub-band scheme and Lyman gate
+    bands: str
     #: Array key for the redshift grid
     z_grid: tuple
     #: IGM transmission law name
     igm_model: str
-    #: Base sub-band count K
-    n_subbands: int
-    #: Whether the partition carries the forced Lyman-limit edge
-    lyc_gate: bool
-    #: Filter convolution convention (the bandpass weight)
-    convention: str
     #: Whether JAX X64 mode is enabled
     x64: bool
     #: JAX backend name
@@ -221,7 +214,7 @@ def cache_key(waves_rest, z_grid, igm_model, *, igm_patchy=False, use_dla=False)
     return stable_digest(repr(frozen_dataclass_key(req)).encode())
 
 
-def band_factor_key(wave_rest, filter_waves, filter_trans, z_grid, igm_model, convention) -> str:
+def band_factor_key(wave_rest, bands, z_grid, igm_model) -> str:
     """Content hash for the filter-averaged band-factor table.
 
     A second key rather than a parameter on :func:`cache_key`, because the two
@@ -245,16 +238,13 @@ def band_factor_key(wave_rest, filter_waves, filter_trans, z_grid, igm_model, co
     ----------
     wave_rest : array_like
         Rest-frame wavelength grid [Angstrom].
-    filter_waves, filter_trans : sequence of array_like
-        Per-filter wavelength and transmission curves. Hashed in order: the
-        table is indexed by filter position, so a reordering is a different
-        table.
+    bands : BandSpec
+        Filter curves (hashed in order: the table is indexed by filter position, so a
+        reordering is a different table), convention, sub-band scheme and Lyman gate.
     z_grid : array_like
         Redshift nodes.
     igm_model : str
         Transmission law name.
-    convention : Any
-        Filter convolution convention (ADR-0017); changes the integral.
 
     Returns
     -------
@@ -263,11 +253,6 @@ def band_factor_key(wave_rest, filter_waves, filter_trans, z_grid, igm_model, co
     """
     import jax
 
-    # Convert filter arrays to array_key tuples
-    filters_keyed = tuple(
-        (array_key(fw), array_key(ft)) for fw, ft in zip(filter_waves, filter_trans)
-    )
-
     req = SubbandBandRequest(
         version=_CACHE_VERSION,
         waves_rest=array_key(wave_rest),
@@ -275,8 +260,7 @@ def band_factor_key(wave_rest, filter_waves, filter_trans, z_grid, igm_model, co
         igm_model=str(igm_model),
         igm_patchy=False,
         use_dla=False,
-        filters=filters_keyed,
-        convention=str(convention),
+        bands=bands.key(),
         x64=bool(jax.config.jax_enable_x64),
         backend=jax.default_backend(),
     )
@@ -284,9 +268,7 @@ def band_factor_key(wave_rest, filter_waves, filter_trans, z_grid, igm_model, co
     return stable_digest(repr(frozen_dataclass_key(req)).encode())
 
 
-def exact_fold_key(
-    ssp_data, filters, z_grid, *, igm_model, n_subbands, lyc_gate, convention
-) -> str:
+def exact_fold_key(ssp_data, bands, z_grid, *, igm_model) -> str:
     """Content hash for the exact-fold ratio table.
 
     Includes session precision and backend for the reason given on
@@ -296,18 +278,12 @@ def exact_fold_key(
     ----------
     ssp_data : SSPData
         Template grid; hashed by wavelength grid and flux cube.
-    filters : sequence of (wave, trans) pairs
-        Filter curves, hashed in order.
+    bands : BandSpec
+        Filter curves (hashed in order), convention and the sub-band partition.
     z_grid : array_like
         Redshift nodes.
     igm_model : str
         Transmission law name.
-    n_subbands : int
-        Base sub-band count K.
-    lyc_gate : bool
-        Whether the partition carries the forced Lyman-limit edge.
-    convention : Any
-        Filter convolution convention.
 
     Returns
     -------
@@ -320,12 +296,9 @@ def exact_fold_key(
         version=_EXACT_FOLD_CACHE_VERSION,
         ssp_wave=array_key(ssp_data.ssp_wave),
         ssp_flux=array_key(ssp_data.ssp_flux),
-        filters=tuple((array_key(fw), array_key(ft)) for fw, ft in filters),
+        bands=bands.key(),
         z_grid=array_key(z_grid),
         igm_model=str(igm_model),
-        n_subbands=int(n_subbands),
-        lyc_gate=bool(lyc_gate),
-        convention=str(convention),
         x64=bool(jax.config.jax_enable_x64),
         backend=jax.default_backend(),
     )

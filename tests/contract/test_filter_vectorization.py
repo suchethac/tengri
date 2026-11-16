@@ -10,6 +10,8 @@ import jax
 import jax.numpy as jnp
 import pytest
 
+from tengri.utils.filter_convention import FilterConvention
+
 pytestmark = pytest.mark.bounds
 
 from tengri.observation.photometry import (
@@ -103,12 +105,19 @@ class TestComputeFluxDensityBatch:
 
         # Loop version
         loop = jnp.array(
-            [compute_flux_density(sed, wave, fw, ft, z, dl_cm) for fw, ft in zip(fws, fts)]
+            [
+                compute_flux_density(
+                    sed, wave, fw, ft, z, dl_cm, convention=FilterConvention.BESSELL
+                )
+                for fw, ft in zip(fws, fts)
+            ]
         )
 
         # Batch version
         fw_pad, ft_pad, _ = pad_filters(fws, fts)
-        batch = compute_flux_density_batch(sed, wave, fw_pad, ft_pad, z, dl_cm)
+        batch = compute_flux_density_batch(
+            sed, wave, fw_pad, ft_pad, z, dl_cm, convention=FilterConvention.BESSELL
+        )
 
         assert jnp.allclose(loop, batch, rtol=1e-12)
 
@@ -120,10 +129,17 @@ class TestComputeFluxDensityBatch:
         z, dl_cm = 0.3, 4.2e27
 
         loop = jnp.array(
-            [compute_flux_density(sed, wave, fw, ft, z, dl_cm) for fw, ft in zip(fws, fts)]
+            [
+                compute_flux_density(
+                    sed, wave, fw, ft, z, dl_cm, convention=FilterConvention.BESSELL
+                )
+                for fw, ft in zip(fws, fts)
+            ]
         )
         fw_pad, ft_pad, _ = pad_filters(fws, fts)
-        batch = compute_flux_density_batch(sed, wave, fw_pad, ft_pad, z, dl_cm)
+        batch = compute_flux_density_batch(
+            sed, wave, fw_pad, ft_pad, z, dl_cm, convention=FilterConvention.BESSELL
+        )
 
         assert jnp.allclose(loop, batch, rtol=1e-12)
 
@@ -134,10 +150,17 @@ class TestComputeFluxDensityBatch:
         z, dl_cm = 2.0, 1.5e28
 
         loop = jnp.array(
-            [compute_flux_density(sed, wave, fw, ft, z, dl_cm) for fw, ft in zip(fws, fts)]
+            [
+                compute_flux_density(
+                    sed, wave, fw, ft, z, dl_cm, convention=FilterConvention.BESSELL
+                )
+                for fw, ft in zip(fws, fts)
+            ]
         )
         fw_pad, ft_pad, _ = pad_filters(fws, fts)
-        batch = compute_flux_density_batch(sed, wave, fw_pad, ft_pad, z, dl_cm)
+        batch = compute_flux_density_batch(
+            sed, wave, fw_pad, ft_pad, z, dl_cm, convention=FilterConvention.BESSELL
+        )
 
         assert jnp.allclose(loop, batch, rtol=1e-12)
 
@@ -147,9 +170,13 @@ class TestComputeFluxDensityBatch:
         ft = [jnp.exp(-0.5 * ((fw[0] - 4500.0) / 200.0) ** 2)]
         z, dl_cm = 0.1, 1.4e27
 
-        loop = compute_flux_density(sed, wave, fw[0], ft[0], z, dl_cm)
+        loop = compute_flux_density(
+            sed, wave, fw[0], ft[0], z, dl_cm, convention=FilterConvention.BESSELL
+        )
         fw_pad, ft_pad, _ = pad_filters(fw, ft)
-        batch = compute_flux_density_batch(sed, wave, fw_pad, ft_pad, z, dl_cm)
+        batch = compute_flux_density_batch(
+            sed, wave, fw_pad, ft_pad, z, dl_cm, convention=FilterConvention.BESSELL
+        )
 
         assert jnp.allclose(loop, batch[0], rtol=1e-12)
 
@@ -169,6 +196,7 @@ class TestComputeFluxDensityBatch:
                     ft_pad,
                     z,
                     dl_cm,
+                    convention=FilterConvention.BESSELL,
                 )
             )
 
@@ -191,6 +219,7 @@ class TestComputeFluxDensityBatch:
                 ft_pad,
                 z,
                 dl_cm,
+                convention=FilterConvention.BESSELL,
             )
 
         result = compute(sed)

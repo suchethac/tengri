@@ -62,7 +62,8 @@ def preintegrate_ssp_filter_grid(
     filter_waves: Sequence[jnp.ndarray],
     filter_trans: Sequence[jnp.ndarray],
     redshift: float = 0.0,
-    convention: FilterConvention = FilterConvention.BESSELL,
+    *,
+    convention: FilterConvention,
 ) -> jnp.ndarray:
     r"""Convolve every SSP template with every filter at construction time.
 

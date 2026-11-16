@@ -56,6 +56,8 @@ from tengri.components.nebular.cloudy_cb19 import (
     load_cb19_grid,
 )
 from tengri.forward.precompute.templates import collapse_fixed_axes
+from tengri.utils.band_projection import delta_line_matrix
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
     library_lookup,
@@ -99,6 +101,7 @@ def precompute(
     imf: str = "Kroupa01",
     mup: float = 100.0,
     hbfrac: float = 1.0,
+    convention: FilterConvention,
 ) -> dict:
     """Build preintegrated CB19 grid, auto-collapsing Fixed axes.
 
@@ -179,22 +182,11 @@ def precompute(
 
     # Build the (n_lines, n_filt) filter projection matrix
     # Each row integrates one emission line (delta function) through filter curves
-    n_lines = len(grid.line_wavelengths)
+    len(grid.line_wavelengths)
     n_filt = len(filter_waves)
-    line_weight_matrix = np.zeros((n_lines, n_filt), dtype=np.float64)
-
-    for i_line, line_wave_aa in enumerate(grid.line_wavelengths):
-        # Redshift line wavelength to observed frame
-        line_wave_obs = float(line_wave_aa) * (1.0 + redshift)
-
-        # For each filter, integrate the line (delta function) through transmission
-        for i_filt, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
-            fw = np.asarray(fw)
-            ft = np.asarray(ft)
-            # Interpolate filter transmission at line wavelength (delta function)
-            line_weight_matrix[i_line, i_filt] = np.interp(
-                line_wave_obs, fw, ft, left=0.0, right=0.0
-            )
+    line_weight_matrix = delta_line_matrix(
+        grid.line_wavelengths, filter_waves, filter_trans, redshift, convention
+    )
 
     # Build grid axes from CB19 data (6 axes; HbFrac was already collapsed above,
     # not an axis for this adapter).

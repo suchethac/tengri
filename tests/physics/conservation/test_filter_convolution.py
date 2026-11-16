@@ -9,6 +9,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid_interp import preintegrate_grid
 
 pytestmark = pytest.mark.conservation
@@ -89,7 +90,9 @@ class TestPreintegrateGridSSPCrossval:
         dl_cm = float(luminosity_distance(z))
 
         # Reference: precompute_photometry (now delegates to preintegrate_grid)
-        phot_ref = precompute_photometry(ssp, filter_waves, filter_trans, z, dl_cm)
+        phot_ref = precompute_photometry(
+            ssp, filter_waves, filter_trans, z, dl_cm, convention=FilterConvention.BESSELL
+        )
 
         # Direct: preintegrate_grid (independent code path for verification)
         result = preintegrate_grid(
@@ -99,6 +102,7 @@ class TestPreintegrateGridSSPCrossval:
             filter_trans,
             redshift=z,
             dl_cm=dl_cm,
+            convention=FilterConvention.BESSELL,
         )
 
         # Conservation: should be identical (energy integral invariant)
@@ -132,7 +136,14 @@ class TestTaylorMomentConservation:
         filter_trans = [jnp.ones(30), jnp.ones(30)]
 
         result = preintegrate_grid(
-            template, wave, filter_waves, filter_trans, redshift=0.0, dl_cm=1e28, taylor=True
+            template,
+            wave,
+            filter_waves,
+            filter_trans,
+            redshift=0.0,
+            dl_cm=1e28,
+            taylor=True,
+            convention=FilterConvention.BESSELL,
         )
 
         # Moment should be small (zero by moment definition)

@@ -82,6 +82,7 @@ from tengri.parameters.resolve import merge_fixed_params
 from tengri.parameters.timing import reference_timing_fracs
 from tengri.parameters.translate import LOG10_ZSUN
 from tengri.protocols.component import declared_default
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid_interp import interp_nd_pchip
 from tengri.utils.host_array import device_table
 from tengri.utils.scale import apply_log10_scale, pow10, representable_floor
@@ -407,6 +408,9 @@ class NebularGridTable:
     cont_subband_waves_rest: jnp.ndarray | None = None
     band_filter_waves: tuple = ()
     band_filter_trans: tuple = ()
+    #: Bandpass weight the table's band channels were integrated with (the observation's
+    #: ``BandSpec.convention``); the runtime kernels read it, so build and apply agree.
+    band_convention: FilterConvention | None = None
 
     @property
     def serves_split_bands(self) -> bool:
@@ -748,6 +752,258 @@ def _refuse_tabulated_metallicity(model):
         "exact line path (WavePrecomp alone is unaffected and still applies), or "
         "use a parametric metallicity: a tabulated SFH with a free met_logzsol "
         "is supported and agrees with exact to 0.3% (#1718)."
+    )
+
+
+# Shape probe (#3526). The per-Q_H table is built on a constant-SFR stand-in, and the
+# per-photon line luminosity depends on the ionizing spectrum, which depends on the
+# SFH: a quenched history's ionizing mix differs from the stand-in's. A tabulated SFH
+# is runtime data the build cannot see, so the probe measures one quenched reference
+# history against the stand-in, at the grid center, and refuses the grid when they differ.
+#: Delayed-tau reference history [Gyr] of the probe: the quenched shape of #3526.
+_SHAPE_PROBE_TAU_GYR = 0.5
+#: Tolerance on the probe's worst strong-line departure [relative]. Measured at the grid
+#: center (z = 0.1, a quenched tau = 0.5 Gyr history against the constant-SFR stand-in):
+#: MIST C3K hr noNE departs 85 % (OIII_5007 1.85x); fsps_prsc_miles_chabrier departs
+#: 0.14 % (OIII_5007 0.9986x). At the #1718 test point (logU -2.5, logZ_gas -0.2,
+#: met -0.3) MIST OIII is 3.16x, the issue's 3.2x. 5 % sits between the two grids.
+_SHAPE_DRIFT_TOL = 0.05
+#: Lines weaker than this fraction of the strongest per-photon line are not judged.
+_SHAPE_PROBE_LINE_FLOOR = 1e-3
+
+
+class NebularShapeDriftError(ValueError):
+    """An explicit FeaturePrecomp whose ionizing shape departs from its stand-in (#3526).
+
+    The ``approx="auto"`` policy catches exactly this class and falls back to the exact
+    line path with a warning; every other error surfaces.
+
+    Attributes
+    ----------
+    line : str
+        The strongest-departing target line, named from the line catalog when possible.
+    ratio : float
+        Per-photon luminosity of the reference history over the stand-in, for that line.
+    departure : float
+        ``|ratio - 1|``, the relative departure the tolerance is applied to.
+    """
+
+    def __init__(self, message: str, *, line: str, ratio: float, departure: float):
+        super().__init__(message)
+        self.line = line
+        self.ratio = ratio
+        self.departure = departure
+
+
+def _quenched_reference_history(ref_params):
+    """The stand-in's time axis carrying a delayed-tau quenched SFH (#3526 probe).
+
+    Peak-normalized to 40 Msun/yr; the table is per-Q_H, so the amplitude divides out.
+    """
+    t = np.asarray(ref_params["sfh_t_gyr"])
+    sfr = (t / _SHAPE_PROBE_TAU_GYR) * np.exp(-t / _SHAPE_PROBE_TAU_GYR)
+    sfr = sfr * (40.0 / sfr.max())
+    sfr[0] = 0.0
+    return {**ref_params, "sfh_sfr": jnp.asarray(sfr)}
+
+
+def _log10_line_per_qh_eager(model, p, wavelengths):
+    """log10 of the per-Q_H line fluxes at one point, eagerly (build-time probe).
+
+    Distance and IGM factors are omitted: both histories are evaluated at the same
+    wavelengths and redshift, so they cancel in the ratio the probe takes.
+    """
+    state = model.predict_state(p, fixed_values={})
+    log_nion = float(_log_nion_of_state(state))
+    flux = model.predict_line_fluxes(
+        p,
+        target_wavelengths=wavelengths,
+        redden=False,
+        state=state,
+        params_are_resolved=True,
+    )
+    with np.errstate(divide="ignore"):
+        return np.log10(np.asarray(flux, dtype=float)) - log_nion
+
+
+def _line_names(wavelengths) -> list[str]:
+    """Catalog names for the target lines, falling back to the wavelength."""
+    from tengri.observation.line_list import LineList
+
+    cat = LineList.default_optical()
+    names = []
+    for w in np.asarray(wavelengths, dtype=float):
+        near = np.argmin(np.abs(np.asarray(cat.wavelengths, dtype=float) - w))
+        ok = abs(float(cat.wavelengths[near]) - w) < 1.0
+        names.append(str(cat.names[near]) if ok else f"{w:.1f} A")
+    return names
+
+
+def _probe_wavelengths(wavelengths):
+    """The lines the probe judges: the grid's targets, else the strong optical set.
+
+    A photometry-only grid tabulates no target lines, but the probe still needs lines to
+    judge the ionizing shape by, so it falls back to the four strongest optical lines.
+    """
+    if len(np.asarray(wavelengths)) > 0:
+        return jnp.asarray(wavelengths)
+    from tengri.observation.line_list import LineList
+
+    cat = LineList.default_optical()
+    wanted = ("Hbeta", "OIII_5007", "Halpha", "NII_6584")
+    pairs = [(n, w) for n, w in zip(cat.names, cat.wavelengths, strict=True) if n in wanted]
+    return jnp.asarray([float(w) for _, w in pairs])
+
+
+def probe_ionizing_shape_drift(model, ref_params, *, axes, axis_names, wavelengths):
+    """Worst strong-line departure of a quenched history from the stand-in (#3526).
+
+    One point, the grid center: the per-photon line luminosity of the stand-in and of a
+    delayed-tau quenched history (``_SHAPE_PROBE_TAU_GYR``), both evaluated eagerly. A
+    real history weights the ionizing regimes by their photons, so this is the shape a
+    quenched history actually produces.
+
+    Returns
+    -------
+    tuple or None
+        ``(departure, line, ratio)``: the worst relative departure over the judged lines,
+        the line's name and the quenched/stand-in per-photon ratio. ``None`` for a
+        parametric SFH (no tabulated history to probe) or when no line is judged.
+    """
+    if "sfh_t_gyr" not in ref_params:
+        return None
+    waves = _probe_wavelengths(wavelengths)
+    center = {n: jnp.asarray(float(a[len(a) // 2])) for n, a in zip(axis_names, axes, strict=True)}
+    quenched = _quenched_reference_history(ref_params)
+    std = _log10_line_per_qh_eager(model, {**ref_params, **center}, waves)
+    qnc = _log10_line_per_qh_eager(model, {**quenched, **center}, waves)
+    lin_std = 10.0**std
+    ok = (
+        np.isfinite(std)
+        & np.isfinite(qnc)
+        & (lin_std > _SHAPE_PROBE_LINE_FLOOR * np.nanmax(lin_std))
+    )
+    if not np.any(ok):
+        return None
+    ratios = np.where(ok, 10.0 ** (qnc - np.where(ok, std, 0.0)), np.nan)
+    departures = np.where(ok, np.abs(ratios - 1.0), -np.inf)
+    index = int(np.argmax(departures))
+    return float(departures[index]), _line_names(waves)[index], float(ratios[index])
+
+
+def _is_sfh_normalization(name: str) -> bool:
+    """True for a parameter that only sets the SFH's amplitude, never its shape.
+
+    Every parametric family renormalizes its SFR to ``10**log_total_mass``
+    (``sfh_<family>_log_total_mass``), so the per-photon lines, which divide Q_H out,
+    do not depend on it. Any other ``sfh_*`` parameter can change the shape.
+    """
+    return name.startswith("sfh_") and name.endswith("_log_total_mass")
+
+
+def _has_free_sfh(spec) -> bool:
+    """True when the SFH has a free parameter that can change its shape (#3526).
+
+    A free amplitude alone (``log_total_mass``) leaves the shape fixed, so the
+    grid's per-photon lines are the same for every draw and no probe is needed.
+    """
+    return any(
+        str(name).startswith("sfh_") and not _is_sfh_normalization(str(name))
+        for name in spec.free_params
+    )
+
+
+def _tabulated_sfh_twin(model):
+    """The model rebuilt with a tabulated SFH: same SSP, nebular, dust and observation.
+
+    The probe needs to run a quenched history through the same nebular and SSP, which
+    a parametric SFH cannot take at runtime. The twin is the exact build with the SFH
+    group swapped for ``{'type': 'table'}``; the rest of the grammar is round-tripped
+    through ``to_dict``.
+
+    Raises
+    ------
+    Exception
+        Whatever the build raises; the caller turns it into a refusal (#3526).
+    """
+    from tengri.forward.sed_model import SEDModel
+
+    groups = dict(model.to_dict())
+    groups["sfh"] = {"type": "table"}
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return SEDModel.build(ssp_data=model.ssp_data, observation=model.observation, **groups)
+
+
+def _twin_probe_params(twin, ref_params):
+    """The model's reference point with the twin's own stand-in history in place."""
+    kept = {k: v for k, v in ref_params.items() if not str(k).startswith("sfh_")}
+    return {
+        **kept,
+        **reference_history_params(twin, redshift=float(ref_params["redshift"])),
+    }
+
+
+def _refuse_ionizing_shape_drift(model, ref_params, *, axes, axis_names, wavelengths):
+    """Refuse a table whose per-photon lines move with a quenched history (#3526).
+
+    Which model the probe runs on depends on the SFH:
+
+    - tabulated: the model itself (its history is runtime data);
+    - free parametric: a tabulated twin of the model (its history is unknown at build);
+      if the twin cannot be built the grid is refused, never silently built unverified;
+    - fixed parametric: nothing to probe. The table is built on the model's own fixed
+      history (``ref_params`` carries it), so its per-photon lines are that history's by
+      construction, not a stand-in's.
+
+    Raises
+    ------
+    NebularShapeDriftError
+        When the worst judged line departs from the quenched history by more than
+        ``_SHAPE_DRIFT_TOL``, or when the probe's twin cannot be built.
+    """
+    if "sfh_t_gyr" in ref_params:
+        probe_model, probe_params = model, ref_params
+    elif _has_free_sfh(model.spec):
+        try:
+            twin = _tabulated_sfh_twin(model)
+        except Exception as exc:
+            raise NebularShapeDriftError(
+                f"FeaturePrecomp cannot verify this grid: the shape probe runs on a "
+                f"tabulated twin of the model (sfh={{'type': 'table'}}, same SSP, nebular "
+                f"and observation), and building that twin failed ({exc}). The table is "
+                f"refused unverified rather than built silently. Fix: use the exact Cue "
+                f"path (no FeaturePrecomp). See #3526.",
+                line="(probe unavailable)",
+                ratio=float("nan"),
+                departure=float("nan"),
+            ) from exc
+        probe_model, probe_params = twin, _twin_probe_params(twin, ref_params)
+    else:
+        return
+    probed = probe_ionizing_shape_drift(
+        probe_model,
+        probe_params,
+        axes=axes,
+        axis_names=axis_names,
+        wavelengths=wavelengths,
+    )
+    if probed is None or probed[0] <= _SHAPE_DRIFT_TOL:
+        return
+    departure, line, ratio = probed
+    grid = ", ".join(axis_names) or "no free axes"
+    raise NebularShapeDriftError(
+        f"FeaturePrecomp refuses this grid (axes: {grid}). Its per-photon line table is "
+        f"built on a constant-SFR stand-in history, and the SFH is not known at build "
+        f"(a free or tabulated history). For line {line}, the per-photon luminosity of a "
+        f"quenched delayed-tau = {_SHAPE_PROBE_TAU_GYR:g} Gyr history is {ratio:.3f}x the "
+        f"stand-in's, a {departure:.1%} departure, above the {_SHAPE_DRIFT_TOL:.0%} "
+        f"tolerance. The cause: this history's ionizing spectrum differs from the "
+        f"constant-SFR stand-in the table was built on. Fix: use the exact Cue path (no "
+        f"FeaturePrecomp; WavePrecomp alone keeps the photometry table). See #3526.",
+        line=line,
+        ratio=ratio,
+        departure=departure,
     )
 
 
@@ -1361,6 +1617,16 @@ def precompute_nebular_grid(
             axis_kinds.append("pchip")
     axes = tuple(axes)
     axis_kinds = tuple(axis_kinds)
+    # The table is built on the stand-in; a tabulated SFH is runtime data the build cannot
+    # see, so the table is refused when a quenched history moves the per-photon lines past
+    # the tolerance (#3526).
+    _refuse_ionizing_shape_drift(
+        model,
+        ref_params,
+        axes=axes,
+        axis_names=axis_names,
+        wavelengths=wavelengths,
+    )
 
     def _params_at(point_values):
         """Resolved reference parameters with the grid axes set to ``point_values``."""
@@ -1379,6 +1645,9 @@ def precompute_nebular_grid(
     # The band channels can be split (lines + continuum) only where the model
     # carries the filters the photometry is projected through.
     can_split = filter_waves is not None and filter_trans is not None
+    band_spec = getattr(neb_state, "band_spec", None)
+    # Without filters no band channel is built and the weight is never read.
+    convention = None if band_spec is None else band_spec.convention
 
     def _split_row(p, state, neg_log_qh):
         """(continuum, line waves, log line luminosities), each per unit Q_H."""
@@ -1587,6 +1856,7 @@ def precompute_nebular_grid(
             request=request,
             n_z=n_z,
             n_subbands=n_subbands if collect_sed else None,
+            convention=convention,
         )
     dust_channels = _build_dust_channels(
         model,
@@ -1600,6 +1870,7 @@ def precompute_nebular_grid(
         dust_component=dust_component,
         eb_tau_grids=eb_tau_grids,
         n_subbands=n_subbands,
+        convention=convention,
     )
 
     return NebularGridTable(
@@ -1629,6 +1900,7 @@ def _split_band_fields(
     request,
     n_z,
     n_subbands=None,
+    convention: FilterConvention,
 ) -> dict:
     """The redshift-dependent band channels of :class:`NebularGridTable`.
 
@@ -1677,7 +1949,9 @@ def _split_band_fields(
                 jnp.asarray(sed_line_waves), unit, jnp.asarray(wave_np), 0.0, sigma
             )
         )(jnp.eye(n_lines))
-        kernel = rendered_line_band_kernel(profiles, wave_np, filter_waves, filter_trans, ref_z)
+        kernel = rendered_line_band_kernel(
+            profiles, wave_np, filter_waves, filter_trans, ref_z, convention=convention
+        )
     else:
         z_lo, z_hi, n_default = request
         if z_hi <= z_lo:
@@ -1685,7 +1959,9 @@ def _split_band_fields(
         lnz = ln1pz_grid(z_lo, z_hi, max(2, int(n_z if n_z is not None else n_default)))
         kernel = None
 
-    table = continuum_ztable(cont_nodes, wave_np, filter_waves, filter_trans, lnz)
+    table = continuum_ztable(
+        cont_nodes, wave_np, filter_waves, filter_trans, lnz, convention=convention
+    )
     zero = np.all(table <= 0.0, axis=0)  # (n_z, n_filter): exactly dark at every node
     positive = table[table > 0.0]
     floor = 1e-3 * float(positive.min()) if positive.size else 1e-300
@@ -1706,7 +1982,9 @@ def _split_band_fields(
         frac = np.zeros((lnz.size, n_filt, k))
         lam = np.zeros_like(frac)
         for iz, z in enumerate(np.expm1(lnz)):
-            phi, lam_z = _nebular_subband_channels(mid, wave_np, filters_np, float(z), k)
+            phi, lam_z = _nebular_subband_channels(
+                mid, wave_np, filters_np, float(z), k, convention
+            )
             tot = phi[0].sum(axis=-1, keepdims=True)
             frac[iz] = np.where(tot > 0.0, phi[0] / np.where(tot > 0.0, tot, 1.0), 1.0 / k)
             lam[iz] = lam_z[0]
@@ -1739,6 +2017,7 @@ def _split_band_fields(
         "cont_keep": jnp.asarray(~zero),
         "band_filter_waves": tuple(jnp.asarray(fw) for fw in filter_waves),
         "band_filter_trans": tuple(jnp.asarray(ft) for ft in filter_trans),
+        "band_convention": convention,
     }
 
 
@@ -1873,7 +2152,12 @@ def reconstruct_nebular_line_log_lums(log_nion, params, table) -> jnp.ndarray:
 
 
 def reconstruct_nebular_phot(
-    log_nion, params, table, redshift=None, *, packed: bool = False
+    log_nion,
+    params,
+    table,
+    redshift=None,
+    *,
+    packed: bool = False,
 ) -> jnp.ndarray:
     r"""Reconstruct the intrinsic nebular photometry precompute: no Cue forward.
 
@@ -1979,7 +2263,11 @@ def reconstruct_nebular_phot(
         kernel = table.line_band_kernel_fixed
     else:
         kernel = delta_line_band_kernel(
-            redshift, table.sed_line_waves, table.band_filter_waves, table.band_filter_trans
+            redshift,
+            table.sed_line_waves,
+            table.band_filter_waves,
+            table.band_filter_trans,
+            convention=table.band_convention,
         )
     lit = kernel > 0.0
     safe = jnp.where(lit, kernel, 1.0)

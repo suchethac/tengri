@@ -15,6 +15,7 @@ from tengri import Parameters, SEDModel, WavePrecomp
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.observation import Observation, Photometry
 from tengri.parameters.priors import Fixed, Uniform
+from tengri.utils.filter_convention import FilterConvention
 
 pytestmark = pytest.mark.conservation
 
@@ -98,6 +99,7 @@ class TestStellarPhotometryConsistency:
                     ft,
                     redshift=z,
                     dl_cm=dl_cm,
+                    convention=FilterConvention.BESSELL,
                 )
                 for fw, ft in zip(
                     m.observation.photometry.filter_waves,

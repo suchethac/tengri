@@ -195,6 +195,7 @@ from tengri.components.nebular._shared import (
 )
 from tengri.components.nebular.ionizing_spectrum import require_ionizing_coverage
 from tengri.config.exceptions import ParameterError, TengriIOError
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
     PreintegratedLines,
@@ -762,6 +763,14 @@ _compute_log_qh_grid = jax.vmap(
 # ── Main backend class ────────────────────────────────────────────
 
 
+class CB19WNESSPError(ValueError):
+    """Raised when CB19Backend is constructed with an explicitly named wNE SSP (#3465).
+
+    Mirrors :class:`~tengri.components.nebular.cue.CueWNESSPError`. Not bypassable by a
+    switch: the flag is metadata, with no false-positive mode.
+    """
+
+
 class CB19Backend(NebularBackendDefaults):
     """CB_19 CLOUDY grid-based nebular emission backend.
 
@@ -900,6 +909,17 @@ class CB19Backend(NebularBackendDefaults):
         ionizing_source_warning: str = "warn",
         continuum_warning: str = "warn",
     ) -> None:
+        # Metadata check first (#3465, mirrors CueBackend and CloudyGridBackend): a grid
+        # flagged nebular-included already carries CLOUDY emission, and CB19 on top would
+        # double-count it. Checked before the grid loads, so it is the refusal a user sees.
+        # The default wNE grid never reaches here: build() pairs it with its bare twin.
+        if ssp_data is not None and getattr(ssp_data, "nebular", "unknown") == "included":
+            raise CB19WNESSPError(
+                "CB19Backend received an SSP flagged nebular-included (wNE): nebular "
+                "continuum and lines are already baked into the templates, so adding CB_19 "
+                "on top double-counts nebular emission. Fix: use the bare stellar twin of "
+                "this grid, or neb={'type': 'ssp'} to keep the baked-in emission."
+            )
         _emit_cb19_warnings(ionizing_source_warning, continuum_warning)
 
         self.has_continuum = False
@@ -957,6 +977,7 @@ class CB19Backend(NebularBackendDefaults):
         neb_co: float = DEFAULT_NEB_CO,
         neb_dno: float = DEFAULT_NEB_DNO,
         neb_hbfrac: float = DEFAULT_NEB_HBFRAC,
+        convention: FilterConvention,
     ) -> None:
         """Preintegrate CB19 lines through filters; expose CLOUDY-shaped surface.
 
@@ -1079,6 +1100,7 @@ class CB19Backend(NebularBackendDefaults):
             filter_trans,
             redshift,
             axes=surface_axes,
+            convention=convention,
         )
 
         # 6. Apply caller-provided fixed dict (axes are CLOUDY-shape indices: 0,1,2).

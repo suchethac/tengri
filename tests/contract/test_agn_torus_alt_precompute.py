@@ -12,6 +12,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.utils.filter_convention import FilterConvention
+
 pytestmark = pytest.mark.contract
 
 from tests._data_skip import DATA_DIR as _DATA  # root computed once; see #1431
@@ -74,7 +76,12 @@ class TestSilva04Adapter:
 
         waves, trans = filter_set
         result = silva04_precompute.precompute(
-            waves, trans, redshift=0.5, parameters=None, grid_path=str(_SILVA04_GRID)
+            waves,
+            trans,
+            redshift=0.5,
+            parameters=None,
+            grid_path=str(_SILVA04_GRID),
+            convention=FilterConvention.BESSELL,
         )
         lookup = silva04_precompute.build_lookup(result)
         # Probe arity defensively (signature may include torus_frac, etc.).
@@ -110,7 +117,12 @@ class TestCAT3DWindAdapter:
 
         waves, trans = filter_set
         result = cat3d_precompute.precompute(
-            waves, trans, redshift=0.5, parameters=None, grid_path=str(_CAT3D_GRID)
+            waves,
+            trans,
+            redshift=0.5,
+            parameters=None,
+            grid_path=str(_CAT3D_GRID),
+            convention=FilterConvention.BESSELL,
         )
         lookup = cat3d_precompute.build_lookup(result)
         import inspect

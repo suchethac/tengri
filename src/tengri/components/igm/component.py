@@ -48,6 +48,7 @@ from tengri.protocols.component import (
     SEDComponentConfig,
     SEDComponentState,
 )
+from tengri.utils.band_projection import BandSpec, project_bands
 
 __all__ = ["IGMSEDComponent", "IGMSEDComponentConfig", "igm_absorption_for_component"]
 
@@ -229,8 +230,7 @@ class IGMSEDComponent(TemplateThreading):
     def precompute_band_factors(
         self,
         wave_rest: jnp.ndarray,
-        photometry: Any,
-        filters: tuple[tuple[jnp.ndarray, jnp.ndarray], ...] | None = None,
+        bands: BandSpec | None,
         redshift_spec: Mapping[str, Any] | None = None,
     ) -> IGMSEDComponentState:
         r"""Tabulate the filter-averaged IGM transmission against redshift.
@@ -264,8 +264,8 @@ class IGMSEDComponent(TemplateThreading):
         ----------
         wave_rest : array_like, shape (n_wave,)
             Rest-frame model wavelength grid [Angstrom].
-        photometry : Photometry
-            Supplies the padded filter curves and the convention.
+        bands : BandSpec or None
+            The observation's band spec: the filter curves and the convention.
         redshift_spec : mapping or None
             ``{'mode': 'fixed', 'value': z}`` or
             ``{'mode': 'free', 'z_min':, 'z_max':, 'n_z':}``.
@@ -287,22 +287,16 @@ class IGMSEDComponent(TemplateThreading):
         """
         import numpy as np
 
-        from tengri.observation.photometry import lnu_filter_integral_batch, pad_filters
-
         if self.config.igm_patchy or self.config.use_dla:
             return IGMSEDComponentState(name=self.name)
 
-        if not filters or wave_rest is None or photometry is None:
+        if bands is None or bands.n_filters == 0 or wave_rest is None:
             return IGMSEDComponentState(name=self.name)
 
-        # Pad exactly as the stellar component does when it publishes
-        # ``phot_filter_waves_padded``: same arrays, same quadrature, so the
-        # tabulated factor is bit-identical to the runtime band average.
-        fws, fts = zip(*filters, strict=False)
-        fw_pad, ft_pad, _ = pad_filters(
-            [jnp.asarray(w) for w in fws], [jnp.asarray(t) for t in fts]
-        )
-        n_filters = int(getattr(photometry, "n_filters", len(filters)))
+        # The runtime band average integrates with the same spec, so the tabulated
+        # factor is bit-identical to it at the nodes.
+        fws, _ = bands.filters
+        n_filters = bands.n_filters
 
         spec = dict(redshift_spec or {"mode": "fixed", "value": 0.0})
         if spec.get("mode") == "free":
@@ -323,9 +317,7 @@ class IGMSEDComponent(TemplateThreading):
         # unlike the node table this integrates against the bandpass.
         from tengri.components.igm import _subband_cache
 
-        key = _subband_cache.band_factor_key(
-            wave_rest, fws, fts, zgrid, self.config.igm_model, photometry.convention
-        )
+        key = _subband_cache.band_factor_key(wave_rest, bands, zgrid, self.config.igm_model)
         cached = _subband_cache.memo_get(key)
         if cached is None:
             cached = _subband_cache.load(key, expected_shape=(len(zgrid), n_filters))
@@ -341,9 +333,8 @@ class IGMSEDComponent(TemplateThreading):
             )
 
         igm_model = self.config.igm_model
-        convention = photometry.convention
 
-        def _band_row(z, wave, fw_p, ft_p):
+        def _band_row(z, wave):
             trans = igm_absorption(
                 wave * (1.0 + z),
                 z,
@@ -351,15 +342,11 @@ class IGMSEDComponent(TemplateThreading):
                 igm_model=igm_model,
                 use_dla=False,
             )
-            return lnu_filter_integral_batch(trans, wave, fw_p, ft_p, z, convention=convention)[
-                :n_filters
-            ]
+            return project_bands(trans, wave, bands, z)
 
         # One jitted program over the whole z grid: the eager per-z loop paid
         # hundreds of op-by-op dispatches per redshift (#2769).
-        band_table = jax.jit(jax.vmap(_band_row, in_axes=(0, None, None, None)))(
-            jnp.asarray(zgrid), wave_rest, fw_pad, ft_pad
-        )
+        band_table = jax.jit(jax.vmap(_band_row, in_axes=(0, None)))(jnp.asarray(zgrid), wave_rest)
         _subband_cache.memo_put(key, np.asarray(band_table))
         _subband_cache.store(key, np.asarray(band_table))
         return IGMSEDComponentState(

@@ -101,6 +101,8 @@ def test_the_published_flux_is_the_filter_integral_of_the_screened_sed():
     from tengri.components._band_projection import project_additive_onto_photometry
     from tengri.components.dust.component import DustAttenuationSEDComponent
     from tengri.protocols.component import ForwardState
+    from tengri.utils.band_projection import BandSpec
+    from tengri.utils.filter_convention import FilterConvention
 
     component = DustAttenuationSEDComponent()
 
@@ -124,9 +126,16 @@ def test_the_published_flux_is_the_filter_integral_of_the_screened_sed():
         ]
     )
 
+    bands = BandSpec(
+        filters=(list(phot_filter_waves_padded), list(phot_filter_trans_padded)),
+        convention=FilterConvention.BESSELL,
+        n_subbands=0,
+        lyc_gate=False,
+    )
+
     sed_neb = _nebular_sed(wave)
     neb_phot_unreddened = project_additive_onto_photometry(
-        None, sed_neb, wave, filter_waves, phot_filter_waves_padded, phot_filter_trans_padded, z
+        None, sed_neb, wave, filter_waves, bands, z
     )
 
     state = ForwardState(
@@ -139,6 +148,7 @@ def test_the_published_flux_is_the_filter_integral_of_the_screened_sed():
             "filter_restband_eff_waves": jnp.asarray(restband_waves),
             "phot_filter_waves_padded": jnp.asarray(phot_filter_waves_padded),
             "phot_filter_trans_padded": jnp.asarray(phot_filter_trans_padded),
+            "phot_band_spec": bands,
         },
     )
 
@@ -152,13 +162,7 @@ def test_the_published_flux_is_the_filter_integral_of_the_screened_sed():
     sed_neb_reddened = sed_neb * np.asarray(attenuation)
 
     expected_obs = project_additive_onto_photometry(
-        None,
-        sed_neb_reddened,
-        wave,
-        filter_waves,
-        phot_filter_waves_padded,
-        phot_filter_trans_padded,
-        z,
+        None, sed_neb_reddened, wave, filter_waves, bands, z
     )
 
     np.testing.assert_allclose(neb_obs_att, expected_obs, rtol=1e-12)

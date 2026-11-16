@@ -454,19 +454,15 @@ class Catalog:
                 # the program compiles once (CatalogFitter promotes it from this
                 # catalog's redshifts). A model that declares a catalog_z_range keeps
                 # it, and the catalog must lie inside it.
-                from tengri.inference.fitter import catalog_redshift_span
+                from tengri.inference.fitter import (
+                    catalog_redshift_span,
+                    require_redshifts_in_range,
+                )
 
                 catalog_redshift_span(ca.redshift)  # refuses non-finite rows, naming them
                 z_range = fwd.populations[0].sed._catalog_z_range
                 if z_range is not None:
-                    z_lo, z_hi = z_range
-                    z_min, z_max = ca.redshift.min(), ca.redshift.max()
-                    if z_min < z_lo or z_max > z_hi:
-                        raise ValueError(
-                            f"Redshift span [{z_min:.3f}, {z_max:.3f}] exceeds model's "
-                            f"catalog_z_range=[{z_lo:.3f}, {z_hi:.3f}]. "
-                            f"Widen catalog_z_range at model build time or filter the table."
-                        )
+                    require_redshifts_in_range(ca.redshift, z_range)
             else:
                 # Condition 2: no redshift_col. A free redshift is fit per galaxy;
                 # a Fixed redshift is legitimate too, every galaxy is fit at the

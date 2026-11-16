@@ -237,12 +237,14 @@ tengri.list_filter_conventions()
 
 Like every other `list_*` verb it returns a `_RegistryTable` (unified across the `list_*` verbs), not a dict. Index it by position or go through its helpers: `.names()` for the bare names, or `.to_dict("name")` if you want the mapping this page used to show.
 
-The convention is a **build-time** choice: it is baked into the
-preintegrated `WavePrecomp` lookup table, so the exact path
-(`approx=None`) and the precomputed path must use the same convention
-(both default to `bessell`). The kernels
-(`tengri.observation.photometry.compute_flux_density`,
-`utils.grid_interp.preintegrate_grid`) take a `convention=` argument; the
+The convention is chosen once, on the observation (`Photometry(..., convention=...)`).
+Every band integral reads it from one `tengri.utils.band_projection.BandSpec`, which carries the
+filter curves, the convention and the sub-band scheme, with no default. The exact path
+(`approx=None`) and the precomputed path (`approx=WavePrecomp(...)`) therefore integrate the
+same band for every component, whichever convention the observation names: stellar light,
+nebular lines and continuum, dust attenuation and emission, AGN, radio and X-ray.
+The kernels (`tengri.observation.photometry.compute_flux_density`,
+`utils.grid_interp.preintegrate_grid`) take a required `convention=` argument; the
 effective/pivot wavelength and the Taylor dust moment are recomputed
 consistently with `w(λ)`.
 
