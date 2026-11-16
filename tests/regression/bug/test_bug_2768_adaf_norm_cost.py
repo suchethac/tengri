@@ -41,6 +41,7 @@ from tengri.components.agn.adaf import adaf_spectrum
 from tengri.components.agn.blocks import _protocol
 from tengri.components.agn.blocks.disc import adaf_disc_block
 from tengri.components.agn.blocks.runner import compose_l_nu
+from tengri.profiling import compiled_flops
 from tengri.utils.physics_constants import C_AA, L_SUN
 
 pytestmark = pytest.mark.regression_bug
@@ -170,7 +171,7 @@ class TestClosedFormPower:
 
 
 def _flops(fn, x0) -> float:
-    return jax.jit(jax.grad(fn)).lower(x0).compile().cost_analysis()["flops"]
+    return compiled_flops(jax.grad(fn), x0)
 
 
 class TestGradientCost:

@@ -35,6 +35,7 @@ import pytest
 from tengri.components.agn.blocks.composable_precompute import _AGN_TABLE_RTOL, UNWIRED_BLOCKS
 from tengri.config.exceptions import TengriIOError
 from tengri.forward.precompute.band_table import Decline
+from tengri.profiling import compiled_flops
 
 pytestmark = pytest.mark.contract
 
@@ -313,8 +314,7 @@ def test_photometry_graph_drops_the_sed_build(key):
     params = dict(table_model.spec.sample(jax.random.PRNGKey(0)))
 
     def flops(model):
-        cost = jax.jit(model.predict_photometry).lower(params).compile().cost_analysis()
-        return float((cost[0] if isinstance(cost, list) else cost)["flops"])
+        return float(compiled_flops(model.predict_photometry, params))
 
     assert flops(table_model) < 0.1 * flops(per_call)
 
@@ -518,8 +518,7 @@ def test_fully_fixed_agn_photometry_graph_drops_the_sed_build():
     params = dict(table.spec.sample(jax.random.PRNGKey(0)))
 
     def flops(model):
-        cost = jax.jit(model.predict_photometry).lower(params).compile().cost_analysis()
-        return float((cost[0] if isinstance(cost, list) else cost)["flops"])
+        return float(compiled_flops(model.predict_photometry, params))
 
     assert flops(table) < 0.1 * flops(per_call)
 

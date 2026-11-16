@@ -25,6 +25,7 @@ import pytest
 import tengri
 from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel, Uniform, WavePrecomp
 from tengri.components.igm.component import IGMSEDComponent, IGMSEDComponentConfig
+from tengri.profiling import compiled_flops
 
 pytestmark = pytest.mark.regression_bug
 
@@ -73,11 +74,7 @@ def _err_vs_exact(ssp, approx, **kw):
 
 
 def _flops(model, p):
-    f = jax.jit(lambda q: model.predict_photometry(q))
-    analysis = f.lower(p).compile().cost_analysis()
-    if isinstance(analysis, list):
-        analysis = analysis[0]
-    return int(analysis["flops"])
+    return int(compiled_flops(lambda q: model.predict_photometry(q), p))
 
 
 # ── 1. the covariance term itself ─────────────────────────────────────────────

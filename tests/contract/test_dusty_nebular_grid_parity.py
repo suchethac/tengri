@@ -57,6 +57,7 @@ from tengri import (
 from tengri.cosmology import age_at_z
 from tengri.forward.sed_model import FeaturePrecomp
 from tengri.inference import Fitter
+from tengri.profiling import compiled_flops
 
 pytestmark = pytest.mark.contract
 
@@ -555,14 +556,8 @@ def test_gradient_flops_drop(views):
         pred = jnp.asarray(m_fast.predict_photometry(params))
         return 0.5 * jnp.sum(((pred - flux_dummy) / err_dummy) ** 2)
 
-    grad_jit_wave = jax.jit(jax.grad(loss_wave))
-    grad_jit_fast = jax.jit(jax.grad(loss_fast))
-
-    compiled_wave = grad_jit_wave.lower(p).compile()
-    compiled_fast = grad_jit_fast.lower(p).compile()
-
-    flops_wave = float(compiled_wave.cost_analysis()["flops"])
-    flops_fast = float(compiled_fast.cost_analysis()["flops"])
+    flops_wave = float(compiled_flops(jax.grad(loss_wave), p))
+    flops_fast = float(compiled_flops(jax.grad(loss_fast), p))
 
     ratio = flops_fast / flops_wave
     msg = (

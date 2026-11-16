@@ -26,6 +26,7 @@ import pytest
 
 from tengri import DEFAULT, FREE, Fixed, SEDModel, Uniform
 from tengri.cosmology import age_at_z
+from tengri.profiling import compiled_flops
 
 pytestmark = pytest.mark.conservation
 
@@ -375,8 +376,7 @@ def _spectrum_grad_flops(model):
     def loss(q):
         return jnp.sum(model.predict_spectrum(q))
 
-    compiled = jax.jit(jax.grad(loss)).lower(p).compile()
-    return float(compiled.cost_analysis()["flops"])
+    return float(compiled_flops(jax.grad(loss), p))
 
 
 def test_grouped_spectrum_gradient_costs_no_more_than_per_node(ssp_data_fsps):

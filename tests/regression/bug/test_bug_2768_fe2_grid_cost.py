@@ -36,6 +36,7 @@ import pytest
 
 from tengri.components.agn import blr
 from tengri.components.agn.blocks.runner import compose_l_nu
+from tengri.profiling import compiled_flops
 
 pytestmark = pytest.mark.regression_bug
 
@@ -176,7 +177,7 @@ class TestTransforms:
 
 
 def _flops(fn, x0) -> float:
-    return jax.jit(jax.grad(fn)).lower(x0).compile().cost_analysis()["flops"]
+    return compiled_flops(jax.grad(fn), x0)
 
 
 class TestGradientCost:

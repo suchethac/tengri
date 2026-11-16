@@ -70,6 +70,7 @@ from tengri import (
 )
 from tengri.inference.fitter import _resolve_batch_fit_approx
 from tengri.observation.line_flux_data import LineFluxData
+from tengri.profiling import compiled_flops
 
 pytestmark = pytest.mark.regression_bug
 
@@ -155,9 +156,7 @@ def _objective_flops(fitter) -> int:
     ctx = InferenceContext.from_target(fitter)
     nlp, args = ctx.neg_log_posterior_fn, ctx.data_args
     p0 = ctx.initial_params(jax.random.PRNGKey(1))
-    return int(
-        jax.jit(jax.grad(lambda p: nlp(p, args))).lower(p0).compile().cost_analysis()["flops"]
-    )
+    return int(compiled_flops(jax.grad(lambda p: nlp(p, args)), p0))
 
 
 def _arm(ssp, obs, phot, policy, *, dust_attenuation: bool, wg00: bool = False):

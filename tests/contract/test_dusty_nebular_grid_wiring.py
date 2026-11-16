@@ -48,6 +48,7 @@ from tengri.components.nebular.nebular_grid_precompute import precompute_nebular
 from tengri.forward.sed_model import _nebular_continuum_consumers
 from tengri.inference import Fitter
 from tengri.inference.fitter import fast_nebular_can_engage
+from tengri.profiling import compiled_flops
 
 pytestmark = pytest.mark.contract
 
@@ -122,8 +123,7 @@ def _grad_flops(model):
     def loss(v):
         return jnp.sum(model.predict_photometry({**p, "sfh_dpl_log_total_mass": v}))
 
-    compiled = jax.jit(jax.grad(loss)).lower(jnp.asarray(10.0)).compile()
-    return float(compiled.cost_analysis()["flops"])
+    return float(compiled_flops(jax.grad(loss), jnp.asarray(10.0)))
 
 
 def test_auto_fit_attaches_a_grid_that_serves_the_dust(ssp, data):

@@ -21,6 +21,7 @@ from tengri.components.stellar.sps.precompute import (
     fast_spectrum,
     interpolate_ssp_phot_metallicity,
 )
+from tengri.profiling import compiled_flops
 from tengri.utils.scale import apply_log10_scale
 
 pytestmark = pytest.mark.bounds
@@ -480,7 +481,7 @@ class TestFusedKernelSpeedup:
 
         def _flops(fn, *args) -> float:
             """Compiled FLOP count — deterministic, unlike wall clock."""
-            return jax.jit(fn).lower(*args).compile().cost_analysis()["flops"]
+            return compiled_flops(fn, *args)
 
         log10_flux_scale = -30.0
 
@@ -568,7 +569,7 @@ class TestFusedKernelSpeedup:
 
         def _flops(fn, *args) -> float:
             """Compiled FLOP count — deterministic, unlike wall clock."""
-            return jax.jit(fn).lower(*args).compile().cost_analysis()["flops"]
+            return compiled_flops(fn, *args)
 
         log10_flux_scale = -30.0
 

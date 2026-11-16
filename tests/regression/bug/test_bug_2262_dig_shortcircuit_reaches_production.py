@@ -78,6 +78,7 @@ from tengri import (
 )
 from tengri.components.nebular import nebular_grid_precompute as _ngp
 from tengri.components.nebular.cue import CueBackend
+from tengri.profiling import compiled_flops
 from tests._data_skip import CUE_WEIGHTS, DATA_DIR, requires_cue_weights
 
 pytestmark = pytest.mark.regression_bug
@@ -329,9 +330,7 @@ def test_dig_shortcircuit_gradient_flops(_cue_fixture_available):
             params["sfh_delayed_log_total_mass"] = v
             return jnp.sum(model.predict_photometry(params))
 
-        return int(
-            jax.jit(jax.grad(loss)).lower(jnp.asarray(10.0)).compile().cost_analysis()["flops"]
-        )
+        return int(compiled_flops(jax.grad(loss), jnp.asarray(10.0)))
 
     default_model = _build_exact_free_mass({})
     forced_model = _build_exact_free_mass({"dig_frac": FREE})

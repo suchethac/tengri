@@ -34,6 +34,7 @@ import pytest
 
 from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel, Uniform
 from tengri.forward.sed_model import FeaturePrecomp, WavePrecomp
+from tengri.profiling import compiled_flops
 
 pytestmark = pytest.mark.contract
 
@@ -89,10 +90,7 @@ def _point(model):
 
 
 def _forward_flops(model, p, q):
-    compiled = jax.jit(lambda qq: model.predict_photometry({**p, **qq})).lower(q).compile()
-    cost = compiled.cost_analysis()
-    cost = cost[0] if isinstance(cost, list) else cost
-    return float(cost["flops"])
+    return float(compiled_flops(lambda qq: model.predict_photometry({**p, **qq}), q))
 
 
 @pytest.fixture(scope="module")

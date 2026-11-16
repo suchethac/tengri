@@ -33,6 +33,7 @@ import pytest
 
 from tengri import DEFAULT, Fixed, Observation, SEDModel, WavePrecomp
 from tengri.observation.photometry_config import Photometry
+from tengri.profiling import compiled_flops
 
 pytestmark = pytest.mark.regression_bug
 
@@ -120,7 +121,7 @@ def test_the_fit_path_stays_fast():
     no-write policy is ever restored "for speed", this budget shows there was no speed in it.
     """
     lut = _model(WavePrecomp())
-    flops = jax.jit(lut.predict_photometry).lower(_params(lut)).compile().cost_analysis()["flops"]
+    flops = compiled_flops(lut.predict_photometry, _params(lut))
     assert flops < MAX_LUT_FLOPS, (
         f"{flops:,.0f} compiled FLOPs — writing sed_intrinsic on the LUT path was supposed "
         "to be free (it is dead code unless something reads it)."

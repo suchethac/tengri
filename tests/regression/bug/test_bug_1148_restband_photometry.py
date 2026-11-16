@@ -25,6 +25,7 @@ import numpy as np
 import pytest
 
 from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, Uniform, WavePrecomp
+from tengri.profiling import compiled_flops
 
 pytestmark = pytest.mark.regression_bug
 
@@ -220,11 +221,7 @@ def test_the_rest_band_does_not_pin_the_full_grid(synthetic_ssp_wide):
     p = dict(m_exact.spec.sample(KEY))
 
     def _flops(m):
-        f = jax.jit(lambda q: m.predict_observables(q))
-        a = f.lower(p).compile().cost_analysis()
-        if isinstance(a, list):
-            a = a[0]
-        return int(a["flops"])
+        return int(compiled_flops(lambda q: m.predict_observables(q), p))
 
     ratio = _flops(m_exact) / _flops(m_lut)
     assert ratio >= 10.0, f"LUT is only {ratio:.1f}x cheaper than exact — the rest band pinned it"

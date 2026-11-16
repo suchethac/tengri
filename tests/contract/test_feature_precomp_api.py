@@ -45,6 +45,7 @@ from tengri.observation.line_flux_data import LineFluxData
 from tengri.observation.line_list import LineList
 from tengri.observation.line_measurement import default_line_defs
 from tengri.observation.photometry_config import Photometry
+from tengri.profiling import compiled_flops
 
 pytestmark = pytest.mark.contract
 
@@ -145,8 +146,7 @@ def _loss_grad_flops(m, *, fit_approx):
     loss_fn = build_loss_fn(f)
     data_args = dict(f._data_args)
     init = f._initialize_unbounded(jax.random.PRNGKey(0))
-    g = jax.jit(jax.grad(lambda p: loss_fn(p, data_args)))
-    return g.lower(init).compile().cost_analysis()["flops"]
+    return compiled_flops(jax.grad(lambda p: loss_fn(p, data_args)), init)
 
 
 # ── the bug: the likelihood could not reach the fast path ──────────────────
@@ -365,7 +365,7 @@ def _grad_flops(m, *, fit_approx):
     f = Fitter(m, jnp.ones(n), jnp.ones(n), approx=fit_approx)
     ctx = InferenceContext.from_target(f)
     x0 = ctx.initial_params(jax.random.PRNGKey(0))
-    return ctx.grad_fn.lower(x0, ctx.data_args).compile().cost_analysis()["flops"]
+    return compiled_flops(ctx.grad_fn, x0, ctx.data_args)
 
 
 def test_feature_precomp_changes_the_compile_signature(synthetic_ssp_wide):
