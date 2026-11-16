@@ -19,6 +19,17 @@ from tengri.parameters.groups import _per_screen_full_names
 pytestmark = pytest.mark.regression_bug  # Frozen output for the silent-fixed-params bug
 
 
+def _default_grid_or_skip():
+    """The default SSP grid from disk, or skip when it is not present."""
+    import tengri
+    from tengri._data_setup import DEFAULT_SSP
+
+    try:
+        return tengri.load_ssp(DEFAULT_SSP)
+    except FileNotFoundError as exc:
+        pytest.skip(f"default SSP not on disk: {exc}")
+
+
 class TestSilentlyFixedParametersWarning:
     """Test the warning for parameters fixed by default."""
 
@@ -364,14 +375,20 @@ class TestShippedRecipesNoWarning:
         obs = Observation(photometry=Photometry.from_names(["jwst_f150w", "jwst_f356w"]))
         offenders = {}
         checked = []
+        # Re-pinned 2026-11-15: the default grid is the MIST c3k_hr wNE grid (#3465).
+        # A recipe that names it is built on the grid itself, so SEDModel swaps a Cue
+        # recipe to the bare twin, exactly as a user's load_ssp() call would.
+        ssp_default = _default_grid_or_skip()
 
         for row in tengri.list_recipes():
             name = row["name"]
-            ssp = (
-                ssp_data_fsps
-                if str(row["ssp_requirement"]).startswith("bare-stellar")
-                else ssp_data_wne
-            )
+            requirement = str(row["ssp_requirement"])
+            if requirement.startswith("bare-stellar"):
+                ssp = ssp_data_fsps
+            elif requirement.startswith("the default grid"):
+                ssp = ssp_default
+            else:
+                ssp = ssp_data_wne
             with warnings.catch_warnings(record=True) as w:
                 warnings.simplefilter("always")
                 try:

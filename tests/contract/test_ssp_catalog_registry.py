@@ -36,6 +36,10 @@ pytestmark = pytest.mark.contract
 
 _TIMEOUT_S = 30
 
+# Only the entries this index describes: the nebular-baked grids live on their own host
+# (DSPS_SSP_BASE_URL) and are not in SSP_BASE_URL's listing, so they are out of scope here.
+_CATALOG_ENTRIES = {k: e for k, e in _KNOWN_SSPS.items() if e.base_url == SSP_BASE_URL}
+
 
 @pytest.fixture(scope="module")
 def hosted_filenames() -> set[str]:
@@ -57,7 +61,7 @@ def hosted_filenames() -> set[str]:
 
 def test_no_registered_ssp_is_missing_from_the_catalog(hosted_filenames):
     """An entry with no file behind it advertises a download that 404s."""
-    phantom = sorted(set(_KNOWN_SSPS.values()) - hosted_filenames)
+    phantom = sorted({e.filename for e in _CATALOG_ENTRIES.values()} - hosted_filenames)
     assert not phantom, (
         "_KNOWN_SSPS names grids the catalog does not serve, so "
         "download_ssp() on them fails with an HTTP error rather than a clear "
@@ -72,7 +76,7 @@ def test_no_hosted_ssp_is_missing_from_the_registry(hosted_filenames):
     breakage — but ``list_known_ssps()`` is how a user finds out what exists,
     and a menu that under-reports is the reason nobody noticed for months.
     """
-    unregistered = sorted(hosted_filenames - set(_KNOWN_SSPS.values()))
+    unregistered = sorted(hosted_filenames - {e.filename for e in _CATALOG_ENTRIES.values()})
     assert not unregistered, (
         "the catalog serves grids _KNOWN_SSPS does not list, so "
         "list_known_ssps() under-reports and the short-name form raises "
@@ -89,5 +93,5 @@ def test_every_registry_key_matches_its_filename():
     consistency property, and a mismatch here would make the two network tests
     above compare the wrong things.
     """
-    mismatched = {k: v for k, v in _KNOWN_SSPS.items() if v != f"{k}.h5"}
+    mismatched = {k: e.filename for k, e in _CATALOG_ENTRIES.items() if e.filename != f"{k}.h5"}
     assert not mismatched, f"keys that are not their filename minus '.h5': {mismatched}"

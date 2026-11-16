@@ -14088,6 +14088,11 @@ class SEDModel:
                     g for g in _spec_obs.effective_catalog.kinematic_groups if g
                 )
 
+        # One place where the grid is chosen for the nebular backend (#3465): a default
+        # wNE grid is swapped for its bare twin unless the backend is baked-in.
+        from tengri.components.stellar.sps.nebular_pairing import resolve_nebular_grid
+
+        ssp_data = resolve_nebular_grid(ssp_data, groups.get("neb"))
         spec = parse_groups(ssp_data=ssp_data, **groups)
         _validate_dust_emission_is_energy_balanced(spec)
         _validate_torus_frac_fracagn_conflict(spec)

@@ -261,19 +261,28 @@ def test_download_and_load_share_one_default():
         f"ssp_lgmet shape {ssp_no_args.ssp_lgmet.shape} vs {ssp_explicit.ssp_lgmet.shape}. "
         f"The no-argument default is not DEFAULT_SSP."
     )
-    # The loaded SSP must match the known catalog entry
-    assert DEFAULT_SSP in _KNOWN_SSPS, "the default must be fetchable by download_ssp()"
+    # The loaded SSP must be a registry entry download_ssp() can fetch, with its checksum
+    # (the default is hosted since #3465).
+    assert DEFAULT_SSP in _KNOWN_SSPS and _KNOWN_SSPS[DEFAULT_SSP].sha256 is not None, (
+        "the default must be fetchable by download_ssp(), with a checksum"
+    )
 
 
 def test_default_ssp_is_bare_stellar():
-    """The default must be bare-stellar: the catalog ships nothing else.
+    """The bare twin of the default is bare-stellar, and that twin is fetchable.
 
-    A wNE (nebular-baked) default is unobtainable via ``download_ssp()`` *and*
-    rejected by the Cue backend, which is what half the recipe catalog uses.
+    Re-pinned 2026-11-15: default SSP is the MIST c3k_hr wNE grid (#3465). The
+    default is nebular-baked by design, so the bare-stellar invariant now holds for
+    its twin: the grid a Cue, CLOUDY or CB_19 model is built on. A wNE twin would
+    double-count the nebular emission those backends add.
     """
-    from tengri._data_setup import DEFAULT_SSP
+    from tengri._data_setup import _BARE_TWIN_OF_WNE, _KNOWN_SSPS, DEFAULT_SSP
 
-    assert "wNE" not in DEFAULT_SSP, "the default SSP must not be a nebular-baked grid"
+    twin = _BARE_TWIN_OF_WNE[DEFAULT_SSP]
+    assert "wNE" not in twin, "the bare twin of the default must not be nebular-baked"
+    assert twin in _KNOWN_SSPS and _KNOWN_SSPS[twin].sha256 is not None, (
+        "the bare twin must be fetchable by download_ssp(), with a checksum"
+    )
 
 
 @pytest.mark.parametrize(
