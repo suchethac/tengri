@@ -21,6 +21,7 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 import numpy as np
+from jax.scipy.special import ndtr
 
 from tengri.components.lyc import LYMAN_LIMIT_AA, edge_interp, ionizing_mask
 from tengri.units import lnu_to_fnu
@@ -1089,6 +1090,442 @@ def apply_lsf(
     return _apply_lsf_variable_r(spectrum, wave_obs, sigma_per_pixel, n_bins, pad=pad)
 
 
+#: Uniform ln-lambda spacing of the lattice the velocity-dispersion correction acts on (#3436).
+#: The lattice holds cell means of the SED with a cubic Hermite readout between nodes, so the
+#: output converges quickly in the spacing (see the convergence test in #3451).
+_LATTICE_DLNLAMBDA = 5e-5
+
+
+def _lattice_pad_cells() -> int:
+    """Kernel margin [cells] per side: 5 sigma of the largest velocity-dispersion bound."""
+    return math.ceil(5.0 * _LSF_MAX_SIGMA_KMS / _C_KM_S / _LATTICE_DLNLAMBDA) + 8
+
+
+def lattice_span(wave_obs, z_lo: float, z_hi: float) -> tuple[float, int]:
+    """Static ln-lambda lattice that the observed pixels read (#3436).
+
+    The rest-frame window is the observed pixel range over ``1 + z`` for every ``z`` in
+    ``[z_lo, z_hi]``, widened by the kernel margin on each side. Build-time (NumPy).
+
+    Parameters
+    ----------
+    wave_obs : array_like, shape (n_pix,)
+        Observed-frame pixel centers [Angstrom], strictly increasing.
+    z_lo, z_hi : float
+        Redshift range the lattice must cover [dimensionless].
+
+    Returns
+    -------
+    origin : float
+        ``ln`` of the first lattice node [dimensionless].
+    n_cells : int
+        Number of lattice cells, so ``n_cells + 1`` nodes.
+    """
+    w = np.asarray(wave_obs, dtype=np.float64)
+    mid = 0.5 * (w[1:] + w[:-1])
+    edges = np.concatenate([[w[0] - 0.5 * (w[1] - w[0])], mid, [w[-1] + 0.5 * (w[-1] - w[-2])]])
+    return lattice_window(edges[0] / (1.0 + z_hi), edges[-1] / (1.0 + z_lo))
+
+
+def lattice_window(lo: float, hi: float) -> tuple[float, int]:
+    """Static ln-lambda lattice covering the rest-frame range ``[lo, hi]`` [Angstrom] (#3436).
+
+    Widened by the kernel margin on each side. :func:`lattice_span` is this over the observed
+    pixel range.
+
+    Returns
+    -------
+    origin : float
+        ``ln`` of the first lattice node [dimensionless].
+    n_cells : int
+        Number of lattice cells, so ``n_cells + 1`` nodes.
+    """
+    h = _LATTICE_DLNLAMBDA
+    k0 = int(np.floor(np.log(lo) / h)) - _lattice_pad_cells()
+    k1 = int(np.ceil(np.log(hi) / h)) + _lattice_pad_cells()
+    return k0 * h, k1 - k0
+
+
+def _pixel_edges(wave_query):
+    """Bin edges of pixel centers: midpoints between neighbors, half a pixel at each end."""
+    mid = 0.5 * (wave_query[1:] + wave_query[:-1])
+    lo = wave_query[:1] - 0.5 * (wave_query[1:2] - wave_query[:1])
+    hi = wave_query[-1:] + 0.5 * (wave_query[-1:] - wave_query[-2:-1])
+    return jnp.concatenate([lo, mid, hi])
+
+
+def _cumulative_flux(wave_rest, sed_rest, x):
+    """Exact cumulative integral of the piecewise-linear model, clamped flat outside the grid.
+
+    Inside interval i the integral from its left node is ``f_i t + (f_{i+1} - f_i) t^2 /
+    (2 h_i)``, so its slope is the interpolated model value and the integral is continuous
+    in ``x`` with a continuous first derivative (#2530).
+    """
+    h = jnp.diff(wave_rest)
+    node_cum = jnp.concatenate(
+        [jnp.zeros(1), jnp.cumsum(0.5 * (sed_rest[1:] + sed_rest[:-1]) * h)]
+    )
+    e = jnp.clip(x, wave_rest[0], wave_rest[-1])
+    i = jnp.clip(jnp.searchsorted(wave_rest, e, side="right") - 1, 0, wave_rest.shape[0] - 2)
+    t = e - wave_rest[i]
+    f0 = sed_rest[i]
+    return node_cum[i] + f0 * t + 0.5 * (sed_rest[i + 1] - f0) / h[i] * t * t
+
+
+def _peak_factors(*seds):
+    """Power-of-two factors that keep the lattice cumulative inside the dtype range (#3149)."""
+    peak = jnp.max(jnp.stack([jnp.max(jnp.abs(s)) for s in seds]))
+    exponent = jnp.frexp(jax.lax.stop_gradient(peak))[1]
+    dtype = jnp.result_type(*seds)
+    scale_in = jax.lax.stop_gradient(jnp.ldexp(jnp.ones((), dtype), -exponent))
+    scale_out = jax.lax.stop_gradient(jnp.ldexp(jnp.ones((), dtype), exponent))
+    return scale_in, scale_out
+
+
+def _model_cumulative(wave_rest, sed_rest, x, edge_aa):
+    """Exact cumulative integral of the model at ``x``, with the Lyman step when ``edge_aa``."""
+    cum = _cumulative_flux(wave_rest, sed_rest, x)
+    if edge_aa is not None:
+        e = jnp.clip(x, wave_rest[0], wave_rest[-1])
+        cum = cum + _step_minus_ramp(wave_rest, sed_rest, e, edge_aa)
+    return cum
+
+
+def _lattice_cell_means(wave_rest, sed_rest, origin, n_cells, edge_aa):
+    """Cell means of ``lambda * F`` over the lattice cells: the flux per unit ln lambda."""
+    h = _LATTICE_DLNLAMBDA
+    nodes = jnp.exp(origin + h * jnp.arange(n_cells + 1, dtype=jnp.result_type(float)))
+    cum = _model_cumulative(wave_rest, sed_rest, nodes, edge_aa)
+    return (cum[1:] - cum[:-1]) / h
+
+
+def _lattice_edge_readout(g, origin, n_cells, edges):
+    """Pixel means between ``edges`` [Angstrom] of lattice cell means ``g``.
+
+    The cumulative integral is exact at the lattice nodes (the cell means are its
+    differences) and cubic Hermite between them, with the node slopes taken from the
+    neighboring cell means. ``origin`` may be traced.
+    """
+    h = _LATTICE_DLNLAMBDA
+    le = jnp.log(edges)
+    zero = jnp.zeros((1,), dtype=g.dtype)
+    cum = jnp.concatenate([zero, jnp.cumsum(g * h)])
+    slope = jnp.concatenate([g[:1], 0.5 * (g[1:] + g[:-1]), g[-1:]])
+    kb = jnp.clip(jnp.floor((le - origin) / h).astype(jnp.int32), 0, n_cells - 1)
+    cell_lo = origin + h * jnp.arange(n_cells, dtype=le.dtype)
+    t = (le - cell_lo[kb]) / h
+    t2 = t * t
+    t3 = t2 * t
+    cum_edge = (
+        (2.0 * t3 - 3.0 * t2 + 1.0) * cum[kb]
+        + (t3 - 2.0 * t2 + t) * h * slope[kb]
+        + (3.0 * t2 - 2.0 * t3) * cum[kb + 1]
+        + (t3 - t2) * h * slope[kb + 1]
+    )
+    return (cum_edge[1:] - cum_edge[:-1]) / (edges[1:] - edges[:-1])
+
+
+def _point_samples(sed_rest, wave_rest, lam_c, edge_aa):
+    """The SED's linear interpolant at the lattice cell centers, zero outside the grid.
+
+    The same function the point-sampled baseline reads (:func:`compute_spectrum`), so the
+    point correction has no cell-averaging bias at a sharp feature.
+    """
+    if edge_aa is not None:
+        return edge_interp(lam_c, wave_rest, sed_rest, edge_aa=edge_aa)
+    return jnp.interp(lam_c, wave_rest, sed_rest, left=0.0, right=0.0)
+
+
+#: Static reach [dimensionless ln lambda] of the closed-form point readout: 6 sigma of the
+#: largest velocity-dispersion bound (#3512). Beyond it the Gaussian mass is below 2e-9.
+_POINT_REACH_LN = 6.0 * _LSF_MAX_SIGMA_KMS / _C_KM_S
+
+
+def _ndtr_diff(upper, lower):
+    """``Phi(upper) - Phi(lower)`` for ``upper >= lower``, taken in the tail that keeps it exact.
+
+    The mirrored form ``Phi(-lower) - Phi(-upper)`` is used when the midpoint is positive, so
+    the difference never cancels two values near one.
+    """
+    direct = ndtr(upper) - ndtr(lower)
+    mirrored = ndtr(-lower) - ndtr(-upper)
+    return jnp.where(upper + lower > 0.0, mirrored, direct)
+
+
+def _kernel_moments(s_lo, s_hi, sigma):
+    r"""Moments :math:`M_1, M_2` of :math:`e^{ks}` over ``[s_lo, s_hi]`` (#3512).
+
+    With :math:`s = \ln\lambda - \mu` and a unit Gaussian of width ``sigma`` centered at zero,
+    :math:`M_k = \int e^{ks}\,\mathcal{N}(s;0,\sigma)\,ds
+    = e^{k^2\sigma^2/2}\,[\Phi((s_1-k\sigma^2)/\sigma)-\Phi((s_0-k\sigma^2)/\sigma)]`.
+    """
+    s2 = sigma * sigma
+    m1 = jnp.exp(0.5 * s2) * _ndtr_diff((s_hi - s2) / sigma, (s_lo - s2) / sigma)
+    m2 = jnp.exp(2.0 * s2) * _ndtr_diff((s_hi - 2.0 * s2) / sigma, (s_lo - 2.0 * s2) / sigma)
+    return m1, m2
+
+
+def _log_offset(w, wq):
+    """``ln(w / wq)`` as ``log1p((w - wq) / wq)``, with the difference formed directly (#3512).
+
+    Taking two logs and subtracting them loses the offset to float32 rounding, which is
+    large against a kernel width of order 1e-4 in ln lambda.
+    """
+    return jnp.log1p((w - wq) / wq)
+
+
+def _interp_cells(wave_rest, sed_rest, has_lyc_edge):
+    """Per-cell nodes, value and slope of the lambda-linear SED interpolant (#3512).
+
+    Cell ``i`` is ``F = y_i + q_i (lambda - w_i)`` on ``[w_i, w_{i+1}]``. With a Lyman step the
+    bracket cell ends at the edge and is constant ``y_a`` (``q = 0``); the part above the edge is
+    returned as ``(edge, w_hi, y_b)``.
+    """
+    w, y = wave_rest, sed_rest
+    w_lo, w_hi = w[:-1], w[1:]
+    q = (y[1:] - y[:-1]) / (w[1:] - w[:-1])
+    y_lo = y[:-1]
+    if not has_lyc_edge:
+        return w_lo, w_hi, y_lo, q, None
+    n = w.shape[0]
+    n_ion = jnp.sum(ionizing_mask(w, LYMAN_LIMIT_AA).astype(jnp.int32))
+    has_bracket = (n_ion > 0) & (n_ion < n)
+    ia = jnp.clip(n_ion - 1, 0, n - 2)
+    # With a bracket, n_ion - 1 is already in [0, n - 2]; without one the mask is False.
+    is_bracket = (jnp.arange(n - 1) == n_ion - 1) & has_bracket
+    w_hi = jnp.where(is_bracket, LYMAN_LIMIT_AA, w_hi)
+    q = jnp.where(is_bracket, 0.0, q)
+    upper = jnp.where(has_bracket, w[ia + 1], LYMAN_LIMIT_AA)
+    return w_lo, w_hi, y_lo, q, (LYMAN_LIMIT_AA, upper, y[ia + 1])
+
+
+def _cell_window_width(wave_rest) -> int:
+    """Static cells per pixel window: the most cells any ``2 * reach`` ln-lambda window holds.
+
+    Built in NumPy from the model grid. A traced grid falls back to every cell (exact, slower).
+    """
+    n_cells = wave_rest.shape[0] - 1
+    if _is_traced(wave_rest):
+        return n_cells
+    w = np.asarray(wave_rest, dtype=float)
+    ua, ub = np.log(w[:-1]), np.log(w[1:])
+    span = 2.0 * _POINT_REACH_LN
+    starts = np.concatenate([ub, ua - span])
+    upto = np.searchsorted(ua, starts + span, side="right")
+    below = np.searchsorted(ub, starts, side="left")
+    return min(int(np.max(np.maximum(upto - below, 0))) + 2, n_cells)
+
+
+def point_readout_gaussian_ln(
+    sed_rest: jnp.ndarray,
+    wave_rest: jnp.ndarray,
+    wave_obs: jnp.ndarray,
+    redshift,
+    sigma_ln: jnp.ndarray,
+    *,
+    has_lyc_edge: bool = False,
+) -> jnp.ndarray:
+    r"""Closed-form Gaussian point readout in :math:`\ln\lambda` (#3512).
+
+    At pixel :math:`\lambda_c` the value is :math:`\mathcal{B}(\lambda F)(\ell_c)/\lambda_c`, where
+    :math:`\mathcal{B}` is a unit Gaussian in :math:`\ell = \ln\lambda` of width ``sigma_ln``
+    and :math:`F` the piecewise-linear interpolant of ``sed_rest`` on ``wave_rest``. On a
+    segment :math:`F = p + q\lambda`, so :math:`\lambda F = p e^{\ell} + q e^{2\ell}` and the
+    segment integral is exact (:func:`_kernel_moments`):
+
+    .. math::
+
+        \frac{\mathcal{B}(\lambda F)(\ell_c)}{\lambda_c}
+        = \sum_{\rm seg} \bigl[p\,M_1 + q\,\lambda_c\,M_2\bigr].
+
+    This is the analytic special case of the Gaussian :func:`broaden_velocity_only` applies:
+    the same :math:`\sigma_v` kernel on :math:`\lambda F`, evaluated exactly at the pixel
+    instead of on a grid, so point mode carries no grid discretization. A test pins the two
+    together on a fine log-uniform grid.
+
+    Segments are gathered per pixel in a static window of ``_POINT_REACH_LN`` on each side, so
+    the cost is ``n_pix x n_window``, not ``n_pix x n_wave``.
+
+    Parameters
+    ----------
+    sed_rest : ndarray, shape (n_wave,)
+        SED on the rest-frame grid [erg/s/Hz]; linear in its values.
+    wave_rest : ndarray, shape (n_wave,)
+        Rest-frame grid, ascending [Angstrom].
+    wave_obs : ndarray, shape (n_pix,)
+        Observed pixel centers [Angstrom]; read at ``wave_obs / (1 + redshift)``.
+    redshift : float or tracer
+        Source redshift.
+    sigma_ln : ndarray, shape (n_pix,) or scalar
+        Kernel width :math:`\sigma_{\ln\lambda}` per pixel. Must be positive; the caller
+        gates the zero-width case.
+    has_lyc_edge : bool, optional
+        The SED is a step at the Lyman edge (:func:`edge_interp` semantics). Static.
+
+    Returns
+    -------
+    ndarray, shape (n_pix,)
+        Convolved SED at each pixel [erg/s/Hz], the same units as ``sed_rest``.
+    """
+    wq = jnp.asarray(wave_obs) / (1.0 + redshift)
+    sig = jnp.broadcast_to(jnp.asarray(sigma_ln), wq.shape)
+    sig = jnp.where(sig > 0.0, sig, 1.0)
+    w_lo, w_hi, y_lo, q, step = _interp_cells(wave_rest, sed_rest, has_lyc_edge)
+    n_cells = w_lo.shape[0]
+    width = _cell_window_width(wave_rest)
+    j0 = jnp.searchsorted(jnp.log(wave_rest[1:]), jnp.log(wq) - _POINT_REACH_LN, side="left")
+    idx = j0[:, None] + jnp.arange(width)[None, :]
+    valid = idx < n_cells
+    idx = jnp.minimum(idx, n_cells - 1)
+    wq_col, sig_col = wq[:, None], sig[:, None]
+    m1, m2 = _kernel_moments(
+        _log_offset(w_lo[idx], wq_col), _log_offset(w_hi[idx], wq_col), sig_col
+    )
+    # e^s F with F = y_a + q (lambda - w_a) and lambda = wq e^s: y_a M1 + q (wq M2 - w_a M1).
+    terms = y_lo[idx] * m1 + q[idx] * (wq_col * m2 - w_lo[idx] * m1)
+    total = jnp.sum(jnp.where(valid, terms, 0.0), axis=1)
+    if step is not None:
+        edge, upper, y_b = step
+        m1_step, _ = _kernel_moments(_log_offset(edge, wq), _log_offset(upper, wq), sig)
+        total = total + y_b * m1_step
+    return total
+
+
+def sigma_v_lattice_correction(
+    stellar_rest: jnp.ndarray,
+    igm_rest: jnp.ndarray | None,
+    wave_rest: jnp.ndarray,
+    wave_obs: jnp.ndarray,
+    redshift,
+    dl_cm,
+    *,
+    sigma_v_kms,
+    span: tuple[float, int],
+    conserving: bool,
+    has_lyc_edge: bool = False,
+) -> jnp.ndarray:
+    r"""Broadening correction on the ln-lambda lattice: sigma_v on the stellar group (#3436).
+
+    The exact unbroadened projection carries the baseline. This function returns only the
+    difference the velocity dispersion makes, with the same discretization on both terms:
+
+    .. math::
+
+        \Delta = L\bigl(T\,B_{\sigma_v}(S)\bigr) - L\bigl(T\,S\bigr),
+
+    where :math:`S` is the stellar group before the IGM, :math:`T` the IGM transmission
+    (applied after :math:`B_{\sigma_v}`), and :math:`L` the lattice load and pixel readout.
+    The Gaussian :math:`B_{\sigma_v}` acts in :math:`\ln\lambda` on :math:`\lambda F_\lambda`,
+    which is flux-conserving Doppler broadening. At :math:`\sigma_v \to 0` the correction
+    vanishes, so the total reduces to the exact unbroadened projection.
+
+    Parameters
+    ----------
+    stellar_rest : ndarray, shape (n_wave,)
+        Stellar-kernel group on the rest grid, before the IGM [erg/s/Hz].
+    igm_rest : ndarray, shape (n_wave,) or None
+        IGM transmission on the rest grid, or ``None`` for unity.
+    wave_rest, wave_obs : ndarray
+        Rest-frame model grid and observed pixel centers [Angstrom].
+    redshift, dl_cm : float
+        Source redshift and luminosity distance [cm]; ``redshift`` may be traced.
+    sigma_v_kms : float or ndarray
+        Velocity dispersion [km/s]; may be traced.
+    span : tuple of (float, int)
+        Static lattice from :func:`lattice_span`, covering the redshift range.
+    conserving : bool
+        Pixel means (``True``) or lattice values at the pixel centers (``False``).
+    has_lyc_edge : bool, optional
+        The SED is a step at the Lyman edge (the lattice load uses the step interpolant).
+
+    Returns
+    -------
+    ndarray, shape (n_pix,)
+        Correction to the observed spectral flux density [erg/s/cm^2/Hz].
+    """
+    origin, n_cells = span
+    h = _LATTICE_DLNLAMBDA
+    edge_aa = LYMAN_LIMIT_AA if has_lyc_edge else None
+    scale_in, scale_out = _peak_factors(stellar_rest)
+    pad = _lattice_pad_cells()
+    wave_q = wave_obs / (1.0 + redshift)
+    ell_c = origin + h * (jnp.arange(n_cells, dtype=jnp.result_type(float)) + 0.5)
+    lam_c = jnp.exp(ell_c)
+    t_c = None if igm_rest is None else jnp.interp(lam_c, wave_rest, igm_rest)
+    if conserving:
+        plain = _lattice_cell_means(wave_rest, stellar_rest * scale_in, origin, n_cells, edge_aa)
+        # One segment: the lattice is uniform in ln lambda, so a single sigma covers it.
+        broad = broaden_velocity_only(plain, lam_c, sigma_v_kms, 1, pad_pixels=pad)
+        if t_c is not None:
+            plain, broad = plain * t_c, broad * t_c
+        pixel_sed = _lattice_edge_readout(broad - plain, origin, n_cells, _pixel_edges(wave_q))
+        return _zero_at_no_dispersion(
+            lnu_to_fnu(pixel_sed * scale_out, dl_cm, redshift), sigma_v_kms
+        )
+    # Point: the closed-form Gaussian readout at each pixel (#3512), so the point value has no
+    # lattice discretization. The difference from the unbroadened sample vanishes at sigma = 0.
+    stellar_in = stellar_rest * scale_in
+    sigma_ln = jnp.broadcast_to(jnp.asarray(sigma_v_kms) / _C_KM_S, wave_q.shape)
+    closed = point_readout_gaussian_ln(
+        stellar_in, wave_rest, wave_obs, redshift, sigma_ln, has_lyc_edge=has_lyc_edge
+    )
+    diff = closed - _point_samples(stellar_in, wave_rest, wave_q, edge_aa)
+    if igm_rest is not None:
+        diff = diff * jnp.interp(wave_q, wave_rest, igm_rest)
+    return _zero_at_no_dispersion(lnu_to_fnu(diff * scale_out, dl_cm, redshift), sigma_v_kms)
+
+
+def _zero_at_no_dispersion(correction, sigma_v_kms):
+    """The correction, exactly zero where sigma_v is not positive (a traced zero included).
+
+    The FFT round trip at sigma = 0 is not bit-identical to no convolution, so a traced zero
+    would otherwise leave a roundoff residue; the gate makes it the sigma_v-absent output.
+    The gradient is unchanged for sigma_v > 0.
+    """
+    return jnp.where(jnp.asarray(sigma_v_kms) > 0.0, correction, 0.0)
+
+
+def _serves_on_lattice(resolution, resolution_matrix, sigma_v_kms) -> bool:
+    """Whether a call with no instrument kernel broadens on the lattice (#3436).
+
+    A concrete sigma_v that is not positive (a Python, NumPy or jax constant) keeps the
+    unbroadened path, so the zero-dispersion output is bit-identical to the pre-lattice
+    projection. A traced sigma_v takes the lattice.
+    """
+    if resolution is not None or resolution_matrix is not None:
+        return False
+    if _is_traced(sigma_v_kms):
+        return True
+    return bool(np.max(np.asarray(sigma_v_kms)) > 0.0)
+
+
+def _concrete_z_range(redshift, z_window=None) -> tuple[float, float]:
+    """``(z_lo, z_hi)`` the lattice must cover: the static window, else the concrete redshift.
+
+    Parameters
+    ----------
+    redshift : float or tracer
+        Source redshift [dimensionless].
+    z_window : tuple of float or None
+        Static redshift range (a redshift prior's bounds) that the lattice must cover.
+
+    Raises
+    ------
+    ValueError
+        If the redshift is traced and no static range is given.
+    """
+    if z_window is not None:
+        return float(z_window[0]), float(z_window[1])
+    if _is_traced(redshift):
+        raise ValueError(
+            "a velocity dispersion with no instrument resolution needs a static redshift "
+            "range for its ln-lambda lattice: give a fixed redshift or a redshift prior "
+            "with finite bounds"
+        )
+    z = float(np.asarray(redshift))
+    return z, z
+
+
 def project_spectrum(
     sed_rest: jnp.ndarray,
     wave_rest: jnp.ndarray,
@@ -1106,6 +1543,7 @@ def project_spectrum(
     resolution_matrix: object | None = None,
     has_lyc_edge: bool = False,
     lsf_pad_pixels: int | None = None,
+    z_window: tuple[float, float] | None = None,
 ) -> jnp.ndarray:
     r"""Project a panchromatic model SED onto an observed-frame spectrum grid.
 
@@ -1133,8 +1571,11 @@ def project_spectrum(
         Luminosity distance [cm].
     resolution : float, array, or None
         Spectral resolution :math:`R(\lambda) = \lambda / \Delta\lambda`.
-        If ``None``, LSF is skipped. If scalar, constant resolution; if array,
-        per-pixel wavelength-dependent resolution (e.g., JWST NIRSpec PRISM).
+        If ``None``, there is no instrument kernel: ``sigma_v_kms`` still broadens the
+        model at library resolution on the ln-lambda lattice (#3436), and the result stays
+        at library resolution; ``sigma_lib_kms`` has no effect. If scalar, constant
+        resolution; if array, per-pixel wavelength-dependent resolution (e.g., JWST
+        NIRSpec PRISM).
     sigma_lib_kms : float or array, shape (n_pix,), optional
         SSP library velocity dispersion [km/s], subtracted in quadrature from
         instrument LSF. Default 0.0 (no subtraction).
@@ -1252,7 +1693,31 @@ def project_spectrum(
 
     # ``conserving`` is a static structural flag (resolved from the ``resample``
     # mode before the trace), so this branch resolves at trace time (#1166).
-    if conserving and resolution is not None and resolution_matrix is None:
+    if _serves_on_lattice(resolution, resolution_matrix, sigma_v_kms):
+        # No instrument kernel: the exact unbroadened projection plus the sigma_v correction
+        # on the ln-lambda lattice (#3436). The instrument stage below is absent, so the
+        # result stays at library resolution.
+        flux = project_spectrum(
+            sed_rest,
+            wave_rest,
+            wave_obs,
+            redshift,
+            dl_cm,
+            conserving=conserving,
+            has_lyc_edge=has_lyc_edge,
+        ) + sigma_v_lattice_correction(
+            sed_rest,
+            None,
+            wave_rest,
+            wave_obs,
+            redshift,
+            dl_cm,
+            sigma_v_kms=sigma_v_kms,
+            span=lattice_span(wave_obs, *_concrete_z_range(redshift, z_window)),
+            conserving=conserving,
+            has_lyc_edge=has_lyc_edge,
+        )
+    elif conserving and resolution is not None and resolution_matrix is None:
         # The detector integrates the light that has already passed through the
         # line-spread function: broaden on the model grid, then take the pixel
         # integral (#2530).
@@ -1474,10 +1939,7 @@ def _flux_conserving_resample(
     all-zero SED has exponent 0. The two powers of two are applied as stop-gradient
     multiplies, because ``jnp.ldexp`` has an inexact derivative.
     """
-    exponent = jnp.frexp(jax.lax.stop_gradient(jnp.max(jnp.abs(sed_rest))))[1]
-    dtype = jnp.result_type(sed_rest)
-    scale_in = jax.lax.stop_gradient(jnp.ldexp(jnp.ones((), dtype), -exponent))
-    scale_out = jax.lax.stop_gradient(jnp.ldexp(jnp.ones((), dtype), exponent))
+    scale_in, scale_out = _peak_factors(sed_rest)
     means = _resample_peak_factored(wave_rest, sed_rest * scale_in, wave_query, edge_aa)
     return means * scale_out
 
@@ -1558,29 +2020,13 @@ def _resample_peak_factored(
     .. [1] Carnall, A. C. 2017, "SpectRes: A Fast Spectral Resampling Tool in
            Python", arXiv:1705.05165.
     """
-    mid = 0.5 * (wave_query[1:] + wave_query[:-1])
-    lo = wave_query[:1] - 0.5 * (wave_query[1:2] - wave_query[:1])
-    hi = wave_query[-1:] + 0.5 * (wave_query[-1:] - wave_query[-2:-1])
-    edges = jnp.concatenate([lo, mid, hi])  # (n_pix + 1,)
-
-    # Exact cumulative integral of the piecewise-linear model, clamped flat
-    # outside the grid. Inside interval i the integral from its left node is
-    # f_i t + (f_{i+1} - f_i) t^2 / (2 h_i), so its slope is the interpolated
-    # model value and the pixel flux is continuous in the edge position with a
-    # continuous first derivative (a linear interpolation of the node integrals
-    # would leave a slope that jumps each time an edge crosses a node, a step
-    # in the redshift gradient; #2530).
-    h = jnp.diff(wave_rest)
-    node_cum = jnp.concatenate(
-        [jnp.zeros(1), jnp.cumsum(0.5 * (sed_rest[1:] + sed_rest[:-1]) * h)]
-    )
-    e = jnp.clip(edges, wave_rest[0], wave_rest[-1])
-    i = jnp.clip(jnp.searchsorted(wave_rest, e, side="right") - 1, 0, wave_rest.shape[0] - 2)
-    t = e - wave_rest[i]
-    f0 = sed_rest[i]
-    flux_at_edges = node_cum[i] + f0 * t + 0.5 * (sed_rest[i + 1] - f0) / h[i] * t * t
-    if edge_aa is not None:
-        flux_at_edges = flux_at_edges + _step_minus_ramp(wave_rest, sed_rest, e, edge_aa)
+    # The exact cumulative integral of the model at the bin edges. Its slope is the
+    # interpolated model value, so the pixel flux is continuous in the edge position with a
+    # continuous first derivative (a linear interpolation of the node integrals would leave
+    # a slope that jumps each time an edge crosses a node, a step in the redshift gradient;
+    # #2530).
+    edges = _pixel_edges(wave_query)  # (n_pix + 1,)
+    flux_at_edges = _model_cumulative(wave_rest, sed_rest, edges, edge_aa)
     return (flux_at_edges[1:] - flux_at_edges[:-1]) / (edges[1:] - edges[:-1])
 
 
@@ -1706,12 +2152,8 @@ def compute_spectrum_conserving_lsf(
     # An array resolution takes the piecewise path (rest grids are not log-uniform).
     # The line-spread convolution sums the SED over its kernel, so the SED is divided
     # by its binary peak before the broadening and the factor is restored on the pixel
-    # luminosity. The factors are stop-gradient powers of two applied as multiplies:
-    # ``jnp.ldexp`` has an inexact derivative.
-    exponent = jnp.frexp(jax.lax.stop_gradient(jnp.max(jnp.abs(sed_rest))))[1]
-    dtype = jnp.result_type(sed_rest)
-    scale_in = jax.lax.stop_gradient(jnp.ldexp(jnp.ones((), dtype), -exponent))
-    scale_out = jax.lax.stop_gradient(jnp.ldexp(jnp.ones((), dtype), exponent))
+    # luminosity (:func:`_peak_factors`).
+    scale_in, scale_out = _peak_factors(sed_rest)
     sed_broad = apply_lsf(
         sed_rest * scale_in,
         wave_rest,
