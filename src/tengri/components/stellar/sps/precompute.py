@@ -694,6 +694,11 @@ class SpectroscopicZTable(NamedTuple):
     z_min: float
     z_max: float
 
+    @property
+    def nbytes(self) -> int:
+        """Resident bytes of the stored arrays (#3541): the observed pixel grid."""
+        return resident_nbytes(self.wave_obs_pixels, self.z_min, self.z_max)
+
 
 def precompute_spectroscopy_ztable(
     ssp_data,

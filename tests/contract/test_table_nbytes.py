@@ -180,3 +180,36 @@ def test_energy_balance_lut_without_sibling(ssp_data):
         tau_diff_grid=tau_diff,
     )
     _check(lut, expect_sibling=False)
+
+
+def test_spectroscopic_ztable_counts_its_pixel_grid():
+    from tengri.components.stellar.sps.precompute import SpectroscopicZTable
+
+    wave_obs = jnp.linspace(5200.0, 7400.0, 200)
+    zt = SpectroscopicZTable(wave_obs_pixels=wave_obs, z_min=0.01, z_max=3.0)
+    assert zt.nbytes == int(wave_obs.nbytes)
+
+
+def test_stellar_state_counts_each_stored_array_once(ssp_data):
+    """One number per state: its tables' nbytes plus the arrays it holds directly."""
+    from tengri.components.stellar.component import StellarSEDComponentState
+
+    waves, trans = _filters()
+    lut = precompute_photometry(ssp_data, waves, trans, REDSHIFT, DL_CM)
+    lut = lut._replace(
+        slopes=precompute_photometry(_slope_ssp(ssp_data), waves, trans, REDSHIFT, DL_CM)
+    )
+    cube = _rng_cube((3, 4, 50))
+    cube_slope = _rng_cube((3, 4, 50))
+    fw = _rng_cube((3, 30))
+    state = StellarSEDComponentState(
+        ssp_phot_lut=lut,
+        spec_ssp_broadened=cube,
+        spec_ssp_broadened_slope=cube_slope,
+        phot_fw_padded=fw,
+        phot_ft_padded=fw,
+        spec_sigma_v_fixed=80.0,
+    )
+    expected = lut.nbytes + int(cube.nbytes) + int(cube_slope.nbytes) + 2 * int(fw.nbytes)
+    assert state.nbytes == expected
+    assert StellarSEDComponentState().nbytes == 0

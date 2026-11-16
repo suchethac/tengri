@@ -60,6 +60,11 @@ def _spectro_obs():
         eline_mode="marginalized",
         eline_catalog=LineList.from_names(["Hbeta", "OIII_4959", "OIII_5007", "Halpha"]),
         eline_prior_sigma=1.0e-14,
+        # SpectrumPrecomp samples the model at the pixel centers, so the exact path it is
+        # compared with must too. resample="auto" resolves to the flux-conserving pixel
+        # integral on a fine-grained hosted grid, which the LUT refuses; this test is about the
+        # metallicity read, not the resample, so it states the one both routes share.
+        resample="point",
     )
     return Observation(spectroscopy=sp)
 
