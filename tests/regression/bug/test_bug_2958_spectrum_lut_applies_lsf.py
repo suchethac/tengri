@@ -212,10 +212,9 @@ def test_g_prebroadened_table_equals_sum_route(ssp_data_wne):
     s_sum = _spectrum(summed, 300.0)
     # Same operation in two orders of linear ops: relative to the median flux so FFT
     # roundoff in the deepest absorption pixels does not dominate.
-    # Route bar, 3x the measured 1.21e-5 on the PCHIP read (main, Hermite: 5.4e-8). PCHIP is
-    # non-linear: the prebroadened table reads PCHIP of the broadened columns, the sum route
-    # broadens the PCHIP read of the raw columns, and the two differ at about 1e-5.
-    assert float(np.max(np.abs(s_table - s_sum))) <= 3.6e-5 * float(np.median(np.abs(s_sum)))
+    # Route bar, 3x the measured 5.39e-8 with the native-slope Hermite read (#3541, 2026-11-15;
+    # it was 1.21e-5 when the table read PCHIP of its own broadened columns).
+    assert float(np.max(np.abs(s_table - s_sum))) <= 1.6e-7 * float(np.median(np.abs(s_sum)))
 
 
 # ── (h) no resolution cap: the LUT holds at R = 5000 ──────────────────────────
@@ -250,14 +249,19 @@ def test_h_lut_matches_exact_at_r5000_without_fallback(ssp_data_wne):
 # Re-pinned 2026-11-15: monotone PCHIP metallicity read (#3434, owner ruling 'True PCHIP
 # on the spectra'). Main's values are 8.800566e-29 ... 1.410505e-27; the PCHIP read moves the
 # low-flux pixels by up to 2.4e-4 relative. Control (Hermite read) reproduces main to 1e-15.
+# Re-pinned 2026-11-15 (#3541, owner ruling "Exact: native slopes"): the spectrum table now reads
+# the native PCHIP slopes by Hermite instead of PCHIP of its own resampled values. The move is up
+# to 2.8e-6 relative (index 0: 2.0e-7). Measured against the exact path on this grid, the LUT
+# moved from 7.2e-6 to 4.4e-6 at these pixels; the rest (about 6e-6 at every pixel, with or
+# without Madau IGM) is a separate LUT residual, not the metallicity read, and is not closed here.
 _PREFIX_LUT_WNE_RNONE = [
-    8.801267342704195e-29,
-    3.157198494420064e-28,
-    5.065771660279481e-28,
-    7.304963047431351e-28,
-    8.537459097668553e-28,
-    1.166429892201843e-27,
-    1.4114134809927024e-27,
+    8.801269134494637e-29,
+    3.1571986038432897e-28,
+    5.065771732046372e-28,
+    7.30496310383873e-28,
+    8.53745948244721e-28,
+    1.1664301615680506e-27,
+    1.4114095304577797e-27,
 ]
 
 
@@ -271,6 +275,111 @@ def test_d_resolution_none_is_bit_for_bit_prefix(ssp_data_wne):
     )
     s = np.asarray(lut.predict_spectrum({}))
     np.testing.assert_allclose(s[_IDX], np.asarray(_PREFIX_LUT_WNE_RNONE), rtol=_PIN_RTOL, atol=0)
+
+
+def _brute_ln_lambda_broaden(wave_rest, sed_rest, sigma_v_kms, *, step=2e-6):
+    """Gaussian in ln(lambda) on lambda F_lambda, on a fine uniform ln-lambda grid (#3436).
+
+    The same brute-force reference as test_bug_3436: a direct kernel on a grid far finer
+    than the lattice, applied by FFT, with no lattice. Returns ln(lambda) and lambda F.
+    """
+    sig = sigma_v_kms / 299792.458
+    x = np.arange(np.log(wave_rest[0]), np.log(wave_rest[-1]), step)
+    g = np.interp(np.exp(x), wave_rest, sed_rest) * np.exp(x)
+    half = int(np.ceil(12.0 * sig / step))
+    k = np.exp(-0.5 * (np.arange(-half, half + 1) * step / sig) ** 2)
+    k /= k.sum()
+    n = g.size + k.size
+    conv = np.fft.irfft(np.fft.rfft(g, n) * np.fft.rfft(k, n), n)
+    return x, conv[half : half + g.size]
+
+
+def _igm_case_reference(exact_model, sigma_v_kms):
+    """Brute-force LUT-free reference for the exact model with IGM, point-sampled.
+
+    The stellar light of this case is all of ``state.sed_intrinsic`` (no nebular or
+    instrument-only group), so the reference is T * B(S) on the rest grid, read at the
+    observed pixel centers, scaled per pixel to the model's sigma_v = 0 output.
+    """
+    state = exact_model.predict_state({"sigma_v_kms": 0.0})
+    wave_rest = np.asarray(state.wave)
+    sed = np.asarray(state.sed_intrinsic)
+    igm = np.asarray(state.derived["igm_transmission"])
+    x, g_b = _brute_ln_lambda_broaden(wave_rest, sed, sigma_v_kms)
+    _, g_0 = _brute_ln_lambda_broaden(wave_rest, sed, 1e-9)
+    t_f = np.interp(np.exp(x), wave_rest, igm)
+    wq = np.asarray(_WAVE_OBS) / (1.0 + _Z)
+    ref_b = np.interp(np.log(wq), x, g_b * t_f / np.exp(x))
+    ref_0 = np.interp(np.log(wq), x, g_0 * t_f / np.exp(x))
+    base = np.asarray(exact_model.predict_spectrum({"sigma_v_kms": 0.0}))
+    return ref_b * (base / ref_0)
+
+
+def test_d_sigma_v_exact_path_matches_brute_force_without_resolution(ssp_data_wne):
+    """#3436: the exact path with IGM and no resolution broadens at library resolution.
+
+    Resample mode: point (``_spec`` uses ``resample="point"``). Reference: the brute-force
+    ln-lambda broadening of the stellar light, times the IGM, at the pixel centers (1e-3).
+    The point readout is the closed-form Gaussian of #3512 (measured 7.2e-5 of peak).
+    """
+    exact = _build(
+        ssp_data_wne,
+        None,
+        spectro=_spec(resolution=None),
+        igm=_MADAU,
+        sigma_v=Uniform(0.0, 2000.0),
+    )
+    s150 = _spectrum(exact, 150.0)
+    ref = _igm_case_reference(exact, 150.0)
+    rel = float(np.max(np.abs(s150 - ref)) / np.max(np.abs(ref)))
+    print(f"NUMBERS #3436 exact vs brute-force reference at sigma_v=150: {rel:.6e} of peak")
+    assert rel <= 1e-3
+
+
+def test_d_sigma_v_zero_lut_agrees_with_exact_without_resolution(ssp_data_wne):
+    """The sigma_v = 0 LUT matches the exact path (point sampling, IGM, no resolution)."""
+    sv = Uniform(0.0, 2000.0)
+    exact = _build(ssp_data_wne, None, spectro=_spec(resolution=None), igm=_MADAU, sigma_v=sv)
+    lut = _build(
+        ssp_data_wne, SpectrumPrecomp(), spectro=_spec(resolution=None), igm=_MADAU, sigma_v=sv
+    )
+    s_exact, s_lut = _spectrum(exact, 0.0), _spectrum(lut, 0.0)
+    rel = float(np.max(np.abs(s_lut - s_exact)) / np.max(np.abs(s_exact)))
+    print(f"NUMBERS #3436 LUT vs exact at sigma_v=0, resolution=None: {rel:.6e} of peak")
+    assert rel <= 1e-5
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "SpectrumPrecomp still broadens on the model grid; fixed by #3413 (conserving) / "
+        "#3500 (point, IGM)"
+    ),
+)
+def test_d_sigma_v_lut_matches_brute_force_without_resolution(ssp_data_wne):
+    """Known gap, #3436 follow-up: the LUT at sigma_v = 150 without resolution.
+
+    Resample mode: point. Same reference and bar as the exact-path test above; expected to
+    fail until the table's dispersion is on the lattice.
+    """
+    exact = _build(
+        ssp_data_wne,
+        None,
+        spectro=_spec(resolution=None),
+        igm=_MADAU,
+        sigma_v=Uniform(0.0, 2000.0),
+    )
+    lut = _build(
+        ssp_data_wne,
+        SpectrumPrecomp(),
+        spectro=_spec(resolution=None),
+        igm=_MADAU,
+        sigma_v=Uniform(0.0, 2000.0),
+    )
+    ref = _igm_case_reference(exact, 150.0)
+    rel = float(np.max(np.abs(_spectrum(lut, 150.0) - ref)) / np.max(np.abs(ref)))
+    print(f"NUMBERS #3436 LUT vs brute-force reference at sigma_v=150: {rel:.6e} of peak")
+    assert rel <= 1e-3
 
 
 # ── (e) exact path bit-for-bit across the extraction ──────────────────────────
@@ -362,9 +471,10 @@ def test_i_free_z_fixed_sigma_v_cube_equals_sum_route(ssp_data_wne, z):
     assert chain[0]._state.spec_ssp_broadened is not None
     s_cube = np.asarray(cube.predict_spectrum({"redshift": z}))
     s_sum = np.asarray(summed.predict_spectrum({"redshift": z, "sigma_v_kms": 300.0}))
-    # Route bar at 3x the measured PCHIP route gap (z=0.08: 1.05e-5, z=0.12: 1.18e-5; main with
-    # the Hermite read: 5.1e-8 and 5.6e-8). Same cause as test_g: PCHIP is non-linear.
-    bar = {0.08: 3.2e-5, 0.12: 3.6e-5}[z]
+    # Route bar at 3x the measured residual with the native-slope Hermite read (#3541: z=0.08
+    # 5.08e-8, z=0.12 5.56e-8, measured 2026-11-15). Before #3541 the PCHIP read of the stored
+    # broadened cube gave 1.05e-5 and 1.18e-5. Same cause as test_g: PCHIP is non-linear.
+    bar = {0.08: 1.6e-7, 0.12: 1.7e-7}[z]
     assert float(np.max(np.abs(s_cube - s_sum))) <= bar * float(np.median(np.abs(s_sum)))
 
 

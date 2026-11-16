@@ -744,7 +744,7 @@ British spellings are gone, not deprecated. Per §2's file-path stability rule t
 | `normalised_excess_variance()` | `normalized_excess_variance()` | `components/agn/grahsp/variability.py` |
 | `rank_normalise()` / `rank_normalised_rhat()` | `rank_normalize()` / `rank_normalized_rhat()` | `analysis/diagnostics/autocorrelation.py` |
 | `finalise()` | `finalize()` | `inference/backends/nested/utils.py` |
-| `SSP_CATALOGUE_URL` | `SSP_CATALOG_URL` | `data/__init__.py` |
+| `SSP_CATALOGUE_URL` | one catalog URL, `SSP_BASE_URL` (the `tengri.data` copy is removed) | `_data_setup.py` |
 
 See `CHANGELOG.md` for the full record.
 

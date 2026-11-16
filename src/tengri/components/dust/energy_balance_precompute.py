@@ -132,6 +132,10 @@ class EnergyBalanceLUT(NamedTuple):
     #: the evaluation redshift. The ``B`` families are intrinsic, so they have no
     #: z axis.
     ln1pz: jnp.ndarray | None = None
+    #: The same build applied to the native PCHIP slopes across metallicity (#3541), as a
+    #: whole table of this type: its families are the slope siblings of ``B``/``G`` and
+    #: the rest. ``None`` on a table built without them; the metallicity read refuses that.
+    slopes: EnergyBalanceLUT | None = None
 
 
 def build_energy_balance_lut(
@@ -560,6 +564,20 @@ _B_ALPHA_FIELDS = ("B", "B_fesc", "B_old", "B_fesc_old")
 _G_ALPHA_FIELDS = ("G", "G_fesc", "G_old", "G_fesc_old")
 
 
+def build_energy_balance_lut_with_slopes(builder, ssp_data, **kwargs):
+    """``builder(ssp_flux, ssp_wave, **kwargs)`` plus its native-slope sibling (#3541).
+
+    The B and G families are linear in the SSP flux, so the same build on the native PCHIP
+    slopes across metallicity is the sibling that the Hermite metallicity read needs.
+    """
+    from tengri.components.stellar.sps.met_pchip import native_slope_flux
+
+    ssp_wave = jnp.asarray(ssp_data.ssp_wave)
+    lut = builder(jnp.asarray(ssp_data.ssp_flux), ssp_wave, **kwargs)
+    slope_flux = native_slope_flux(ssp_data.ssp_flux, ssp_data.ssp_lgmet)
+    return lut._replace(slopes=builder(slope_flux, ssp_wave, **kwargs))
+
+
 def read_lut_met(lut: EnergyBalanceLUT, joint, met_z, lgmet):
     """Read every B and G family over metallicity at the galaxy's met_z (#3434, phase 2).
 
@@ -571,24 +589,35 @@ def read_lut_met(lut: EnergyBalanceLUT, joint, met_z, lgmet):
 
     Returns the (possibly new) table and the joint to contract with it.
     """
-    from tengri.components.stellar.sps.met_pchip import met_collapsed
+    from tengri.components.stellar.sps.met_pchip import met_collapsed_hermite
 
     if joint.shape[0] == lgmet.shape[0]:
         return lut, joint
+    if lut.slopes is None:
+        raise ValueError(
+            "the energy-balance LUT reached the metallicity read without its native-slope "
+            "sibling (#3541); build it with build_energy_balance_lut_with_slopes."
+        )
+    sib = lut.slopes
     updates = {}
     for name in _B_ALPHA_FIELDS:
         value = getattr(lut, name)
         if value is not None:
-            updates[name] = met_collapsed(value, lgmet, met_z, age_axis=1)
+            updates[name] = met_collapsed_hermite(
+                value, getattr(sib, name), lgmet, met_z, age_axis=1
+            )
     for name in _G_ALPHA_FIELDS:
         value = getattr(lut, name)
         if value is None:
             continue
+        slope = getattr(sib, name)
         if lut.ln1pz is None:
-            updates[name] = met_collapsed(value, lgmet, met_z, age_axis=1)
+            updates[name] = met_collapsed_hermite(value, slope, lgmet, met_z, age_axis=1)
         else:
             # leading ln(1+z) axis: read each redshift slab over metallicity
-            updates[name] = jax.vmap(lambda t: met_collapsed(t, lgmet, met_z, age_axis=1))(value)
+            updates[name] = jax.vmap(
+                lambda t, d: met_collapsed_hermite(t, d, lgmet, met_z, age_axis=1)
+            )(value, slope)
     return lut._replace(**updates), joint
 
 
@@ -634,6 +663,8 @@ def collapse_lut_alpha(lut: EnergyBalanceLUT, ia, fa) -> EnergyBalanceLUT:
         value = getattr(lut, name)
         if value is not None:
             updates[name] = collapse_alpha_axis(value, ia, fa, axis=g_axis)
+    if lut.slopes is not None:
+        updates["slopes"] = collapse_lut_alpha(lut.slopes, ia, fa)
     return lut._replace(**updates)
 
 

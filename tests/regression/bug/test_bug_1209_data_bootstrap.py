@@ -168,32 +168,20 @@ def test_doctor_and_bench_share_one_answer(clean_env, monkeypatch, tmp_path):
 # ── one download_ssp ─────────────────────────────────────────────────────
 
 
-def test_data_download_ssp_is_deprecated_and_delegates(clean_env, monkeypatch, tmp_path):
-    """The duplicate twin warns and routes to the canonical implementation.
+def test_data_has_one_download_ssp_and_one_catalog_url():
+    """There is one download implementation and one catalog URL.
 
-    The two were separate implementations of one job, reachable under the same
-    name with incompatible signatures, and only one honored the environment.
+    The deprecated ``tengri.data`` copies were deleted rather than kept as
+    shims, so the only ``download_ssp`` is ``tengri.download_ssp`` and the only
+    catalog URL is ``tengri._data_setup.SSP_BASE_URL``.
     """
+    import tengri
     import tengri._data_setup as ds
     import tengri.data as td
 
-    seen = {}
-
-    def _fake(name, dest=None, force=False, progress=True):
-        seen.update(name=name, dest=dest, force=force, progress=progress)
-        return tmp_path / "x.h5"
-
-    monkeypatch.setattr(ds, "download_ssp", _fake)
-
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        td.download_ssp("fsps_prsc_miles_chabrier.h5", dest_dir=tmp_path, overwrite=True)
-
-    assert [w for w in caught if issubclass(w.category, DeprecationWarning)], (
-        "tengri.data.download_ssp did not warn"
-    )
-    assert seen["dest"] == tmp_path, "dest_dir was not forwarded as dest"
-    assert seen["force"] is True, "overwrite was not forwarded as force"
+    assert not hasattr(td, "download_ssp"), "tengri.data still exposes download_ssp"
+    assert not hasattr(td, "SSP_CATALOG_URL"), "tengri.data still exposes SSP_CATALOG_URL"
+    assert tengri.download_ssp is ds.download_ssp
 
 
 def test_download_ssp_progress_is_not_silently_dropped():
@@ -273,19 +261,28 @@ def test_download_and_load_share_one_default():
         f"ssp_lgmet shape {ssp_no_args.ssp_lgmet.shape} vs {ssp_explicit.ssp_lgmet.shape}. "
         f"The no-argument default is not DEFAULT_SSP."
     )
-    # The loaded SSP must match the known catalog entry
-    assert DEFAULT_SSP in _KNOWN_SSPS, "the default must be fetchable by download_ssp()"
+    # The loaded SSP must be a registry entry download_ssp() can fetch, with its checksum
+    # (the default is hosted since #3465).
+    assert DEFAULT_SSP in _KNOWN_SSPS and _KNOWN_SSPS[DEFAULT_SSP].sha256 is not None, (
+        "the default must be fetchable by download_ssp(), with a checksum"
+    )
 
 
 def test_default_ssp_is_bare_stellar():
-    """The default must be bare-stellar: the catalog ships nothing else.
+    """The bare twin of the default is bare-stellar, and that twin is fetchable.
 
-    A wNE (nebular-baked) default is unobtainable via ``download_ssp()`` *and*
-    rejected by the Cue backend, which is what half the recipe catalog uses.
+    Re-pinned 2026-11-15: default SSP is the MIST c3k_hr wNE grid (#3465). The
+    default is nebular-baked by design, so the bare-stellar invariant now holds for
+    its twin: the grid a Cue, CLOUDY or CB_19 model is built on. A wNE twin would
+    double-count the nebular emission those backends add.
     """
-    from tengri._data_setup import DEFAULT_SSP
+    from tengri._data_setup import _BARE_TWIN_OF_WNE, _KNOWN_SSPS, DEFAULT_SSP
 
-    assert "wNE" not in DEFAULT_SSP, "the default SSP must not be a nebular-baked grid"
+    twin = _BARE_TWIN_OF_WNE[DEFAULT_SSP]
+    assert "wNE" not in twin, "the bare twin of the default must not be nebular-baked"
+    assert twin in _KNOWN_SSPS and _KNOWN_SSPS[twin].sha256 is not None, (
+        "the bare twin must be fetchable by download_ssp(), with a checksum"
+    )
 
 
 @pytest.mark.parametrize(

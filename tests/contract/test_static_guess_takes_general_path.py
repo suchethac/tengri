@@ -45,6 +45,12 @@ _CONCRETENESS_HELPERS = frozenset(
 #: the same justification.
 ALLOWLIST: dict[str, str] = {
     # ---- answered: an unknown takes the general path, or raises at build ----
+    # ---- build-time host predicate, never traced ----
+    "observation/batched.py::_needs_z_twin": (
+        "a host-side build-time check on the template spec (a fixed or free Distribution and "
+        "the WavePrecomp flag), never called on a tracer; a fixed-z WavePrecomp template gets "
+        "the runtime-redshift promotion, every other template passes through unchanged"
+    ),
     "utils/host_array.py::device_table": (
         "a tracer passes through as jnp.asarray(tracer) and is never cached; a numpy table is "
         "held once per table and dtype; a concrete device array is cast to the canonical dtype "
@@ -104,7 +110,7 @@ ALLOWLIST: dict[str, str] = {
     "forward/sed_model.py::SEDModel.__init__": (
         "catalog or free redshift -> z-table enabled in both branches (#2858)"
     ),
-    "forward/sed_model.py::SEDModel._build_component_chain": (
+    "forward/sed_model.py::SEDModel._build_component_chain_in_scope": (
         "via redshift_is_runtime: catalog or free -> runtime z-table spec, never the placeholder"
     ),
     "forward/sed_model.py::SEDModel._get_or_build_predict_spectrum_on_grid_jit": (
@@ -133,10 +139,24 @@ ALLOWLIST: dict[str, str] = {
         "is static and the eager call on the same model runs the check"
     ),
     "forward/sed_model.py::redshift_is_runtime": "unknown distribution -> runtime (#2858)",
-    "forward/sed_model.py::_alpha_fe_redshift_ends": (
+    "forward/sed_model.py::_redshift_ends": (
         "catalog model -> both ends of the catalog z range, never the placeholder; free "
         "redshift -> both ends of its prior; only a non-catalog Fixed redshift gives its "
-        "one value (#3487 warning)"
+        "one value (#3487 warning; the #3436 lattice window, whose caller returns None for "
+        "an unbounded range so the projection raises at build)"
+    ),
+    "observation/spectrum.py::_cell_window_width": (
+        "traced model grid -> every cell in the window, the exact general path; the static "
+        "window width is only an optimization for a concrete grid (#3512)"
+    ),
+    "observation/spectrum.py::_concrete_z_range": (
+        "traced redshift with no static window -> ValueError at build naming the fix (a fixed "
+        "redshift or finite prior bounds); never a lattice spanned from a guessed z (#3436)"
+    ),
+    "observation/spectrum.py::_serves_on_lattice": (
+        "traced sigma_v -> the lattice route, which serves every sigma_v (a traced zero is "
+        "gated to an exactly-zero correction); only a concrete non-positive sigma_v keeps the "
+        "unbroadened projection (#3436)"
     ),
     "observation/spectroscopy.py::Spectroscopy.resolve_conserving": (
         "traced grid -> resample mode resolved on the configured grid (see gap below)"

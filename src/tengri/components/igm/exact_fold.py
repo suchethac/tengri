@@ -51,10 +51,19 @@ class SubbandFold(NamedTuple):
         screen multiplying it must be evaluated. NaN for bands the IGM cannot
         reach (their node is the bare one) and the bare node wherever the IGM
         removes a chunk entirely.
+    phi : ndarray, same shape
+        The folded sub-band integral itself, ``int_k S T_IGM T_b w / int T_b w``:
+        linear in the template, so it has a native-slope sibling of its own (#3541).
+        NaN for bands the IGM cannot reach.
+    num_rest : ndarray, same shape
+        The folded rest-frame numerator ``int_k lambda_rest S T_IGM T_b w / int T_b w``
+        [Angstrom], linear in the template. NaN for bands the IGM cannot reach.
     """
 
     ratio: np.ndarray
     nodes_rest: np.ndarray
+    phi: np.ndarray
+    num_rest: np.ndarray
 
 
 def _transmission(igm_model, wave_rest, z):
@@ -233,13 +242,15 @@ def subband_fold(
     shape = (*lead, len(filters), n_chunks)
     ratio = np.ones(shape, dtype=np.float64)
     nodes = np.full(shape, np.nan, dtype=np.float64)
+    phi = np.full(shape, np.nan, dtype=np.float64)
+    num_rest = np.full(shape, np.nan, dtype=np.float64)
     if transmission is None:
         transmission = _transmission(igm_model, wave_rest, z)
     else:
         transmission = np.asarray(transmission, dtype=np.float64)
     reached = _absorbed_filters(transmission, wave_rest, z, filter_waves)
     if not reached:
-        return SubbandFold(ratio, nodes)
+        return SubbandFold(ratio, nodes, phi, num_rest)
 
     # Only the SSP nodes the reached filters' quadratures read are multiplied
     # and stacked (#2769): everything outside the slice is never indexed, so the
@@ -268,11 +279,17 @@ def subband_fold(
     )
     sub_phot = np.asarray(grid.subband_phot, dtype=np.float64)
     sub_nodes = np.asarray(grid.subband_waves_rest, dtype=np.float64)
+    sub_num = np.asarray(grid.subband_num_rest, dtype=np.float64)
     bare, folded = sub_phot[0], sub_phot[1]
     bare_nodes, folded_nodes = sub_nodes[0], sub_nodes[1]
     ratio[..., reached, :] = np.where(bare != 0.0, folded / np.where(bare != 0.0, bare, 1.0), 0.0)
     nodes[..., reached, :] = np.where(folded != 0.0, folded_nodes, bare_nodes)
-    return SubbandFold(ratio, nodes)
+    # The folded integrals are the linear objects: each is its own quadrature of the
+    # template, so the native-slope sibling is the same quadrature on S (#3541). The
+    # ratio to the bare integral is nonlinear in the flux and is not stored.
+    phi[..., reached, :] = folded
+    num_rest[..., reached, :] = sub_num[1]
+    return SubbandFold(ratio, nodes, phi, num_rest)
 
 
 def subband_fold_table(
@@ -316,7 +333,7 @@ def subband_fold_table(
             key,
             prefix=_subband_cache.EXACT_FOLD_PREFIX,
             expected_shape=(
-                2,
+                len(SubbandFold._fields),
                 z_grid.size,
                 *np.shape(ssp_data.ssp_flux)[:-1],  # (n_met[, n_alpha], n_age)
                 len(filters),
@@ -346,8 +363,8 @@ def subband_fold_table(
         )
         for z, transmission_z in zip(z_grid, transmissions)
     ]
-    # One array on disk: (2, n_z, ...) = (ratio, nodes).
-    table = np.stack([np.stack([f.ratio for f in folds]), np.stack([f.nodes_rest for f in folds])])
+    # One array on disk: (4, n_z, ...) = (ratio, nodes, phi, num_rest).
+    table = np.stack([np.stack([getattr(f, name) for f in folds]) for name in SubbandFold._fields])
     _subband_cache.memo_put(key, table)
     _subband_cache.store(key, table, prefix=_subband_cache.EXACT_FOLD_PREFIX)
     return SubbandFold(*table)

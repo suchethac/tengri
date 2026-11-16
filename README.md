@@ -104,11 +104,11 @@ The same two-file selection runs as the smoke gate on every PR.
 
 ## SSP grids
 
-Tengri needs a pre-computed Simple Stellar Population grid in DSPS HDF5 format. Pre-formatted grids (BC03, BPASS, FSPS, ProGeny) live at the [public mirror](https://halos.as.arizona.edu/suchethacooray/ssp-spectra/). Pull the default FSPS grid:
+Tengri needs a pre-computed Simple Stellar Population grid in DSPS HDF5 format. Pre-formatted grids (BC03, BPASS, FSPS, ProGeny) live at the [public mirror](https://halos.as.arizona.edu/suchethacooray/ssp-spectra/). Pull the default FSPS grid (MIST isochrones with the C3K library; the Padova grids are available by name):
 
 ```python
 import tengri
-tengri.download_ssp()           # -> data/fsps_prsc_miles_chabrier.h5 (or $TENGRI_DATA_DIR)
+tengri.download_ssp()           # -> data/fsps_mist_c3k_a_chabrier.h5 (or $TENGRI_DATA_DIR)
 tengri.list_known_ssps()        # other grids
 ```
 
@@ -284,11 +284,10 @@ codes: the same models, implemented in one framework, so you can
 check every assumption and compare models side by side. The
 comparisons live in
 [docs/reproduction/](https://suchethacooray.com/tengri/reproduction/index.html).
-Six are online now ([CIGALE](https://cigale.lam.fr/), BAGPIPES,
-Prospector/FSPS, AGNFITTER-RX, ProSpect, GRAHSP), each putting the two codes
-on the same axes, component by component, ending with a full-SED
-head-to-head. Synthesizer is being revised, and BEAGLE, MAGPHYS,
-and GalaPy are next.
+Seven are online now ([CIGALE](https://cigale.lam.fr/), BAGPIPES,
+Prospector/FSPS, AGNFITTER-RX, ProSpect, GRAHSP, BEAGLE), each putting the two
+codes on the same axes, component by component, ending with a full-SED
+head-to-head. Synthesizer is being revised, and MAGPHYS and GalaPy are next.
 
 ## Citation
 

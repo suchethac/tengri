@@ -34,6 +34,7 @@ from jax import Array
 
 from tengri.components.agn.grahsp.bolometric import BBB_BOL_CUT_NM
 from tengri.utils.host_array import device_table
+from tengri.utils.physics_constants import C_KM_S as _C_KMS, GAUSSIAN_FWHM_PER_SIGMA
 
 __all__ = [
     "BASE_PER_DECADE",
@@ -71,10 +72,9 @@ the disc block normalization are low by at most that fraction.
 _WINDOW_OFFSETS: np.ndarray = np.arange(-WINDOW_SIGMA, WINDOW_SIGMA + 1.0)
 """Window edge offsets in sigma units: 13 edges per feature (-6 sigma .. +6 sigma)."""
 
-_FWHM_TO_SIGMA: float = 1.0 / (2.0 * math.sqrt(2.0 * math.log(2.0)))
+_FWHM_TO_SIGMA: float = 1.0 / GAUSSIAN_FWHM_PER_SIGMA
 """FWHM -> sigma for a Gaussian, 1 / (2 sqrt(2 ln 2))."""
 
-_C_KMS: float = 299792.458
 """Speed of light [km/s]."""
 
 

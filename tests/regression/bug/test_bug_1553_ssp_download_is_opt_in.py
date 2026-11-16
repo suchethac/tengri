@@ -38,7 +38,7 @@ def wire(monkeypatch):
 
     def fake_download(short, dest="data"):
         calls.append((short, str(dest)))
-        path = Path(dest) / data_setup._KNOWN_SSPS[short]
+        path = Path(dest) / data_setup._KNOWN_SSPS[short].filename
         path.parent.mkdir(parents=True, exist_ok=True)
         with h5py.File(path, "w") as f:
             f["ssp_wave"] = np.linspace(1000.0, 10000.0, 16)

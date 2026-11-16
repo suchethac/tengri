@@ -17,13 +17,16 @@ chosen from the static grid kind, never from a traced grid: under a trace
 ``_is_log_uniform`` (``tengri.observation.spectrum``) answers ``False`` (unknown),
 which sends the grid down the general path (#2847).
 
-Why the redshift is free in the template
-----------------------------------------
-The template model must have its redshift free. A fixed redshift is baked
-into the model's luminosity distance and into the stellar redshift
-interpolation, so a per-galaxy ``obs.z`` could not reach them. The per-galaxy
-redshift enters through the parameter dictionary instead, and any ``redshift``
-key in ``params`` is ignored in favor of ``obs.z``.
+Redshift of each galaxy
+-----------------------
+Every galaxy is evaluated at its own ``obs.z``, whatever the template's redshift
+setting: a free redshift, a fixed redshift or a ``catalog_z_range`` window
+(``WavePrecomp(catalog_z_range=...)``). The per-galaxy redshift enters through the
+parameter dictionary, and any ``redshift`` key in ``params`` is ignored in favor of
+``obs.z``. A fixed template's value is overridden the same way, so the batch never
+reads the template's fixed redshift. Each galaxy's ``z`` must lie inside the template's
+``catalog_z_range`` when it has one (:func:`~tengri.observation.batched.build_spectro_batches`
+checks this at build time).
 
 Per-galaxy SFH bin edges
 ------------------------
@@ -67,7 +70,8 @@ JIT note
 --------
 :func:`make_batched_predict` returns a jitted, vmapped function. The template
 model's spectrum LUT must be off (:func:`check_template_model` refuses it), and
-the template's structure, not its grid, sets the compile. The per-call arrays
+the template's structure, not its grid, sets the compile. The redshift is a traced
+per-galaxy leaf, so galaxies at different redshifts share one compile. The per-call arrays
 are the batch and the parameters, so one compile serves every batch that shares
 a :class:`~tengri.observation.batched.SpectroBatchSpec`.
 """
@@ -93,6 +97,7 @@ from tengri.observation.eline_marginalization import (
     apply_doublet_constraints,
     build_eline_design_matrix,
     eline_amplitude_names,
+    line_kinematics,
     model_line_match,
 )
 from tengri.utils.batching import GALAXY_CHUNK_SIZE, vmap_chunked
@@ -116,15 +121,15 @@ def check_template_model(model) -> None:
     Parameters
     ----------
     model : SEDModel
-        Template model. Its redshift must be free, its spectroscopy must be
-        configured, and it must not use the spectrum LUT, a ``catalog_z_range``,
-        line fluxes, line ratios, spectral indices, emission lines with a Cloudy
-        prior, broad emission lines (``eline_broad``), a spectral covariance or a
-        Student-t or calibration-floor noise model. Emission lines with
-        ``eline_mode='fitted'`` or ``'marginalized'`` (flat or model-centered prior) and
-        ``eline_broad=False`` are accepted. A pixel covariance is a per-galaxy input
-        (:class:`~tengri.observation.batched.GalaxySpectrum`) and the template
-        must not carry one.
+        Template model. Its spectroscopy must be configured, and it must not use the
+        spectrum LUT, line fluxes, line ratios, spectral indices, emission lines with a Cloudy
+        prior, a spectral covariance or a Student-t or calibration-floor noise model.
+        Emission lines with ``eline_mode='fitted'`` or ``'marginalized'`` (flat or
+        model-centered prior) are accepted, in kinematic groups (``eline_kinematics``)
+        as on the per-galaxy path. The redshift may be free, fixed or a
+        ``catalog_z_range`` window: each galaxy's ``obs.z`` is the redshift used. A pixel
+        covariance is a per-galaxy input (:class:`~tengri.observation.batched.GalaxySpectrum`)
+        and the template must not carry one.
 
     Raises
     ------
@@ -141,16 +146,6 @@ def check_template_model(model) -> None:
     observation = getattr(model, "observation", None)
     if observation is None or not observation.can_do_spectroscopy:
         raise ValueError("template model has no spectroscopy configured")
-    if model.z_fixed is not None:
-        raise ValueError(
-            "template model has a fixed redshift; build it with redshift free "
-            "so the per-galaxy obs.z is the only redshift the batch uses"
-        )
-    if getattr(model, "_catalog_z_range", None) is not None:
-        raise ValueError(
-            "template model has a catalog_z_range (a per-galaxy redshift window in "
-            "WavePrecomp); build it with redshift free and without catalog_z_range"
-        )
     if bool(model._approx.get("spectrum_precomp")):
         raise ValueError(
             "template model uses the SpectrumPrecomp spectrum LUT, which bakes the "
@@ -171,11 +166,6 @@ def check_template_model(model) -> None:
         )
     if spectroscopy.eline_mode == "marginalized" and spectroscopy.eline_prior_type == "model":
         model_line_match(model, batched_line_set(model).independent_wavelengths)
-    if spectroscopy.eline_mode != "off" and spectroscopy.eline_broad:
-        raise ValueError(
-            "template model fits emission lines with eline_broad=True, which the batched "
-            "likelihood does not evaluate; use eline_broad=False"
-        )
     for name in _UNSUPPORTED_CHANNELS:
         if getattr(observation, name, None) is not None:
             raise ValueError(
@@ -249,6 +239,82 @@ def require_model_spec(model, spec) -> SpectroBatchSpec:
     return spec
 
 
+def batched_template(model, spec):
+    """Return the template that the batch of ``spec`` is evaluated on.
+
+    A fixed-z template with ``WavePrecomp`` bakes its photometry LUT at the fixed
+    value (see :func:`~tengri.inference.fitter.promote_to_runtime_redshift`).
+    For such a bucket, ``spec.z_span`` names the span of its galaxies, and the
+    evaluation uses the catalog twin over that span, so each galaxy's photometry is
+    projected at its own ``obs.z``. Every other bucket gets ``model`` back.
+
+    Parameters
+    ----------
+    model : SEDModel
+        Template model.
+    spec : SpectroBatchSpec
+        Bucket key; its ``z_span`` is ``None`` unless the template needs a twin.
+
+    Returns
+    -------
+    SEDModel
+        ``model``, or its cached catalog twin over ``spec.z_span``.
+
+    Notes
+    -----
+    Build-time Python, not JIT-compatible. The promotion is delegated to
+    :func:`~tengri.inference.fitter.promote_to_runtime_redshift`, which caches it per
+    model and span, so every entry point that takes the same template and bucket
+    evaluates the same model object and compiles once.
+    """
+    span = getattr(spec, "z_span", None)
+    if span is None:
+        return model
+    # Local import: inference.fitter imports observation, and this module is loaded
+    # before fitter by the batched entry points.
+    from tengri.inference.fitter import promote_to_runtime_redshift
+
+    return promote_to_runtime_redshift(model, span)
+
+
+def batched_template_for_batches(model, batches):
+    """Return the template for a list of buckets, which must share one ``z_span``.
+
+    Parameters
+    ----------
+    model : SEDModel
+        Template model.
+    batches : sequence of (SpectroBatchSpec, SpectroBatch, ndarray)
+        Buckets from one :func:`~tengri.observation.batched.build_spectro_batches` call.
+
+    Returns
+    -------
+    SEDModel
+        The template twin shared by every bucket, or ``model`` when there are none
+        or the template needs no twin.
+
+    Raises
+    ------
+    ValueError
+        If the buckets carry different ``z_span`` values. They then come from
+        different builds and would need different twins; build the catalog in one call.
+
+    Notes
+    -----
+    Build-time Python, not JIT-compatible. Delegates to :func:`batched_template`, so
+    the twin is cached on the template and shared by every bucket of the call.
+    """
+    if not batches:
+        return model
+    spans = {getattr(spec, "z_span", None) for spec, _, _ in batches}
+    if len(spans) > 1:
+        raise ValueError(
+            f"buckets carry {len(spans)} different redshift spans {sorted(map(str, spans))}; "
+            "build the whole catalog in one build_spectro_batches call"
+        )
+    return batched_template(model, batches[0][0])
+
+
 @dataclass(frozen=True)
 class BatchedLineSet:
     """Emission-line data of a template, read once outside the trace.
@@ -257,6 +323,9 @@ class BatchedLineSet:
     ----------
     amplitude_names : tuple of str
         ``eline_amp_<name>`` keys of the independent lines, in column order.
+    catalog : LineList
+        The template's effective catalog; its kinematic groups set which width and
+        offset parameters each line reads (``line_kinematics``).
     wavelengths : ndarray, shape (n_lines,)
         Rest-frame vacuum line centers [Angstrom] of the full catalog.
     independent_wavelengths : ndarray, shape (n_independent,)
@@ -271,6 +340,7 @@ class BatchedLineSet:
     """
 
     amplitude_names: tuple[str, ...]
+    catalog: object
     wavelengths: jax.Array
     independent_wavelengths: np.ndarray
     constraint_matrix: jax.Array
@@ -317,6 +387,7 @@ def batched_line_set(model) -> BatchedLineSet | None:
     )
     return BatchedLineSet(
         amplitude_names=tuple(eline_amplitude_names(catalog)),
+        catalog=catalog,
         wavelengths=jnp.asarray(catalog.wavelengths),
         independent_wavelengths=np.asarray(independent, dtype=np.float64),
         constraint_matrix=jnp.asarray(constraint),
@@ -335,8 +406,10 @@ def batched_eline_design(line_set: BatchedLineSet, obs: SpectroBatch, params: di
         the redshift ``z``, the resolution ``eline_resolution``, the pixel mask
         ``pix_mask`` and the line mask ``line_mask``.
     params : dict
-        Parameter values; ``eline_sigma_kms`` and ``eline_delta_v_kms`` default
-        to zero when absent.
+        Parameter values, fixed values included. Each line's width and offset are
+        those of its kinematic group (``eline_sigma_kms[_<group>]``,
+        ``eline_delta_v_kms[_<group>]``, read by ``line_kinematics``); absent ones
+        are zero.
 
     Returns
     -------
@@ -355,7 +428,7 @@ def batched_eline_design(line_set: BatchedLineSet, obs: SpectroBatch, params: di
         {\sqrt{2\pi}\,\sigma_j}, \qquad
         \mu_j = \lambda_j^{\rm rest}(1+z)\left(1+\frac{\Delta v}{c}\right),
         \qquad
-        \sigma_j = \sqrt{\left(\frac{\lambda_j^{\rm obs}}{2.355\,R}\right)^2
+        \sigma_j = \sqrt{\left(\frac{\lambda_j^{\rm obs}}{2\sqrt{2\ln 2}\,R}\right)^2
         + \left(\frac{\lambda_j^{\rm obs}\,\sigma_v}{c}\right)^2},
         \qquad \lambda_j^{\rm obs} = \lambda_j^{\rm rest}(1+z),
 
@@ -363,8 +436,8 @@ def batched_eline_design(line_set: BatchedLineSet, obs: SpectroBatch, params: di
     :math:`\lambda_j^{\rm rest}` the rest vacuum line center [Angstrom],
     :math:`z` the redshift [dimensionless], :math:`R` the spectral resolution
     [dimensionless], :math:`\sigma_v` the intrinsic broadening
-    ``eline_sigma_kms`` [km/s], :math:`\Delta v` the velocity offset
-    ``eline_delta_v_kms`` [km/s] and :math:`c` the speed of light [km/s].
+    of line :math:`j`'s kinematic group [km/s], :math:`\Delta v` its velocity
+    offset [km/s] and :math:`c` the speed of light [km/s].
     :math:`m_i` is ``pix_mask`` (1 on a good real pixel) and :math:`p_j` is
     ``line_mask`` (1 when line :math:`j` is redshifted onto the real grid).
     :math:`\mathbf{C}` is the doublet constraint matrix, so each column of
@@ -378,13 +451,14 @@ def batched_eline_design(line_set: BatchedLineSet, obs: SpectroBatch, params: di
     are constants, so a zero mask gives an exactly zero column.
     **vmap-compatible**: yes, over the galaxy axis.
     """
+    sigma_kms, delta_v_kms = line_kinematics(params, {}, line_set.catalog)
     G = build_eline_design_matrix(
         obs.wave,
         line_set.wavelengths,
         obs.eline_resolution,
         obs.z,
-        params.get("eline_sigma_kms", 0.0),
-        params.get("eline_delta_v_kms", 0.0),
+        sigma_kms,
+        delta_v_kms,
     )
     G = G * obs.line_mask[None, :] * obs.pix_mask[:, None]
     return apply_doublet_constraints(G, line_set.constraint_matrix)
@@ -419,7 +493,8 @@ def predict_batched_observables(
     Parameters
     ----------
     model : SEDModel
-        Template model with a free redshift (see :func:`check_template_model`).
+        Template model (see :func:`check_template_model`). Its redshift may be free,
+        fixed or a ``catalog_z_range`` window; the galaxy is evaluated at ``obs.z``.
     params : dict
         Free parameter values for this galaxy. A ``redshift`` key is ignored;
         the redshift is ``obs.z``.
@@ -477,6 +552,7 @@ def predict_batched_observables(
     from tengri.observation.photometry import project_photometry
     from tengri.observation.spectrum import resolve_sigma_lib_kms
 
+    model = batched_template(model, spec)
     require_model_spec(model, spec)
     conserving = spec.conserving
     observation = model.observation
@@ -611,6 +687,7 @@ def make_batched_predict(
     The template's component chain is built here, outside the trace, so that
     the first call does not build it inside ``jit``.
     """
+    model = batched_template(model, spec)
     check_template_model(model)
     require_model_spec(model, spec)
     threaded = model.threaded_template_inputs()

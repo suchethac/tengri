@@ -527,6 +527,30 @@ def _approx_clone_key(cfg) -> tuple[str, str]:
     return (type(cfg).__name__, repr(cfg))
 
 
+def _warn_shape_fallback(exc, *, stacklevel: int) -> None:
+    """Announce that ``approx="auto"`` kept the exact line path (#3526).
+
+    Raised only for a :class:`NebularShapeDriftError`: the table's per-photon lines
+    move with a quenched history by more than the tolerance, so the auto policy
+    serves the lines exactly. Photometry keeps its ``WavePrecomp`` table.
+    """
+    from tengri.components.nebular.nebular_grid_precompute import _SHAPE_DRIFT_TOL
+    from tengri.config.exceptions import warn_measured
+
+    warn_measured(
+        f"approx='auto' keeps the exact line path for this model: FeaturePrecomp would "
+        f"serve a table whose ionizing shape departs from its constant-SFR stand-in "
+        f"(#3526). Line {exc.line}: the per-photon luminosity of a quenched history is "
+        f"{exc.ratio:.3f}x the stand-in's, a {exc.departure:.1%} departure, above the "
+        f"{_SHAPE_DRIFT_TOL:.0%} tolerance. The fit is correct, only slower; photometry "
+        f"keeps its WavePrecomp table. Pass approx=None to silence this, or see #3526.",
+        UserWarning,
+        stacklevel=stacklevel + 1,
+        ratio=exc.ratio,
+        departure=exc.departure,
+    )
+
+
 def _forget_memoized_approx_clone(model, cfg) -> None:
     """Drop the memo entry for ``(model, cfg)``, if any.
 
@@ -585,17 +609,59 @@ def catalog_redshift_span(redshifts) -> tuple[float, float]:
     z = np.asarray(redshifts, dtype=float).ravel()
     if z.size == 0:
         raise ValueError("cannot derive a redshift span from an empty redshift list")
+    _refuse_non_finite(z)
+    lo, hi = float(z.min()), float(z.max())
+    pad = max(_SPAN_PAD_FRAC * (hi - lo), _SPAN_MIN_PAD)
+    q_lo = np.floor(max(0.0, lo - pad) / _SPAN_STEP + 1e-9) * _SPAN_STEP
+    q_hi = np.ceil((hi + pad) / _SPAN_STEP - 1e-9) * _SPAN_STEP
+    return (round(float(q_lo), 10), round(float(q_hi), 10))
+
+
+def _refuse_non_finite(z) -> None:
+    """Raise ``ValueError`` naming the rows of ``z`` that are NaN or infinite."""
     bad = np.flatnonzero(~np.isfinite(z))
     if bad.size:
         raise ValueError(
             f"redshift is not finite (NaN or inf) for row(s) {bad.tolist()}; a redshift "
             "table cannot cover it. Fix or drop those rows before fitting."
         )
-    lo, hi = float(z.min()), float(z.max())
-    pad = max(_SPAN_PAD_FRAC * (hi - lo), _SPAN_MIN_PAD)
-    q_lo = np.floor(max(0.0, lo - pad) / _SPAN_STEP + 1e-9) * _SPAN_STEP
-    q_hi = np.ceil((hi + pad) / _SPAN_STEP - 1e-9) * _SPAN_STEP
-    return (round(float(q_lo), 10), round(float(q_hi), 10))
+
+
+def require_redshifts_in_range(redshifts, z_range) -> None:
+    """Refuse redshifts that a ``catalog_z_range`` table cannot cover, naming their rows.
+
+    The one range rule of the runtime-redshift path. The catalog fit and the batched
+    build both call it, so a galaxy outside the model's range is refused with the same
+    message and the same two remedies.
+
+    Parameters
+    ----------
+    redshifts : array_like, shape (n,)
+        Redshifts [dimensionless] of the catalog or of the galaxies.
+    z_range : tuple of float
+        ``(z_lo, z_hi)`` [dimensionless] of the model's ``catalog_z_range``.
+
+    Raises
+    ------
+    ValueError
+        If a redshift is NaN or infinite (the message names its rows, as
+        :func:`catalog_redshift_span` does), or lies outside ``[z_lo, z_hi]`` (the
+        message names the rows, their redshifts and the range).
+
+    Notes
+    -----
+    Build-time NumPy check, not JIT-compatible.
+    """
+    z = np.asarray(redshifts, dtype=float).ravel()
+    _refuse_non_finite(z)
+    z_lo, z_hi = float(z_range[0]), float(z_range[1])
+    outside = np.flatnonzero((z < z_lo) | (z > z_hi))
+    if outside.size:
+        raise ValueError(
+            f"redshift outside the model's catalog_z_range=[{z_lo:.3f}, {z_hi:.3f}] for "
+            f"row(s) {outside.tolist()} (z={np.round(z[outside], 6).tolist()}). "
+            "Widen catalog_z_range at model build time or filter the table."
+        )
 
 
 def _is_runtime_redshift(model) -> bool:
@@ -639,7 +705,9 @@ def promote_to_runtime_redshift(model, redshifts):
     span = catalog_redshift_span(redshifts)
     if _is_runtime_redshift(model):
         return model
-    promote = getattr(model, "with_runtime_redshift", None)
+    promote: Callable[[tuple[float, float] | None], Any] | None = getattr(
+        model, "with_runtime_redshift", None
+    )
     spec = getattr(model, "spec", None)
     if not callable(promote) or spec is None or not spec.is_fixed("redshift"):
         return model
@@ -891,7 +959,15 @@ def _photometry_grid_engages(model) -> bool:
     # resolvers attach, so a positive answer reuses the memoized clone. A negative
     # one is forgotten, so the probe is not kept alive by the memo.
     pair = (WavePrecomp(), FeaturePrecomp())
-    engages = fast_nebular_can_engage(_memoized_approx_clone(model, pair))
+    from tengri.components.nebular.nebular_grid_precompute import NebularShapeDriftError
+
+    try:
+        engages = fast_nebular_can_engage(_memoized_approx_clone(model, pair))
+    except NebularShapeDriftError as exc:
+        # #3526: the table would drift for this model's ionizing shape, so the auto
+        # policy stays on the exact photometry path too, with a specific warning.
+        _warn_shape_fallback(exc, stacklevel=4)
+        return False
     if not engages:
         _forget_memoized_approx_clone(model, pair)
     return engages
@@ -1470,8 +1546,19 @@ def _resolve_batch_fit_approx(model, approx, data_type):
             ):
                 existing = tuple(getattr(model, "approx_configs", ()))
                 extra = (FeaturePrecomp(),) if has_wave else (cfg, FeaturePrecomp())
-                with contextlib.suppress(Exception):
+                from tengri.components.nebular.nebular_grid_precompute import (
+                    NebularShapeDriftError,
+                )
+
+                try:
                     return _memoized_approx_clone(model, (*existing, *extra))
+                except NebularShapeDriftError as exc:
+                    _warn_shape_fallback(exc, stacklevel=4)
+                except (ValueError, NotImplementedError):
+                    # #1596: a backend with nothing to tabulate refuses with one of these
+                    # (FeaturePrecomp's own refusals are ValueError / NotImplementedError);
+                    # the wave LUT is kept. Anything else is a bug and propagates.
+                    pass
             if has_wave:
                 return model
         elif data_type == "spectroscopy" or data_type == "joint":
@@ -1493,8 +1580,14 @@ def _resolve_batch_fit_approx(model, approx, data_type):
     else:
         resolved = approx
 
+    from tengri.components.nebular.nebular_grid_precompute import NebularShapeDriftError
+
     try:
         return _memoized_approx_clone(model, resolved)
+    except NebularShapeDriftError:
+        # #3526: an explicit FeaturePrecomp on a drifting table is refused, never
+        # quietly turned into a slower fit. The auto top-up above handles its own.
+        raise
     except Exception as exc:  # broad on purpose, never break a working fit
         import warnings
 
@@ -2470,6 +2563,21 @@ class Fitter:
             or self._fits_line_fluxes(model)
         )
 
+    def _feature_precomp_has_lines(self, model) -> bool:
+        """Whether ``FeaturePrecomp`` has emission lines to tabulate for this fit.
+
+        It tabulates the lines of a measured line-flux channel, or of a nebular
+        backend whose line luminosities scale with the ionizing photon rate. A
+        spectrum whose line amplitudes are nuisance parameters (marginalized or
+        fitted) on a model with neither has nothing to tabulate, and the build
+        refuses: the automatic policy then attaches no line table (#3374).
+        """
+        from tengri.forward.sed_model import _is_q_h_linear_backend
+
+        return self._fits_line_fluxes(model) or _is_q_h_linear_backend(
+            getattr(model, "_nebular_backend", None)
+        )
+
     def _auto_approx_config(self, model):
         """Precompute config auto-selected for this fit's data type.
 
@@ -2538,6 +2646,7 @@ class Fitter:
         wants_lut = (
             self._fits_lines(model)
             and not _has_line_adjacent_channel(model)
+            and self._feature_precomp_has_lines(model)
             and _feature_precomp_can_pay(model, serves_line_channel=True)
         )
         configs = (*base, FeaturePrecomp()) if wants_lut else base
@@ -2614,9 +2723,15 @@ class Fitter:
         if not _feature_precomp_can_pay(model, serves_line_channel=serves_line_channel):
             return model
         existing = tuple(getattr(model, "approx_configs", ()))
+        from tengri.components.nebular.nebular_grid_precompute import NebularShapeDriftError
+
         try:
             return _memoized_approx_clone(model, (*existing, FeaturePrecomp()))
-        except Exception as exc:  # broad on purpose, never break a working fit
+        except NebularShapeDriftError as exc:
+            # #3526: the drifting-shape refusal gets its own specific warning.
+            _warn_shape_fallback(exc, stacklevel=4)
+            return model
+        except Exception as exc:  # broad on purpose, never break a working fit (#1596)
             if not warn_on_failure:
                 return model
             import warnings
@@ -2728,8 +2843,20 @@ class Fitter:
                 from tengri.forward.sed_model import FeaturePrecomp
 
                 base = cfg if isinstance(cfg, tuple) else (cfg,)
-                with contextlib.suppress(Exception):
+                from tengri.components.nebular.nebular_grid_precompute import (
+                    NebularShapeDriftError,
+                )
+
+                try:
                     return _memoized_approx_clone(model, (*base, FeaturePrecomp()))
+                except NebularShapeDriftError as exc:
+                    # #3526: a drifting table is not attached; the exact line path
+                    # is kept, announced, and photometry keeps the WavePrecomp table.
+                    _warn_shape_fallback(exc, stacklevel=4)
+                except (ValueError, NotImplementedError):
+                    # #1596: nothing to tabulate refuses with one of these; the wave LUT
+                    # is kept. Anything else is a bug and propagates.
+                    pass
             return _memoized_approx_clone(model, cfg)
 
         resolved = _memoized_approx_clone(model, approx)
@@ -2790,21 +2917,6 @@ class Fitter:
             ),
         )
         self._init_eline_arrays(resolved)
-
-        obs = model.observation
-        _spec_config = obs.spectroscopy if obs is not None else None
-        # The broad component is not evaluated by any emission-line likelihood
-        # (no broad design-matrix columns are built), so its parameter would be
-        # sampled and change nothing (#3332). Refuse rather than run inert.
-        spec_broad = bool(getattr(_spec_config, "eline_broad", False))
-        params_broad = bool(getattr(self.spec, "eline_broad", False))
-        if spec_broad or params_broad:
-            raise ValueError(
-                "The broad emission-line component (eline_broad=True) is not implemented: "
-                "no likelihood builds its design-matrix columns, so 'eline_broad_sigma_kms' "
-                "would be sampled and change nothing. Set eline_broad=False on both "
-                "Spectroscopy and Parameters (tracked in #3332)."
-            )
 
     def _init_eline_arrays(self, resolved):
         """Assign the resolved emission-line state; merge fitted amplitude priors into the spec."""

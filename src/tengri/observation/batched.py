@@ -322,6 +322,14 @@ class SpectroBatchSpec:
     cov_offsets : tuple of int
         Diagonal offsets ``(0, -1, ..., -p)`` of the banded Cholesky factor of the
         pixel covariance; ``()`` (default) when the bucket has no covariance.
+    z_span : tuple of float or None
+        ``(z_min, z_max)`` [dimensionless] spanning every galaxy of the
+        :func:`build_spectro_batches` call that built the bucket, set only for a
+        fixed-z template with ``WavePrecomp``. All buckets of one call share it, so
+        they share one twin and one compile per bucket. The batched entry points evaluate
+        the bucket on :func:`~tengri.inference.fitter.promote_to_runtime_redshift`
+        of this span, so each galaxy's photometry is projected at its own ``obs.z``.
+        ``None`` (default) when the template needs no such twin.
 
     Raises
     ------
@@ -349,6 +357,7 @@ class SpectroBatchSpec:
     n_lines: int = 0
     n_segments: int = 0
     cov_offsets: tuple[int, ...] = ()
+    z_span: tuple[float, float] | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.n_max, int) or self.n_max < 1:
@@ -427,10 +436,11 @@ class SpectroBatch:
         lies inside the galaxy's real (unpadded) grid ``[wave.min(), wave.max()]``,
         else 0.0. Zero-width when the template does not fit lines
         (``spec.n_lines == 0``).
-    eline_resolution : ndarray, shape (B,)
-        Scalar resolution R [dimensionless] that sets the emission-line profile
+    eline_resolution : ndarray, shape (B, n_lines)
+        Resolution R [dimensionless] that sets each emission line's profile
         width: the template's scalar R on a banded-resolution galaxy, otherwise
-        the galaxy's own R over its real pixels (median when per-pixel).
+        the galaxy's own R at the line's observed center (#3343). Zero-width when
+        the template does not fit lines.
     chol_data : ndarray, shape (B, p + 1, n_max)
         Bands of each galaxy's lower Cholesky factor of the pixel covariance,
         ``chol_data[b, k, i] = L[i, i - k]`` [F_nu units], factored on the host with
@@ -851,12 +861,23 @@ def _line_mask(wave: np.ndarray, rest_lines: np.ndarray, z: float) -> np.ndarray
     return inside.astype(np.float64)
 
 
-def _galaxy_eline_resolution(g: GalaxySpectrum, n: int, template_r: float) -> float:
-    """Return the scalar R of the line profiles for one galaxy."""
+def _galaxy_eline_resolution(
+    g: GalaxySpectrum,
+    wave: np.ndarray,
+    rest_lines: np.ndarray,
+    z: float,
+    template_r: float,
+) -> np.ndarray:
+    """Return the R of each catalog line's profile for one galaxy, shape ``(n_lines,)``.
+
+    A banded-resolution galaxy takes the template's scalar R for every line; any
+    other galaxy reads its own R at each line's observed center, the rule of
+    :func:`~tengri.observation.eline_marginalization.line_resolution` (#3343).
+    """
     if isinstance(g.resolution, BandedMatrix):
-        return template_r
-    r = np.broadcast_to(np.asarray(g.resolution, dtype=np.float64), (n,))
-    return eline_scalar_resolution(r)
+        return np.full(rest_lines.shape, float(template_r))
+    r = np.broadcast_to(np.asarray(g.resolution, dtype=np.float64), wave.shape)
+    return np.interp(rest_lines * (1.0 + z), wave, r)
 
 
 def _prepare_segments(g: GalaxySpectrum, n: int, n_max: int) -> tuple[np.ndarray, int]:
@@ -963,7 +984,7 @@ def _prepare_galaxy(
             rest_lines, template_r = eline
             rest_lines = np.asarray(rest_lines, dtype=np.float64)
             line_mask = _line_mask(wave, rest_lines, z)
-        eline_r = _galaxy_eline_resolution(g, n, template_r)
+        eline_r = _galaxy_eline_resolution(g, wave, rest_lines, z, template_r)
         seg_row, n_segments = _prepare_segments(g, n, n_max)
         cal_prior = check_cal_scale_prior(
             g.cal_scale_prior if g.cal_scale_prior is not None else template_cal_prior
@@ -1122,6 +1143,22 @@ def _require_common_covariance_offsets(galaxies: Sequence[GalaxySpectrum]) -> No
             )
 
 
+def _needs_z_twin(model) -> bool:
+    """Whether the template's photometry LUT bakes its fixed redshift.
+
+    A template with ``WavePrecomp`` whose redshift is not runtime (a fixed value, no
+    ``catalog_z_range``) builds its stellar photometry LUT at that value. The batched
+    path then evaluates the bucket on the runtime-redshift model of
+    :func:`~tengri.inference.fitter.promote_to_runtime_redshift`. Every other template
+    reads each galaxy's ``obs.z`` directly, or is exact.
+    """
+    from tengri.forward.sed_model import redshift_is_runtime
+
+    return bool(model._approx.get("wave_precomp")) and not redshift_is_runtime(
+        model.spec.get_distribution("redshift"), model._catalog_z_range, model._z_runtime
+    )
+
+
 def _require_banded_records(model, galaxies: Sequence[GalaxySpectrum]) -> None:
     """Refuse scalar or per-pixel resolutions when the template is banded.
 
@@ -1181,7 +1218,9 @@ def build_spectro_batches(
         ``(lo, hi)`` [Angstrom]. When given, every galaxy's padded grid divided
         by ``1 + z`` must lie inside it, or a ``ValueError`` is raised.
     model : SEDModel, optional
-        Template model. When given, each galaxy's flux-conserving flag is resolved
+        Template model. When the template carries a ``catalog_z_range``, every
+        galaxy's ``z`` must lie inside it, or a ``ValueError`` is raised. When given,
+        each galaxy's flux-conserving flag is resolved
         from the template's ``resample`` mode with the same rule as
         :meth:`~tengri.observation.observation.Observation.predict`, and every
         padded bucket is checked with :func:`padding_exact`. Without it the
@@ -1201,7 +1240,9 @@ def build_spectro_batches(
     ValueError
         If a galaxy is malformed (the message names its index), if its padded
         rest-frame grid leaves ``rest_wave_range``, if ``quantum`` is not a
-        positive integer, if ``lsf_n_bins`` disagrees with the template, or if
+        positive integer, if ``lsf_n_bins`` disagrees with the template, if a galaxy's
+        ``z`` lies outside the template's ``catalog_z_range`` (the message names the
+        galaxy index, its ``z`` and the range), or if
         padding would change the real pixels of a galaxy (the message names the
         galaxies, their n_real and n_max, the reason, and the remedy).
 
@@ -1245,6 +1286,13 @@ def build_spectro_batches(
             )
         lsf_n_bins = policy.lsf_n_bins
         _require_banded_records(model, galaxies)
+        z_window = getattr(model, "_catalog_z_range", None)
+        if z_window is not None:
+            # Local import: inference.fitter imports observation, so a module-level
+            # import would be circular.
+            from tengri.inference.fitter import require_redshifts_in_range
+
+            require_redshifts_in_range([float(g.z) for g in galaxies], z_window)
         if model.spec.foreground_ebmv_mw > 0.0:
             missing = [i for i, g in enumerate(galaxies) if g.ebmv_mw is None]
             if missing:
@@ -1282,11 +1330,19 @@ def build_spectro_batches(
             if offenders:
                 raise _padding_error(spec, offenders)
 
+    call_span = None
+    if model is not None and _needs_z_twin(model):
+        # Local import for the same cycle reason as the range check above.
+        from tengri.inference.fitter import catalog_redshift_span
+
+        call_span = catalog_redshift_span([g.z for g in galaxies])
     out = []
     for spec, members in buckets.items():
         rows = [row for _, row, _, _ in members]
         if model is not None:
-            spec = replace(spec, lsf_pad_pixels=_bucket_lsf_pad(model, spec, rows))
+            spec = replace(
+                spec, lsf_pad_pixels=_bucket_lsf_pad(model, spec, rows), z_span=call_span
+            )
         out.append(
             (spec, _stack_bucket(rows), np.asarray([i for i, _, _, _ in members], dtype=int))
         )
