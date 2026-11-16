@@ -56,7 +56,6 @@ from tengri.components.dust.attenuation import (
     gordon03_smcbar as gordon03_smcbar,
     hd23_mwrv31 as hd23_mwrv31,
     li08 as li08,
-    list_laws,
     lmc as lmc,
     prevot_smc as prevot_smc,
     register_dust_law,
@@ -203,7 +202,6 @@ _CURATED_DIR = (
     "energy_balance_split",
     "apply_lyman_cutoff",
     # Registration / resolver
-    "list_laws",
     "register_dust_law",
     "resolve_dust_law",
     "register_emission_model",

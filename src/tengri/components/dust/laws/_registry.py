@@ -2,7 +2,7 @@
 """Dust attenuation-law registry and shared curve helpers.
 
 Leaf module for the ``DUST_LAWS`` catalog: the ``register_dust_law`` decorator,
-``resolve_dust_law`` / ``list_laws`` lookups, the ``DustLawRegistryEntry``
+``resolve_dust_law`` lookup, the ``DustLawRegistryEntry``
 metadata record, and the shared curve helpers (``_drude_profile``,
 ``_calzetti_l02_kprime``) used across law families. Imports only ``jnp`` and
 physical constants, so law modules and the ``attenuation`` facade can import it
@@ -15,12 +15,8 @@ import inspect
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from functools import cache
-from typing import TYPE_CHECKING
 
 import jax.numpy as jnp
-
-if TYPE_CHECKING:  # annotation only; see the local import in list_laws (#843)
-    from tengri.registry import _RegistryTable
 
 # ── Attenuation law catalog ─────────────────────────────────────
 
@@ -471,75 +467,6 @@ def reject_unread_law_kwargs(law_params: Mapping, laws: tuple, context: str) -> 
         f"({named}), so the value{plural} would be silently discarded. "
         f"These laws read: {accepts}."
     )
-
-
-# Curated headline subset for gallery comparisons. Each entry's value is the
-# canonical kwargs to evaluate the law at "nominal" tuning; callers pass
-# wavelengths positionally and get k(lambda) at tau_V=1.
-_HEADLINE_LAWS: dict[str, tuple[str, dict]] = {
-    "Calzetti+2000": ("calzetti", {}),
-    "Charlot & Fall (slope=-0.7)": ("power_law", {"dust_slope": -0.7}),
-    "Cardelli+1989 (MW, Rv=3.1)": ("cardelli", {"dust_Rv": 3.1}),
-    "SMC (Gordon+2003)": ("smc", {}),
-    "Kriek & Conroy 2013": ("kriek_conroy", {"dust_bump_strength": 1.0, "dust_delta": 0.0}),
-    "Salim+2018": ("salim", {}),
-}
-
-
-def list_laws(headline: bool = True) -> _RegistryTable:
-    """List the attenuation laws, each row carrying a one-arg callable.
-
-    The ``fn`` column holds ``fn(wave_aa) -> k(wave)`` at the law's
-    canonical parameters with ``tau_V = 1``. Use for plotting k(lambda)
-    comparisons without restating each law's argument signature.
-
-    Parameters
-    ----------
-    headline : bool, optional
-        If True (default) list the 6 textbook laws, named by display
-        label with citation. If False list every registered law by
-        registry name with no kwargs baked in.
-
-    Returns
-    -------
-    _RegistryTable
-        One row per law, with columns ``name`` and ``fn``. ``fn`` holds a
-        live callable and is hidden from the printed table.
-
-    Notes
-    -----
-    Returned ``{label: callable}`` before #1574; every discovery verb
-    returns a table (#1285). ``.to_dict("fn")`` reproduces that mapping
-    exactly, so ``for label, fn in list_laws().items()`` becomes
-    ``for label, fn in list_laws().to_dict("fn").items()``.
-
-    Examples
-    --------
-    >>> from tengri.dust import list_laws
-    >>> for label, fn in list_laws().to_dict("fn").items():
-    ...     plt.plot(wave, fn(wave), label=label)
-    """
-    # Imported here, not at module scope: this module is a leaf by design
-    # so the law modules and the attenuation facade can import it without
-    # a cycle (#843, see the module docstring).
-    from tengri.registry import _RegistryTable
-
-    if headline:
-        rows = [
-            {
-                "name": label,
-                "kind": "dust_law",
-                "law": name,
-                "fn": (lambda w, _n=name, _kw=kwargs: DUST_LAWS[_n](w, **_kw)),
-            }
-            for label, (name, kwargs) in _HEADLINE_LAWS.items()
-        ]
-    else:
-        rows = [
-            {"name": name, "kind": "dust_law", "law": name, "fn": fn}
-            for name, fn in DUST_LAWS.items()
-        ]
-    return _RegistryTable(rows)
 
 
 # ── Utility: Drude profile for the 2175 Angstrom UV bump ──────────

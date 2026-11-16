@@ -3,6 +3,9 @@
 ### Fixed
 - **Velocity dispersion broadens the spectrum with no instrument resolution (#3436).** With `resolution=None`, `sigma_v_kms` had no effect on the spectrum, so a free dispersion was silently inert. It now broadens the stellar group at library resolution (the owner ruling of 2026-11-13): the output is the unbroadened projection plus the dispersion's correction on a ln-lambda lattice, so it does not depend on how the model grid is partitioned. **Behaviour change for existing fits without a resolution that set `sigma_v_kms` > 0:** their spectra now broaden by the dispersion, and their free-dispersion posteriors change. Fits at `sigma_v_kms = 0` are bit-identical. `sigma_lib_kms` and `lsf_scale` still have no effect without a resolution.
 
+### Removed
+- **`tengri.dust.list_laws` and its six-law headline subset are deleted (#3547 D15).** Use `tengri.list_dust_laws()` instead: its `fn` column holds each law's callable, so `tengri.list_dust_laws().to_dict("fn")` is the mapping `list_laws(headline=False).to_dict("fn")` returned. The column is hidden from the rendered table.
+
 ### Added
 - docs(notebooks): batched DESI dwarf spectroscopy notebook, the DR1 dwarf scenario end to end on mocks (notebooks/20_desi_dwarfs_batched)
 - feat(batched): a `catalog_z_range` template and a fixed-redshift template run on the batched spectroscopic path; each galaxy's `obs.z` is the redshift used, and a galaxy outside the template's `catalog_z_range` is refused at build (part of #3505)

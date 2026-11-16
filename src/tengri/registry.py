@@ -50,7 +50,7 @@ class _RegistryTable(list):
         "short_doc",
         "use",
     )
-    # ``fn`` holds a live callable (list_laws): its str() is an address,
+    # ``fn`` holds a live callable (list_dust_laws): its str() is an address,
     # so it is carried in the row but never rendered.
     _ALWAYS_HIDDEN = ("module", "requires", "params", "fn")  # surfaced via describe()
 
@@ -1032,10 +1032,15 @@ def list_dust_laws(*, status: str | None = None) -> _RegistryTable:
     For dust **emission** templates (DL07, Dale, MBB, …), see
     :func:`list_dust_emission_models`. For how the dust is *arranged*
     (one screen vs birth-cloud + diffuse), see :func:`list_dust_models`.
+
+    The ``fn`` column holds each registered law callable (hidden from the
+    rendered table), so ``.to_dict("fn")`` maps every name to its callable.
     """
     from tengri.components.dust.attenuation import DUST_LAWS
 
-    out = [_entry_to_dict(n, e, kind="dust_attenuation") for n, e in DUST_LAWS.items()]
+    out = [
+        {**_entry_to_dict(n, e, kind="dust_attenuation"), "fn": e} for n, e in DUST_LAWS.items()
+    ]
     out = _filter_menu(out, "status", status, listing="list_dust_laws")
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 

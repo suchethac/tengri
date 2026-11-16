@@ -18,11 +18,11 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+import tengri
 from tengri.components.dust.attenuation import conroy2010, power_law
 from tengri.components.dust.laws._registry import (
     DUST_LAWS,
     law_kwarg_names,
-    list_laws,
 )
 
 pytestmark = pytest.mark.contract
@@ -143,14 +143,14 @@ def test_registry_callable_accepts_old_name_conroy2010():
     assert result.shape == wave.shape
 
 
-def test_list_laws_callable_accepts_alias():
-    """Callable from list_laws() accepts the deprecated n_slope alias.
+def test_list_dust_laws_callable_accepts_alias():
+    """Callable from list_dust_laws() accepts the deprecated n_slope alias.
 
-    This is (b) from issue #2257: the callable from list_laws().to_dict("fn")
+    This is (b) from issue #2257: the callable from list_dust_laws().to_dict("fn")
     is the same object as DUST_LAWS[name] and accepts the alias too.
     """
     wave = jnp.linspace(1000.0, 30000.0, 50)
-    laws_dict = list_laws(headline=False).to_dict("fn")
+    laws_dict = tengri.list_dust_laws().to_dict("fn")
 
     # Test power_law
     with pytest.warns(DeprecationWarning, match="dust_slope"):
@@ -177,7 +177,7 @@ def test_raw_registered_callable_has_alias_after_swap():
     np.testing.assert_array_equal(result_old, result_new)
 
 
-def test_list_laws_runs():
-    """list_laws() returns a non-empty listing."""
-    laws = list_laws()
+def test_list_dust_laws_runs():
+    """list_dust_laws() returns a non-empty listing."""
+    laws = tengri.list_dust_laws()
     assert len(laws) > 0

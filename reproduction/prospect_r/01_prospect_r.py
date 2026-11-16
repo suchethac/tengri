@@ -701,9 +701,9 @@ V.print_filter_table(_rows3, ref_name="ProSpect", title="§3 stellar SED, UV-to-
 # **Verification Status:** CROSSVAL: Attenuation law library
 
 # %%
-from tengri.dust import list_laws
+from tengri import list_dust_laws
 
-_tengri_laws = list_laws(headline=False).to_dict("fn")
+_tengri_laws = list_dust_laws().to_dict("fn")
 wave_law = np.logspace(np.log10(1000.0), np.log10(30000.0), 2000)
 
 
@@ -821,9 +821,9 @@ _assert_comparable(L_p5, L_t_atten, name="§5 dust applied")
 # bandpasses: all six combinations differ, with birth-cloud depth dominating the residual over screen depth.
 
 # %%
-from tengri.dust import list_laws
+from tengri import list_dust_laws
 
-_laws2 = list_laws(headline=False).to_dict("fn")
+_laws2 = list_dust_laws().to_dict("fn")
 _wave_law2 = np.logspace(np.log10(1000.0), np.log10(30000.0), 2000)
 
 

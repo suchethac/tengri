@@ -60,8 +60,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, SSPData
-from tengri.components.dust.laws._registry import is_diffuse_only_law, list_laws
+from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, SSPData, list_dust_laws
+from tengri.components.dust.laws._registry import is_diffuse_only_law
 from tengri.observation.photometry import FilterCurve
 
 pytestmark = pytest.mark.regression_bug
@@ -88,7 +88,7 @@ def _all_laws() -> tuple[str, ...]:
     #1482 and #1833 were both missed by suites carrying a hardcoded menu, so
     a law registered later is covered here without editing this file.
     """
-    return tuple(sorted(row["name"] for row in list_laws(headline=False)))
+    return tuple(sorted(row["name"] for row in list_dust_laws()))
 
 
 @pytest.fixture(scope="module")
