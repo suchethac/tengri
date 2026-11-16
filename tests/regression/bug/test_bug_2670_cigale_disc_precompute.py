@@ -20,6 +20,7 @@ from tengri.components.agn.disc_cigale import (
     skirtor_disk_spectrum,
 )
 from tengri.parameters.parameters import Parameters
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.physics_constants import L_SUN
 
 pytestmark = pytest.mark.regression_bug
@@ -75,7 +76,13 @@ def test_cigale_table_equals_exact_disc_off_node(disk_type):
     fw = [f[0] for f in _FILTERS]
     ft = [f[1] for f in _FILTERS]
     result = adapter.precompute(
-        fw, ft, 0.0, _parameters(block), model="cigale_disc", disk_type=disk_type
+        fw,
+        ft,
+        0.0,
+        _parameters(block),
+        model="cigale_disc",
+        disk_type=disk_type,
+        convention=FilterConvention.BESSELL,
     )
     lookup = adapter.build_lookup(result, model="cigale_disc")
     worst = 0.0

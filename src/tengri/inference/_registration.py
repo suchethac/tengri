@@ -83,6 +83,7 @@ from tengri.inference.backends.vi.nifty import (
     run_nifty_fast_vi as _ctx_run_nifty_fast_vi,
     run_nifty_vi as _ctx_run_nifty_vi,
 )
+from tengri.inference.sampling.samplers import SAMPLERS
 
 
 def _mcmc_auto_pick(context, *, key, init_from=None, precondition=None, **kw):
@@ -142,6 +143,7 @@ def _run_meanfield_vi(context, *, key, init_from=None, precondition=None, **kw):
 # ── Primary backends ─────────────────────────────────────────────────────
 register_backend(
     "map",
+    sampler=SAMPLERS["map"],
     tier="primary",
     short_doc="Adam MAP optimization",
     requires=("optax",),
@@ -251,6 +253,8 @@ register_backend(
 # It picks the concrete runner from ``context.spec.n_free``.
 register_backend(
     "mcmc",
+    sampler=SAMPLERS["nuts"],  # the flat seam pins the generic name to NUTS, never the auto-pick
+    sampler_is_pin=True,
     tier="primary",
     short_doc="Auto MCMC: NUTS for low-D, raytrace for high-D",
     requires=("blackjax",),  # NUTS branch needs it; raytrace branch is pure JAX
@@ -375,6 +379,7 @@ def _first_order_compile_plan_for(proposal: str):
 
 register_backend(
     "mcmc_nuts",
+    sampler=SAMPLERS["nuts"],
     tier="primary",
     short_doc=(
         "No-U-Turn Sampler (cold ~90s at D=6 DPL; warmup blows past 5 min on "
@@ -442,6 +447,7 @@ def _run_nuts_fast(context, *, key, init_from=None, precondition=None, **kw):
 
 register_backend(
     "mcmc_nuts_fast",
+    sampler=SAMPLERS["nuts_fast"],
     tier="primary",
     short_doc=(
         "NUTS photometry recipe: 4 chains x (150 warmup + 300 draws), no burn-in, target 0.8; "
@@ -458,6 +464,7 @@ register_backend(
 # on 2026-05-22 (issue #231). See docs/dev/benchmarks/2026-05-22_inference_backend_validation.md.
 register_backend(
     "laplace",
+    sampler=SAMPLERS["laplace"],
     tier="primary",
     short_doc="Laplace approximation around the MAP (cold ~5-9s, warm ~1-2s, ~3 GB)",
     legacy_fitter=False,
@@ -465,6 +472,7 @@ register_backend(
 
 register_backend(
     "mcmc_hmc",
+    sampler=SAMPLERS["hmc"],
     tier="primary",
     short_doc=(
         "Hamiltonian Monte Carlo (cold ~21s, ~5 GB on D=6-7). "
@@ -483,6 +491,7 @@ register_backend(
 
 register_backend(
     "hmc_is",
+    sampler=SAMPLERS["hmc_is"],
     tier="experimental",
     short_doc=(
         "HMC posterior + importance-sampled log-evidence (cold ~30s at D=6; "
@@ -511,6 +520,7 @@ def _dynamic_hmc_adaptation_rule(kwargs: dict):
 
 register_backend(
     "mcmc_dynamic_hmc",
+    sampler=SAMPLERS["dynamic_hmc"],
     tier="experimental",
     short_doc=(
         "Dynamic HMC, fast (cold ~19s) but chains under-mix at default "
@@ -546,6 +556,7 @@ def _ghmc_compile_adaptation_rule(kwargs: dict):
 
 register_backend(
     "mcmc_ghmc",
+    sampler=SAMPLERS["ghmc"],
     tier="broken",
     short_doc=(
         "[POOR MIXING] Generalized HMC, fast (cold ~17s) but R-hat ≈ 2.5-3.1 "
@@ -568,6 +579,7 @@ register_backend(
 
 register_backend(
     "mcmc_mclmc",
+    sampler=SAMPLERS["mclmc"],
     tier="broken",
     short_doc=(
         "[POOR MIXING] Microcanonical Langevin MC. The earlier quarantine "
@@ -599,6 +611,7 @@ register_backend(
 # ── Experimental backends ────────────────────────────────────────────────
 register_backend(
     "mcmc_chees",
+    sampler=SAMPLERS["chees"],
     tier="experimental",
     short_doc=(
         "ChEES-HMC: one trajectory length learned from cross-chain statistics, "
@@ -616,6 +629,7 @@ register_backend(
 
 register_backend(
     "mcmc_smc",
+    sampler=SAMPLERS["smc"],
     tier="experimental",
     short_doc=(
         "Tempered Sequential Monte Carlo: a particle population annealed from "
@@ -648,6 +662,7 @@ def _first_order_adaptation_rule(kwargs: dict):
 
 register_backend(
     "mcmc_barker",
+    sampler=SAMPLERS["barker"],
     tier="experimental",
     short_doc=(
         "Barker-proposal MCMC: one gradient per step, no trajectory, no tree, "
@@ -667,6 +682,7 @@ register_backend(
 
 register_backend(
     "mcmc_mala",
+    sampler=SAMPLERS["mala"],
     tier="experimental",
     short_doc=(
         "MALA. Exists as the CONTROL for mcmc_barker -- same code path, same "
@@ -685,6 +701,7 @@ register_backend(
 
 register_backend(
     "mcmc_hmc_lowrank",
+    sampler=SAMPLERS["hmc_lowrank"],
     tier="experimental",
     short_doc=(
         "Fixed-L HMC whose mass matrix is a rank-k correction to a diagonal, "
@@ -702,6 +719,7 @@ register_backend(
 
 register_backend(
     "mcmc_adjusted_mclmc",
+    sampler=SAMPLERS["adjusted_mclmc"],
     tier="experimental",
     short_doc=(
         "Adjusted microcanonical Langevin (cold ~60s, ~3x compile premium over "
@@ -714,6 +732,7 @@ register_backend(
 
 register_backend(
     "mcmc_ess",
+    sampler=SAMPLERS["ess"],
     tier="experimental",
     short_doc=(
         "Elliptical slice sampling, cheap (cold ~10s, ~2 GB) but assumes a "
@@ -725,6 +744,7 @@ register_backend(
 
 register_backend(
     "vi_fullrank",
+    sampler=SAMPLERS["vi_fullrank"],
     tier="experimental",
     short_doc=(
         "Full-rank Gaussian VI (BlackJAX fullrank_vi): SGD on the ELBO over a "
@@ -747,6 +767,7 @@ register_backend(
 
 register_backend(
     "vi_meanfield",
+    sampler=SAMPLERS["vi_meanfield"],
     tier="experimental",
     short_doc=(
         "Mean-field Gaussian VI (BlackJAX meanfield_vi): a DIAGONAL Gaussian, "
@@ -767,6 +788,7 @@ register_backend(
 
 register_backend(
     "nss",
+    sampler=SAMPLERS["nss"],
     tier="primary",
     short_doc=(
         "Vectorized nested sampling: returns Bayesian evidence (log Z) and posterior samples. "
@@ -777,6 +799,7 @@ register_backend(
 
 register_backend(
     "pathfinder",
+    sampler=SAMPLERS["nuts_pathfinder"],
     tier="experimental",
     short_doc=(
         "[NARROW ERROR BARS] Pathfinder reports uncertainties up to 9x too small "

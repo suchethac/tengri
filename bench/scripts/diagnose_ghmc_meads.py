@@ -162,7 +162,9 @@ def probe_trace(logdensity, x0, names, *, dispersion, n_warmup, n_ensemble) -> N
     position = np.asarray(info.state.position)
     accept = np.asarray(info.info.acceptance_rate)
     print(f"dispersion={dispersion} warmup={n_warmup} ensemble={n_ensemble}")
-    print(f"{'step':>6}{'eps':>12}{'alpha':>10}{'accept':>9}{'sd_min':>11}{'sd_max':>11}{'|x|':>11}")
+    print(
+        f"{'step':>6}{'eps':>12}{'alpha':>10}{'accept':>9}{'sd_min':>11}{'sd_max':>11}{'|x|':>11}"
+    )
     steps = sorted({*range(min(12, n_warmup)), *range(0, n_warmup, max(1, n_warmup // 12))})
     for t in steps:
         sd = position[t].std(axis=0)
@@ -207,14 +209,20 @@ def probe_sweep(logdensity, x0, names) -> None:
         started = time.perf_counter()
         (last, params), _ = warmup.run(jax.random.PRNGKey(12), ensemble, num_steps=n_warmup)
         score = _sample_and_score(logdensity, last, params, names, n_samples=2000)
-        _row(f"mult={mult} slow={slowdown} d={dispersion} w={n_warmup}",
-             params, time.perf_counter() - started, score)
+        _row(
+            f"mult={mult} slow={slowdown} d={dispersion} w={n_warmup}",
+            params,
+            time.perf_counter() - started,
+            score,
+        )
 
 
 def probe_lrd(logdensity, x0, names) -> None:
     dim = x0.shape[0]
-    print("LRD support in the installed blackjax:",
-          hasattr(blackjax.mcmc.ghmc, "_metric_from_momentum_inverse_scale"))
+    print(
+        "LRD support in the installed blackjax:",
+        hasattr(blackjax.mcmc.ghmc, "_metric_from_momentum_inverse_scale"),
+    )
     print(_HEADER)
     for rank, n_ensemble, n_warmup, dispersion in (
         (dim, 64, 1000, 0.05),
@@ -236,8 +244,12 @@ def probe_lrd(logdensity, x0, names) -> None:
         started = time.perf_counter()
         (last, params), _ = warmup.run(jax.random.PRNGKey(12), ensemble, num_steps=n_warmup)
         score = _sample_and_score(logdensity, last, params, names)
-        _row(f"rank={rank} E={n_ensemble} w={n_warmup} d={dispersion}",
-             params, time.perf_counter() - started, score)
+        _row(
+            f"rank={rank} E={n_ensemble} w={n_warmup} d={dispersion}",
+            params,
+            time.perf_counter() - started,
+            score,
+        )
 
 
 def probe_laplace(logdensity, x0, names) -> None:
@@ -248,8 +260,12 @@ def probe_laplace(logdensity, x0, names) -> None:
     chol = jnp.asarray(np.linalg.cholesky(cov + 1e-12 * np.eye(dim)))
     print("Laplace marginal sd:", np.array2string(np.sqrt(np.diag(cov)), precision=4))
     print(_HEADER)
-    for n_ensemble, n_warmup, scale in ((64, 1000, 1.0), (64, 4000, 1.0), (64, 1000, 0.3),
-                                        (128, 4000, 1.0)):
+    for n_ensemble, n_warmup, scale in (
+        (64, 1000, 1.0),
+        (64, 4000, 1.0),
+        (64, 1000, 0.3),
+        (128, 4000, 1.0),
+    ):
         z = jax.random.normal(jax.random.PRNGKey(11), (n_ensemble, dim), dtype=x0.dtype)
         ensemble = x0[None, :] + scale * z @ chol.T
         warmup = blackjax.meads_adaptation(
@@ -261,8 +277,12 @@ def probe_laplace(logdensity, x0, names) -> None:
         started = time.perf_counter()
         (last, params), _ = warmup.run(jax.random.PRNGKey(12), ensemble, num_steps=n_warmup)
         score = _sample_and_score(logdensity, last, params, names)
-        _row(f"laplace E={n_ensemble} w={n_warmup} s={scale}",
-             params, time.perf_counter() - started, score)
+        _row(
+            f"laplace E={n_ensemble} w={n_warmup} s={scale}",
+            params,
+            time.perf_counter() - started,
+            score,
+        )
 
 
 def probe_whiten(logdensity, x0, names) -> None:
@@ -274,8 +294,7 @@ def probe_whiten(logdensity, x0, names) -> None:
     # here -- so clip rather than pretend. The point is a target whose scales are
     # comparable, not an exact Laplace approximation.
     transform = jnp.asarray(vec @ np.diag(1.0 / np.sqrt(np.clip(np.abs(eig), 1e-2, None))))
-    print("condition number before whitening:",
-          f"{np.abs(eig).max() / np.abs(eig).min():.4g}")
+    print("condition number before whitening:", f"{np.abs(eig).max() / np.abs(eig).min():.4g}")
 
     def whitened(u):
         return logdensity(x0 + transform @ u)
@@ -295,8 +314,12 @@ def probe_whiten(logdensity, x0, names) -> None:
         started = time.perf_counter()
         (last, params), _ = warmup.run(jax.random.PRNGKey(12), ensemble, num_steps=n_warmup)
         score = _sample_and_score(whitened, last, params, names)
-        _row(f"whitened E={n_ensemble} w={n_warmup} d={dispersion}",
-             params, time.perf_counter() - started, score)
+        _row(
+            f"whitened E={n_ensemble} w={n_warmup} d={dispersion}",
+            params,
+            time.perf_counter() - started,
+            score,
+        )
 
 
 def main() -> None:
@@ -317,8 +340,12 @@ def main() -> None:
         probe_curvature(logdensity, x0, names)
     elif args.probe == "trace":
         probe_trace(
-            logdensity, x0, names,
-            dispersion=args.dispersion, n_warmup=args.warmup, n_ensemble=args.ensemble,
+            logdensity,
+            x0,
+            names,
+            dispersion=args.dispersion,
+            n_warmup=args.warmup,
+            n_ensemble=args.ensemble,
         )
     elif args.probe == "sweep":
         probe_sweep(logdensity, x0, names)

@@ -58,6 +58,7 @@ from tengri.forward.precompute.templates import (
     collapse_fixed_axes,
     precompute_template_photometry,
 )
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid_interp import PreintegratedGrid
 from tengri.utils.host_array import device_table, host_array
 
@@ -96,6 +97,8 @@ def _build_grid_synchrotron(
     filter_trans: list,
     redshift: float,
     alpha_grid: np.ndarray,
+    *,
+    convention: FilterConvention,
 ) -> PreintegratedGrid:
     """Preintegrate Bell+2003 synchrotron over a 1D grid of alpha_sf."""
     alpha_grid = np.asarray(alpha_grid, dtype=np.float64)
@@ -114,6 +117,7 @@ def _build_grid_synchrotron(
         dl_cm=1.0,
         energy_normalize=False,
         units="lnu",
+        convention=convention,
     )
 
 
@@ -122,6 +126,8 @@ def _build_grid_freefree(
     filter_trans: list,
     redshift: float,
     alpha_grid: np.ndarray,
+    *,
+    convention: FilterConvention,
 ) -> PreintegratedGrid:
     """Preintegrate Murphy+2011 free-free over a 1D grid of alpha_ff."""
     alpha_grid = np.asarray(alpha_grid, dtype=np.float64)
@@ -140,6 +146,7 @@ def _build_grid_freefree(
         dl_cm=1.0,
         energy_normalize=False,
         units="lnu",
+        convention=convention,
     )
 
 
@@ -148,6 +155,8 @@ def _build_grid_agn_jet(
     filter_trans: list,
     redshift: float,
     alpha_grid: np.ndarray,
+    *,
+    convention: FilterConvention,
 ) -> PreintegratedGrid:
     """Preintegrate radio_agn over a 1D grid of alpha_agn (radio_loudness=0)."""
     alpha_grid = np.asarray(alpha_grid, dtype=np.float64)
@@ -171,6 +180,7 @@ def _build_grid_agn_jet(
         dl_cm=1.0,
         energy_normalize=False,
         units="lnu",
+        convention=convention,
     )
 
 
@@ -210,6 +220,7 @@ def precompute(
     *,
     model: str = "radio_synchrotron",
     alpha_grid: np.ndarray | None = None,
+    convention: FilterConvention,
 ) -> dict:
     """Build preintegrated radio grid; auto-collapse Fixed-parameter axes.
 
@@ -230,6 +241,8 @@ def precompute(
     alpha_grid : ndarray, optional
         Custom spectral-index grid. Defaults: synchrotron [0.5, 1.0],
         free-free [-0.2, 0.0], AGN [0.4, 1.2].
+    convention : FilterConvention, keyword-only
+        Bandpass weight, the observation's (``BandSpec.convention``).
 
     Returns
     -------
@@ -251,7 +264,9 @@ def precompute(
     }
     alpha_grid = _axis(AXIS_PARAMS[model][0], alpha_grid, literal_grids[model], parameters)
 
-    preint = _BUILDERS[model](filter_waves, filter_trans, redshift, alpha_grid)
+    preint = _BUILDERS[model](
+        filter_waves, filter_trans, redshift, alpha_grid, convention=convention
+    )
     result = {
         "grid_phot": preint.phot,
         "axes": (jnp.asarray(alpha_grid),),
@@ -336,6 +351,7 @@ def term_shape_table(
     parameters: Any,
     model: str,
     term: str | None = None,
+    convention: FilterConvention,
 ) -> dict | None:
     """Shape-only band table of one radio term, built through the shared normalizer.
 
@@ -385,6 +401,7 @@ def term_shape_table(
         filter_waves_padded,
         filter_trans_padded,
         redshift,
+        convention=convention,
     )
 
 

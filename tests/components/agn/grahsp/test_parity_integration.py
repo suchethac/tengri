@@ -123,12 +123,14 @@ def _precompute_lookup(torus_model):
     """Build the production precompute lookup for a torus model and evaluate it
     at the GRAHSP default (plslope=-1.7, ebv=0); returns per-filter L_nu."""
     from tengri.components.agn.grahsp.precompute import build_lookup, precompute
+    from tengri.utils.filter_convention import FilterConvention
 
     fws, fts = _toy_filters()
     pre = precompute(
         filter_waves=fws,
         filter_trans=fts,
         redshift=0.0,
+        convention=FilterConvention.BESSELL,
         plslope_grid=np.array([-1.7], dtype=np.float64),
         ebv_grid=np.array([0.0], dtype=np.float64),
         torus_model=torus_model,
@@ -191,12 +193,14 @@ def test_ratio_tor_bbb_and_frac_agn_tor():
 def test_precompute_mn12_differs_from_gaussian():
     """The two torus models must produce different precomputed photometry."""
     from tengri.components.agn.grahsp.precompute import build_lookup, precompute
+    from tengri.utils.filter_convention import FilterConvention
 
     fws, fts = _toy_filters()
     kw = dict(
         filter_waves=fws,
         filter_trans=fts,
         redshift=0.0,
+        convention=FilterConvention.BESSELL,
         plslope_grid=np.array([-1.7], dtype=np.float64),
         ebv_grid=np.array([0.0], dtype=np.float64),
     )

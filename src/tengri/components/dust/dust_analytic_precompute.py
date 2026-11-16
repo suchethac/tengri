@@ -60,6 +60,7 @@ from tengri.forward.precompute.templates import (
     collapse_fixed_axes,
     precompute_template_photometry,
 )
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid_interp import PreintegratedGrid, interp_nd_pchip
 from tengri.utils.interpolation import edges_for_grid
 from tengri.utils.physics_constants import C_CGS as _C_CGS
@@ -223,6 +224,8 @@ def _band_integrals_over_nodes(
     filter_waves: list,
     filter_trans: list,
     redshift: float,
+    *,
+    convention: FilterConvention,
 ) -> np.ndarray:
     """Evaluate ``closure`` at every node and reduce each batch to band integrals.
 
@@ -272,6 +275,7 @@ def _band_integrals_over_nodes(
             dl_cm=1.0,
             energy_normalize=False,
             units="lnu",
+            convention=convention,
         )
         rows.append(np.asarray(band.phot)[: min(chunk, n_nodes - start)])
     return np.concatenate(rows, axis=0)
@@ -286,6 +290,8 @@ def _build_grid(
     redshift: float,
     closure_kwargs: dict[str, float] | None = None,
     exact_nodes_aa: tuple[float, ...] = (),
+    *,
+    convention: FilterConvention,
 ) -> tuple[PreintegratedGrid, np.ndarray]:
     """Preintegrate a continuum closure over the Cartesian product of ``axes``.
 
@@ -322,6 +328,7 @@ def _build_grid(
         filter_waves,
         filter_trans,
         redshift,
+        convention=convention,
     )
     probe = precompute_template_photometry(
         templates=np.zeros((1, wave_rest.size)),
@@ -333,6 +340,7 @@ def _build_grid(
         dl_cm=1.0,
         energy_normalize=False,
         units="lnu",
+        convention=convention,
     )
     axes_jax = tuple(jnp.asarray(ax) for ax in axes)
     shaped = flat.reshape(*(len(ax) for ax in axes), len(filter_waves))
@@ -351,6 +359,8 @@ def _build_grid_modified_blackbody(
     redshift: float,
     T_grid: np.ndarray,
     beta_grid: np.ndarray,
+    *,
+    convention: FilterConvention,
 ) -> tuple[PreintegratedGrid, np.ndarray]:
     """Preintegrate the modified blackbody over (T, beta); shape (n_T, n_beta, n_filters)."""
     return _build_grid(
@@ -360,6 +370,7 @@ def _build_grid_modified_blackbody(
         filter_waves,
         filter_trans,
         redshift,
+        convention=convention,
     )
 
 
@@ -371,6 +382,8 @@ def _build_grid_casey2012(
     beta_grid: np.ndarray,
     alpha_mir_grid: np.ndarray,
     lambda_0_um_grid: np.ndarray,
+    *,
+    convention: FilterConvention,
 ) -> tuple[PreintegratedGrid, np.ndarray]:
     """Preintegrate Casey (2012) over (T, beta, alpha_mir, lambda_0); 4 axes + filters."""
     return _build_grid(
@@ -381,6 +394,7 @@ def _build_grid_casey2012(
         filter_trans,
         redshift,
         exact_nodes_aa=(_CASEY_LAMBDA_MIN_UM * 1e4,),
+        convention=convention,
     )
 
 
@@ -391,6 +405,8 @@ def _build_grid_graybody(
     T_grid: np.ndarray,
     beta_grid: np.ndarray,
     lambda_0_um_grid: np.ndarray,
+    *,
+    convention: FilterConvention,
 ) -> tuple[PreintegratedGrid, np.ndarray]:
     """Preintegrate the graybody over (T, beta, lambda_0); axes (n_T, n_beta, n_lambda_0)."""
     return _build_grid(
@@ -400,6 +416,7 @@ def _build_grid_graybody(
         filter_waves,
         filter_trans,
         redshift,
+        convention=convention,
     )
 
 
@@ -408,6 +425,8 @@ def _build_grid_pah_drude(
     filter_trans: list,
     redshift: float,
     L_absorbed_ref: float = 1.0,
+    *,
+    convention: FilterConvention,
 ) -> PreintegratedGrid:
     """Preintegrate PAH Drude template through filters.
 
@@ -462,6 +481,7 @@ def _build_grid_pah_drude(
         dl_cm=1.0,
         energy_normalize=False,  # template already normalized to L_absorbed_ref
         units="lnu",
+        convention=convention,
     )
 
 
@@ -518,6 +538,7 @@ def precompute(
     beta_grid: np.ndarray | None = None,
     alpha_mir_grid: np.ndarray | None = None,
     lambda_0_um_grid: np.ndarray | None = None,
+    convention: FilterConvention,
 ) -> dict:
     """Build preintegrated analytic dust grid, auto-collapsing Fixed-parameter axes.
 
@@ -609,7 +630,7 @@ def precompute(
     reach. Nothing here changes the exact closures.
     """
     if model == "pah_drude":
-        preint = _build_grid_pah_drude(filter_waves, filter_trans, redshift)
+        preint = _build_grid_pah_drude(filter_waves, filter_trans, redshift, convention=convention)
         ln_phot = np.log(np.maximum(np.asarray(preint.phot, dtype=np.float64), _FLOAT64_TINY))
         result = {"grid_phot": preint.phot, "axes": (), "_preint": preint, "_ln_phot": ln_phot}
         axis_params = AXIS_PARAMS_PAH
@@ -631,7 +652,9 @@ def precompute(
                 reach_axes.check_user_axis(name, axis, support)
                 axes.append(axis)
         axes = tuple(axes)
-        preint, ln_phot = _CONTINUUM_BUILDERS[model](filter_waves, filter_trans, redshift, *axes)
+        preint, ln_phot = _CONTINUUM_BUILDERS[model](
+            filter_waves, filter_trans, redshift, *axes, convention=convention
+        )
         result = {
             "grid_phot": preint.phot,
             "axes": tuple(jnp.asarray(ax) for ax in axes),

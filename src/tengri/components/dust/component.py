@@ -887,12 +887,11 @@ class DustAttenuationSEDComponent(TemplateThreading):
                 from tengri.parameters.resolve import require_redshift
 
                 z_neb = jnp.asarray(require_redshift(params, "components.dust.component.apply"))
-                fw_pad = state.derived.get("phot_filter_waves_padded")
-                ft_pad = state.derived.get("phot_filter_trans_padded")
+                bands = state.derived.get("phot_band_spec")
                 sed_neb_reddened = jnp.asarray(_sed_neb) * attenuation
                 derived_overrides["nebular_phot_lnu_attenuated_precomp"] = (
                     project_additive_onto_photometry(
-                        None, sed_neb_reddened, state.wave, filter_eff, fw_pad, ft_pad, z_neb
+                        None, sed_neb_reddened, state.wave, filter_eff, bands, z_neb
                     )
                 )
                 _rb_eff = state.derived.get("filter_restband_eff_waves")
@@ -903,8 +902,7 @@ class DustAttenuationSEDComponent(TemplateThreading):
                             sed_neb_reddened,
                             state.wave,
                             _rb_eff,
-                            fw_pad,
-                            ft_pad,
+                            bands,
                             jnp.zeros_like(z_neb),
                         )
                     )

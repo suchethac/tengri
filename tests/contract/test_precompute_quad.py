@@ -15,6 +15,7 @@ import pytest
 from numpy.testing import assert_allclose
 
 from tengri.components.stellar.sps.precompute import precompute_photometry
+from tengri.utils.filter_convention import FilterConvention
 
 # ── Minimal fake SSP data ─────────────────────────────────────────
 
@@ -63,7 +64,9 @@ class TestTaylorMomentTensor:
         """Ψ has the same shape as Φ."""
         ssp = _SSPData()
         fw, ft = _simple_filters()
-        pc = precompute_photometry(ssp, fw, ft, 0.1, 1e28, taylor_correction=True)
+        pc = precompute_photometry(
+            ssp, fw, ft, 0.1, 1e28, taylor_correction=True, convention=FilterConvention.BESSELL
+        )
         assert pc.ssp_phot_moment is not None
         chex.assert_equal_shape([pc.ssp_phot_moment, pc.ssp_phot])
 
@@ -71,14 +74,14 @@ class TestTaylorMomentTensor:
         """Ψ contains no NaN or Inf."""
         ssp = _SSPData()
         fw, ft = _simple_filters()
-        pc = precompute_photometry(ssp, fw, ft, 0.1, 1e28)
+        pc = precompute_photometry(ssp, fw, ft, 0.1, 1e28, convention=FilterConvention.BESSELL)
         chex.assert_tree_all_finite(np.asarray(pc.ssp_phot_moment))
 
     def test_moment_zero_for_flat_ssp(self):
         """For a flat SSP (constant across λ), Ψ = SSP · <λ - λ_eff> = 0."""
         ssp = _SSPData(flat=True)
         fw, ft = _simple_filters()
-        pc = precompute_photometry(ssp, fw, ft, 0.1, 1e28)
+        pc = precompute_photometry(ssp, fw, ft, 0.1, 1e28, convention=FilterConvention.BESSELL)
         # <(λ - λ_eff)> weighted by T·λ is zero by definition of λ_eff
         # ... but only if λ_eff is computed from the same T·λ² / T·λ formula.
         # For top-hat filters this is exact to machine precision.
@@ -88,7 +91,7 @@ class TestTaylorMomentTensor:
         """For a steep λ^-2 SSP, Ψ ≠ 0."""
         ssp = _SSPData(flat=False)
         fw, ft = _simple_filters()
-        pc = precompute_photometry(ssp, fw, ft, 0.1, 1e28)
+        pc = precompute_photometry(ssp, fw, ft, 0.1, 1e28, convention=FilterConvention.BESSELL)
         moment = np.asarray(pc.ssp_phot_moment)
         assert np.any(np.abs(moment) > 1e-6)
 
@@ -96,7 +99,9 @@ class TestTaylorMomentTensor:
         """taylor_correction=False → ssp_phot_moment is None."""
         ssp = _SSPData()
         fw, ft = _simple_filters()
-        pc = precompute_photometry(ssp, fw, ft, 0.1, 1e28, taylor_correction=False)
+        pc = precompute_photometry(
+            ssp, fw, ft, 0.1, 1e28, taylor_correction=False, convention=FilterConvention.BESSELL
+        )
         assert pc.ssp_phot_moment is None
 
 
@@ -106,7 +111,9 @@ class TestTaylorCorrectionAccuracy:
     @staticmethod
     def _compute_errors(ssp, fw_list, ft_list, redshift=0.1, dl_cm=1e28):
         """Compute Zacharegkas (n=1) and Taylor-corrected errors per filter."""
-        pc = precompute_photometry(ssp, fw_list, ft_list, redshift, dl_cm)
+        pc = precompute_photometry(
+            ssp, fw_list, ft_list, redshift, dl_cm, convention=FilterConvention.BESSELL
+        )
         ssp_flux_np = np.asarray(ssp.ssp_flux)
         wave_obs = np.asarray(ssp.ssp_wave) * (1.0 + redshift)
 

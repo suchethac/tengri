@@ -58,6 +58,7 @@ import pytest
 
 from tengri import Fixed, Uniform
 from tengri.parameters.parameters import Parameters
+from tengri.utils.filter_convention import FilterConvention
 from tests._data_skip import (
     CAT3D_WIND_GRID,
     SILVA04_GRID,
@@ -199,7 +200,14 @@ def _build(module, pre_kwargs, build_kwargs, waves, trans):
     adapter = importlib.import_module(f"tengri.components.agn.{module}")
     kwargs = dict(pre_kwargs)
     parameters = kwargs.pop("parameters", None)
-    result = adapter.precompute(waves, trans, redshift=0.1, parameters=parameters, **kwargs)
+    result = adapter.precompute(
+        waves,
+        trans,
+        redshift=0.1,
+        parameters=parameters,
+        **kwargs,
+        convention=FilterConvention.BESSELL,
+    )
     return adapter.build_lookup(result, **build_kwargs)
 
 

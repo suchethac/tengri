@@ -121,9 +121,9 @@ def test_set_precision_refuses_a_mismatched_process(bench) -> None:
 
 def test_methods_match_catalog_fitter_vmappable(bench) -> None:
     """The --method choices are exactly the samplers the catalog path vectorizes."""
-    from tengri.inference.catalog_fitter import CatalogFitter
+    from tengri.inference.catalog_fitter import _vmapped_mcmc_tags
 
-    assert set(bench.METHODS) == set(CatalogFitter._MCMC_VMAPPABLE)
+    assert set(bench.METHODS) == set(_vmapped_mcmc_tags())
 
 
 # ── 2. the R-hat gate ───────────────────────────────────────────────

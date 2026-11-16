@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """The batched catalog path: which samplers reach it, and on what convention.
 
-``CatalogFitter._MCMC_VMAPPABLE`` decides whether a sampler runs K galaxies per
-``lax.map`` step on the accelerator or falls to ``_run_sequential`` and never
+``_vmapped_mcmc_tags()``, read from the backend registry, decides whether a sampler runs K
+galaxies per ``lax.map`` step on the accelerator or falls to ``_run_sequential`` and never
 reaches the GPU at all. Three things about that set are load-bearing enough to
 pin:
 
@@ -27,9 +27,27 @@ from __future__ import annotations
 
 import inspect
 
+import jax
+import jax.numpy as jnp
+import numpy as np
 import pytest
 
 pytestmark = pytest.mark.contract
+
+
+def _gauss_ld(x, data_args):
+    """Standard-normal-shaped log-density centered on ``data_args["mu"]``."""
+    return -0.5 * jnp.sum((x - data_args["mu"]) ** 2)
+
+
+def _gauss_substitute(data, noise, presence, redshift, line_flux_obs, line_flux_err, shared):
+    """Per-galaxy ``data_args``: the galaxy's center only."""
+    return {"mu": data}
+
+
+def _gauss_flat(dim):
+    """The four-tuple ``flat_logdensity`` seam for a ``dim``-dimensional Gaussian target."""
+    return (_gauss_ld, lambda x: x, jnp.zeros(dim), {"mu": jnp.zeros(dim)})
 
 
 # --------------------------------------------------------------------------
@@ -40,22 +58,29 @@ pytestmark = pytest.mark.contract
 class TestWhichSamplersReachTheBatchedPath:
     def test_chees_is_on_the_batched_path(self):
         """The Phase 3 change, stated once as a fact rather than inferred."""
-        from tengri.inference.catalog_fitter import _CatalogFitterOriginal
+        from tengri.inference.catalog_fitter import _vmapped_mcmc_tags
 
-        assert "mcmc_chees" in _CatalogFitterOriginal._MCMC_VMAPPABLE
+        assert "mcmc_chees" in _vmapped_mcmc_tags()
 
-    def test_the_quarantined_samplers_are_not(self):
+    def test_the_quarantine_is_the_tier_gate_not_set_membership(self):
         """A ``tier="broken"`` backend reports wrong answers *faster* here.
 
         ``mcmc_ghmc`` measured split-R-hat 1.1e10 with acceptance at 0.989 and
-        ``mcmc_mclmc`` is quarantined on its energy error. Putting either on the
-        batched path would hand a catalog user a fast wrong answer, which is
-        strictly worse than a slow one.
+        ``mcmc_mclmc`` is quarantined on its energy error. The vmapped set is derived
+        from the sampler registry, so ghmc is a member, and what keeps a catalog user
+        from a fast wrong answer is the tier gate every surface applies: refused unless
+        ``allow_unvalidated=True``. ``mcmc_mclmc`` has no vmapped engine at all.
         """
-        from tengri.inference.catalog_fitter import _CatalogFitterOriginal
+        import pytest
 
-        for name in ("mcmc_ghmc", "mcmc_mclmc"):
-            assert name not in _CatalogFitterOriginal._MCMC_VMAPPABLE
+        from tengri.inference._backend_registry import check_usable, get_backend
+        from tengri.inference.catalog_fitter import _vmapped_mcmc_tags
+
+        assert "mcmc_mclmc" not in _vmapped_mcmc_tags()
+        assert get_backend("mcmc_ghmc").tier == "broken"
+        with pytest.raises(Exception, match="broken"):
+            check_usable(get_backend("mcmc_ghmc"))
+        check_usable(get_backend("mcmc_ghmc"), allow_unvalidated=True)
 
     def test_chees_did_not_get_promoted_on_the_way_in(self):
         """Reaching the batched path is a structural property, not a tier bump."""
@@ -63,22 +88,11 @@ class TestWhichSamplersReachTheBatchedPath:
 
         assert get_backend("mcmc_chees").tier == "experimental"
 
-    def test_every_vmappable_method_has_a_sampler_tag(self):
-        """A method in the set with no engine tag is a ``KeyError`` at fit time.
-
-        The dispatch used to read ``"nuts" if method == "mcmc_nuts" else "hmc"``,
-        which silently ran HMC for anything else added to the set. A table that
-        must be complete is better than a fallback that cannot be wrong.
-        """
-        from tengri.inference.catalog_fitter import _CatalogFitterOriginal as C
-
-        assert set(C._MCMC_VMAPPABLE) == set(C._MCMC_SAMPLER_TAG)
-
     def test_the_engine_agrees_about_which_samplers_exist(self):
-        from tengri.inference.backends.mcmc.catalog import _SAMPLERS
-        from tengri.inference.catalog_fitter import _CatalogFitterOriginal as C
+        from tengri.inference.catalog_fitter import _vmapped_mcmc_tags
+        from tengri.inference.sampling.driver import get_sampler
 
-        assert set(C._MCMC_SAMPLER_TAG.values()) <= set(_SAMPLERS)
+        assert all(get_sampler(method).vmappable for method in _vmapped_mcmc_tags())
 
 
 # --------------------------------------------------------------------------
@@ -132,20 +146,95 @@ class TestTheAdaptationConvention:
                 object(), "chees", n_warmup=10, n_burnin=0, n_samples=10, n_ensemble=1
             )
 
-    def test_window_adaptation_samplers_refuse_multiple_chains_by_name(self):
-        """NUTS/HMC adapt per galaxy, so a second chain would re-run warmup.
+    @pytest.mark.parametrize("sampler", ["nuts", "hmc"])
+    def test_window_samplers_run_several_chains_from_one_adaptation(self, sampler):
+        """NUTS/HMC adapt once per galaxy and sample several overdispersed chains from it.
 
-        Refused rather than ignored: a caller who asked for four chains and got
-        one would have no way to find out, and would read a single chain's split
-        R-hat as a four-chain one.
+        The output contract matches the ChEES path: the chains are flattened to
+        ``(n_chains * n_samples, D)``. The chains must differ, or the split R-hat
+        over them measures nothing.
         """
+        import jax.numpy as jnp
+        import numpy as np
+
         from tengri.inference.backends.mcmc.catalog import build_catalog_mcmc_engine
 
-        for sampler in ("nuts", "hmc"):
-            with pytest.raises(ValueError, match="n_chains"):
-                build_catalog_mcmc_engine(
-                    object(), sampler, n_warmup=10, n_burnin=0, n_samples=10, n_chains=4
-                )
+        n_chains, n_samples, dim = 2, 12, 2
+        run_one, _ = build_catalog_mcmc_engine(
+            None,
+            sampler,
+            n_warmup=40,
+            n_burnin=5,
+            n_samples=n_samples,
+            n_chains=n_chains,
+            flat_logdensity=_gauss_flat(dim),
+            substitute=_gauss_substitute,
+        )
+        positions, divergent = run_one(
+            jnp.zeros(dim),
+            jax.random.PRNGKey(7),
+            jnp.ones(dim),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        assert positions.shape == (n_chains * n_samples, dim)
+        assert divergent.shape == (n_chains * n_samples,)
+        assert bool(jnp.all(jnp.isfinite(positions)))
+        chains = np.asarray(positions).reshape(n_chains, n_samples, dim)
+        assert not np.allclose(chains[0], chains[1])
+
+    def test_single_window_chain_is_the_direct_run_chain_program(self):
+        """``n_chains=1`` keeps the one-chain program, bit for bit.
+
+        The multi-chain form must not perturb the existing single-chain result:
+        the draws equal a direct ``run_chain`` call on the same key split.
+        """
+        import jax.numpy as jnp
+        import numpy as np
+
+        from tengri.inference._backend_registry import get_backend
+        from tengri.inference.backends.mcmc.catalog import build_catalog_mcmc_engine
+        from tengri.inference.backends.mcmc.chain_program import NUTSConfig, run_chain
+
+        n_warmup, n_burnin, n_samples, dim = 40, 5, 12, 2
+        n_chain = n_burnin + n_samples
+        run_one, _ = build_catalog_mcmc_engine(
+            None,
+            "nuts",
+            n_warmup=n_warmup,
+            n_burnin=n_burnin,
+            n_samples=n_samples,
+            flat_logdensity=_gauss_flat(dim),
+            substitute=_gauss_substitute,
+        )
+        gal_key = jax.random.PRNGKey(11)
+        data = jnp.ones(dim)
+        positions, _ = run_one(jnp.zeros(dim), gal_key, data, None, None, None, None, None, None)
+
+        warmup_key, chain_key = jax.random.split(gal_key)
+        chain_keys = jax.random.split(chain_key, n_chain)
+        entry = get_backend("mcmc_nuts")
+        adaptation = entry.adaptation_for({"pathfinder_warmstart": False})
+        cfg = NUTSConfig(max_doublings=10, use_dense=False, target_accept_rate=0.85)
+        direct, _ = run_chain(
+            entry.chain_program,
+            adaptation,
+            jnp.zeros(dim),
+            warmup_key,
+            None,
+            chain_keys,
+            _gauss_ld,
+            {"mu": data},
+            n_warmup,
+            cfg,
+        )
+        np.testing.assert_array_equal(
+            np.asarray(positions), np.asarray(direct.position[n_burnin:])
+        )
 
     def test_the_catalog_docstring_names_all_three_conventions(self):
         """The rejected alternatives are recorded where the choice was made.
@@ -178,19 +267,43 @@ class TestTheAdaptationConvention:
         assert sig.parameters["target_accept_rate"].default is AUTO
         assert pytest.approx(0.651) == CHEES_TARGET_ACCEPT_RATE
 
-    def test_chees_refuses_a_dense_mass_matrix_by_name(self):
-        """Its kernel metric is diagonal; a silently-ignored True is worse.
+    def test_chees_dense_metric_changes_the_draws_and_stays_finite(self):
+        """``chees_dense`` is applied, not silently ignored.
 
-        This is the failure ``run_ghmc``'s ``target_accept_rate`` records: an
-        argument the surface accepts and the kernel cannot use.
+        The dense metric is a linear change of variables estimated from a pilot run, so
+        the same key must give different draws with and without it. Both must be finite
+        and of the shared chain-flattened shape.
         """
-        from tengri.inference.catalog_fitter import _CatalogFitterOriginal
+        from tengri.inference.backends.mcmc.catalog import build_catalog_mcmc_engine
 
-        cat = _CatalogFitterOriginal.__new__(_CatalogFitterOriginal)
-        with pytest.raises(ValueError, match="dense_mass_matrix"):
-            _CatalogFitterOriginal._run_native_mcmc(
-                cat, "mcmc_chees", key=None, dense_mass_matrix=True
-            )
+        dim, n_samples = 2, 12
+        kwargs = dict(
+            n_warmup=40,
+            n_burnin=5,
+            n_samples=n_samples,
+            n_chains=4,
+            n_ensemble=4,
+            flat_logdensity=_gauss_flat(dim),
+            substitute=_gauss_substitute,
+        )
+        args = (
+            jnp.zeros(dim),
+            jax.random.PRNGKey(3),
+            jnp.ones(dim),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        diagonal_run, _ = build_catalog_mcmc_engine(None, "chees", **kwargs)
+        dense_run, _ = build_catalog_mcmc_engine(None, "chees", chees_dense=True, **kwargs)
+        diagonal, _ = diagonal_run(*args)
+        dense, _ = dense_run(*args)
+        assert dense.shape == (4 * n_samples, dim)
+        assert bool(jnp.all(jnp.isfinite(dense)))
+        assert not bool(jnp.allclose(diagonal, dense))
 
 
 # --------------------------------------------------------------------------
@@ -325,3 +438,196 @@ class TestTheTreeDepthCapReachesWarmup:
         src = inspect.getsource(nuts.run_nuts)
         tuning = src[src.index("    tuning = ") : src.index("adapt_key = (")]
         assert "max_num_doublings" in tuning
+
+
+def test_stuck_pilot_falls_back_to_its_own_draws(monkeypatch):
+    """A pilot that returns constant draws cannot define a metric; the galaxy keeps them.
+
+    The constant pilot has a zero covariance, so the Cholesky factor is not finite. The
+    galaxy must then return exactly the pilot's post-burn-in draws, all finite, and not
+    NaN. The pilot is replaced by a stub so that the stuck state is exact; the final pass
+    is the real ChEES scan and must still run.
+    """
+    from tengri.inference.backends.mcmc import catalog as catalog_mod
+    from tengri.inference.backends.mcmc.catalog import build_catalog_mcmc_engine
+
+    real_scan = catalog_mod._chees_scan
+    dim, n_burnin, n_samples, n_chains, pilot_value = 2, 5, 12, 4, 0.5
+    n_chain = n_burnin + n_samples
+    calls = []
+
+    def stuck_pilot_then_real(*args):
+        calls.append(None)
+        if len(calls) > 1:
+            return real_scan(*args)
+        n_chains_arg, n_chain_arg = args[7], args[8]
+        positions = jnp.full((n_chains_arg, n_chain_arg, dim), pilot_value)
+        divergent = jnp.zeros((n_chains_arg, n_chain_arg), dtype=bool)
+        return positions, divergent, None, None, None
+
+    monkeypatch.setattr(catalog_mod, "_chees_scan", stuck_pilot_then_real)
+    run_one, _ = build_catalog_mcmc_engine(
+        None,
+        "chees",
+        n_warmup=40,
+        n_burnin=n_burnin,
+        n_samples=n_samples,
+        n_chains=n_chains,
+        n_ensemble=4,
+        chees_dense=True,
+        flat_logdensity=_gauss_flat(dim),
+        substitute=_gauss_substitute,
+    )
+    positions, divergent = run_one(
+        jnp.zeros(dim), jax.random.PRNGKey(9), jnp.ones(dim), None, None, None, None, None, None
+    )
+
+    assert len(calls) == 2, "the dense final pass must still be attempted"
+    assert positions.shape == (n_chains * n_samples, dim)
+    assert bool(jnp.all(jnp.isfinite(positions)))
+    np.testing.assert_array_equal(
+        np.asarray(positions), np.full((n_chains * n_samples, dim), pilot_value)
+    )
+    assert not bool(jnp.any(divergent))
+
+
+def _split_rhat(chains):
+    """Gelman-Rubin R-hat per coordinate for ``chains`` of shape (n_chains, n_draws, D)."""
+    n_draws = chains.shape[1]
+    means = chains.mean(axis=1)
+    within = chains.var(axis=1, ddof=1).mean(axis=0)
+    between = n_draws * means.var(axis=0, ddof=1)
+    var_hat = (n_draws - 1) / n_draws * within + between / n_draws
+    return np.sqrt(var_hat / within)
+
+
+def test_window_chains_start_at_distinct_overdispersed_positions():
+    """Every chain starts somewhere of its own, at about the requested jitter scale."""
+    from tengri.inference.sampling.chains import jittered_starts
+
+    starts = np.asarray(jittered_starts(jnp.zeros(2), jax.random.PRNGKey(0), 4, 0.1))
+    assert starts.shape == (4, 2)
+    assert len({tuple(np.round(row, 12)) for row in starts}) == 4
+    assert 0.02 < starts.std() < 0.3, f"start spread {starts.std():.3f} is not ~0.1"
+
+
+@pytest.mark.parametrize("sampler", ["nuts", "hmc"])
+def test_window_chains_mix_on_a_well_posed_target(sampler):
+    """Four chains from one adaptation agree on the target: split R-hat below 1.1."""
+    from tengri.inference.backends.mcmc.catalog import build_catalog_mcmc_engine
+
+    n_chains, n_samples = 4, 300
+    run_one, _ = build_catalog_mcmc_engine(
+        None,
+        sampler,
+        n_warmup=200,
+        n_burnin=50,
+        n_samples=n_samples,
+        n_chains=n_chains,
+        flat_logdensity=_gauss_flat(2),
+        substitute=_gauss_substitute,
+    )
+    positions, _ = run_one(
+        jnp.zeros(2), jax.random.PRNGKey(5), jnp.ones(2), None, None, None, None, None, None
+    )
+    chains = np.asarray(positions).reshape(n_chains, n_samples, 2)
+    rhat = _split_rhat(chains)
+    assert np.all(rhat < 1.1), rhat
+
+
+def test_single_chain_matches_the_golden_array_from_before_multichain():
+    """``n_chains=1`` is bit-identical to the array the pre-multichain engine produced.
+
+    The golden was generated at the parent of the first multi-chain commit, with the same
+    key, target and counts, and is pinned as a file so the single-chain path cannot drift
+    without the change being visible.
+    """
+    from pathlib import Path
+
+    from tengri.inference.backends.mcmc.catalog import build_catalog_mcmc_engine
+
+    golden = np.load(Path(__file__).parent / "data" / "catalog_nuts_single_chain_golden.npy")
+    run_one, _ = build_catalog_mcmc_engine(
+        None,
+        "nuts",
+        n_warmup=40,
+        n_burnin=5,
+        n_samples=12,
+        flat_logdensity=_gauss_flat(2),
+        substitute=_gauss_substitute,
+    )
+    positions, _ = run_one(
+        jnp.zeros(2), jax.random.PRNGKey(11), jnp.ones(2), None, None, None, None, None, None
+    )
+    np.testing.assert_array_equal(np.asarray(positions), golden)
+
+
+_RHO = 0.95
+_CORR_COV = np.array([[1.0, _RHO], [_RHO, 1.0]])
+_CORR_PREC = np.linalg.inv(_CORR_COV)
+
+
+def _corr_ld(x, data_args):
+    """Log-density of a 2-D Gaussian with unit variances and correlation 0.95."""
+    return -0.5 * x @ jnp.asarray(_CORR_PREC) @ x
+
+
+def _corr_flat():
+    return (_corr_ld, lambda x: x, jnp.zeros(2), {"mu": jnp.zeros(2)})
+
+
+def _ess_1d(chains):
+    """Effective sample size of (n_chains, n_draws) chains, pooled, truncated at the first
+    negative autocorrelation."""
+    m, n = chains.shape
+    centered = chains - chains.mean()
+    var = (centered**2).mean()
+    rho_sum = 0.0
+    for lag in range(1, n // 2):
+        rho = np.mean(centered[:, :-lag] * centered[:, lag:]) / var
+        if rho < 0:
+            break
+        rho_sum += rho
+    return m * n / (1.0 + 2.0 * rho_sum)
+
+
+def test_chees_dense_recovers_a_correlated_gaussian_and_mixes_better_than_diagonal():
+    """Dense ChEES recovers rho=0.95 and resolves the correlated direction better.
+
+    Tolerances: about 2000 draws at ESS of several hundred give a standard error near
+    0.06 on a variance and near 0.004 on a correlation, (1-rho^2)/sqrt(ESS) at rho=0.95,
+    so 0.2 and 0.03 are roughly 3 and 7 standard errors. The mixing comparison is on the
+    projection onto (1,1)/sqrt(2), where the diagonal metric cannot help: the dense run
+    must have at least 1.5 times the diagonal run's ESS.
+    """
+    from tengri.inference.backends.mcmc.catalog import build_catalog_mcmc_engine
+
+    n_chains, n_samples = 4, 500
+    kwargs = dict(
+        n_warmup=300,
+        n_burnin=100,
+        n_samples=n_samples,
+        n_chains=n_chains,
+        n_ensemble=8,
+        max_leapfrog_steps=64,
+        flat_logdensity=_corr_flat(),
+        substitute=_gauss_substitute,
+    )
+    args = (jnp.zeros(2), jax.random.PRNGKey(21), jnp.ones(2), None, None, None, None, None, None)
+    dense_run, _ = build_catalog_mcmc_engine(None, "chees", chees_dense=True, **kwargs)
+    diag_run, _ = build_catalog_mcmc_engine(None, "chees", **kwargs)
+    dense, _ = dense_run(*args)
+    diagonal, _ = diag_run(*args)
+    dense = np.asarray(dense)
+    assert np.all(np.isfinite(dense))
+
+    draws = dense.reshape(n_chains, n_samples, 2)
+    cov = np.cov(draws.reshape(-1, 2), rowvar=False)
+    np.testing.assert_allclose(np.diag(cov), [1.0, 1.0], atol=0.2)
+    corr = cov[0, 1] / np.sqrt(cov[0, 0] * cov[1, 1])
+    assert abs(corr - _RHO) < 0.03, f"sample correlation {corr:.4f} vs {_RHO}"
+
+    direction = np.array([1.0, 1.0]) / np.sqrt(2.0)
+    ess_dense = _ess_1d(draws @ direction)
+    ess_diag = _ess_1d(np.asarray(diagonal).reshape(n_chains, n_samples, 2) @ direction)
+    assert ess_dense >= 1.5 * ess_diag, f"ESS dense {ess_dense:.1f} vs diagonal {ess_diag:.1f}"

@@ -39,18 +39,14 @@ import numpy as np
 
 from tengri._cache_keys import array_key, baked, frozen_dataclass_key, stable_digest
 from tengri.components.stellar.sps.ztable_grid import build_edge_aware_z_grid
+from tengri.utils.band_projection import BandSpec, project_bands
 from tengri.utils.cosmology import DEFAULT_COSMO
-from tengri.utils.filter_convention import FilterConvention, filter_weight_np as _filter_weight_np
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid_interp import (
-    edge_split,
-    filter_support_slice,
-    fold_integrand_T,
-    lyc_augment_fold_T,
     preintegrate_grid,
-    subband_quadrature,
     transpose_templates,
 )
-from tengri.utils.physics_constants import LYMAN_LIMIT_AA, TEN_PC_CM
+from tengri.utils.physics_constants import TEN_PC_CM
 from tengri.utils.resident_bytes import resident_nbytes
 from tengri.utils.scale import (
     apply_log10_scale,
@@ -302,6 +298,8 @@ def precompute_photometry(
     n_subbands: int = 0,
     fixed: dict[int, float] | None = None,
     lyc_gate: bool = False,
+    *,
+    convention: FilterConvention,
 ) -> PhotometricPrecomputation:
     """Pre-compute SSP broadband fluxes for all filters.
 
@@ -389,6 +387,7 @@ def precompute_photometry(
         taylor=taylor_correction,
         n_subbands=n_subbands,
         lyc_gate=lyc_gate,
+        convention=convention,
     )
 
     # Collapse fixed axes if provided
@@ -455,6 +454,8 @@ def precompute_restband_photometry(
     filter_trans,
     n_subbands: int = 0,
     fixed: dict[int, float] | None = None,
+    *,
+    convention: FilterConvention,
 ) -> RestBandPrecomputation:
     r"""Preintegrate the SSP grid through each filter placed in the **rest** frame.
 
@@ -520,6 +521,7 @@ def precompute_restband_photometry(
         ),
         taylor=False,  # the rest band uses the quadrature, never the Taylor form
         n_subbands=n_subbands,
+        convention=convention,
     )
     if fixed:
         preint = slice_fixed_axes(preint, fixed)
@@ -856,23 +858,16 @@ class ZTableRequest:
     ssp_wave: tuple
     #: Array key for SSP flux grid (n_met, n_age, n_wave)
     ssp_flux: tuple
-    #: Tuple of (wave_key, trans_key) per filter, in order
-    filters: tuple
+    #: ``BandSpec.key()``: the filter curves (in order), the convention, the sub-band count
+    #: and the Lyman-continuum gate in one digest, so a field added to the spec reaches the key
+    #: without an edit here.
+    bands: str
     #: Array key for redshift grid
     z_grid: tuple
     #: Whether to apply IGM absorption
     apply_igm: bool
     #: Whether to apply Taylor expansion correction
     taylor_correction: bool
-    #: Filter convolution convention (str)
-    convention: str
-    #: Number of sub-band quadrature nodes
-    n_subbands: int
-    #: Whether this model has a live nebular Lyman-continuum mask (#2439,
-    #: #2427): gates the LyC whole-band split and the sub-band forced edge.
-    #: Part of the key so a lyc_gate=True request can never be served an
-    #: entry a lyc_gate=False (or pre-#2439) build wrote.
-    lyc_gate: bool
     #: Cosmology parameters (baked DEFAULT_COSMO or equivalent)
     cosmology: tuple
     #: Whether JAX X64 mode is enabled
@@ -926,7 +921,7 @@ class ZTableRequest:
 # the term scale on ``ssp_phot_moment_table`` (lyc_gate). The interpolation fold
 # that preceded it (#2769) changed the same tables the same way, so a version-8
 # entry is not mixed with new output.
-_ZTABLE_CACHE_VERSION = 9
+_ZTABLE_CACHE_VERSION = 10
 
 
 def _ztable_cache_dir():
@@ -945,17 +940,7 @@ def _ztable_cache_dir():
     return Path(custom) if custom else Path.home() / ".cache" / "tengri_precomp"
 
 
-def _ztable_cache_key(
-    ssp_data,
-    filter_waves,
-    filter_trans,
-    z_grid,
-    apply_igm,
-    taylor_correction,
-    convention,
-    n_subbands=0,
-    lyc_gate=False,
-) -> str:
+def _ztable_cache_key(ssp_data, bands, z_grid, apply_igm, taylor_correction) -> str:
     """Content hash over everything the table depends on.
 
     Includes session precision (jax_enable_x64) and JAX backend since stored
@@ -968,11 +953,6 @@ def _ztable_cache_key(
     input dimension is represented: omitting a field cannot be a silent bug
     because the dataclass has every field explicitly listed and type-annotated.
     """
-    # Convert filter arrays to array_key tuples
-    filters_keyed = tuple(
-        (array_key(fw), array_key(ft)) for fw, ft in zip(filter_waves, filter_trans)
-    )
-
     # cosmology is a hardcoded module default on this path today (#2145);
     # this row is the tripwire: the day a per-model cosmology is threaded
     # through, it must reach this request
@@ -980,13 +960,10 @@ def _ztable_cache_key(
         version=_ZTABLE_CACHE_VERSION,
         ssp_wave=array_key(ssp_data.ssp_wave),
         ssp_flux=array_key(ssp_data.ssp_flux),
-        filters=filters_keyed,
+        bands=bands.key(),
         z_grid=array_key(z_grid),
         apply_igm=bool(apply_igm),
         taylor_correction=bool(taylor_correction),
-        convention=str(convention),
-        n_subbands=int(n_subbands),
-        lyc_gate=bool(lyc_gate),
         cosmology=baked(DEFAULT_COSMO),
         x64=bool(jax.config.jax_enable_x64),
         backend=jax.default_backend(),
@@ -1006,7 +983,8 @@ def precompute_photometry_ztable(
     apply_igm=False,
     taylor_correction: bool = False,
     n_subbands: int = 0,
-    convention: FilterConvention = FilterConvention.BESSELL,
+    *,
+    convention: FilterConvention,
     lyc_gate: bool = False,
 ) -> PhotometricZTable:
     """Pre-compute SSP broadband fluxes on a redshift grid, disk-cached.
@@ -1045,14 +1023,15 @@ def precompute_photometry_ztable(
     if cache_dir is not None:
         key = _ztable_cache_key(
             ssp_data,
-            filter_waves,
-            filter_trans,
+            BandSpec(
+                filters=(list(filter_waves), list(filter_trans)),
+                convention=convention,
+                n_subbands=n_subbands,
+                lyc_gate=lyc_gate,
+            ),
             z_grid,
             apply_igm,
             taylor_correction,
-            convention,
-            n_subbands,
-            lyc_gate,
         )
         cache_path = cache_dir / f"ztable_{key}.npz"
         if cache_path.is_file():
@@ -1194,7 +1173,8 @@ def _compute_photometry_ztable(
     apply_igm=False,
     taylor_correction: bool = False,
     n_subbands: int = 0,
-    convention: FilterConvention = FilterConvention.BESSELL,
+    *,
+    convention: FilterConvention,
     lyc_gate: bool = False,
 ) -> PhotometricZTable:
     """Pre-compute SSP broadband fluxes on a redshift grid.
@@ -1304,23 +1284,14 @@ def _compute_photometry_ztable(
     ssp_flux_T = transpose_templates(ssp_flux_np)
     ssp_lead = ssp_flux_np.shape[:-1]
 
-    # Filter effective wavelengths (z-independent pivot for the IGM lookup)
-    # under the bandpass weight w(λ) (ADR-0017): λ_eff = ∫ λ T w dλ / ∫ T w dλ,
-    # evaluated on the filter's own nodes. The integral denominators; and the
-    # per-(z, filter) λ_eff the Taylor moment expands around: are computed on
-    # the union quadrature grid inside the z loop, matching
-    # lnu_filter_integral (#960) so the LUT and exact paths agree.
-    eff_waves_obs = []  # observed-frame effective wavelengths (z-independent)
-    for fw, ft in zip(filter_waves, filter_trans):
-        fw_np, ft_np = np.asarray(fw), np.asarray(ft)
-        tw_np = ft_np * _filter_weight_np(fw_np, convention)
-        eff_waves_obs.append(
-            _np_trapezoid(tw_np * fw_np, fw_np) / max(_np_trapezoid(tw_np, fw_np), 1e-30)
-        )
-    eff_waves_obs = np.array(eff_waves_obs)
-
-    # z-independent filter curves, converted once (not per z).
-    filter_np = [(np.asarray(fw), np.asarray(ft)) for fw, ft in zip(filter_waves, filter_trans)]
+    spec = BandSpec(
+        filters=([np.asarray(fw) for fw in filter_waves], [np.asarray(ft) for ft in filter_trans]),
+        convention=convention,
+        n_subbands=K,
+        lyc_gate=lyc_gate,
+    )
+    # Filter pivot wavelengths: z-independent, the point the IGM transmission is read at.
+    eff_waves_obs = spec.pivot_wavelengths()
 
     # z-dependent scalars, batched over the whole grid in one call each: the
     # luminosity distance and the IGM transmission. Eager per-z dispatch of
@@ -1338,101 +1309,23 @@ def _compute_photometry_ztable(
 
     for zi, z_val in enumerate(z_grid):
         z_val = float(z_val)
-        wave_obs = wave_ssp_np * (1.0 + z_val)
-
-        # Effective wavelengths: observed-frame are filter properties (z-independent)
-        eff_waves_rest_all[zi] = eff_waves_obs / (1.0 + z_val)
-
-        # Pre-integrate SSP through each filter (vectorized over met × age)
-        # on the union quadrature grid; SED nodes + filter nodes, with the
-        # smooth transmission interpolated, never the SED point-sampled at
-        # the filter table's nodes (#960). Matches lnu_filter_integral so
-        # the LUT and exact paths agree.
-        for f_idx, (fw_np, ft_np) in enumerate(filter_np):
-            grid = np.sort(np.concatenate([wave_obs, fw_np]))
-            # Integrate over the filter's support only (#2817, the exact path's
-            # rule). The SSP grid spans 91 Å–100 µm while a band transmits over a
-            # narrow window, so this also cuts the quadrature ~10–50×.
-            lo, hi = filter_support_slice(grid, fw_np)
-            grid = grid[lo:hi]
-            trans_on_grid = np.interp(grid, fw_np, ft_np, left=0.0, right=0.0)
-            tw_np = trans_on_grid * _filter_weight_np(grid, convention)
-            denom = _np_trapezoid(tw_np, grid)
-            # λ_eff on the SAME union grid: the Taylor moment must expand
-            # around the weight's first moment under its own quadrature, so
-            # that Ψ ≡ 0 for a flat template.
-            eff_waves_rest_all[zi, f_idx] = (
-                _np_trapezoid(tw_np * grid, grid) / max(denom, 1e-30) / (1.0 + z_val)
-            )
-
-            # The SSP interpolation is folded into the quadrature weights (#2769):
-            # no (met, age, m) integrand is ever built, every consumer below reads
-            # the SSP row through ``fold`` instead.
-            fold = fold_integrand_T(grid, tw_np, wave_obs, ssp_flux_T, ssp_lead)
-
-            # One Lyman edge (#2439, #2427, L3): gated on lyc_gate (a live
-            # nebular Lyman-continuum mask) -- a model without one never
-            # pays this compute, and the whole-band table stays bit-
-            # identical to the ordinary (unaugmented) path. When live,
-            # ``lyc_augment_grid_for_step`` resamples the SSP edge-aware and
-            # inserts the edge as a zero-width node pair, so the WHOLE-band
-            # integral, the ionizing-only split, AND ``subband_quadrature``'s
-            # own forced-boundary chunks are all exact at the SAME bracket
-            # cell (see :func:`tengri.utils.grid_interp.lyc_augment_grid_for_step`).
-            # Both halves of the split (below and above the edge) come from
-            # ONE cumulative integral (``edge_split``), so a band wholly on
-            # one side has exactly zero in the other half.
-            lyc_wave_obs = LYMAN_LIMIT_AA * (1.0 + z_val)
-            if lyc_gate:
-                grid_q, fold_q, tw_q = lyc_augment_fold_T(
-                    grid,
-                    tw_np,
-                    wave_obs,
-                    ssp_flux_T,
-                    ssp_lead,
-                    fw_np,
-                    ft_np,
-                    lyc_wave_obs,
-                    convention,
-                )
-                denom_q = _np_trapezoid(tw_q, grid_q)
-                num = fold_q.trapezoid()
-                lyc_num, above_num = edge_split(fold_q, grid_q, lyc_wave_obs)
-                ssp_phot_lyc_all[zi, :, :, f_idx] = lyc_num / max(denom_q, 1e-30)
-                ssp_phot_nolyc_all[zi, :, :, f_idx] = above_num / max(denom_q, 1e-30)
-            else:
-                grid_q, fold_q, tw_q, denom_q = grid, fold, tw_np, denom
-                num = fold.trapezoid()
-            ssp_phot_all[zi, :, :, f_idx] = num / max(denom_q, 1e-30)
-
-            # Taylor moment Ψ at this z and filter.
-            # Ψ_{ijb} = ∫ SSP(λ) (λ - λ_eff_rest) T_b(λ_obs) w(λ_obs) dλ_obs / ∫ T_b w dλ_obs
-            # Note: λ_eff_rest is the rest-frame effective wavelength of this filter at this z.
-            if taylor_correction:
-                lambda_rest_per_obs = grid / (1.0 + z_val)
-                lambda_minus_eff = lambda_rest_per_obs - eff_waves_rest_all[zi, f_idx]
-                moment_num = fold.trapezoid(lambda_minus_eff)
-                ssp_phot_moment_all[zi, :, :, f_idx] = moment_num / max(denom, 1e-30)
-
-            # Sub-band quadrature (#1122): same helper the fixed-z precompute
-            # uses, so the two paths cannot drift. Nodes come back observed-frame;
-            # store them rest-frame, which is where the dust law is evaluated.
-            # ``lyc_edge_obs`` forces a chunk boundary at the physical Lyman
-            # limit when this model has a live mask (R1, #2439, #2427); the
-            # (possibly edge-augmented) ``grid_q``/``tw_q``/``integrand_q``
-            # keep its own chunks exact at that boundary too.
-            if K > 0:
-                phi_k, nodes_obs = subband_quadrature(
-                    grid_q,
-                    tw_q,
-                    fold_q,
-                    denom_q,
-                    K,
-                    float(eff_waves_obs[f_idx]),
-                    lyc_edge_obs=lyc_wave_obs if lyc_gate else None,
-                )
-                ssp_subband_all[zi, :, :, f_idx, :] = phi_k
-                subband_waves_all[zi, :, :, f_idx, :] = nodes_obs / (1.0 + z_val)
+        # The shared engine: the union grid of the redshifted SSP nodes and each filter,
+        # the filter's support rule, the Lyman edge and the sub-band partition are all
+        # its, so this table cannot drift from the fixed-z LUT or the exact path.
+        grid = project_bands(
+            ssp_flux_T, wave_ssp_np, spec, z_val, grid_dims=ssp_lead, taylor=taylor_correction
+        )
+        ssp_phot_all[zi] = np.asarray(grid.phot)
+        eff_waves_rest_all[zi] = np.asarray(grid.effective_wavelengths_rest)
+        if taylor_correction:
+            # The engine's moment expands in the observed frame; this table's in the rest frame.
+            ssp_phot_moment_all[zi] = np.asarray(grid.moment) / (1.0 + z_val)
+        if lyc_gate:
+            ssp_phot_lyc_all[zi] = np.asarray(grid.lyc_phot)
+            ssp_phot_nolyc_all[zi] = np.asarray(grid.nolyc_phot)
+        if K > 0:
+            ssp_subband_all[zi] = np.asarray(grid.subband_phot)
+            subband_waves_all[zi] = np.asarray(grid.subband_waves_rest)
 
         # Geometric flux scale, stored as a log10 offset. The build is eager
         # float64 and the linear value is correct here: it is the *storage* that
@@ -1757,6 +1650,7 @@ def precompute(
     ssp_data,
     dl_cm: float,
     taylor_correction: bool = True,
+    convention: FilterConvention,
 ):
     """Protocol-shaped wrapper around :func:`precompute_photometry`.
 
@@ -1806,6 +1700,7 @@ def precompute(
         dl_cm=dl_cm,
         taylor_correction=taylor_correction,
         fixed=fixed,
+        convention=convention,
     )
 
 

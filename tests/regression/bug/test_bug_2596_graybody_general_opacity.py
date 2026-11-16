@@ -20,6 +20,7 @@ import pytest
 import tengri
 from tengri import DEFAULT, Fixed, SEDModel
 from tengri.components.dust.emission import DUST_EMISSION_MODELS as M
+from tengri.utils.filter_convention import FilterConvention
 
 pytestmark = pytest.mark.regression_bug
 
@@ -361,7 +362,15 @@ def graybody_precompute_and_exact():
     from tengri.components.dust import dust_analytic_precompute as adapter
 
     waves, trans = _fir_tophats()
-    result = adapter.precompute(waves, trans, 0.0, None, model="graybody", **_PRECOMP_GRIDS)
+    result = adapter.precompute(
+        waves,
+        trans,
+        0.0,
+        None,
+        model="graybody",
+        **_PRECOMP_GRIDS,
+        convention=FilterConvention.BESSELL,
+    )
     lookup = adapter.build_lookup(result, model="graybody")
     phot_precompute = np.asarray(lookup(1.0, 50.0, 1.5, 200.0))
 
@@ -428,7 +437,9 @@ def test_continuum_precompute_covers_far_ir(model, band):
 
     grids, query, closure_kwargs = _CONTINUUM_MODELS[model]
     waves, trans = _fir_tophats()
-    result = adapter.precompute(waves, trans, 0.0, None, model=model, **grids)
+    result = adapter.precompute(
+        waves, trans, 0.0, None, model=model, **grids, convention=FilterConvention.BESSELL
+    )
     lookup = adapter.build_lookup(result, model=model)
     phot_precompute = np.asarray(lookup(1.0, *query))
 

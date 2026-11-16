@@ -28,6 +28,7 @@ import numpy as np
 import pytest
 
 from tengri import Fixed
+from tengri.utils.filter_convention import FilterConvention
 
 pytestmark = pytest.mark.bounds
 
@@ -445,7 +446,9 @@ class TestPreintegrateForPhotometry:
     def test_sets_flag_and_attributes(self, backend_for_preint, synthetic_filters):
         """After call, the duck-typed attributes must exist and be populated."""
         fw, ft = synthetic_filters
-        backend_for_preint.preintegrate_for_photometry(fw, ft, 0.5, 1.0e28)
+        backend_for_preint.preintegrate_for_photometry(
+            fw, ft, 0.5, 1.0e28, convention=FilterConvention.BESSELL
+        )
         assert backend_for_preint._has_preint_photometry is True
         assert backend_for_preint._preint_continuum is not None
         assert backend_for_preint._preint_lines is not None
@@ -455,7 +458,9 @@ class TestPreintegrateForPhotometry:
         """CB19 has no nebular continuum — _preint_continuum.phot must be all zeros
         with shape (n_met, n_age, n_logU, n_filt)."""
         fw, ft = synthetic_filters
-        backend_for_preint.preintegrate_for_photometry(fw, ft, 0.5, 1.0e28)
+        backend_for_preint.preintegrate_for_photometry(
+            fw, ft, 0.5, 1.0e28, convention=FilterConvention.BESSELL
+        )
         cont = backend_for_preint._preint_continuum
         n_met = backend_for_preint.grid.log_OH_grid.shape[0]
         n_age = backend_for_preint.grid.log_age_grid.shape[0]
@@ -471,7 +476,9 @@ class TestPreintegrateForPhotometry:
         from tengri.components.nebular._constants import _LOG_OH_OFFSET
 
         fw, ft = synthetic_filters
-        backend_for_preint.preintegrate_for_photometry(fw, ft, 0.5, 1.0e28)
+        backend_for_preint.preintegrate_for_photometry(
+            fw, ft, 0.5, 1.0e28, convention=FilterConvention.BESSELL
+        )
         cont = backend_for_preint._preint_continuum
         expected = backend_for_preint.grid.log_OH_grid - _LOG_OH_OFFSET
         np.testing.assert_allclose(np.array(cont.axes[0]), np.array(expected), atol=1e-6)
@@ -480,7 +487,9 @@ class TestPreintegrateForPhotometry:
         """``_line_lum_collapsed`` must have shape (n_met, n_age, n_logU, n_lines)
         and contain log10(L_line/Q_H) [Lsun·s/photon] — i.e. log_line_ratios + log_hb_per_qh."""
         fw, ft = synthetic_filters
-        backend_for_preint.preintegrate_for_photometry(fw, ft, 0.5, 1.0e28)
+        backend_for_preint.preintegrate_for_photometry(
+            fw, ft, 0.5, 1.0e28, convention=FilterConvention.BESSELL
+        )
         n_met = backend_for_preint.grid.log_OH_grid.shape[0]
         n_age = backend_for_preint.grid.log_age_grid.shape[0]
         n_u = backend_for_preint.grid.log_U_grid.shape[0]
@@ -496,7 +505,9 @@ class TestPreintegrateForPhotometry:
     def test_line_filter_weights_shape(self, backend_for_preint, synthetic_filters):
         """``_preint_lines.line_filter_weights`` must be (n_lines, n_filt) finite floats."""
         fw, ft = synthetic_filters
-        backend_for_preint.preintegrate_for_photometry(fw, ft, 0.5, 1.0e28)
+        backend_for_preint.preintegrate_for_photometry(
+            fw, ft, 0.5, 1.0e28, convention=FilterConvention.BESSELL
+        )
         weights = backend_for_preint._preint_lines.line_filter_weights
         n_lines = backend_for_preint.grid.line_wavelengths.shape[0]
         assert weights.shape == (n_lines, len(fw))
@@ -506,7 +517,9 @@ class TestPreintegrateForPhotometry:
         """Passing ``fixed={2: -3.0}`` must drop the log_U axis from line_lum and
         from _preint_lines.axes."""
         fw, ft = synthetic_filters
-        backend_for_preint.preintegrate_for_photometry(fw, ft, 0.5, 1.0e28, fixed={2: -3.0})
+        backend_for_preint.preintegrate_for_photometry(
+            fw, ft, 0.5, 1.0e28, fixed={2: -3.0}, convention=FilterConvention.BESSELL
+        )
         n_met = backend_for_preint.grid.log_OH_grid.shape[0]
         n_age = backend_for_preint.grid.log_age_grid.shape[0]
         n_lines = backend_for_preint.grid.line_wavelengths.shape[0]
@@ -527,7 +540,7 @@ class TestPreintegrateForPhotometry:
 
         fw, ft = synthetic_filters
         b = backend_for_preint
-        b.preintegrate_for_photometry(fw, ft, 0.5, 1.0e28)
+        b.preintegrate_for_photometry(fw, ft, 0.5, 1.0e28, convention=FilterConvention.BESSELL)
         # Pick an exact interior grid point — last met index, middle age, middle U.
         log_oh_idx, age_idx, u_idx = 4, 2, 3
         log_oh = float(b.grid.log_OH_grid[log_oh_idx])
@@ -567,7 +580,9 @@ class TestPreintegrateForPhotometry:
         from tengri.utils.grid_interp import interp_nd_triweight
 
         fw, ft = synthetic_filters
-        backend_for_preint.preintegrate_for_photometry(fw, ft, 0.5, 1.0e28)
+        backend_for_preint.preintegrate_for_photometry(
+            fw, ft, 0.5, 1.0e28, convention=FilterConvention.BESSELL
+        )
         line_lum = backend_for_preint._line_lum_collapsed
         line_axes = backend_for_preint._preint_lines.axes
         line_edges = backend_for_preint._preint_lines.edges

@@ -9,6 +9,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.utils.filter_convention import FilterConvention
+
 pytestmark = pytest.mark.contract
 
 
@@ -33,7 +35,14 @@ def test_radio_precompute_and_lookup(model, filter_set):
     assert model in adapter.AXIS_PARAMS
 
     waves, trans = filter_set
-    result = adapter.precompute(waves, trans, redshift=0.5, parameters=None, model=model)
+    result = adapter.precompute(
+        waves,
+        trans,
+        redshift=0.5,
+        parameters=None,
+        model=model,
+        convention=FilterConvention.BESSELL,
+    )
     phot = np.asarray(result["grid_phot"])
     assert phot.shape[-1] == len(waves)
     chex.assert_tree_all_finite(phot)

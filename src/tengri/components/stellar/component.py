@@ -47,6 +47,7 @@ from tengri.parameters.timing import (
     published_timing_gyr,
     resolve_timing_fracs,
 )
+from tengri.utils.band_projection import BandSpec
 from tengri.utils.host_array import device_table, host_array
 
 
@@ -2619,6 +2620,9 @@ class StellarSEDComponentState(SEDComponentState):
     # for fixed-z and free-z (redshift is applied inside the integral).
     phot_fw_padded: Any | None = None
     phot_ft_padded: Any | None = None
+    #: The BandSpec the padded curves and every photometry LUT of this state were built with;
+    #: the runtime projections read the convention from it.
+    phot_band_spec: Any | None = None
     #: Number of SSP wavelength bins in the ionizing region (lambda < 2*911.76 A),
     #: a static structural constant of the fixed SSP grid. Computed at build time
     #: (concrete grid) and carried as static meta so :meth:`apply` can integrate
@@ -3171,6 +3175,7 @@ class StellarSEDComponent:
         lyc_gate: bool = False,
         spec_sigma_v_fixed: float | None = None,
         spec_lsf_n_bins: int = 16,
+        bands: BandSpec | None = None,
     ) -> StellarSEDComponentState:
         """Build SSP×filter LUT (WavePrecomp) or SSP×pixel LUT (SpectrumPrecomp).
 
@@ -3279,6 +3284,11 @@ class StellarSEDComponent:
         if approx.get("wave_precomp") and filters is not None and self.ssp_data is not None:
             from tengri.observation.photometry import pad_filters
 
+            if bands is None:
+                raise ValueError(
+                    "StellarSEDComponent.precompute: the WavePrecomp photometry LUT needs the "
+                    "observation's BandSpec (filters, convention, sub-band scheme); pass bands=."
+                )
             filter_waves, filter_trans = zip(*filters, strict=False)
             filter_list = [jnp.asarray(fw) for fw in filter_waves]
             filter_trans_list = [jnp.asarray(ft) for ft in filter_trans]
@@ -3287,7 +3297,9 @@ class StellarSEDComponent:
             # projection (published to state.derived in ``apply``). Static and
             # shared by the fixed-z and free-z LUT paths.
             fw_pad, ft_pad, _ = pad_filters(filter_list, filter_trans_list)
-            state = _replace_state(state, phot_fw_padded=fw_pad, phot_ft_padded=ft_pad)
+            state = _replace_state(
+                state, phot_fw_padded=fw_pad, phot_ft_padded=ft_pad, phot_band_spec=bands
+            )
 
             # Dispatch: fixed-z LUT or free-z ztable
             if redshift_spec is None or redshift_spec.get("mode") == "fixed":
@@ -3309,6 +3321,7 @@ class StellarSEDComponent:
                     # Sub-band quadrature for the dust screen (#1122): supersedes Ψ.
                     n_subbands=int(approx.get("n_subbands", 0)),
                     lyc_gate=lyc_gate,
+                    convention=bands.convention,
                 )
                 lut = precompute_photometry(ssp_data=self.ssp_data, **phot_kwargs)
                 # The same build on the native PCHIP slopes (#3541): the LUT is then
@@ -3338,6 +3351,7 @@ class StellarSEDComponent:
                     # Sub-band quadrature for the dust screen (#1122): supersedes Ψ.
                     n_subbands=int(approx.get("n_subbands", 0)),
                     lyc_gate=lyc_gate,
+                    convention=bands.convention,
                 )
                 ztable = precompute_photometry_ztable(ssp_data=self.ssp_data, **ztable_kwargs)
                 # The same z-table build on the native PCHIP slopes (#3541).
@@ -3366,6 +3380,7 @@ class StellarSEDComponent:
                 filter_waves=filter_list,
                 filter_trans=filter_trans_list,
                 n_subbands=int(approx.get("n_subbands", 0)),
+                convention=bands.convention,
             )
             # The same build on the native PCHIP slopes across Z (#3541), the sibling the
             # metallicity read needs.
@@ -3902,6 +3917,7 @@ class StellarSEDComponent:
             if self._state.phot_fw_padded is not None:
                 derived_overrides["phot_filter_waves_padded"] = self._state.phot_fw_padded
                 derived_overrides["phot_filter_trans_padded"] = self._state.phot_ft_padded
+                derived_overrides["phot_band_spec"] = self._state.phot_band_spec
 
         elif self._state is not None and self._state.ssp_phot_ztable is not None:
             # Free-z path: local monotone cubic Hermite (PCHIP) read of the
@@ -4090,6 +4106,7 @@ class StellarSEDComponent:
             if self._state.phot_fw_padded is not None:
                 derived_overrides["phot_filter_waves_padded"] = self._state.phot_fw_padded
                 derived_overrides["phot_filter_trans_padded"] = self._state.phot_ft_padded
+                derived_overrides["phot_band_spec"] = self._state.phot_band_spec
 
         # ── 12b-rest. The REST-frame band (#1148) ───────────────────────────
         # ``phot_rest_fnu`` is the SED reprojected at z=0, d_L=10 pc: the galaxy

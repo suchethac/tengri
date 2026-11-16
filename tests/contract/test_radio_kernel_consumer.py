@@ -9,6 +9,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.utils.filter_convention import FilterConvention
 from tests._bounds import assert_non_negative
 
 pytestmark = pytest.mark.contract
@@ -35,7 +36,14 @@ def test_radio_lookups_jit_compatible(model_name, filter_set):
     from tengri.components.radio import radio_precompute as adapter
 
     waves, trans = filter_set
-    result = adapter.precompute(waves, trans, redshift=0.5, parameters=None, model=model_name)
+    result = adapter.precompute(
+        waves,
+        trans,
+        redshift=0.5,
+        parameters=None,
+        model=model_name,
+        convention=FilterConvention.BESSELL,
+    )
     lookup = adapter.build_lookup(result, model=model_name)
 
     # Test JIT compilation
@@ -76,7 +84,12 @@ def test_radio_synchrotron_scale_invariance(filter_set):
     ]
 
     result = adapter.precompute(
-        radio_waves, radio_trans, redshift=0.5, parameters=None, model="radio_synchrotron"
+        radio_waves,
+        radio_trans,
+        redshift=0.5,
+        parameters=None,
+        model="radio_synchrotron",
+        convention=FilterConvention.BESSELL,
     )
     lookup = adapter.build_lookup(result, model="radio_synchrotron")
 

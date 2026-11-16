@@ -36,7 +36,8 @@ def compute_green_function(
     filter_wave=None,
     filter_trans=None,
     wave_target=None,
-    convention=FilterConvention.BESSELL,
+    *,
+    convention,
 ):
     """Compute Green's function G(t_age) for a filter or wavelength.
 
@@ -154,7 +155,9 @@ def compute_window_function_fourier(window_fn, ssp_ages_yr):
     return power_transfer, omega
 
 
-def compute_time_sensitivity_matrix(ssp_flux_at_z, ssp_wave, wavelengths_target):
+def compute_time_sensitivity_matrix(
+    ssp_flux_at_z, ssp_wave, wavelengths_target, *, convention: FilterConvention
+):
     """Compute sensitivity of multiple wavelengths to different ages.
 
     Returns a matrix G(wavelength, age) showing which wavelengths
@@ -182,7 +185,9 @@ def compute_time_sensitivity_matrix(ssp_flux_at_z, ssp_wave, wavelengths_target)
 
     sensitivity = jnp.zeros((n_target, n_age))
     for w_idx, wave in enumerate(wavelengths_target):
-        g = compute_green_function(ssp_flux_at_z, ssp_wave, wave_target=wave)
+        g = compute_green_function(
+            ssp_flux_at_z, ssp_wave, wave_target=wave, convention=convention
+        )
         sensitivity = sensitivity.at[w_idx].set(g)
 
     return sensitivity
