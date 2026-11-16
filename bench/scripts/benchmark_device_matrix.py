@@ -67,6 +67,7 @@ import numpy as np
 # Deliberately no jax.config.update("jax_enable_x64", ...) here: tengri's import
 # honors JAX_ENABLE_X64 and holds the choice for the whole import (#1880).
 import tengri  # noqa: F401  (import for side effect: the x64 guard)
+from tengri.profiling import compiled_flops
 
 DEFAULT_OUT = os.path.join("bench", "results", "device_matrix.json")
 DEFAULT_DUMP_DIR = os.path.join("bench", "results", "device_matrix_arrays")
@@ -204,19 +205,6 @@ def bench_rotated(fn, reps: int, n_runs: int) -> dict:
     }
 
 
-def flops(fn, *args) -> int | None:
-    """Compiled-HLO FLOP count — machine-independent, unlike a wall clock.
-
-    The house instrument whenever the question is "does this path do less
-    work"; device choice is not that question, so this is reported beside the
-    wall clock as the invariant, never instead of it.
-    """
-    try:
-        return int(jax.jit(fn).lower(*args).compile().cost_analysis()["flops"])
-    except Exception:
-        return None
-
-
 # ── fixture ───────────────────────────────────────────────────────────────
 
 
@@ -338,7 +326,7 @@ def cell_forward(model, args) -> dict:
         **row,
         "compile_ms": compile_ms,
         "out_dtype": dtype,
-        "flops": flops(single, p),
+        "flops": compiled_flops(single, p),
     }
 
 
@@ -358,7 +346,7 @@ def cell_gradient(model, args) -> dict:
         **row,
         "compile_ms": compile_ms,
         "out_dtype": dtype,
-        "flops": flops(jax.grad(loss), p),
+        "flops": compiled_flops(jax.grad(loss), p),
     }
 
 

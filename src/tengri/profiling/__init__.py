@@ -9,8 +9,10 @@ Usage
 -----
 >>> from tengri.profiling import tic, toc, profiled, OperationTimers
 >>> from tengri.profiling import profile_pipeline, profile_memory
+>>> from tengri.profiling import compiled_flops
 """
 
+from tengri.profiling.cost import compiled_flops
 from tengri.profiling.memory import profile_memory
 from tengri.profiling.pipeline import profile_pipeline
 from tengri.profiling.timers import (
@@ -25,6 +27,7 @@ from tengri.profiling.timers import (
 __all__ = [
     "OperationTimers",
     "bench",
+    "compiled_flops",
     "profile_memory",
     "profile_pipeline",
     "profiled",
