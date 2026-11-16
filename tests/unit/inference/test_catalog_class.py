@@ -2,6 +2,8 @@
 """#1317: one noun, action verbs. Wraps the existing engine; ingestion
 and validation happen at construction (fail fast, before any compile)."""
 
+import warnings
+
 import jax
 import numpy as np
 import pytest
@@ -271,8 +273,7 @@ def test_per_galaxy_redshift_batched_guards(fwd_3band, fwd_3band_no_zrange, tabl
     raise, and went stale unnoticed because ``tests/unit`` runs in no CI job):
 
     * batched native VI never threads per-galaxy z → ``NotImplementedError``;
-    * batched MCMC without a ``catalog_z_range`` has no runtime-z LUT →
-      ``ValueError`` teaching the ``WavePrecomp(catalog_z_range=...)`` build.
+    * batched MCMC without a ``catalog_z_range`` derives one from the catalog.
     """
     from tengri import Catalog
 
@@ -284,10 +285,13 @@ def test_per_galaxy_redshift_batched_guards(fwd_3band, fwd_3band_no_zrange, tabl
     with pytest.raises(NotImplementedError, match="native VI"):
         cat.fit(method="native_vi_linear", key=jax.random.PRNGKey(0), allow_unvalidated=True)
 
-    with pytest.warns(UserWarning, match="catalog_z_range"):
+    # A model without a catalog_z_range needs none: the catalog's own redshifts give one
+    # promoted model, so construction is quiet and batched MCMC runs (#3505).
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
         cat_nz = Catalog(fwd_3band_no_zrange, table_3band, flux_unit="cgs_fnu", redshift_col="z")
-    with pytest.raises(ValueError, match="catalog_z_range"):
-        cat_nz.fit(method="mcmc_nuts", key=jax.random.PRNGKey(0), n_warmup=5, n_samples=5)
+    post = cat_nz.fit(method="mcmc_nuts", key=jax.random.PRNGKey(0), n_warmup=5, n_samples=5)
+    assert post.n_galaxies == len(table_3band["z"])
 
 
 def test_predict_mock_shapes(fwd_3band, param_table_3rows):
@@ -305,3 +309,33 @@ def test_no_vi_default_anywhere(fwd_3band, table_3band):
 
     sig = inspect.signature(Catalog.fit)
     assert sig.parameters["method"].default == "map"
+
+
+def test_catalog_forwards_cigale_ingest_options(fwd_3band, table_3band):
+    """Catalog(...) passes the CIGALE ingest options through to ingest_catalog.
+
+    The reference is ingest_catalog called directly with the same table and options.
+    Without the option the noise arrays are the table's own errors.
+    """
+    from tengri import Catalog
+    from tengri.inference.catalog_ingest import ingest_catalog
+
+    photometry = fwd_3band.observation.photometry
+    cat = Catalog(
+        fwd_3band, table_3band, flux_unit="cgs_fnu", redshift_col="z", observed_relative_error=0.1
+    )
+    direct = ingest_catalog(
+        table_3band,
+        photometry=photometry,
+        flux_unit="cgs_fnu",
+        redshift_col="z",
+        observed_relative_error=0.1,
+    )
+    np.testing.assert_allclose(cat._catalog_arrays.noise, direct.noise, rtol=1e-12)
+
+    plain = Catalog(fwd_3band, table_3band, flux_unit="cgs_fnu", redshift_col="z")
+    default = ingest_catalog(
+        table_3band, photometry=photometry, flux_unit="cgs_fnu", redshift_col="z"
+    )
+    np.testing.assert_allclose(plain._catalog_arrays.noise, default.noise, rtol=1e-12)
+    assert not np.allclose(cat._catalog_arrays.noise, plain._catalog_arrays.noise, rtol=1e-12)

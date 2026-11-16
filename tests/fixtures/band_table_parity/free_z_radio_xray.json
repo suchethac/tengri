@@ -5,6 +5,7 @@
   "xray_delta_alpha_ox": -1.8986232452627305
  },
  "platform": "darwin-arm64",
+ "repin_note": "Re-pinned 2026-11-15: monotone PCHIP metallicity read (#3434, owner ruling 'True PCHIP on the spectra'). Against real main: the PCHIP move is up to 4.1e-4 relative (dust_fixed_z, exact, shock) and 3.3e-5 (free_z_radio_xray); the re-pinned arrays also carry 1-6 ulp (max 1.3e-15 relative) from the restructured contraction order, measured on a Hermite control.",
  "signature_sha256": "f592fe1c26925711388cccec26cb573bdd50086eea94749395803f76b1453b22",
  "summary": "Precompute Engagement Summary\n===========================\n\n\u2022 Energy-balance LUT: ENGAGED\n\u2022 Dust band response: ENGAGED\n\n\u2022 Emitter term responses:\n  - agn: ENGAGED\n  - radio: ENGAGED\n  - xray: DECLINED\n    Reason: free xray parameters: ['xray_delta_alpha_ox']\n\n\u2022 Observed facts:\n  components: stellar, nebular, dust, dust_emission, agn, radio, xray\n  dust_emission_configured: True\n  free_params: redshift, sfh_dpl_log_total_mass, xray_delta_alpha_ox\n  igm_fold: declared=auto, resolved=None\n  redshift_free: True\n  wave_precomp_enabled: True\n  ztable_enabled: True",
  "tree": [

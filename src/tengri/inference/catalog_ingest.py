@@ -79,6 +79,7 @@ def ingest_catalog(
     missing="error",
     default_relative_error=None,
     lim_flag=None,
+    observed_relative_error=None,
 ) -> CatalogArrays:
     """Convert a heterogeneous table into contiguous validated arrays.
 
@@ -168,6 +169,14 @@ def ingest_catalog(
         ``censor_cols`` (two sources of censor flags), and every option refuses
         ``flux_unit="ab_mag"``.
 
+    observed_relative_error : float, optional
+        CIGALE's ``additionalerror`` (Boquien et al. 2019, A&A 622, A103), scaled by
+        the observed flux. Each detected band (``presence`` true, not a limit, error
+        >= 0) gets ``noise = sqrt(noise**2 + (observed_relative_error * |flux|)**2)``
+        (pcigale ``managers/observations.py`` ``_add_model_error``). Limits and absent
+        bands are untouched. ``None`` (default) adds nothing. Must be finite and >= 0.
+        Not available with ``flux_unit="ab_mag"``.
+
     Returns
     -------
     CatalogArrays
@@ -193,6 +202,7 @@ def ingest_catalog(
     if flux_unit is None:
         raise TypeError("flux_unit is required")
     _validate_cigale_input_options(default_relative_error, lim_flag, flux_unit, censor_cols)
+    _validate_observed_floor(observed_relative_error, flux_unit)
 
     n_bands = photometry.n_filters
     band_names = tuple(photometry.names)
@@ -353,6 +363,9 @@ def ingest_catalog(
     else:
         censor = None
 
+    # Step 8b: CIGALE ``additionalerror`` on the detected bands (opt-in)
+    err = _apply_observed_floor(flux, err, presence, censor, observed_relative_error)
+
     # Step 9: Read emission-line fluxes if requested
     line_flux_obs = None
     line_flux_err = None
@@ -499,6 +512,64 @@ def ingest_catalog(
         line_flux_err=line_flux_err,
         line_censor=line_censor,
     )
+
+
+def _validate_observed_floor(observed_relative_error, flux_unit):
+    """Refuse an invalid ``observed_relative_error`` (finite, >= 0, linear flux only)."""
+    if observed_relative_error is None:
+        return
+    if not (np.isfinite(observed_relative_error) and observed_relative_error >= 0.0):
+        raise ValueError(
+            f"observed_relative_error must be finite and >= 0 (CIGALE: 'The relative "
+            f"model error must be positive'); got {observed_relative_error!r}."
+        )
+    if flux_unit == "ab_mag":
+        raise ValueError(
+            "observed_relative_error scales the linear observed flux; it is not "
+            "defined for flux_unit='ab_mag'. Convert the table to a flux unit first."
+        )
+
+
+def _apply_observed_floor(flux, err, presence, censor, fraction):
+    r"""Add an observed-flux-scaled relative error in quadrature on the detections.
+
+    .. math::
+
+        \sigma_{\rm eff}^2 = \sigma^2 + (f_{\rm obs}\, \epsilon)^2
+
+    for each band with ``presence`` true, a non-negative error and a censor flag of
+    zero (CIGALE ``_add_model_error``, Boquien et al. 2019 Sect. 4.3). Limits and absent
+    bands keep ``err``. Returns a new array; the inputs are not modified.
+
+    Parameters
+    ----------
+    flux : ndarray, shape (N, n_bands)
+        Observed flux [erg/s/cm^2/Hz], already converted.
+    err : ndarray, shape (N, n_bands)
+        1-sigma error, same unit as ``flux``.
+    presence : ndarray of bool, shape (N, n_bands)
+        True where the band is present.
+    censor : ndarray of int, shape (N, n_bands), or None
+        Censor flags (0 detected, 1 upper limit, -1 lower limit); None if absent.
+    fraction : float or None
+        Relative error :math:`\epsilon`; None returns ``err`` unchanged.
+
+    Returns
+    -------
+    ndarray, shape (N, n_bands)
+        Effective 1-sigma error, same unit as ``err``.
+
+    Notes
+    -----
+    Not JIT-traced: runs once on host arrays during ingest.
+    """
+    if fraction is None:
+        return err
+    detected = presence & (err >= 0.0)
+    if censor is not None:
+        detected = detected & (censor == 0)
+    inflated = np.sqrt(err**2 + (fraction * np.abs(flux)) ** 2)
+    return np.where(detected, inflated, err)
 
 
 def _zero_non_finite(values: np.ndarray) -> np.ndarray:
