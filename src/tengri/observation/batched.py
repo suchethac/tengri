@@ -812,8 +812,10 @@ def padding_exact(policy: TemplatePolicy, spec: SpectroBatchSpec, log_grid: bool
       ``sigma_v`` is never on the observed grid. But the rest-frame range the LSF
       covers is set by the observed grid, and padding widens it. That shifts the
       sub-pixel ringing tail by 1e-7 to 1.8e-6 of peak, so the path is refused and
-      the batch is exact or the build raises. Point sampling applies the Gaussian
-      LSF to the observed grid, so it is not exact either.
+      the batch is exact or the build raises.
+    * Gaussian resolution, point sampling: the kernel is applied before the pixels
+      are read, on the ln-lambda lattice or in closed form, so a real pixel does not
+      depend on a padded one and padding is exact (measured: 3e-13 to 1e-12 of peak).
     * Flux-conserving sampling takes the upper edge of the last real pixel from
       its padded neighbor. A linear extension reproduces the edge exactly; a
       geometric one does not, so a log-uniform grid is refused under it.
@@ -831,9 +833,9 @@ def padding_exact(policy: TemplatePolicy, spec: SpectroBatchSpec, log_grid: bool
             )
         return True, ""
     if not spec.conserving:
-        return False, (
-            "a Gaussian LSF on the observed grid with point sampling reads the padded pixels"
-        )
+        # Point sampling applies the kernel before the pixels are read, so a real pixel does
+        # not depend on a padded one (#3500).
+        return True, ""
     if log_grid:
         return False, (
             "the flux-conserving pixel edge of the last real pixel moves when a "
