@@ -1,12 +1,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Photometric catalog reading, on the one reader (#3547 D4).
 
-The CSV parsing and filter-mapping tests ported from the removed
-``observation.catalog.read_catalog`` run through :func:`tengri.io.load_catalog`.
-Mask and unit behavior runs through :func:`tengri.inference.catalog_ingest.ingest_catalog`,
-the kept path that turns a table into arrays, with ``lim_flag="full"`` where the
-table carries CIGALE limits. The sentinel-masking tests of the removed reader are not
-ported: the owner ruled that a sentinel is refused unless declared.
+CSV parsing and filter mapping are checked through :func:`tengri.io.load_catalog`.
+Mask and unit behavior are checked through :func:`tengri.inference.catalog_ingest.ingest_catalog`,
+which turns a table into arrays, with ``lim_flag="full"`` where the table carries
+CIGALE limits. Sentinel flux values are not masked here: they are refused unless declared.
 """
 
 import warnings
