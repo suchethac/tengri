@@ -142,6 +142,14 @@ def test_one_nan_column_among_finite_ones_is_named():
     )
 
 
+def test_a_short_run_with_a_nan_names_the_parameter():
+    draws = np.random.default_rng(4).normal(size=(1, 5, 2))
+    draws[0, 2, 1] = np.nan
+    _, problems = chain_diagnostics(draws, ["a", "b"])
+    assert any("non-finite draws in 'b'" in p for p in problems), problems
+    assert not any("non-finite draws in 'a'" in p for p in problems)
+
+
 def test_a_constant_chain_is_collapsed_not_silent():
     record, problems = chain_diagnostics(np.ones((2, 100, 2)), ["a", "b"])
     assert record["acceptance_rate"] == 0.0

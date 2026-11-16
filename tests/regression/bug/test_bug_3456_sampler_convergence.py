@@ -71,6 +71,17 @@ class TestSharedConvergenceCheck:
         assert post.diagnostics["convergence_warning"] is not None
         assert "R-hat" in post.diagnostics["convergence_warning"]
 
+    def test_a_column_with_a_nan_draw_gets_a_verdict_naming_it(self):
+        """A NaN column is a named problem from the shared check, not a skipped column."""
+        draws = _RNG.normal(size=400)
+        draws[17] = np.nan
+        post = _posterior({"x": draws}, {"n_chains": 1, "n_samples": draws.size})
+
+        with pytest.warns(RuntimeWarning, match="non-finite draws in 'x'"):
+            check_sampler_convergence(post, backend="mcmc_nuts")
+
+        assert "non-finite draws in 'x' (1 of 400)" in post.diagnostics["convergence_warning"]
+
     def test_strongly_autocorrelated_chain_warns_on_low_ess(self):
         """A single chain with ESS far below 10 % of its draws warns."""
         draws = _ar1(2000, 0.999, _RNG)

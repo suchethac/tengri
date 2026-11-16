@@ -53,7 +53,7 @@ def _scalar_columns(posterior) -> dict[str, np.ndarray]:
 
 
 def _worst_rhat(columns: dict[str, np.ndarray], n_chains: int) -> tuple[float, str] | None:
-    """Largest finite split R-hat over the columns, with its parameter name."""
+    """Largest split R-hat over the columns, with its parameter name."""
     worst = None
     for name, arr in columns.items():
         if n_chains >= 2 and arr.size % n_chains == 0:
@@ -66,7 +66,7 @@ def _worst_rhat(columns: dict[str, np.ndarray], n_chains: int) -> tuple[float, s
 
 
 def _worst_ess(columns: dict[str, np.ndarray]) -> tuple[float, str, int] | None:
-    """Smallest finite bulk ESS over the columns, with its name and draw count."""
+    """Smallest bulk ESS over the columns, with its name and draw count."""
     info = effective_sample_size(columns)
     worst = None
     for name, arr in columns.items():
@@ -108,8 +108,13 @@ def _problems(posterior, backend: str) -> list[str]:
     """Every convergence failure found in this run, as short phrases."""
     diagnostics = posterior.diagnostics or {}
     n_chains = max(int(diagnostics.get("n_chains", 1)), 1)
+    from tengri.inference.sampling.health import nonfinite_problems
+
     columns = _scalar_columns(posterior)
     found = []
+    # A column with a non-finite draw is named and judged by no estimator that would drop it.
+    for name in [n for n, arr in columns.items() if not np.all(np.isfinite(arr))]:
+        found += nonfinite_problems(columns.pop(name)[None, :, None], [name])[1]
 
     if columns:
         worst_rhat = _worst_rhat(columns, n_chains)

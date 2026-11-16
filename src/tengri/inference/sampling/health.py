@@ -60,6 +60,38 @@ def element_names(layout) -> list[str]:
     return names
 
 
+def nonfinite_problems(draws, names) -> tuple[np.ndarray, list[str]]:
+    """Return which coordinates of ``draws`` are all finite and a phrase naming each that is not.
+
+    The one rule for non-finite draws: every judge of a run (the driver's, the catalog's and the
+    post-run check of a finished fit) names a coordinate with a non-finite draw rather than
+    skipping it, however short the run.
+
+    Parameters
+    ----------
+    draws : ndarray, shape (n_chains, n, D)
+        Draws to judge.
+    names : sequence of str
+        One name per coordinate.
+
+    Returns
+    -------
+    finite_columns : ndarray of bool, shape (D,)
+        True for a coordinate whose every draw is finite.
+    problems : list of str
+        One phrase per non-finite coordinate, the first three named and the rest counted.
+    """
+    n_chains, n, _dim = draws.shape
+    finite_columns = np.all(np.isfinite(draws), axis=(0, 1))
+    problems = []
+    for j in np.flatnonzero(~finite_columns)[:3]:
+        bad = int(np.sum(~np.isfinite(draws[..., j])))
+        problems.append(f"non-finite draws in '{names[j]}' ({bad} of {n_chains * n})")
+    if int(np.sum(~finite_columns)) > 3:
+        problems.append(f"non-finite draws in {int(np.sum(~finite_columns)) - 3} further columns")
+    return finite_columns, problems
+
+
 def chain_diagnostics(
     draws, names, *, exchangeable: bool = False, divergent=None
 ) -> tuple[dict, list[str]]:
@@ -94,7 +126,7 @@ def chain_diagnostics(
     draws = np.asarray(draws)
     n_chains, n, _dim = draws.shape
     record: dict = {}
-    problems: list[str] = []
+    finite_columns, problems = nonfinite_problems(draws, names)
     if n < 8:
         return record, problems
     if divergent is not None:
@@ -104,12 +136,6 @@ def chain_diagnostics(
                 f"{record['divergent_fraction']:.0%} of steps were divergent "
                 f"(above {DEAD_DIVERGENT_FRACTION:.0%}): the chain is dead"
             )
-    finite_columns = np.all(np.isfinite(draws), axis=(0, 1))
-    for j in np.flatnonzero(~finite_columns)[:3]:
-        bad = int(np.sum(~np.isfinite(draws[..., j])))
-        problems.append(f"non-finite draws in '{names[j]}' ({bad} of {n_chains * n})")
-    if int(np.sum(~finite_columns)) > 3:
-        problems.append(f"non-finite draws in {int(np.sum(~finite_columns)) - 3} further columns")
     usable = np.flatnonzero(finite_columns)
     if n > 1 and not exchangeable:
         both = np.isfinite(draws[:, 1:]) & np.isfinite(draws[:, :-1])
