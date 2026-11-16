@@ -165,8 +165,8 @@ def check_student_t_mode(fitter, posterior):
 
     A warning is emitted when the weights of the iteratively reweighted mode still move by
     more than ``WEIGHT_CHANGE_WARN``, when the two starting points reach marginals more than
-    ``START_GAP_WARN`` nats apart, or when the nuisance columns exceed ``RELIABLE_COLUMN_RATIO``
-    of the data. The measured values are recorded in ``posterior.diagnostics`` under
+    ``START_GAP_WARN`` nats apart, or when the ratio of nuisance columns to data reaches
+    ``RELIABLE_COLUMN_RATIO``. The measured values are recorded in ``posterior.diagnostics`` under
     ``student_t_weight_change``, ``student_t_start_gap`` and ``student_t_column_ratio``.
 
     Parameters
@@ -209,10 +209,10 @@ def check_student_t_mode(fitter, posterior):
         found.append(f"the weights still change by {report['weight_change']:.1e}")
     if report["start_gap"] > START_GAP_WARN:
         found.append(f"two starting points reach marginals {report['start_gap']:.2f} nat apart")
-    if ratio > RELIABLE_COLUMN_RATIO:
+    if ratio >= RELIABLE_COLUMN_RATIO:
         found.append(
             f"{report['n_columns']} nuisance columns for {report['n_data']:.0f} data "
-            f"(ratio {ratio:.2f}, above {RELIABLE_COLUMN_RATIO})"
+            f"(ratio {ratio:.2f}, at or above {RELIABLE_COLUMN_RATIO})"
         )
     if found:
         warn_measured(

@@ -31,9 +31,11 @@ WEIGHT_CHANGE_WARN = 1e-6
 #: Two starts that reach marginals differing by more than this [nats] found different modes.
 START_GAP_WARN = 1e-3
 
-#: Largest ratio of nuisance columns to data inside the range where the Student-t marginal
-#: reached the best mode in every measured case (``tests/contract``); above it the objective
-#: can be multimodal and the reported mode need not be the global one.
+#: Ratio of nuisance columns to data at which the measured cells stop being clean. Below it no
+#: miss of the best mode was measured (at most 10 columns for 60 data); at it, one cell (12
+#: columns, 60 data, 3 degrees of freedom, 30% outliers at 20 sigma) missed the best mode in 2 of
+#: 10 seeds. A fit at or above it warns. See the "Several modes" note of
+#: :func:`marginalize_linear_nuisance` for every measured cell.
 RELIABLE_COLUMN_RATIO = 0.2
 
 
@@ -279,15 +281,23 @@ def marginalize_linear_nuisance(
     quadrature tests (worst 0.46 against 0.73 nat).
 
     **Several modes.** The Student-t posterior of the nuisance coefficients can be multimodal,
-    and two starts do not find every mode. Against the best of 30 optimizer restarts of the same
-    penalized density (60 data, 20-sigma outliers of random sign, :math:`\nu` of 3 and 10, 10
-    seeds per cell), the returned mode was within 0.1 nat of the best in every seed up to one
-    coefficient per five data, with 0, 10 and 30% outliers. At one coefficient per three data and
-    at least 10% outliers, 7 to 9 of 10 seeds reached the best mode; the others are usually,
-    not always, visible in ``weight_change`` or ``start_gap``. A number of coefficients
-    comparable to the number of data is not measured further. ``weight_change``, ``start_gap``,
-    and the ratio of coefficients to data are read by
-    :func:`~tengri.inference.sampler_health.check_student_t_mode` at the end of a fit.
+    and two starts do not find every mode. Each cell below compares the returned mode with the
+    best of optimizer restarts of the same penalized density (60 data, 20-sigma outliers of
+    random sign); a miss is a mode more than 0.1 nat below the best. With at most 10
+    coefficients (ratio 0.17) no miss occurred: 10 seeds per cell at :math:`\nu` of 3 and 10 and
+    0, 10 and 30% outliers (best of 30 restarts), and 10 seeds with 10 coefficients,
+    :math:`\nu = 3`, 30% outliers (best of 15). At 12 coefficients (ratio 0.2) with
+    :math:`\nu = 3` and 30% outliers the mode missed the best in 2 of 10 seeds (best of 15
+    restarts), and both misses were flagged by ``weight_change`` above ``WEIGHT_CHANGE_WARN`` and
+    ``start_gap`` above ``START_GAP_WARN``; with 12 coefficients, :math:`\nu = 10`, 30% outliers,
+    and with 12 coefficients, :math:`\nu = 3`, 10% outliers, 0 of 10 seeds missed. At 20
+    coefficients (ratio 0.33) 0 of 5 seeds missed and all 5 were flagged. At one coefficient per
+    three data and at least 10% outliers, 7 to 9 of 10 seeds reached the best mode (best of 30
+    restarts); the others are usually, not always, visible in ``weight_change`` or
+    ``start_gap``. Cells beyond these are not measured. ``weight_change``, ``start_gap``, and
+    the ratio of coefficients to data are read by
+    :func:`~tengri.inference.sampler_health.check_student_t_mode` at the end of a fit, which
+    warns at a ratio of ``RELIABLE_COLUMN_RATIO`` or more.
 
     This is an approximation. The Laplace integral treats the posterior of :math:`\beta` as
     Gaussian about its mode, and :math:`H` is the expected rather than the observed curvature

@@ -4,11 +4,14 @@
 The posterior of the nuisance coefficients under Student-t noise can have several modes. The
 marginal runs the reweighting from two starting points and keeps the better marginal; what it
 can detect it reports (``weight_change``, ``start_gap``), and a finished fit warns once. Each
-cell below compares the reached mode with the best of 30 optimizer restarts of the same penalized
-density. Measured on 10 seeds per cell at 60 data, 20-sigma outliers of random sign, the reached
-mode is within 0.1 nat of the best in every seed up to a ratio of nuisance columns to data of
-0.2, and in 7 to 9 of 10 seeds at 0.33 with at least 10% outliers (one of those misses carries
-no flag).
+cell below compares the reached mode with the best of optimizer restarts of the same penalized
+density, at 60 data and 20-sigma outliers of random sign, 10 seeds per cell unless stated. With at
+most 10 columns (ratio 0.17) no seed missed the best mode. With 12 columns (ratio 0.2), 3 degrees
+of freedom and 30% outliers the mode missed the best in 2 of 10 seeds, both flagged by the weight
+change and the start gap; with 12 columns at 10 degrees of freedom or at 10% outliers, 0 of 10
+missed. At 20 columns (ratio 0.33), 0 of 5 missed and all 5 were flagged. At 0.33 with at least
+10% outliers and 30 restarts, 7 to 9 of 10 seeds reached the best mode (one of the misses carries
+no flag). The warning therefore fires at a ratio of 0.2 and above.
 """
 
 from __future__ import annotations
@@ -155,6 +158,20 @@ def test_a_weight_change_above_the_threshold_warns_once_with_the_measured_values
     assert len(caught) == 1
     assert caught[0].message.measurements["weight_change"] >= 0.0
     assert "weights still change" in str(caught[0].message)
+
+
+def test_a_ratio_exactly_at_the_threshold_warns(monkeypatch):
+    """A cell at exactly the threshold missed the best mode in 2 of 10 seeds, so it warns."""
+    fitter = fixtures.fitter_of("spec_student_t_lines")
+    posterior = _stub_posterior(fitter)
+    report = fixtures.build_term(fitter)[0].mode_report(
+        fixtures.physical_params(fitter), fitter._data_args
+    )
+    monkeypatch.setattr(
+        linear_marginal, "RELIABLE_COLUMN_RATIO", report["n_columns"] / report["n_data"]
+    )
+    with pytest.warns(RuntimeWarning, match="nuisance columns"):
+        check_student_t_mode(fitter, posterior)
 
 
 def test_too_many_columns_for_the_data_warns():
