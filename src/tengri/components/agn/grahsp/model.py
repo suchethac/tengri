@@ -56,7 +56,7 @@ from tengri.components.agn.grahsp.torus import (
     torus_mn12_continuum,
     torus_mn12_si,
 )
-from tengri.utils.physics_constants import L_SUN as LSUN_ERG
+from tengri.utils.physics_constants import C_NM_PER_S as _C_NM_PER_S, L_SUN as LSUN_ERG
 from tengri.utils.scale import pow10
 
 __all__ = [
@@ -68,7 +68,6 @@ __all__ = [
 
 
 # Speed of light in nm * Hz (== c in nm / s) for L_lambda <-> L_nu conversion.
-_C_NM_PER_S: float = 2.99792458e17
 
 # Defaults match upstream ``activate*`` modules and Buchner+ 2024 §2.1.
 _DEFAULT_UVSLOPE: float = 0.0

@@ -98,6 +98,7 @@ from tengri.protocols.component import (
     SEDComponentConfig,
     SEDComponentState,
 )
+from tengri.utils.physics_constants import C_NM_PER_S as _C_NM_PER_S
 from tengri.utils.scale import apply_log10_scale, log10_magnitude, pow10
 
 __all__ = [
@@ -109,7 +110,6 @@ __all__ = [
 
 
 # Speed of light in nm * Hz (== c in nm / s) for L_lambda <-> L_nu conversion.
-_C_NM_PER_S: float = 2.99792458e17  # 1e9 * 2.998e8
 
 #: ``lambda L_lambda(5100 A)`` [erg/s] at which the model is evaluated in float32. The model
 #: is linear in ``l5100``, and 1e44 erg/s is ``inf`` in float32; at 1e10 erg/s the integrals
