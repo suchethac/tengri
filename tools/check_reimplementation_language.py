@@ -167,6 +167,8 @@ REFERENCE_CODES = (
     "skirtor",
     "mappings",
     "cloudy",
+    "beagle",
+    "neogal",
 )
 PORT_WORD_RE = re.compile(r"\bport(?:s|ed|ing)?\b", re.IGNORECASE)
 # No directional anchor like the "X from" phrases above -- "transcribed" alone
