@@ -220,7 +220,7 @@ def test_a_vmapped_broken_sampler_is_refused_without_the_opt_in():
     """``mcmc_ghmc`` is a member of the vmapped catalog set and ``tier="broken"``.
 
     Membership of the set is structural, so the tier gate is all that keeps a catalog user
-    from a fast wrong answer: with ``forward_chunk_size`` set (the vectorised path) the call is
+    from a fast wrong answer: with ``forward_chunk_size`` set (the vectorized path) the call is
     refused before any model work, and ``allow_unvalidated=True`` is the only way past.
     """
     from tengri import CatalogFitter
