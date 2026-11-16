@@ -44,7 +44,7 @@ from tengri.inference.likelihoods.terms import (
     floor_value,
     student_t_term,
 )
-from tengri.observation.noise import student_t_log_density, student_t_log_norm_per_point
+from tengri.observation.noise import student_t_log_density, student_t_log_norm
 from tengri.utils.scale import LOG_2PI, diag_gaussian_log_normalization
 
 __all__ = [
@@ -447,7 +447,7 @@ def _censoring_norm(data, noise):
         detected = jnp.logical_and(detected, present)
     n_detected = jnp.sum(detected)
     if noise.dof is not None:
-        return n_detected * student_t_log_norm_per_point(noise.dof)
+        return n_detected * student_t_log_norm(noise.dof)
     return -0.5 * n_detected * LOG_2PI
 
 

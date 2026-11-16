@@ -21,6 +21,7 @@ import pytest
 import scipy.integrate
 import scipy.optimize
 import scipy.special
+import scipy.stats
 
 from tengri.inference.likelihoods.terms import calibration_marginal_term, eline_flat_marginal_term
 
@@ -185,3 +186,24 @@ def test_a_flat_ish_line_prior_is_scored_by_the_same_quadrature():
     )
     print(f"QUAD lines dof={dof} N={n_data} error={got - reference:+.5f}")
     assert abs(got - reference) < 0.04
+
+
+@pytest.mark.parametrize("dof", (1.5, 3.0, 10.0, 1.0e4))
+def test_the_one_normalization_constant_matches_scipy_in_one_and_many_dimensions(dof):
+    from tengri.observation.noise import multivariate_student_t_log_density, student_t_log_norm
+
+    assert float(student_t_log_norm(dof)) == pytest.approx(
+        scipy.stats.t.logpdf(0.0, dof), rel=1e-12
+    )
+    assert float(multivariate_student_t_log_density(0.0, 0.0, 1.0, dof)) == pytest.approx(
+        float(student_t_log_norm(dof)), rel=1e-12
+    )
+    rng = np.random.default_rng(3)
+    for n in (2, 5):
+        root = rng.standard_normal((n, n))
+        shape = root @ root.T + n * np.eye(n)
+        x = rng.standard_normal(n)
+        chi2 = x @ np.linalg.solve(shape, x)
+        expected = scipy.stats.multivariate_t.logpdf(x, np.zeros(n), shape, df=dof)
+        got = multivariate_student_t_log_density(chi2, np.linalg.slogdet(shape)[1], n, dof)
+        assert float(got) == pytest.approx(expected, rel=1e-10)

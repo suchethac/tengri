@@ -477,26 +477,30 @@ def censored_neg_log_likelihood(
 # ── Energy and metric for JIT EVI engine ──────────────────────────
 
 
-def student_t_log_norm_per_point(dof: float | jnp.ndarray) -> jnp.ndarray:
-    r"""Per-point constant of a location-scale Student-t.
+def student_t_log_norm(dof: float | jnp.ndarray, dim: float | jnp.ndarray = 1.0) -> jnp.ndarray:
+    r"""Normalization constant of a Student-t of dimension ``dim``, without the scale determinant.
 
-    The constant is :math:`\log\Gamma\!\left(\tfrac{\nu+1}{2}\right)
-    - \log\Gamma\!\left(\tfrac{\nu}{2}\right) - \tfrac12\log(\nu\pi)`.
+    The constant is :math:`\log\Gamma\!\left(\tfrac{\nu+d}{2}\right)
+    - \log\Gamma\!\left(\tfrac{\nu}{2}\right) - \tfrac d2\log(\nu\pi)`. It is the one
+    place this expression is written: ``dim = 1`` is the per-point constant of a location-scale
+    Student-t, and :func:`multivariate_student_t_log_density` uses the general ``dim``.
 
     Parameters
     ----------
     dof : float or array
-        Degrees of freedom :math:`\nu`.
+        Degrees of freedom :math:`\nu` [dimensionless].
+    dim : float or array, optional
+        Dimension :math:`d` of the variate [dimensionless]. Default 1.
 
     Returns
     -------
     scalar jnp.ndarray
-        The constant added to each point's log-density [nats].
+        The constant of the log-density [nats].
     """
     return (
-        jax.scipy.special.gammaln((dof + 1.0) / 2.0)
-        - jax.scipy.special.gammaln(dof / 2.0)
-        - 0.5 * jnp.log(dof * math.pi)
+        jax.scipy.special.gammaln(0.5 * (dof + dim))
+        - jax.scipy.special.gammaln(0.5 * dof)
+        - 0.5 * dim * jnp.log(dof * math.pi)
     )
 
 
@@ -576,7 +580,7 @@ def variable_noise_hamiltonian(
         #            - n [lgamma((ν+1)/2) - lgamma(ν/2) - ½log(ν/2)]
         energy = 0.5 * (dof + 1.0) * jnp.sum(jnp.log(1.0 + r**2 / dof)) + logdet
         n_data = data.shape[0]
-        return energy - n_data * (student_t_log_norm_per_point(dof) + 0.5 * LOG_2PI)
+        return energy - n_data * (student_t_log_norm(dof) + 0.5 * LOG_2PI)
     else:
         # Gaussian: ½ Σ r² + Σ log(σ_eff)
         return 0.5 * jnp.sum(r**2) + logdet
@@ -661,13 +665,7 @@ def multivariate_student_t_log_density(
     -----
     **JIT-compatible**: yes.
     """
-    return (
-        jax.scipy.special.gammaln(0.5 * (dof + n))
-        - jax.scipy.special.gammaln(0.5 * dof)
-        - 0.5 * n * jnp.log(dof * math.pi)
-        - 0.5 * log_det
-        - 0.5 * (dof + n) * jnp.log1p(chi2 / dof)
-    )
+    return student_t_log_norm(dof, n) - 0.5 * log_det - 0.5 * (dof + n) * jnp.log1p(chi2 / dof)
 
 
 def variable_noise_metric_vec(
