@@ -109,6 +109,7 @@ and [NOTICE](https://github.com/suchethac/tengri/blob/main/NOTICE).
    overview
    installation
    spine/00_quickstart
+   spine/model_catalog
    citation
 
 .. toctree::

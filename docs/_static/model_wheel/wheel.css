@@ -1,0 +1,107 @@
+/* Model catalog wheel. Ported from the approved reference figure; every rule is
+   scoped under .tg-wheel so nothing leaks into the Furo page. Layout queries are
+   container queries, because embedded in a docs page the container, not the
+   viewport, sets the shape. Theme tokens follow the site toggle (body[data-theme]). */
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400&display=swap");
+
+.tg-wheel {
+  --w-bg: #0F1419;
+  --w-ink: #E6EDF3;
+  --w-mute: #8B949E;
+  --w-surface: #161D27;
+  --w-border: #232B36;
+  --w-hover: #ffffff14;
+  --w-ground: radial-gradient(110% 85% at 50% 50%, #17202c 0%, #0F1419 62%, #0b0f14 100%);
+  --legh: 0px;
+  position: relative;
+  height: min(85vh, 900px);
+  min-height: 420px;
+  margin: 1rem 0 1.5rem;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--w-ground);
+  color: var(--w-ink);
+  font: 16px/1.5 "IBM Plex Sans", system-ui, sans-serif;
+  container-type: size;
+  container-name: tgwheel;
+}
+/* On wide screens, use the empty right-hand gutter (this page has no in-page TOC):
+   a landscape wheel puts the legend at the left, as in the talk figure, and gives
+   every wedge more room for its label. */
+@media (min-width: 1200px) {
+  .tg-wheel { width: min(1180px, calc(100vw - var(--sidebar-width, 15em) - 6rem)); height: min(88vh, 900px); }
+}
+.tg-wheel:focus { outline: none; }
+.tg-wheel:focus-visible { box-shadow: 0 0 0 2px #7AB8E8 inset; }
+
+/* Light: same hues, light ground. */
+body[data-theme="light"] .tg-wheel {
+  --w-bg: #FAFBFC;
+  --w-ink: #0F1419;
+  --w-mute: #57606A;
+  --w-surface: #FFFFFF;
+  --w-border: #E1E4E8;
+  --w-hover: #0F14190d;
+  --w-ground: radial-gradient(110% 85% at 50% 50%, #FFFFFF 0%, #FAFBFC 62%, #EEF1F4 100%);
+}
+@media (prefers-color-scheme: light) {
+  body:not([data-theme="dark"]) .tg-wheel {
+    --w-bg: #FAFBFC;
+    --w-ink: #0F1419;
+    --w-mute: #57606A;
+    --w-surface: #FFFFFF;
+    --w-border: #E1E4E8;
+    --w-hover: #0F14190d;
+    --w-ground: radial-gradient(110% 85% at 50% 50%, #FFFFFF 0%, #FAFBFC 62%, #EEF1F4 100%);
+  }
+}
+
+.tg-wheel *, .tg-wheel *::before, .tg-wheel *::after { box-sizing: border-box; min-width: 0; }
+.tg-wheel .fig { position: absolute; inset: 0; }
+.tg-wheel .fig > svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.tg-wheel .arc { cursor: pointer; transition: filter .15s; }
+.tg-wheel .arc:hover { filter: brightness(1.18); }
+.tg-wheel .arc:focus { outline: none; }
+.tg-wheel .arc:focus-visible { filter: brightness(1.3); stroke: var(--w-ink); stroke-width: 2px; }
+.tg-wheel .arc.sel { filter: brightness(1.6); }
+/* On a light ground brightening washes a pale wedge to white; deepen it instead. */
+body[data-theme="light"] .tg-wheel .arc.sel { filter: brightness(.82) saturate(1.6); }
+.tg-wheel .ring-t { font-family: "IBM Plex Sans", sans-serif; pointer-events: none; fill: #0F1419; font-weight: 600; }
+.tg-wheel .sub-t { font-family: "IBM Plex Sans", sans-serif; font-weight: 500; pointer-events: none; }
+.tg-wheel .leaf-t { font-family: "IBM Plex Sans", sans-serif; pointer-events: none; }
+.tg-wheel .hub { cursor: pointer; }
+.tg-wheel .labs { will-change: opacity; }
+
+.tg-wheel .key { position: absolute; left: 16px; bottom: 10px; right: 16px; font-size: 13px; color: var(--w-mute); transition: opacity .3s; pointer-events: none; }
+.tg-wheel .key b { color: var(--w-ink); font-weight: 600; }
+.tg-wheel .key.off { opacity: 0; }
+
+.tg-wheel .legend { position: absolute; left: 18px; top: 50%; transform: translateY(-50%); list-style: none; margin: 0; padding: 0; font-size: clamp(14px, 1.6cqw, 20px); font-weight: 500; transition: opacity .3s; z-index: 1; }
+.tg-wheel .legend li { display: flex; align-items: center; gap: .6em; padding: .3em .5em; margin: 0; border-radius: 6px; cursor: pointer; color: var(--w-ink); }
+.tg-wheel .legend li:hover, .tg-wheel .legend li.on, .tg-wheel .legend li:focus-visible { background: var(--w-hover); outline: none; }
+.tg-wheel .legend i { width: .85em; height: .85em; border-radius: .2em; flex: none; }
+
+@container tgwheel (max-width: 1000px) and (min-aspect-ratio: 1/1) {
+  .tg-wheel .legend { display: none; }
+}
+@container tgwheel (max-aspect-ratio: 1/1) {
+  .tg-wheel .legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 6px; left: 0; right: 0; top: 0; transform: none; padding: 12px 12px 0; font-size: clamp(13px, 3.4cqw, 18px); }
+  .tg-wheel .legend li { padding: .22em .5em; }
+  .tg-wheel .fig { top: var(--legh, 0px); }
+}
+@container tgwheel (max-width: 600px) {
+  .tg-wheel .key { display: none; }
+}
+
+.tg-wheel .card { position: absolute; right: 16px; bottom: 40px; width: min(380px, calc(100% - 32px)); background: var(--w-surface); border: 1px solid var(--w-border); border-radius: 12px; padding: 18px 20px 16px; box-shadow: 0 18px 40px #0006; opacity: 0; transform: translateY(8px); pointer-events: none; transition: opacity .2s, transform .2s; z-index: 2; }
+.tg-wheel .card.on { opacity: 1; transform: none; pointer-events: auto; }
+.tg-wheel .card .path { margin: 0 0 4px; font-size: 14px; color: var(--w-mute); display: flex; align-items: center; gap: 8px; }
+.tg-wheel .card .path i { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.tg-wheel .card .name { margin: 0 0 12px; font-size: 22px; line-height: 1.15; font-weight: 600; padding-right: 28px; color: var(--w-ink); }
+.tg-wheel .card .lab { margin: 0; font-size: 13px; color: var(--w-mute); }
+.tg-wheel .card .cite { margin: 2px 0 0; font-size: 15px; line-height: 1.45; overflow-wrap: anywhere; }
+.tg-wheel .card .note { display: block; margin-top: 6px; font-size: 13px; color: var(--w-mute); }
+.tg-wheel .card .x { position: absolute; top: 8px; right: 8px; width: 36px; height: 36px; border: 0; border-radius: 8px; background: none; color: var(--w-mute); font-size: 22px; line-height: 1; cursor: pointer; }
+.tg-wheel .card .x:hover, .tg-wheel .card .x:focus-visible { background: var(--w-hover); color: var(--w-ink); outline: none; }
+
+@media (prefers-reduced-motion: reduce) { .tg-wheel .arc { transition: none; } }
