@@ -889,6 +889,55 @@ def resolve_sigma_lib_kms(
     return jnp.interp(wave_rest, curve_wave_rest, curve_sigma_kms)
 
 
+def lsf_sigma_eff_kms(resolution, sigma_lib_kms, sigma_v_kms) -> jnp.ndarray:
+    r"""Width of the kernel that takes library-resolution templates to the instrument.
+
+    .. math::
+
+        \sigma_{\rm eff} = \begin{cases}
+        \sqrt{\sigma_{\rm inst}^2 - \sigma_{\rm lib}^2 + \sigma_v^2}, &
+        \sigma_{\rm inst} > \sigma_{\rm lib} \\
+        \sigma_v, & \text{otherwise}
+        \end{cases}
+        \qquad \sigma_{\rm inst} = \frac{c}{2\sqrt{2\ln 2}\,R}
+
+    with :math:`R` the resolving power, :math:`c` the speed of light [km/s],
+    :math:`\sigma_{\rm lib}` the dispersion already in the templates [km/s] and
+    :math:`\sigma_v` the stellar velocity dispersion [km/s].
+
+    Parameters
+    ----------
+    resolution : float or array_like, shape (n_pix,)
+        Resolving power :math:`R = \lambda / \mathrm{FWHM}`.
+    sigma_lib_kms : float or array_like, shape (n_pix,)
+        Library velocity dispersion [km/s].
+    sigma_v_kms : float or array_like
+        Stellar velocity dispersion [km/s]; negative values count as zero.
+
+    Returns
+    -------
+    ndarray, shape broadcast of the inputs
+        Kernel width [km/s], zero where the library is at least as coarse as the
+        instrument and ``sigma_v_kms`` is zero.
+
+    Notes
+    -----
+    JIT, grad and vmap compatible. Where the library is at least as coarse as the
+    instrument the width is ``sigma_v_kms`` itself, not ``sqrt(0 + sigma_v**2)``: the
+    derivative stays finite at ``sigma_v = 0`` and equals the one-sided derivative
+    (#3546). ``where`` rather than ``maximum`` clamps ``sigma_v_kms``, because at zero
+    it passes the full derivative where ``maximum`` passes half of it.
+    """
+    sigma_v_kms = jnp.asarray(sigma_v_kms)
+    sigma_v_kms = jnp.where(sigma_v_kms >= 0.0, sigma_v_kms, 0.0)
+    sigma_inst_kms = _C_KM_S / (_FWHM_TO_SIGMA * jnp.asarray(resolution))
+    deficit = sigma_inst_kms**2 - jnp.asarray(sigma_lib_kms) ** 2
+    resolved = deficit > 0.0
+    return jnp.where(
+        resolved, jnp.sqrt(jnp.where(resolved, deficit, 1.0) + sigma_v_kms**2), sigma_v_kms
+    )
+
+
 def apply_lsf(
     spectrum: jnp.ndarray,
     wave_obs: jnp.ndarray,
@@ -1039,36 +1088,9 @@ def apply_lsf(
     # for callers that pass sigma_v_kms in via the params dict, the prior
     # guards against negatives, so this is purely defensive).
     sigma_bound = _lsf_sigma_bound_kms(resolution, sigma_v_kms)
-    # ``where`` rather than ``maximum``: at sigma_v = 0 it passes the full
-    # derivative, where ``maximum`` passes half of it.
-    sigma_v_kms = jnp.asarray(sigma_v_kms)
-    sigma_v_kms = jnp.where(sigma_v_kms >= 0.0, sigma_v_kms, 0.0)
-
     resolution = jnp.asarray(resolution)
     sigma_lib_kms = jnp.asarray(sigma_lib_kms)
-
-    # Compute instrument sigma at each pixel
-    sigma_inst_kms = _C_KM_S / (_FWHM_TO_SIGMA * resolution)
-
-    # Subtract library resolution and add intrinsic stellar velocity
-    # dispersion in quadrature:
-    #   σ_total² = σ_inst² − σ_lib² + σ_v²
-    # σ_lib accounts for the broadening already baked into the SSP
-    # templates; σ_v is the intrinsic galaxy velocity dispersion.
-    sigma_lib2 = sigma_lib_kms**2
-    sigma_v2 = sigma_v_kms**2
-
-    # Compute the effective broadening kernel, clamping to zero when
-    # the library resolution exceeds the instrument resolution at some pixels.
-    # Where the library is at least as coarse as the instrument the width is
-    # sigma_v itself. Taking it directly, instead of as sqrt(0 + sigma_v**2),
-    # keeps the derivative finite at sigma_v = 0 (the root's is infinite there)
-    # and equal to the one-sided derivative with respect to sigma_v.
-    deficit = sigma_inst_kms**2 - sigma_lib2
-    resolved = deficit > 0.0
-    sigma_eff_kms = jnp.where(
-        resolved, jnp.sqrt(jnp.where(resolved, deficit, 1.0) + sigma_v2), sigma_v_kms
-    )
+    sigma_eff_kms = lsf_sigma_eff_kms(resolution, sigma_lib_kms, sigma_v_kms)
 
     # The single-FFT path reads one pixel scale, ``log(wave[1]/wave[0])``, which
     # describes the whole array only on a grid uniform in ln(lambda). On any other
@@ -1275,7 +1297,7 @@ def _interp_cells(wave_rest, sed_rest, has_lyc_edge):
     return w_lo, w_hi, y_lo, q, (LYMAN_LIMIT_AA, upper, y[ia + 1])
 
 
-def _cell_window_width(wave_rest) -> int:
+def _cell_window_width(wave_rest, reach_ln: float = _POINT_REACH_LN) -> int:
     """Static cells per pixel window: the most cells any ``2 * reach`` ln-lambda window holds.
 
     Built in NumPy from the model grid. A traced grid falls back to every cell (exact, slower).
@@ -1285,7 +1307,7 @@ def _cell_window_width(wave_rest) -> int:
         return n_cells
     w = np.asarray(wave_rest, dtype=float)
     ua, ub = np.log(w[:-1]), np.log(w[1:])
-    span = 2.0 * _POINT_REACH_LN
+    span = 2.0 * reach_ln
     starts = np.concatenate([ub, ua - span])
     upto = np.searchsorted(ua, starts + span, side="right")
     below = np.searchsorted(ub, starts, side="left")
@@ -1300,6 +1322,7 @@ def point_readout_gaussian_ln(
     sigma_ln: jnp.ndarray,
     *,
     has_lyc_edge: bool = False,
+    reach_ln: float | None = None,
 ) -> jnp.ndarray:
     r"""Closed-form Gaussian point readout in :math:`\ln\lambda` (#3512).
 
@@ -1337,6 +1360,10 @@ def point_readout_gaussian_ln(
         gates the zero-width case.
     has_lyc_edge : bool, optional
         The SED is a step at the Lyman edge (:func:`edge_interp` semantics). Static.
+    reach_ln : float, optional
+        Half-width of the per-pixel segment window in :math:`\ln\lambda`. Static. Default
+        ``_POINT_REACH_LN``, six times a 2000 km/s dispersion; a caller with a wider kernel
+        passes six times its own static bound.
 
     Returns
     -------
@@ -1348,8 +1375,9 @@ def point_readout_gaussian_ln(
     sig = jnp.where(sig > 0.0, sig, 1.0)
     w_lo, w_hi, y_lo, q, step = _interp_cells(wave_rest, sed_rest, has_lyc_edge)
     n_cells = w_lo.shape[0]
-    width = _cell_window_width(wave_rest)
-    j0 = jnp.searchsorted(jnp.log(wave_rest[1:]), jnp.log(wq) - _POINT_REACH_LN, side="left")
+    reach = _POINT_REACH_LN if reach_ln is None else float(reach_ln)
+    width = _cell_window_width(wave_rest, reach)
+    j0 = jnp.searchsorted(jnp.log(wave_rest[1:]), jnp.log(wq) - reach, side="left")
     idx = j0[:, None] + jnp.arange(width)[None, :]
     valid = idx < n_cells
     idx = jnp.minimum(idx, n_cells - 1)
@@ -1709,6 +1737,21 @@ def project_spectrum(
             sigma_v_kms=sigma_v_kms,
         )
         resolution = None
+    elif resolution is not None and resolution_matrix is None:
+        # Point mode with an instrument: the kernel is applied before sampling, in closed
+        # form, so the pixel value does not depend on the pixel or model grid (#3500).
+        flux = compute_spectrum_point_lsf(
+            sed_rest,
+            wave_rest,
+            wave_obs,
+            redshift,
+            dl_cm,
+            resolution=resolution,
+            sigma_lib_kms=sigma_lib_kms,
+            sigma_v_kms=sigma_v_kms,
+            has_lyc_edge=has_lyc_edge,
+        )
+        resolution = None
     else:
         resampler = compute_spectrum_conserving if conserving else compute_spectrum
         flux = resampler(sed_rest, wave_rest, wave_obs, redshift, dl_cm, has_lyc_edge=has_lyc_edge)
@@ -1726,16 +1769,6 @@ def project_spectrum(
             flux, wave_obs, sigma_v_kms, n_bins, pad_pixels=lsf_pad_pixels
         )
         flux = banded_matvec(resolution_matrix.offsets, resolution_matrix.data, flux)
-    elif resolution is not None:
-        flux = apply_lsf(
-            flux,
-            wave_obs,
-            resolution,
-            sigma_lib_kms=sigma_lib_kms,
-            n_bins=n_bins,
-            sigma_v_kms=sigma_v_kms,
-            pad_pixels=lsf_pad_pixels,
-        )
     if cal_coeffs is not None:
         wmin, wmax = (
             cal_wave_range if cal_wave_range is not None else (wave_obs.min(), wave_obs.max())
@@ -1896,6 +1929,91 @@ def compute_spectrum(
     # (~1e30) apply_log10_scale folds the offset into the array peak and the
     # result stays in range. Identical in float64 (#1206).
     return lnu_to_fnu(sed_at_pixels, dl_cm, redshift)
+
+
+def compute_spectrum_point_lsf(
+    sed_rest: jnp.ndarray,
+    wave_rest: jnp.ndarray,
+    wave_obs: jnp.ndarray,
+    redshift: float,
+    dl_cm: float,
+    *,
+    resolution: jnp.ndarray | float,
+    sigma_lib_kms: jnp.ndarray | float = 0.0,
+    sigma_v_kms: jnp.ndarray | float = 0.0,
+    has_lyc_edge: bool = False,
+) -> jnp.ndarray:
+    r"""Point-sampled spectrum with the instrument and velocity kernel applied before sampling.
+
+    Each pixel is the model convolved with its own Gaussian in :math:`\ln\lambda` and read at
+    the pixel center, in closed form (:func:`point_readout_gaussian_ln`):
+
+    .. math::
+
+        F_\nu(\lambda_c) = \frac{1 + z}{4\pi d_L^2}\,
+        \frac{\mathcal{B}_{\sigma_c}(\lambda L_\nu)(\ln\lambda_c)}{\lambda_c},
+        \qquad \sigma_c = \sigma_{\rm eff}(\lambda_c) / c ,
+
+    with :math:`L_\nu` the piecewise-linear interpolant of ``sed_rest`` [erg/s/Hz],
+    :math:`\lambda_c` the rest wavelength of the pixel center [Angstrom],
+    :math:`\sigma_{\rm eff}` from :func:`lsf_sigma_eff_kms` [km/s], :math:`c` the speed of light
+    [km/s], :math:`z` the redshift and :math:`d_L` the luminosity distance [cm].
+
+    Parameters
+    ----------
+    sed_rest : ndarray, shape (n_wave,)
+        Rest-frame SED :math:`L_\nu` [erg/s/Hz].
+    wave_rest : ndarray, shape (n_wave,)
+        Rest-frame wavelength grid, ascending [Angstrom].
+    wave_obs : ndarray, shape (n_pix,)
+        Observed pixel centers [Angstrom].
+    redshift : float
+        Source redshift.
+    dl_cm : float
+        Luminosity distance [cm].
+    resolution : float or ndarray, shape (n_pix,)
+        Resolving power :math:`R = \lambda / \mathrm{FWHM}` at each pixel.
+    sigma_lib_kms : float or ndarray, shape (n_pix,), optional
+        Library velocity dispersion [km/s].
+    sigma_v_kms : float or tracer, optional
+        Stellar velocity dispersion [km/s].
+    has_lyc_edge : bool, optional
+        The SED is a step at the Lyman edge. Static.
+
+    Returns
+    -------
+    ndarray, shape (n_pix,)
+        Observed-frame flux density :math:`F_\nu` [erg/s/cm^2/Hz].
+
+    Notes
+    -----
+    JIT, grad and vmap compatible. The kernel acts on :math:`\lambda L_\nu`, the convention of
+    :func:`broaden_velocity_only`. The result does not depend on the pixel grid or on how
+    the model grid is segmented: a pixel is the exact integral of the model's own
+    interpolant, where convolving after sampling aliases features narrower than a pixel
+    and couples neighboring pixels (#3451, #3500). A pixel whose kernel has zero width takes
+    the point sample of the interpolant.
+    """
+    edge_aa = LYMAN_LIMIT_AA if has_lyc_edge else None
+    scale_in, scale_out = _peak_factors(sed_rest)
+    sed_in = sed_rest * scale_in
+    wave_q = wave_obs / (1.0 + redshift)
+    sigma_ln = jnp.broadcast_to(
+        lsf_sigma_eff_kms(resolution, sigma_lib_kms, sigma_v_kms) / _C_KM_S, wave_q.shape
+    )
+    reach_ln = 6.0 * _lsf_sigma_bound_kms(resolution, sigma_v_kms) / _C_KM_S
+    closed = point_readout_gaussian_ln(
+        sed_in,
+        wave_rest,
+        wave_obs,
+        redshift,
+        sigma_ln,
+        has_lyc_edge=has_lyc_edge,
+        reach_ln=reach_ln,
+    )
+    plain = _point_samples(sed_in, wave_rest, wave_q, edge_aa)
+    pixel_sed = jnp.where(sigma_ln > 0.0, closed, plain)
+    return lnu_to_fnu(pixel_sed * scale_out, dl_cm, redshift)
 
 
 def _flux_conserving_resample(
