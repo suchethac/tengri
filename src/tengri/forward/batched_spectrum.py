@@ -59,8 +59,8 @@ through the same LUT call as the per-galaxy joint kernel (``predict_via_precomp`
 the exact spectrum), with the galaxy's own traced redshift ``obs.z``. Without it, the
 exact projector :func:`~tengri.observation.photometry.project_photometry` is used. The
 LUT is used whatever the nebular setting: a model with a fast nebular grid
-(``enable_fast_nebular``) keeps the LUT photometry and the exact spectrum, which the
-per-galaxy joint kernel does not do. Its accuracy is the LUT's own (see
+(``enable_fast_nebular``) keeps the LUT photometry and the exact spectrum, as the per-galaxy
+joint kernel does. Its accuracy is the LUT's own (see
 ``predict_via_precomp``), not the exact projector's.
 
 JIT note
@@ -356,7 +356,7 @@ def batched_eline_design(line_set: BatchedLineSet, obs: SpectroBatch, params: di
         {\sqrt{2\pi}\,\sigma_j}, \qquad
         \mu_j = \lambda_j^{\rm rest}(1+z)\left(1+\frac{\Delta v}{c}\right),
         \qquad
-        \sigma_j = \sqrt{\left(\frac{\lambda_j^{\rm obs}}{2.355\,R}\right)^2
+        \sigma_j = \sqrt{\left(\frac{\lambda_j^{\rm obs}}{2\sqrt{2\ln 2}\,R}\right)^2
         + \left(\frac{\lambda_j^{\rm obs}\,\sigma_v}{c}\right)^2},
         \qquad \lambda_j^{\rm obs} = \lambda_j^{\rm rest}(1+z),
 

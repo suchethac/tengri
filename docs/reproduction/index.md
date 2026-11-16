@@ -31,6 +31,11 @@ A new code should earn trust by reproducing the physics in the codes already in 
   a metallicity history tied to the stellar mass formed, Charlot & Fall
   attenuation, Dale 2014 IR, emission lines, the SKIRTOR torus, a radio
   continuum, and the Inoue 2014 IGM.
+- **{doc}`beagle`**: BEAGLE (Chevallard & Charlot 2016), run live in its Docker image on its own
+  templates with only its outputs compared: Bruzual & Charlot SSPs, the delayed history with a
+  decoupled current star-formation episode, Charlot & Fall and Chevallard et al. 2013 attenuation
+  in the (τ_V, μ) form, the Gutkin et al. 2016 photoionization grids, Inoue 2014 IGM, and a
+  BEAGLE-mode capstone on CANDELS photometry.
 ```{toctree}
 :maxdepth: 1
 
@@ -40,8 +45,9 @@ prospector
 agnfitter
 grahsp
 prospect_r
+beagle
 ```
 
-Comparisons with BEAGLE, MAGPHYS, and GalaPy are scoped on the
+Comparisons with MAGPHYS and GalaPy are scoped on the
 [issue tracker](https://github.com/suchethac/tengri/issues) and will
 land as their notebooks come together.

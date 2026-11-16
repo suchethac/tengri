@@ -200,12 +200,12 @@ class PosteriorProperties(ReadOnlyPropertyMapping, Mapping):
         names = _bundle_siblings(model, name, exclude=cache)
         if post.samples is None:
             # MAP: one point, no sample axis. Same key, zero extra axes.
-            values = model.predict_properties(post.params, names=names)
+            values = model.predict_properties(post._with_runtime(post.params), names=names)
         else:
             from tengri.utils.batching import vmap_chunked
 
             fn = vmap_chunked(
-                lambda p: model.predict_properties(p, names=names),
+                lambda p: model.predict_properties(post._with_runtime(p), names=names),
                 chunk_size=_PROPERTY_CHUNK,
             )
             values = fn(post.samples)
@@ -474,6 +474,7 @@ class Posterior:
     log_evidence: float | None = None
     _model: object = field(default=None, repr=False)
     _fitter: object = field(default=None, repr=False)
+    _runtime_values: dict | None = field(default=None, repr=False)
     eline_fluxes: jnp.ndarray | None = field(default=None, repr=False)
     eline_flux_cov: jnp.ndarray | None = field(default=None, repr=False)
     eline_names: tuple | None = field(default=None, repr=False)
@@ -667,6 +668,45 @@ class Posterior:
             free_on_model = set(self._model.spec.free_params)
             values = {k: v for k, v in values.items() if k not in free_on_model}
         return values
+
+    @property
+    def runtime_values(self) -> dict:
+        """This galaxy's own values of the model's runtime keys (its redshift).
+
+        A model that reads its redshift at call time evaluates every derived quantity
+        at the redshift of the galaxy that was fit, not at the placeholder it was built
+        at. A catalog fit records each galaxy's value here; a single fit reads it from
+        its fitter's ``params_override``.
+
+        Returns
+        -------
+        dict
+            Runtime key -> value [dimensionless for redshift]. Empty when the model
+            reads nothing at call time.
+        """
+        from tengri.inference._prediction import assemble_eval_params
+
+        if self._model is None:
+            return {}
+        held = dict(self._runtime_values or {})
+        if not held and self._fitter is not None:
+            held = dict(getattr(self._fitter, "_fixed_values", {}))
+        return {k: v for k, v in assemble_eval_params(self._model, {}, held).items()}
+
+    def _with_runtime(self, params: dict) -> dict:
+        """``params`` with this galaxy's runtime values, for every evaluation of the model.
+
+        Parameters
+        ----------
+        params : dict
+            Free parameter values of one draw or point estimate.
+
+        Returns
+        -------
+        dict
+            A new dict; ``params`` itself is not modified.
+        """
+        return {**params, **self.runtime_values}
 
     # ── Derived quantities ────────────────────────────────────────
 
@@ -1165,7 +1205,7 @@ class Posterior:
             # call injected, not on anything the caller overrode -- the same
             # hazard Prediction/Catalog avoid by keeping a free-only params
             # dict alongside the merged one.
-            state = self._model.predict_state(p)
+            state = self._model.predict_state(self._with_runtime(p))
             return state_to_sed_components(state)
 
         if self.samples is None:
@@ -1831,7 +1871,7 @@ class Posterior:
         noise_arr = jnp.asarray(noise)
 
         def _predict_one(p: dict) -> jnp.ndarray:
-            return jnp.asarray(self._model.predict_photometry(p))
+            return jnp.asarray(self._model.predict_photometry(self._with_runtime(p)))
 
         if self.samples is None:
             preds = _predict_one(self.params)[None, :]
@@ -2095,13 +2135,13 @@ class Posterior:
             # built with. Faster, and an approximation.
             def fn(p):
                 free_p = {k: v for k, v in p.items() if k not in fixed_names}
-                return model.predict_photometry(free_p)
+                return model.predict_photometry(self._with_runtime(free_p))
         else:
             # The canonical exact projector, the same kernel Prediction.photometry()
             # uses, so a posterior band and a Prediction band answer the same question.
             def fn(p):
                 free_p = {k: v for k, v in p.items() if k not in fixed_names}
-                return project_photometry(model.predict_state(free_p), p, phot)
+                return project_photometry(model.predict_state(self._with_runtime(free_p)), p, phot)
 
         return vmap_chunked(fn, chunk_size=chunk_size)(draws)
 
@@ -2197,7 +2237,7 @@ class Posterior:
 
             def fn(p):
                 free_p = {k: v for k, v in p.items() if k not in fixed_names}
-                return model.predict_spectrum(free_p, wave_obs=wave_obs)
+                return model.predict_spectrum(self._with_runtime(free_p), wave_obs=wave_obs)
         else:
             # Exact, and the same kernel Prediction.spectrum uses:
             # Observation.predict calls project_spectrum (#1052) and applies the flux
@@ -2211,7 +2251,8 @@ class Posterior:
 
             def fn(p):
                 free_p = {k: v for k, v in p.items() if k not in fixed_names}
-                out = model.observation.predict(model.predict_state(free_p), p, wave_obs=wave_obs)
+                state = model.predict_state(self._with_runtime(free_p))
+                out = model.observation.predict(state, p, wave_obs=wave_obs)
                 return out["spec_fnu"]
 
         return vmap_chunked(fn, chunk_size=chunk_size)(draws)
@@ -2237,7 +2278,8 @@ class Posterior:
             draws = self.resample(jax.random.PRNGKey(0) if key is None else key, n=n_draws)
 
         n = next(iter(draws.values())).shape[0]
-        fixed = resolve_fixed_params(self._model, {})
+        # A runtime key's Fixed value is the build placeholder; this galaxy's own value wins.
+        fixed = {**resolve_fixed_params(self._model, {}), **self.runtime_values}
         return {**{k: jnp.broadcast_to(v, (n,)) for k, v in fixed.items()}, **draws}
 
     # ── Resampling ────────────────────────────────────────────────
@@ -2423,6 +2465,43 @@ class Posterior:
                 "are runtime objects, not serialized). Use "
                 "Posterior.load(path, model=model) to reattach it."
             )
+
+    def pointwise_log_likelihood(self, n_draws: int | None = None, key=None):
+        """Log-likelihood of every data point under every posterior draw.
+
+        Parameters
+        ----------
+        n_draws : int, optional
+            Number of draws to use. Default: all.
+        key : jax PRNG key, optional
+            Selects the subset when ``n_draws`` is given.
+
+        Returns
+        -------
+        ndarray, shape (n_draws, n_points)
+            Input of :func:`tengri.inference.waic`, :func:`tengri.inference.loo`
+            and :func:`tengri.inference.compare_models`.
+
+        Raises
+        ------
+        ValueError
+            If the posterior has no draws or no fitter (a reloaded or hand-built
+            posterior), or the likelihood does not factorize over data points.
+
+        Notes
+        -----
+        See :func:`tengri.inference.predictive.pointwise_log_likelihood`.
+        """
+        from tengri.inference.predictive import pointwise_log_likelihood
+
+        if self._fitter is None or self.samples is None:
+            raise ValueError(
+                "pointwise_log_likelihood needs the posterior's draws and its fitter; a "
+                "reloaded posterior carries no fitter. Call "
+                "tengri.inference.pointwise_log_likelihood(fitter, samples) with a "
+                "rebuilt fitter."
+            )
+        return pointwise_log_likelihood(self._fitter, self.samples, n_draws=n_draws, key=key)
 
     def to_arviz(self):
         """Convert to ArviZ InferenceData for diagnostics.
@@ -3176,7 +3255,7 @@ class Posterior:
                     for k, v in self.samples.items()
                 }
                 try:
-                    sfh_dict = model.predict_sfh(p)
+                    sfh_dict = model.predict_sfh(self._with_runtime(p))
                     if t_gyr is None:
                         t_gyr = np.array(sfh_dict["t_gyr"])
                     sfhs_mean.append(np.array(sfh_dict["sfr_mean"]))
@@ -3198,7 +3277,7 @@ class Posterior:
                 med_mean = np.percentile(sfhs_mean, 50, axis=0)
                 ax.plot(t_gyr, med_mean, color="0.5", lw=1.2, ls="--", label="median (smooth)")
         else:
-            sfh_dict = model.predict_sfh(self.params)
+            sfh_dict = model.predict_sfh(self._with_runtime(self.params))
             t_gyr = np.array(sfh_dict["t_gyr"])
             ax.plot(t_gyr, np.array(sfh_dict["sfr_full"]), color="C0", lw=1.8, label="best-fit")
             ax.plot(
