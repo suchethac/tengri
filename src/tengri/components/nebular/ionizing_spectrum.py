@@ -117,7 +117,7 @@ def _ssp_fingerprint(
     check and not the only one.
 
     The digest costs one SHA-256 pass over the flux array per fingerprint, which is
-    a fraction of the SSP's own load time and is dwarfed by the scipy curve-fits it
+    a fraction of the SSP's own load time and is dwarfed by the power-law fits it
     guards.
     """
     flux = np.ascontiguousarray(np.asarray(ssp_flux))
@@ -241,9 +241,9 @@ class _single_thread_blas:
     """Context manager forcing single-threaded BLAS / OpenMP.
 
     The piecewise-power-law fits in :func:`precompute_ionizing_params_table`
-    use scipy / numpy linear algebra under the hood. Multi-threaded BLAS
-    introduces non-determinism (thread scheduling perturbs the last ULPs of
-    the LSQ solution), and those bits then bake into the JAX trace as
+    run reductions that multi-threaded BLAS / OpenMP may order differently
+    from run to run (thread scheduling perturbs the last ULPs of the
+    solution), and those bits then bake into the JAX trace as
     constants: so different processes produce different HLO modules. Pinning
     BLAS / OpenMP to one thread for the duration of the fit loop gives
     bit-identical coefficients across processes and is also slightly faster
@@ -406,8 +406,8 @@ def fit_ionizing_spectrum(
     (HeII, OII, HeI, HI Lyman limit). Returns 7 parameters suitable for input
     to the Cue neural emulator: 4 power-law slopes + 3 log-flux ratios.
 
-    **Not JAX-compatible**: uses numpy and scipy.optimize; intended for
-    one-time precomputation of SSP grids before inference.
+    **Host routine**: NumPy in, NumPy out (the fit itself runs in JAX, float64);
+    intended for one-time precomputation of SSP grids before inference.
 
     Parameters
     ----------
@@ -851,7 +851,7 @@ def precompute_ionizing_params_table(
 
     Notes
     -----
-    **One-time cost**: This function is not JAX-compatible (uses scipy). Call
+    **One-time cost**: a host routine (NumPy tables, the fit in JAX). Call
     once per Cue model initialization and store results (e.g., in h5 file).
     Precomputation is O(n_met × n_fitted_ages × n_segments); n_fitted_ages is the number
     of bins up to 100 Myr plus at most :data:`MAX_OLD_FITS_PER_METALLICITY` older ones.

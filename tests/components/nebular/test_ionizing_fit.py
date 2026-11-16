@@ -122,20 +122,34 @@ def test_gradient_matches_finite_differences(ion_grid):
 
 
 @pytest.mark.gradient
-def test_population_with_no_ionizing_flux_is_finite_with_finite_gradient(ion_grid):
-    """An old-only population (exact zeros in the HeII segment) stays finite, gradient too."""
-    _, flux, log_age, layout = ion_grid
-    old = log_age >= 9.5
-    spectrum = flux[flux.shape[0] // 2, old].sum(axis=0)
-    total = jnp.asarray(spectrum)
+@pytest.mark.parametrize("x64", [True, False], ids=["float64", "float32"])
+@pytest.mark.parametrize("population", ["old_only", "zero_hard_segment"])
+def test_no_ionizing_flux_is_finite_with_finite_gradient(ion_grid, population, x64):
+    """Exact zeros (old-only population, or a segment with no flux) stay finite, gradient too.
+
+    The implicit gradient divides by the slope curvature at the root, so a segment
+    with no usable flux is the case that could produce an infinite gradient.
+    """
+    wave, flux, log_age, layout = ion_grid
+    met_index = flux.shape[0] // 2
+    if population == "old_only":
+        spectrum = flux[met_index, log_age >= 9.5].sum(axis=0)
+    else:
+        spectrum = _young_composite(flux, log_age, met_index)
+        spectrum = np.where(wave < _EDGES[1], 0.0, spectrum)
 
     def readout(t):
         positive = t > 0
         lf = jnp.where(positive, jnp.log10(jnp.where(positive, t, 1.0)), -jnp.inf)
         return jnp.sum(fit_ionizing_shape(lf, layout).i7 * _WEIGHTS)
 
-    assert np.isfinite(float(readout(total)))
-    assert np.all(np.isfinite(np.asarray(jax.grad(readout)(total))))
+    dtype = jnp.float64 if x64 else jnp.float32
+    with jax.enable_x64(x64):
+        total = jnp.asarray(spectrum / spectrum.max(), dtype=dtype)
+        value = readout(total)
+        grad = jax.grad(readout)(total)
+    assert np.isfinite(float(value))
+    assert np.all(np.isfinite(np.asarray(grad)))
 
 
 def test_float32_within_1e3_of_float64(ion_grid):

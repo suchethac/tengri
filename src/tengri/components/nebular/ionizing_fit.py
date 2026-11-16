@@ -264,9 +264,14 @@ def _solve_slope(stats, alpha0):
 
         return jax.lax.fori_loop(0, NEWTON_ITERATIONS, body, x0)
 
-    return jax.lax.custom_root(
-        slope_gradient, alpha0, newton, lambda g, y: y / g(jnp.ones_like(y))
-    )
+    def tangent_solve(g, y):
+        # The implicit derivative divides by the curvature at the root. It is positive
+        # at a minimum; a segment with no usable flux could leave it at zero, so the
+        # same rule as the Newton step applies and the gradient stays finite.
+        curvature = g(jnp.ones_like(y))
+        return y / jnp.where(curvature > 0.0, curvature, 1.0)
+
+    return jax.lax.custom_root(slope_gradient, alpha0, newton, tangent_solve)
 
 
 class IonizingShape(NamedTuple):

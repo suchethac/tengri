@@ -177,3 +177,36 @@ def test_effective_shape_matches_a_refit_of_the_composite_spectrum():
         ssp_lnu_ion=st.derived["lnu_age_ion"],
     )
     np.testing.assert_allclose(np.asarray(got), t_raw, rtol=0, atol=1e-6)
+
+
+def test_forward_pass_fits_the_stellar_components_published_spectrum(monkeypatch):
+    """The model's Cue call takes its shape from the stellar ``lnu_age_ion``, not from weights.
+
+    Engagement, asserted on the call: the composite fit runs during the forward pass
+    and receives the stellar component's per-age ionizing spectrum, so a tabulated or
+    evolving metallicity reaches the shape. A route that fell back to the weights
+    (``ssp_lnu_ion=None``) would rebuild the spectrum at one metallicity.
+    """
+    import warnings
+
+    from tengri.components.nebular.cue import CueBackend
+
+    calls = []
+    original = CueBackend._composite_ionizing_shape
+
+    def recording(self, *args, ssp_lnu_ion=None, **kwargs):
+        calls.append(None if ssp_lnu_ion is None else tuple(ssp_lnu_ion.shape))
+        return original(self, *args, ssp_lnu_ion=ssp_lnu_ion, **kwargs)
+
+    monkeypatch.setattr(CueBackend, "_composite_ionizing_shape", recording)
+    m, _lw, _ssp = _model()
+    # Building the backend runs its trained-box check, a weights-only composite at the
+    # metallicity nodes; only the forward pass is under test here.
+    calls.clear()
+    p = dict(m.spec.sample(jax.random.PRNGKey(1)))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        st = m.predict_state(p)
+    assert calls, "the forward pass never fitted the composite ionizing spectrum"
+    assert all(c is not None for c in calls), f"a forward call fitted from weights: {calls}"
+    assert calls[0] == tuple(np.asarray(st.derived["lnu_age_ion"]).shape)
