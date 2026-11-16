@@ -26,6 +26,7 @@ from tengri.components.stellar.sps.precompute import (
     precompute_restband_photometry,
     precompute_spectroscopy,
 )
+from tengri.utils.filter_convention import FilterConvention
 
 #: Luminosity distance [cm] and redshift the photometric and spectroscopic builds use.
 DL_CM = 1.0e26
@@ -46,6 +47,10 @@ def ssp_data():
         ssp_lg_age_gyr=jnp.linspace(-1.0, 1.14, 20),
         ssp_lgmet=jnp.array([-2.0, -1.0, 0.0]),
     )
+
+
+#: The band convention the model uses by default (PhotometryConfig).
+_CONV = FilterConvention.BESSELL
 
 
 def _rng_cube(shape):
@@ -100,9 +105,11 @@ def _check(table, *, expect_sibling: bool):
 
 def test_photometric_precomputation_counts_sibling(ssp_data):
     waves, trans = _filters()
-    lut = precompute_photometry(ssp_data, waves, trans, REDSHIFT, DL_CM)
+    lut = precompute_photometry(ssp_data, waves, trans, REDSHIFT, DL_CM, convention=_CONV)
     lut = lut._replace(
-        slopes=precompute_photometry(_slope_ssp(ssp_data), waves, trans, REDSHIFT, DL_CM)
+        slopes=precompute_photometry(
+            _slope_ssp(ssp_data), waves, trans, REDSHIFT, DL_CM, convention=_CONV
+        )
     )
     _check(lut, expect_sibling=True)
     # Same filters, same shapes: the sibling carries exactly the values' bytes.
@@ -112,7 +119,7 @@ def test_photometric_precomputation_counts_sibling(ssp_data):
 
 def test_photometric_precomputation_without_sibling(ssp_data):
     waves, trans = _filters()
-    lut = precompute_photometry(ssp_data, waves, trans, REDSHIFT, DL_CM)
+    lut = precompute_photometry(ssp_data, waves, trans, REDSHIFT, DL_CM, convention=_CONV)
     _check(lut, expect_sibling=False)
 
 
@@ -141,17 +148,21 @@ def test_spectroscopic_precomputation_without_sibling(ssp_data):
 
 def test_restband_precomputation_counts_sibling(ssp_data):
     waves, trans = _filters()
-    rb = precompute_restband_photometry(ssp_data, waves, trans)
-    rb = rb._replace(slopes=precompute_restband_photometry(_slope_ssp(ssp_data), waves, trans))
+    rb = precompute_restband_photometry(ssp_data, waves, trans, convention=_CONV)
+    rb = rb._replace(
+        slopes=precompute_restband_photometry(_slope_ssp(ssp_data), waves, trans, convention=_CONV)
+    )
     _check(rb, expect_sibling=True)
     assert rb.slopes.nbytes == rb._replace(slopes=None).nbytes
 
 
 def test_photometric_ztable_counts_sibling(ssp_data):
     waves, trans = _filters()
-    zt = precompute_photometry_ztable(ssp_data, waves, trans, n_z=5)
+    zt = precompute_photometry_ztable(ssp_data, waves, trans, n_z=5, convention=_CONV)
     zt = zt._replace(
-        slopes=precompute_photometry_ztable(_slope_ssp(ssp_data), waves, trans, n_z=5)
+        slopes=precompute_photometry_ztable(
+            _slope_ssp(ssp_data), waves, trans, n_z=5, convention=_CONV
+        )
     )
     _check(zt, expect_sibling=True)
     assert zt.nbytes == 2 * zt._replace(slopes=None).nbytes
@@ -195,9 +206,11 @@ def test_stellar_state_counts_each_stored_array_once(ssp_data):
     from tengri.components.stellar.component import StellarSEDComponentState
 
     waves, trans = _filters()
-    lut = precompute_photometry(ssp_data, waves, trans, REDSHIFT, DL_CM)
+    lut = precompute_photometry(ssp_data, waves, trans, REDSHIFT, DL_CM, convention=_CONV)
     lut = lut._replace(
-        slopes=precompute_photometry(_slope_ssp(ssp_data), waves, trans, REDSHIFT, DL_CM)
+        slopes=precompute_photometry(
+            _slope_ssp(ssp_data), waves, trans, REDSHIFT, DL_CM, convention=_CONV
+        )
     )
     cube = _rng_cube((3, 4, 50))
     cube_slope = _rng_cube((3, 4, 50))
