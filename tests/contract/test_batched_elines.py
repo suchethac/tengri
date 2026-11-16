@@ -285,7 +285,7 @@ def test_padding_quantum_leaves_loglik_unchanged_with_lines(synthetic_ssp):
 
 
 def test_refusals_marginalized_broad_and_line_count(synthetic_ssp):
-    """(e): kinematic groups and a different line count are refused; flat lines pass."""
+    """(e): a different line count is refused; flat lines and kinematic groups pass."""
     wave = _grid(160, 4000.0, 7500.0)
     marginalized = _template(synthetic_ssp, wave, eline_mode="marginalized")
     check_template_model(marginalized)
@@ -293,8 +293,7 @@ def test_refusals_marginalized_broad_and_line_count(synthetic_ssp):
     grouped = _template(
         synthetic_ssp, wave, kinematics={"broad": {"lines": ["Halpha"], "add": True}}
     )
-    with pytest.raises(ValueError, match="kinematic groups"):
-        check_template_model(grouped)
+    check_template_model(grouped)
 
     fitted = _template(synthetic_ssp, wave)
     three = _template(synthetic_ssp, wave, lines=("Hbeta", "OIII_5007", "Halpha"))
@@ -372,3 +371,139 @@ def test_float32_gradients_are_finite_and_nonzero(synthetic_ssp):
     for key, g in values.items():
         assert np.isfinite(g), key
         assert g != 0.0, key
+
+
+#: A broad Halpha group, wide and offset, so the group's kinematics are visible.
+_BROAD = {"broad": {"lines": ["Halpha"], "add": True}}
+_BROAD_VALUES = {"eline_sigma_kms_broad": 1500.0, "eline_delta_v_kms_broad": 300.0}
+
+
+def _grouped_template(ssp, wave, eline_mode="fitted"):
+    """Template with a broad Halpha group pinned at ``_BROAD_VALUES``."""
+    model = _template(ssp, wave, eline_mode=eline_mode, kinematics=_BROAD)
+    spec = model.spec
+    for name, value in _BROAD_VALUES.items():
+        spec = spec.with_fixed_value(name, value)
+    return SEDModel(spec, model.ssp_data, observation=model.observation)
+
+
+def test_kinematic_group_design_and_its_derivative_match_the_per_galaxy_builder(synthetic_ssp):
+    """The batched line design of a grouped catalog is the per-galaxy one, value and gradient.
+
+    The reference is the per-galaxy builder ``_build_eline_G_eff`` on the same model
+    and parameters; the derivative is taken in the group's width and offset.
+    """
+    from tengri.forward.batched_spectrum import batched_eline_design, batched_line_set
+    from tengri.inference.likelihood import _build_eline_G_eff
+
+    wave = _grid(160, 4000.0, 7500.0)
+    z = 0.1
+    template = _grouped_template(synthetic_ssp, wave)
+    catalog = template.observation.spectroscopy.effective_catalog
+    assert "Halpha__broad" in catalog.names
+    flux = np.zeros(wave.size)
+    ivar = np.ones(wave.size)
+    _, batch, _ = build_spectro_batches([_galaxy(wave, z, flux, ivar)], model=template)[0]
+    obs = batch.galaxy(0)
+    line_set = batched_line_set(template)
+    fixed = dict(template.spec.get_fixed_values())
+    constraint = catalog.build_constraint_matrix()
+
+    def batched(sigma, dv):
+        full = {**fixed, "eline_sigma_kms_broad": sigma, "eline_delta_v_kms_broad": dv}
+        return batched_eline_design(line_set, obs, full)[: wave.size]
+
+    def per_galaxy(sigma, dv):
+        full = {**fixed, "redshift": z, "eline_sigma_kms_broad": sigma}
+        full["eline_delta_v_kms_broad"] = dv
+        return _build_eline_G_eff(full, fixed, template, catalog.wavelengths, constraint)
+
+    args = (jnp.asarray(1500.0), jnp.asarray(300.0))
+    np.testing.assert_allclose(batched(*args), per_galaxy(*args), rtol=1e-10, atol=1e-30)
+    for argnum in (0, 1):
+        got = jax.jacfwd(batched, argnums=argnum)(*args)
+        want = jax.jacfwd(per_galaxy, argnums=argnum)(*args)
+        assert float(jnp.max(jnp.abs(want))) > 0.0, "the group parameter has no effect"
+        np.testing.assert_allclose(got, want, rtol=1e-10, atol=1e-30)
+
+
+def test_kinematic_group_loglik_and_gradient_match_eline_fitted_likelihood(synthetic_ssp):
+    """Batched log-likelihood and its gradient equal ELineFittedLikelihood with a broad group."""
+    from tengri.inference.likelihood import _build_eline_G_eff
+
+    wave = _grid(160, 4000.0, 7500.0)
+    z = 0.1
+    template = _grouped_template(synthetic_ssp, wave)
+    catalog = template.observation.spectroscopy.effective_catalog
+    names = eline_amplitude_names(catalog)
+    rng = np.random.default_rng(1)
+    flux = rng.normal(0.0, 0.05, wave.size)
+    ivar = np.full(wave.size, 1.0 / 0.05**2)
+    spec, batch, _ = build_spectro_batches([_galaxy(wave, z, flux, ivar)], model=template)[0]
+    loglik = batched_log_likelihood(template, spec)
+    obs = batch.galaxy(0)
+    params = {**_stellar_params(template), **{n: 4.0e-16 for n in names}}
+    fixed = dict(template.spec.get_fixed_values())
+    constraint = catalog.build_constraint_matrix()
+    G_eff = _build_eline_G_eff(
+        {**fixed, "redshift": z}, fixed, template, catalog.wavelengths, constraint
+    )
+    fitted = ELineFittedLikelihood(
+        jnp.asarray(flux),
+        jnp.asarray(1.0 / np.sqrt(ivar)),
+        design_matrix_builder=lambda _p: G_eff,
+        amplitude_names=tuple(names),
+    )
+
+    def reference(p):
+        stellar = {k: v for k, v in p.items() if not k.startswith("eline_amp_")}
+        model_spec = template.predict_spectrum({**stellar, "redshift": z})
+        return fitted.log_prob({"spec_fnu": model_spec}, p)
+
+    np.testing.assert_allclose(float(loglik(params, obs)), float(reference(params)), rtol=1e-10)
+    got = jax.grad(lambda p: loglik(p, obs))(params)
+    want = jax.grad(reference)(params)
+    for key in params:
+        assert np.isfinite(float(got[key])), key
+        np.testing.assert_allclose(float(got[key]), float(want[key]), rtol=1e-10, atol=0.0)
+
+
+def test_kinematic_groups_compile_once_per_spec(synthetic_ssp):
+    """A second batch of a grouped template's spec triggers no compile."""
+    from jax._src import test_util as jtu
+
+    wave = _grid(160, 4000.0, 7500.0)
+    model = _grouped_template(synthetic_ssp, wave)
+    names = eline_amplitude_names(model.observation.spectroscopy.effective_catalog)
+    flux = np.ones(wave.size)
+    ivar = np.ones(wave.size)
+    spec_a, batch_a, _ = build_spectro_batches(
+        _spectra(wave, [0.1, 0.12], flux, ivar), model=model
+    )[0]
+    spec_b, batch_b, _ = build_spectro_batches(
+        _spectra(wave, [0.2, 0.15], flux, ivar), model=model
+    )[0]
+    assert spec_a == spec_b
+    params = _stack({**_stellar_params(model), **{n: 4.0e-16 for n in names}}, 2)
+    loglik = jax.jit(jax.vmap(batched_log_likelihood(model, spec_a), in_axes=(0, 0)))
+    jax.block_until_ready(loglik(params, batch_a))
+    with jtu.count_jit_compilation_cache_miss() as counter:
+        jax.block_until_ready(loglik(params, batch_b))
+    assert counter() == 0
+
+
+def test_kinematic_group_changes_the_batched_spectrum(synthetic_ssp):
+    """Engagement: moving the broad group's width changes the batched line design."""
+    from tengri.forward.batched_spectrum import batched_eline_design, batched_line_set
+
+    wave = _grid(160, 4000.0, 7500.0)
+    template = _grouped_template(synthetic_ssp, wave)
+    _, batch, _ = build_spectro_batches(
+        _spectra(wave, [0.1], np.zeros(wave.size), np.ones(wave.size)), model=template
+    )[0]
+    obs = batch.galaxy(0)
+    fixed = dict(template.spec.get_fixed_values())
+    line_set = batched_line_set(template)
+    narrow = batched_eline_design(line_set, obs, {**fixed, "eline_sigma_kms_broad": 100.0})
+    broad = batched_eline_design(line_set, obs, {**fixed, "eline_sigma_kms_broad": 1500.0})
+    assert float(jnp.max(jnp.abs(broad - narrow))) > 0.0

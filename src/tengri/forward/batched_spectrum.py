@@ -97,6 +97,7 @@ from tengri.observation.eline_marginalization import (
     apply_doublet_constraints,
     build_eline_design_matrix,
     eline_amplitude_names,
+    line_kinematics,
     model_line_match,
 )
 from tengri.utils.batching import GALAXY_CHUNK_SIZE, vmap_chunked
@@ -122,10 +123,10 @@ def check_template_model(model) -> None:
     model : SEDModel
         Template model. Its spectroscopy must be configured, and it must not use the
         spectrum LUT, line fluxes, line ratios, spectral indices, emission lines with a Cloudy
-        prior, kinematic groups (``eline_kinematics``), a spectral covariance or a
-        Student-t or calibration-floor noise model. Emission lines with
-        ``eline_mode='fitted'`` or ``'marginalized'`` (flat or model-centered prior) and
-        no ``eline_kinematics`` are accepted. The redshift may be free, fixed or a
+        prior, a spectral covariance or a Student-t or calibration-floor noise model.
+        Emission lines with ``eline_mode='fitted'`` or ``'marginalized'`` (flat or
+        model-centered prior) are accepted, in kinematic groups (``eline_kinematics``)
+        as on the per-galaxy path. The redshift may be free, fixed or a
         ``catalog_z_range`` window: each galaxy's ``obs.z`` is the redshift used. A pixel
         covariance is a per-galaxy input (:class:`~tengri.observation.batched.GalaxySpectrum`)
         and the template must not carry one.
@@ -165,12 +166,6 @@ def check_template_model(model) -> None:
         )
     if spectroscopy.eline_mode == "marginalized" and spectroscopy.eline_prior_type == "model":
         model_line_match(model, batched_line_set(model).independent_wavelengths)
-    if spectroscopy.eline_mode != "off" and spectroscopy.eline_kinematics:
-        raise ValueError(
-            "template model fits emission lines in kinematic groups (eline_kinematics), "
-            "which the batched likelihood does not evaluate; it gives every line one "
-            "width and one offset. Remove eline_kinematics or fit galaxies one at a time"
-        )
     for name in _UNSUPPORTED_CHANNELS:
         if getattr(observation, name, None) is not None:
             raise ValueError(
@@ -328,6 +323,9 @@ class BatchedLineSet:
     ----------
     amplitude_names : tuple of str
         ``eline_amp_<name>`` keys of the independent lines, in column order.
+    catalog : LineList
+        The template's effective catalog; its kinematic groups set which width and
+        offset parameters each line reads (``line_kinematics``).
     wavelengths : ndarray, shape (n_lines,)
         Rest-frame vacuum line centers [Angstrom] of the full catalog.
     independent_wavelengths : ndarray, shape (n_independent,)
@@ -342,6 +340,7 @@ class BatchedLineSet:
     """
 
     amplitude_names: tuple[str, ...]
+    catalog: object
     wavelengths: jax.Array
     independent_wavelengths: np.ndarray
     constraint_matrix: jax.Array
@@ -388,6 +387,7 @@ def batched_line_set(model) -> BatchedLineSet | None:
     )
     return BatchedLineSet(
         amplitude_names=tuple(eline_amplitude_names(catalog)),
+        catalog=catalog,
         wavelengths=jnp.asarray(catalog.wavelengths),
         independent_wavelengths=np.asarray(independent, dtype=np.float64),
         constraint_matrix=jnp.asarray(constraint),
@@ -406,8 +406,10 @@ def batched_eline_design(line_set: BatchedLineSet, obs: SpectroBatch, params: di
         the redshift ``z``, the resolution ``eline_resolution``, the pixel mask
         ``pix_mask`` and the line mask ``line_mask``.
     params : dict
-        Parameter values; ``eline_sigma_kms`` and ``eline_delta_v_kms`` default
-        to zero when absent.
+        Parameter values, fixed values included. Each line's width and offset are
+        those of its kinematic group (``eline_sigma_kms[_<group>]``,
+        ``eline_delta_v_kms[_<group>]``, read by ``line_kinematics``); absent ones
+        are zero.
 
     Returns
     -------
@@ -434,8 +436,8 @@ def batched_eline_design(line_set: BatchedLineSet, obs: SpectroBatch, params: di
     :math:`\lambda_j^{\rm rest}` the rest vacuum line center [Angstrom],
     :math:`z` the redshift [dimensionless], :math:`R` the spectral resolution
     [dimensionless], :math:`\sigma_v` the intrinsic broadening
-    ``eline_sigma_kms`` [km/s], :math:`\Delta v` the velocity offset
-    ``eline_delta_v_kms`` [km/s] and :math:`c` the speed of light [km/s].
+    of line :math:`j`'s kinematic group [km/s], :math:`\Delta v` its velocity
+    offset [km/s] and :math:`c` the speed of light [km/s].
     :math:`m_i` is ``pix_mask`` (1 on a good real pixel) and :math:`p_j` is
     ``line_mask`` (1 when line :math:`j` is redshifted onto the real grid).
     :math:`\mathbf{C}` is the doublet constraint matrix, so each column of
@@ -449,13 +451,14 @@ def batched_eline_design(line_set: BatchedLineSet, obs: SpectroBatch, params: di
     are constants, so a zero mask gives an exactly zero column.
     **vmap-compatible**: yes, over the galaxy axis.
     """
+    sigma_kms, delta_v_kms = line_kinematics(params, {}, line_set.catalog)
     G = build_eline_design_matrix(
         obs.wave,
         line_set.wavelengths,
         obs.eline_resolution,
         obs.z,
-        params.get("eline_sigma_kms", 0.0),
-        params.get("eline_delta_v_kms", 0.0),
+        sigma_kms,
+        delta_v_kms,
     )
     G = G * obs.line_mask[None, :] * obs.pix_mask[:, None]
     return apply_doublet_constraints(G, line_set.constraint_matrix)
