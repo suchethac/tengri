@@ -147,24 +147,9 @@ def test_spectrum_lut_matches_exact_for_young_populations(synthetic_ssp_wide, sf
     wave_obs = jnp.logspace(jnp.log10(3300.0), jnp.log10(8000.0), 80)
     obs = Observation(spectroscopy=Spectroscopy(resample="point", wave_obs=wave_obs))
 
-    # LUT and exact models with the same config.
-    model_lut = SEDModel.build(
-        ssp_data=synthetic_ssp_wide,
-        observation=obs,
-        sfh=sfh,
-        dust_attenuation={
-            "type": "two_component",
-            **law_screen_keys(law),
-            "tau_bc": Fixed(1.0),
-            "tau_diff": Fixed(0.3),
-            "all_params": Fixed(DEFAULT),
-        },
-        neb={"type": "none"},
-        redshift=Fixed(0.3),
-        approx=SpectrumPrecomp(),
-    )
-
-    model_exact = SEDModel.build(
+    # LUT and exact models with the same config. sigma_v_kms=150 keeps the table
+    # serving point pixels (#3500); the exact twin shares the config.
+    base = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
         observation=obs,
         sfh=sfh,
@@ -179,6 +164,10 @@ def test_spectrum_lut_matches_exact_for_young_populations(synthetic_ssp_wide, sf
         redshift=Fixed(0.3),
         approx=None,
     )
+    spec = base.spec.merge_observation_params(sigma_v_kms=Fixed(150.0))
+    model_lut = SEDModel(spec, synthetic_ssp_wide, observation=obs, approx=SpectrumPrecomp())
+    assert model_lut._approx.get("spectrum_precomp") is True
+    model_exact = SEDModel(spec, synthetic_ssp_wide, observation=obs, approx=None)
 
     # Spectrum ratio.
     spec_lut = np.asarray(model_lut.predict_spectrum({}))

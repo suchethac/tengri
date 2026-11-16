@@ -46,7 +46,9 @@ def wave_obs():
 
 def _build(ssp_data, wave_obs, order, approx=None):
     obs = Observation(
-        spectroscopy=Spectroscopy(resample="point", wave_obs=wave_obs, calibration_order=order)
+        spectroscopy=Spectroscopy(
+            resample="conserving", wave_obs=wave_obs, calibration_order=order
+        )
     )
     return SEDModel.build(
         ssp_data=ssp_data,
@@ -71,6 +73,7 @@ def test_precomp_applies_the_calibration(synthetic_ssp_wide, wave_obs):
     x1.2 at the red. Before the fix this ratio was 1.0 everywhere.
     """
     model = _build(synthetic_ssp_wide, wave_obs, order=2, approx=SpectrumPrecomp())
+    assert model._approx.get("spectrum_precomp")
 
     flat = model.predict_spectrum({"cal_c1": 0.0, "cal_c2": 0.0})
     tilted = model.predict_spectrum({"cal_c1": 0.2, "cal_c2": 0.0})
@@ -91,6 +94,7 @@ def test_precomp_calibration_matches_the_exact_path(synthetic_ssp_wide, wave_obs
     """
     exact = _build(synthetic_ssp_wide, wave_obs, order=2)
     lut = _build(synthetic_ssp_wide, wave_obs, order=2, approx=SpectrumPrecomp())
+    assert lut._approx.get("spectrum_precomp")
 
     coeffs = {"cal_c1": 0.15, "cal_c2": -0.07}
     zeros = {"cal_c1": 0.0, "cal_c2": 0.0}
@@ -112,6 +116,7 @@ def test_precomp_calibration_is_differentiable(synthetic_ssp_wide, wave_obs):
     changed nothing.
     """
     model = _build(synthetic_ssp_wide, wave_obs, order=2, approx=SpectrumPrecomp())
+    assert model._approx.get("spectrum_precomp")
 
     def total(c1):
         return jnp.sum(model.predict_spectrum({"cal_c1": c1, "cal_c2": 0.0}))
@@ -128,6 +133,7 @@ def test_precomp_uncalibrated_model_is_unchanged(synthetic_ssp_wide, wave_obs):
     equality, not a tolerance.
     """
     lut_cal = _build(synthetic_ssp_wide, wave_obs, order=2, approx=SpectrumPrecomp())
+    assert lut_cal._approx.get("spectrum_precomp")
     lut_plain = _build(synthetic_ssp_wide, wave_obs, order=0, approx=SpectrumPrecomp())
 
     with_zeros = lut_cal.predict_spectrum({"cal_c1": 0.0, "cal_c2": 0.0})

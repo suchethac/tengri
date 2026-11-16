@@ -135,7 +135,7 @@ class TestSpectrumLUTAccuracy:
             _build(ssp, obs, None, Fixed(0.05), dust_attenuation=diffuse_dust), ssp, obs, None
         )
         m_lut = _restate_with_sigma(
-            _build(ssp, obs, SpectrumPrecomp(), Fixed(0.05), dust_attenuation=diffuse_dust),
+            _build(ssp, obs, None, Fixed(0.05), dust_attenuation=diffuse_dust),
             ssp,
             obs,
             SpectrumPrecomp(),
@@ -173,16 +173,20 @@ class TestSpectrumLUTAccuracy:
             "all_params": Fixed(DEFAULT),
             "tau_bc": 0.0,
         }
-        m_exact = _build(
-            ssp, obs, None, Uniform(0.01, 0.5, "redshift"), dust_attenuation=diffuse_dust
+        # sigma_v_kms=150 keeps the table serving point pixels (#3500); exact twin shares it.
+        m_exact = _restate_with_sigma(
+            _build(ssp, obs, None, Uniform(0.01, 0.5, "redshift"), dust_attenuation=diffuse_dust),
+            ssp,
+            obs,
+            None,
         )
-        m_lut = _build(
+        m_lut = _restate_with_sigma(
+            _build(ssp, obs, None, Uniform(0.01, 0.5, "redshift"), dust_attenuation=diffuse_dust),
             ssp,
             obs,
             SpectrumPrecomp(),
-            Uniform(0.01, 0.5, "redshift"),
-            dust_attenuation=diffuse_dust,
         )
+        assert m_lut._approx.get("spectrum_precomp") is True
         for z in (0.05, 0.2, 0.4):
             se = m_exact.predict_observables({"redshift": z}).spec_fnu
             sl = m_lut.predict_observables({"redshift": z}).spec_fnu
@@ -203,8 +207,13 @@ class TestSpectrumLUTAccuracy:
         obs = Observation(
             spectroscopy=Spectroscopy(resample="point", wave_obs=jnp.linspace(4500.0, 7500.0, 48))
         )
-        m = _build(ssp, obs, SpectrumPrecomp(), Fixed(0.05))
-        m_free = _build(ssp, obs, SpectrumPrecomp(), Uniform(0.01, 0.5, "redshift"))
+        # sigma_v_kms=150 keeps the table serving the point pixels (#3500).
+        m = _restate_with_sigma(_build(ssp, obs, None, Fixed(0.05)), ssp, obs, SpectrumPrecomp())
+        m_free = _restate_with_sigma(
+            _build(ssp, obs, None, Uniform(0.01, 0.5, "redshift")), ssp, obs, SpectrumPrecomp()
+        )
+        assert m._approx.get("spectrum_precomp") is True
+        assert m_free._approx.get("spectrum_precomp") is True
 
         f_fixed = jax.jit(lambda: m.predict_observables({}).spec_fnu)
         assert bool(jnp.all(jnp.isfinite(f_fixed())))  # fixed-z LUT under jit
@@ -266,7 +275,7 @@ class TestSpectrumLUTGuards:
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            m = SEDModel.build(
+            base = SEDModel.build(
                 ssp_data=ssp,
                 observation=obs,
                 sfh={
@@ -281,8 +290,11 @@ class TestSpectrumLUTGuards:
                 },
                 neb={"type": "none"},
                 redshift=Fixed(0.05),
-                approx=SpectrumPrecomp(),
+                approx=None,
             )
+        # sigma_v_kms=150 keeps the table serving the point pixels (#3500).
+        m = _restate_with_sigma(base, ssp, obs, SpectrumPrecomp())
+        assert m._approx.get("spectrum_precomp") is True
 
         def loss(a):
             return jnp.sum(m.predict_observables({"sfh_dpl_alpha": a}).spec_fnu ** 2)
@@ -353,8 +365,16 @@ class TestSpectrumLUTLines:
         obs = Observation(
             spectroscopy=Spectroscopy(resample="point", wave_obs=jnp.linspace(4500.0, 7500.0, 64))
         )
+        # A Cue nebular component rules out a sigma_v_kms fix; flux-conserving pixels keep
+        # the table serving (#3500). The exact twin shares the same observation.
+        obs = Observation(
+            spectroscopy=Spectroscopy(
+                resample="conserving", wave_obs=jnp.linspace(4500.0, 7500.0, 64)
+            )
+        )
         m_lut = self._build_cue(ssp, obs, SpectrumPrecomp())
         m_exact = self._build_cue(ssp, obs, None)
+        assert m_lut._approx.get("spectrum_precomp") is True
         targets = jnp.asarray([4862.69, 5008.24, 6564.61])  # Hβ, [OIII]5008, Hα (vacuum)
         lf_lut = m_lut.predict_line_fluxes({}, target_wavelengths=targets)
         lf_exact = m_exact.predict_line_fluxes({}, target_wavelengths=targets)
@@ -368,10 +388,15 @@ class TestSpectrumLUTLines:
         from tengri import Observation, Spectroscopy, load_ssp_data
 
         ssp = load_ssp_data(bare)
+        # Cue on point pixels is always declined (#3500): use flux-conserving pixels.
         obs = Observation(
-            spectroscopy=Spectroscopy(resample="point", wave_obs=jnp.linspace(4500.0, 7500.0, 64))
+            spectroscopy=Spectroscopy(
+                resample="conserving", wave_obs=jnp.linspace(4500.0, 7500.0, 64)
+            )
         )
-        pred = self._build_cue(ssp, obs, SpectrumPrecomp()).predict({})
+        m = self._build_cue(ssp, obs, SpectrumPrecomp())
+        assert m._approx.get("spectrum_precomp") is True
+        pred = m.predict({})
         # pred.lines.* must be finite under the precomp path.
         assert jnp.isfinite(pred.lines.halpha)
         assert jnp.isfinite(pred.lines.bpt_nii)
@@ -452,7 +477,7 @@ class TestJointPrecomp:
             self._build_joint(ssp, obs, None, Fixed(0.05)), ssp, obs, None
         )
         m_lut = _restate_with_sigma(
-            self._build_joint(ssp, obs, approx_factory(), Fixed(0.05)),
+            self._build_joint(ssp, obs, None, Fixed(0.05)),
             ssp,
             obs,
             approx_factory(),

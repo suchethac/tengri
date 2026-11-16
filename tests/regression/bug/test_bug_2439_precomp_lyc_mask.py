@@ -827,7 +827,9 @@ def _spec_build(ssp, z, approx, fesc=0.0, n_pix=40):
     wave_obs = jnp.linspace(LYC_LIMIT * (1.0 + z) * 0.5, LYC_LIMIT * (1.0 + z) * 1.5, n_pix)
     return SEDModel.build(
         ssp_data=ssp,
-        observation=Observation(spectroscopy=Spectroscopy(resample="point", wave_obs=wave_obs)),
+        observation=Observation(
+            spectroscopy=Spectroscopy(resample="conserving", wave_obs=wave_obs)
+        ),
         sfh={
             "type": "delayed",
             "log_total_mass": 10.0,
@@ -860,6 +862,7 @@ def test_spectrumprecomp_exact_per_pixel_lyc_mask(lyc_ssp):
     z = 2.0
     model_exact = _spec_build(lyc_ssp, z, None, fesc=0.0)
     model_lut = _spec_build(lyc_ssp, z, SpectrumPrecomp(), fesc=0.0)
+    assert model_lut._approx.get("spectrum_precomp")
     # Free-only params dict (#2296: no Fixed keys); all params are Fixed for this model
     p = {}
     exact_spec = np.asarray(model_exact.predict_spectrum(p))
@@ -885,6 +888,7 @@ def test_spectrumprecomp_exact_per_pixel_lyc_mask(lyc_ssp):
     # fesc=1 floor: same exact-per-pixel mechanism, mask is a no-op.
     model_exact1 = _spec_build(lyc_ssp, z, None, fesc=1.0)
     model_lut1 = _spec_build(lyc_ssp, z, SpectrumPrecomp(), fesc=1.0)
+    assert model_lut1._approx.get("spectrum_precomp")
     # Free-only params dict (#2296: no Fixed keys); all params are Fixed for this model
     p1 = {}
     exact1 = np.asarray(model_exact1.predict_spectrum(p1))

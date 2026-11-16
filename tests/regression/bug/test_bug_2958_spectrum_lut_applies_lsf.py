@@ -129,9 +129,10 @@ def _chi2_grad(model, ref, sigma_v):
 
 @pytest.mark.parametrize("sigma_v", [50.0, 300.0])
 def test_a_chi2_gradient_matches_exact(ssp_data_wne, sigma_v):
-    sv = Uniform(0.0, 2000.0)
+    sv = _FREE_SERVED
     exact = _build(ssp_data_wne, None, spectro=_spec(), igm=_MADAU, sigma_v=sv)
     lut = _build(ssp_data_wne, SpectrumPrecomp(), spectro=_spec(), igm=_MADAU, sigma_v=sv)
+    assert lut._approx.get("spectrum_precomp")
     ref = jnp.asarray(_spectrum(exact, 100.0))
     g_exact = _chi2_grad(exact, ref, sigma_v)
     g_lut = _chi2_grad(lut, ref, sigma_v)
@@ -141,9 +142,10 @@ def test_a_chi2_gradient_matches_exact(ssp_data_wne, sigma_v):
 
 
 def test_a_gradient_live_on_continuum_fixture(synthetic_ssp_wide):
-    sv = Uniform(0.0, 2000.0)
+    sv = _FREE_SERVED
     exact = _build(synthetic_ssp_wide, None, spectro=_spec(), igm=_MADAU, sigma_v=sv)
     lut = _build(synthetic_ssp_wide, SpectrumPrecomp(), spectro=_spec(), igm=_MADAU, sigma_v=sv)
+    assert lut._approx.get("spectrum_precomp")
     ref = jnp.asarray(_spectrum(exact, 100.0))
     g_lut = _chi2_grad(lut, ref, 300.0)
     g_exact = _chi2_grad(exact, ref, 300.0)
@@ -157,8 +159,9 @@ def test_a_gradient_live_on_continuum_fixture(synthetic_ssp_wide):
 
 def test_b_spectrum_depends_on_sigma_v(ssp_data_wne):
     lut = _build(
-        ssp_data_wne, SpectrumPrecomp(), spectro=_spec(), igm=_MADAU, sigma_v=Uniform(0, 2000)
+        ssp_data_wne, SpectrumPrecomp(), spectro=_spec(), igm=_MADAU, sigma_v=_FREE_SERVED
     )
+    assert lut._approx.get("spectrum_precomp")
     s0 = _spectrum(lut, 0.0)
     s300 = _spectrum(lut, 300.0)
     assert float(np.max(np.abs(s300 - s0))) > 1e-6 * float(np.max(np.abs(s0)))
@@ -168,17 +171,19 @@ def test_b_spectrum_depends_on_sigma_v(ssp_data_wne):
 
 
 def test_c_lut_matches_exact_continuum(synthetic_ssp_wide):
-    sv = Uniform(0.0, 2000.0)
+    sv = _FREE_SERVED
     exact = _build(synthetic_ssp_wide, None, spectro=_spec(), igm=_MADAU, sigma_v=sv)
     lut = _build(synthetic_ssp_wide, SpectrumPrecomp(), spectro=_spec(), igm=_MADAU, sigma_v=sv)
+    assert lut._approx.get("spectrum_precomp")
     s_exact, s_lut = _spectrum(exact, 300.0), _spectrum(lut, 300.0)
     assert _max_rel_dev(s_lut, s_exact, _mask(s_exact)) <= 2e-3
 
 
 def test_c_lut_matches_exact_lines_at_halpha_hbeta(ssp_data_wne):
-    sv = Uniform(0.0, 2000.0)
+    sv = _FREE_SERVED
     exact = _build(ssp_data_wne, None, spectro=_spec(), igm=_MADAU, sigma_v=sv)
     lut = _build(ssp_data_wne, SpectrumPrecomp(), spectro=_spec(), igm=_MADAU, sigma_v=sv)
+    assert lut._approx.get("spectrum_precomp")
     s_exact, s_lut = _spectrum(exact, 300.0), _spectrum(lut, 300.0)
     mask = _mask(s_exact)
     assert _max_rel_dev(s_lut, s_exact, mask) <= 2e-3
@@ -352,7 +357,7 @@ def test_d_sigma_v_exact_path_matches_brute_force_without_resolution(ssp_data_wn
 
 def test_d_sigma_v_zero_lut_agrees_with_exact_without_resolution(ssp_data_wne):
     """The sigma_v = 0 LUT matches the exact path (point sampling, IGM, no resolution)."""
-    sv = Uniform(0.0, 2000.0)
+    sv = _FREE_SERVED
     exact = _build(ssp_data_wne, None, spectro=_spec(resolution=None), igm=_MADAU, sigma_v=sv)
     lut = _build(
         ssp_data_wne, SpectrumPrecomp(), spectro=_spec(resolution=None), igm=_MADAU, sigma_v=sv
@@ -374,14 +379,14 @@ def test_d_sigma_v_lut_matches_brute_force_without_resolution(ssp_data_wne):
         None,
         spectro=_spec(resolution=None),
         igm=_MADAU,
-        sigma_v=Uniform(0.0, 2000.0),
+        sigma_v=_FREE_SERVED,
     )
     lut = _build(
         ssp_data_wne,
         SpectrumPrecomp(),
         spectro=_spec(resolution=None),
         igm=_MADAU,
-        sigma_v=Uniform(0.0, 2000.0),
+        sigma_v=_FREE_SERVED,
     )
     ref = _igm_case_reference(exact, 150.0)
     rel = float(np.max(np.abs(_spectrum(lut, 150.0) - ref)) / np.max(np.abs(ref)))
