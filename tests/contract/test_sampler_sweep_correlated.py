@@ -105,7 +105,7 @@ def _hierarchical(method, n_chains, metric, monkeypatch, **settings):
 
     post = hf.run_flat_sampler(
         _Fitter(),
-        get_sampler(method).methods[0],
+        get_sampler(method).method,
         key=jax.random.PRNGKey(5),
         n_warmup=_N_WARMUP,
         n_burnin=_N_BURNIN,

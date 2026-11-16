@@ -16,7 +16,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri.inference.sampling import driver
+from tengri.inference._backend_registry import _BACKENDS, register_backend
 from tengri.inference.sampling.driver import Sampler, SamplerResult, run_sampler
 from tengri.inference.sampling.health import (
     chain_diagnostics,
@@ -45,10 +45,10 @@ def stuck_sampler():
         base = jnp.where(jnp.arange(2) == 0, -3.0, 3.0)[:, None, None]
         return SamplerResult(base + wiggle + jnp.zeros((2, n, target.n_dim)), None, {})
 
-    sampler = Sampler("stuck", "chain", ("stuck",), run)
-    driver.register_sampler(sampler)
+    sampler = Sampler("stuck", "chain", "stuck", run)
+    register_backend("stuck", legacy_fitter=False, sampler=sampler)(run)
     yield sampler
-    driver._REGISTRY.pop("stuck")
+    _BACKENDS.pop("stuck")
 
 
 def test_a_stuck_pair_of_chains_triggers_one_warning_naming_the_parameter(stuck_sampler):

@@ -14,7 +14,7 @@ import inspect
 import pytest
 
 from tengri.inference._backend_registry import DEFAULT_METHOD, get_backend
-from tengri.inference.fitter import _CANONICAL_METHODS, _MANY_EVAL_SAMPLERS, resolve_method
+from tengri.inference.fitter import _CANONICAL_METHODS, _many_eval_samplers, resolve_method
 from tengri.parameters.defaults import get_inference_defaults
 
 pytestmark = pytest.mark.contract
@@ -26,7 +26,7 @@ def test_default_method_is_the_fast_nuts_recipe():
 
 def test_fast_nuts_is_canonical_and_registered():
     assert "mcmc_nuts_fast" in _CANONICAL_METHODS
-    assert "mcmc_nuts_fast" in _MANY_EVAL_SAMPLERS
+    assert "mcmc_nuts_fast" in _many_eval_samplers()
     assert resolve_method("mcmc_nuts_fast") == "mcmc_nuts_fast"
     entry = get_backend("mcmc_nuts_fast")
     assert entry.tier == "primary"

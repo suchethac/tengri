@@ -772,12 +772,12 @@ def _all_absent(presence) -> bool:
 
 def _vmapped_mcmc_tags() -> dict[str, str]:
     """Return ``registry method -> engine sampler tag`` for every vmappable sampler."""
-    from tengri.inference.sampling.driver import get_sampler, sampler_names
+    from tengri.inference.sampling.driver import get_sampler, method_map
 
     return {
-        get_sampler(name).methods[0]: get_sampler(name).engine or name
-        for name in sampler_names()
-        if get_sampler(name).vmappable
+        method: get_sampler(driver).engine or driver
+        for method, driver in method_map().items()
+        if get_sampler(driver).vmappable and get_sampler(driver).method == method
     }
 
 

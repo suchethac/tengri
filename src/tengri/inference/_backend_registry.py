@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from tengri.inference.sampling.driver import Sampler
     from tengri.inference.backends.mcmc.chain_program import (
         Adaptation,
         ChainProgram,
@@ -94,6 +95,10 @@ class BackendEntry:
     # Builds the statics ``compile()`` warms, from (entry, n_dim, spec). None when
     # the entry has no compile plan, and ``compile()`` then refuses it by name.
     compile_plan: Callable[[Any, int, Any], CompilePlan] | None = None
+    # The sampler the shared driver (``sampling.run_sampler``) runs on a flat target for
+    # this method, for the engines that fit through it (catalog, hierarchical); None when
+    # the method has no flat-target form.
+    sampler: Sampler | None = None
 
     def adaptation_for(self, kwargs: dict, *, path: str = "run") -> Adaptation | None:
         """Return the adaptation this entry runs on ``path`` for ``kwargs``.
@@ -177,6 +182,7 @@ def register_backend(
     adaptation_rule=None,
     compile_adaptation_rule=None,
     compile_plan=None,
+    sampler=None,
 ):
     """Decorator to register an inference backend.
 
@@ -203,6 +209,8 @@ def register_backend(
         uses ``diagonal_preconditioning=True``, or low-rank HMC learns a metric
         from warmup). When True, composing with ``precondition=`` raises ValueError
         before sampling starts (#2196).
+    sampler : Sampler or None
+        The shared driver's sampler for this method; see :class:`BackendEntry`.
 
     Raises
     ------
@@ -230,6 +238,7 @@ def register_backend(
             adaptation_rule=adaptation_rule,
             compile_adaptation_rule=compile_adaptation_rule,
             compile_plan=compile_plan,
+            sampler=sampler,
         )
         _BACKENDS[name] = entry
         for a in aliases:

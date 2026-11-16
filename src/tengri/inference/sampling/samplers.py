@@ -30,7 +30,6 @@ from tengri.inference.sampling.chains import (
 from tengri.inference.sampling.driver import (
     Sampler,
     SamplerResult,
-    register_sampler,
     run_sampler,
 )
 from tengri.inference.sampling.families import DENSE_FAMILIES, resolve_accept, run_chain_family
@@ -738,51 +737,52 @@ _PATHFINDER_NOT_VMAPPABLE = (
     "K copies of its optimizer state would be live at once"
 )
 
-for _name, _methods, _family, _dense in (
-    ("nuts", ("mcmc_nuts", "mcmc"), "nuts", False),
-    ("nuts_pathfinder", ("pathfinder",), "nuts_pathfinder", False),
-    ("hmc", ("mcmc_hmc",), "hmc", False),
-    ("dynamic_hmc", ("mcmc_dynamic_hmc",), "dynamic_hmc", False),
-    ("ghmc", ("mcmc_ghmc",), "ghmc", False),
-    ("barker", ("mcmc_barker",), "barker", False),
-    ("mala", ("mcmc_mala",), "mala", False),
-    ("nuts_fast", ("mcmc_nuts_fast",), "nuts", True),
-):
-    register_sampler(
+_SAMPLERS: tuple[Sampler, ...] = (
+    *(
         Sampler(
-            _name,
+            name,
             "chain",
-            _methods,
-            _chain_runner(_family, force_dense=_dense),
-            metric_mode="native" if _family in DENSE_FAMILIES else "layer",
-            vmappable=_name
-            in ("nuts", "hmc", "dynamic_hmc", "ghmc", "barker", "mala", "nuts_fast"),
-            engine="nuts" if _name == "nuts_fast" else None,
-            dense_default=_dense,
-            not_vmappable=_PATHFINDER_NOT_VMAPPABLE if _name == "nuts_pathfinder" else None,
+            method,
+            _chain_runner(family, force_dense=dense),
+            metric_mode="native" if family in DENSE_FAMILIES else "layer",
+            vmappable=name in _VMAPPABLE,
+            engine="nuts" if name == "nuts_fast" else None,
+            dense_default=dense,
+            not_vmappable=_PATHFINDER_NOT_VMAPPABLE if name == "nuts_pathfinder" else None,
         )
-    )
-
-register_sampler(Sampler("chees", "ensemble", ("mcmc_chees",), _run_chees, vmappable=True))
-register_sampler(Sampler("smc", "ensemble", ("mcmc_smc",), _run_smc))
-register_sampler(Sampler("ess", "chain", ("mcmc_ess",), _run_ess))
-register_sampler(Sampler("mclmc", "chain", ("mcmc_mclmc",), _mclmc_runner(False)))
-register_sampler(Sampler("adjusted_mclmc", "chain", ("mcmc_adjusted_mclmc",), _mclmc_runner(True)))
-register_sampler(Sampler("hmc_lowrank", "chain", ("mcmc_hmc_lowrank",), _run_lowrank))
-register_sampler(Sampler("hmc_is", "chain", ("hmc_is",), _run_hmc_is, metric_mode="internal"))
-register_sampler(Sampler("nss", "nested", ("nss",), _run_nss))
-register_sampler(
-    Sampler("map", "point", ("map",), _run_map, fidelity="point", pilot=_curvature_pilot)
-)
-register_sampler(Sampler("laplace", "point", ("laplace",), _run_laplace, metric_mode="invariant"))
-register_sampler(Sampler("vi_fullrank", "variational", ("vi_fullrank",), _vi_runner("fullrank")))
-register_sampler(
+        for name, method, family, dense in (
+            ("nuts", "mcmc_nuts", "nuts", False),
+            ("nuts_pathfinder", "pathfinder", "nuts_pathfinder", False),
+            ("hmc", "mcmc_hmc", "hmc", False),
+            ("dynamic_hmc", "mcmc_dynamic_hmc", "dynamic_hmc", False),
+            ("ghmc", "mcmc_ghmc", "ghmc", False),
+            ("barker", "mcmc_barker", "barker", False),
+            ("mala", "mcmc_mala", "mala", False),
+            ("nuts_fast", "mcmc_nuts_fast", "nuts", True),
+        )
+    ),
+    Sampler("chees", "ensemble", "mcmc_chees", _run_chees, vmappable=True),
+    Sampler("smc", "ensemble", "mcmc_smc", _run_smc),
+    Sampler("ess", "chain", "mcmc_ess", _run_ess),
+    Sampler("mclmc", "chain", "mcmc_mclmc", _mclmc_runner(False)),
+    Sampler("adjusted_mclmc", "chain", "mcmc_adjusted_mclmc", _mclmc_runner(True)),
+    Sampler("hmc_lowrank", "chain", "mcmc_hmc_lowrank", _run_lowrank),
+    Sampler("hmc_is", "chain", "hmc_is", _run_hmc_is, metric_mode="internal"),
+    Sampler("nss", "nested", "nss", _run_nss),
+    Sampler("map", "point", "map", _run_map, fidelity="point", pilot=_curvature_pilot),
+    Sampler("laplace", "point", "laplace", _run_laplace, metric_mode="invariant"),
+    Sampler("vi_fullrank", "variational", "vi_fullrank", _vi_runner("fullrank")),
     Sampler(
         "vi_meanfield",
         "variational",
-        ("vi_meanfield",),
+        "vi_meanfield",
         _vi_runner("meanfield"),
         fidelity="mean_only",
         advisory=MEANFIELD_WARNING,
-    )
+    ),
 )
+
+#: ``driver name -> sampler``. A sampler is attached to the backend entry that serves it
+#: (``register_backend(..., sampler=SAMPLERS[...])`` in ``_registration.py``); this table only
+#: names the definitions and is read by nothing else.
+SAMPLERS: dict[str, Sampler] = {s.name: s for s in _SAMPLERS}

@@ -14,8 +14,10 @@ settings are generic layers rather than per-sampler code:
   point, a Laplace Gaussian: both affine-equivariant) the sampler is marked ``invariant`` and
   runs as it is, recorded as such in its diagnostics.
 
-The sampler implementations live in :mod:`tengri.inference.sampling.samplers` and register
-here, so adding a sampler is one registration and every engine reaches it.
+The sampler implementations live in :mod:`tengri.inference.sampling.samplers`. A sampler is
+an attribute of the backend entry that serves it (``register_backend(..., sampler=...)`` in
+``_registration.py``), so the backend registry is the one registry and adding a sampler is
+one registration that every engine reaches.
 """
 
 from __future__ import annotations
@@ -105,8 +107,8 @@ class Sampler:
         Driver name.
     kind : {"chain", "ensemble", "variational", "nested", "point"}
         What the sampler is; chain kinds wrap a ``ChainProgram`` and ``Adaptation``.
-    methods : tuple of str
-        Registry method names (and aliases) that select it.
+    method : str
+        Canonical registry method name of the backend that serves it (``"mcmc_nuts"``).
     run : callable
         ``run(target, key, n_chains, metric, cfg) -> SamplerResult``.
     fidelity : {"exact", "mean_only", "point"}
@@ -137,7 +139,7 @@ class Sampler:
 
     name: str
     kind: str
-    methods: tuple[str, ...]
+    method: str
     run: Callable
     fidelity: str = "exact"
     metric_mode: str = "layer"
@@ -159,46 +161,43 @@ class Sampler:
             )
 
 
-_REGISTRY: dict[str, Sampler] = {}
-
-
-def register_sampler(sampler: Sampler) -> Sampler:
-    """Add ``sampler`` to the registry and return it."""
-    _REGISTRY[sampler.name] = sampler
-    return sampler
-
-
 def _ensure_registered() -> None:
-    from tengri.inference.sampling import samplers  # noqa: F401  (registers on import)
+    from tengri.inference import _registration  # noqa: F401  (registers the backends)
+
+
+def _served() -> dict[str, Sampler]:
+    """Return ``registry method name -> sampler`` for every backend entry that carries one."""
+    from tengri.inference._backend_registry import _BACKENDS
+
+    _ensure_registered()
+    return {name: entry.sampler for name, entry in _BACKENDS.items() if entry.sampler is not None}
 
 
 def get_sampler(name: str) -> Sampler:
-    """Return the sampler registered under a driver name or a method name.
+    """Return the sampler of a driver name or a registry method name.
 
     Raises
     ------
     ValueError
         If ``name`` is neither.
     """
-    _ensure_registered()
-    if name in _REGISTRY:
-        return _REGISTRY[name]
-    for sampler in _REGISTRY.values():
-        if name in sampler.methods:
+    served = _served()
+    if name in served:
+        return served[name]
+    for sampler in served.values():
+        if sampler.name == name:
             return sampler
-    raise ValueError(f"unknown sampler {name!r}; registered: {sorted(_REGISTRY)}")
+    raise ValueError(f"unknown sampler {name!r}; registered: {sorted(sampler_names())}")
 
 
 def sampler_names() -> tuple[str, ...]:
-    """Return every registered driver name."""
-    _ensure_registered()
-    return tuple(_REGISTRY)
+    """Return every driver name, once, in registration order."""
+    return tuple(dict.fromkeys(s.name for s in _served().values()))
 
 
 def method_map() -> dict[str, str]:
-    """Return ``method name -> driver name`` for every registered sampler."""
-    _ensure_registered()
-    return {m: s.name for s in _REGISTRY.values() for m in s.methods}
+    """Return ``registry method name -> driver name`` for every backend with a sampler."""
+    return {method: sampler.name for method, sampler in _served().items()}
 
 
 def resolve_cfg(cfg: dict) -> dict:

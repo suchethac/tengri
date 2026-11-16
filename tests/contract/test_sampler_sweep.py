@@ -173,7 +173,7 @@ def _run_hierarchical(method, n_chains, metric, monkeypatch):
 
     post = hf.run_flat_sampler(
         _Fitter(),
-        get_sampler(method).methods[0],
+        get_sampler(method).method,
         key=jax.random.PRNGKey(5),
         n_warmup=_N_WARMUP,
         n_burnin=_N_BURNIN,
@@ -297,3 +297,17 @@ def test_a_cell_is_bitwise_reproducible(engine, monkeypatch):
             chains, _y = _run_hierarchical("mclmc", 4, "dense", monkeypatch)
         runs.append(np.concatenate([c.reshape(-1) for c in chains]))
     np.testing.assert_array_equal(runs[0], runs[1])
+
+
+def test_every_sampler_is_an_attribute_of_one_backend_entry():
+    """The backend registry is the one registry: a sampler names the entry that carries it."""
+    from tengri.inference._backend_registry import all_backends
+    from tengri.inference.sampling.driver import method_map, sampler_names
+    from tengri.inference.sampling.samplers import SAMPLERS
+
+    carried = {e.sampler.name for e in all_backends() if e.sampler is not None}
+    assert carried == set(SAMPLERS) == set(sampler_names())
+    for entry in all_backends():
+        if entry.sampler is not None and entry.name != "mcmc":
+            assert entry.sampler.method == entry.name
+    assert set(method_map()) == {e.name for e in all_backends() if e.sampler is not None}

@@ -137,7 +137,7 @@ def test_prior_aware_samplers_keep_the_posterior_when_whitened():
 @pytest.fixture
 def spy_sampler():
     """A layered sampler that records the sizes it is asked for and returns constant draws."""
-    from tengri.inference.sampling import driver
+    from tengri.inference._backend_registry import _BACKENDS, register_backend
     from tengri.inference.sampling.driver import Sampler, SamplerResult
 
     calls = []
@@ -146,9 +146,9 @@ def spy_sampler():
         calls.append(cfg["n_samples"])
         return SamplerResult(jnp.ones((n_chains, cfg["n_samples"], target.n_dim)), None, {})
 
-    driver.register_sampler(Sampler("spy", "chain", ("spy",), run))
+    register_backend("spy", legacy_fitter=False, sampler=Sampler("spy", "chain", "spy", run))(run)
     yield calls
-    driver._REGISTRY.pop("spy")
+    _BACKENDS.pop("spy")
 
 
 def test_a_fallback_to_the_diagonal_metric_warns_once_with_the_reason(spy_sampler):
@@ -190,16 +190,21 @@ def test_a_point_estimate_pilots_with_the_curvature_not_a_sampler(monkeypatch):
     """Whitening a MAP or a Laplace must not run a NUTS warmup just to learn a covariance."""
     import dataclasses
 
-    from tengri.inference.sampling import driver
+    from tengri.inference._backend_registry import _BACKENDS
+    from tengri.inference.sampling.driver import get_sampler
 
     ran = []
-    nuts = driver._REGISTRY["nuts"]
+    nuts = get_sampler("nuts")
 
     def spy(*args, **kwargs):
         ran.append("nuts")
         return nuts.run(*args, **kwargs)
 
-    monkeypatch.setitem(driver._REGISTRY, "nuts", dataclasses.replace(nuts, run=spy))
+    spied = dataclasses.replace(nuts, run=spy)
+    for method in ("mcmc", "mcmc_nuts"):
+        monkeypatch.setitem(
+            _BACKENDS, method, dataclasses.replace(_BACKENDS[method], sampler=spied)
+        )
     target, _mean = _ill_conditioned_quadratic()
     for name in ("map", "laplace"):
         result = run_sampler(
