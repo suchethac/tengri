@@ -35,6 +35,8 @@ import jax
 import numpy as np
 import pytest
 
+from tengri.profiling import compiled_flops
+
 pytestmark = pytest.mark.contract
 
 
@@ -253,10 +255,7 @@ def test_window_cost_is_independent_of_axis_length(n_small, n_large):
     from tengri.utils.interpolation import apply_grid_window, compute_grid_window
 
     def flops(fn, *args):
-        cost = jax.jit(fn).lower(*args).compile().cost_analysis()
-        if isinstance(cost, list):
-            cost = cost[0] if cost else {}
-        return float(dict(cost or {}).get("flops", 0.0))
+        return float(compiled_flops(fn, *args))
 
     def measure(n):
         grid = _uniform_grid(n)

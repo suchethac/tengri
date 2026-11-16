@@ -75,6 +75,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.profiling import compiled_flops
+
 pytestmark = pytest.mark.regression_bug
 
 #: The published reddened term is a band integral of an array the pipeline already
@@ -366,9 +368,7 @@ def test_wave_precomp_still_beats_the_exact_path_on_flops(ssp_data_fsps):
         def loss(v):
             return jnp.sum(model.predict_photometry({"sfh_delayed_log_total_mass": v}))
 
-        return int(
-            jax.jit(jax.grad(loss)).lower(jnp.asarray(10.0)).compile().cost_analysis()["flops"]
-        )
+        return int(compiled_flops(jax.grad(loss), jnp.asarray(10.0)))
 
     lut = grad_flops(WavePrecomp())
     exact = grad_flops(None)

@@ -33,6 +33,7 @@ from tengri.components.stellar.sps.dsps_wrapper import (
     csp_age_dt,
     csp_log_interp_matrix,
 )
+from tengri.profiling import compiled_flops
 
 pytestmark = pytest.mark.bounds
 
@@ -224,7 +225,7 @@ class TestCspBenchmark:
 
         def _flops(fn, *args) -> float:
             """Compiled FLOP count — deterministic, unlike wall clock."""
-            return jax.jit(fn).lower(*args).compile().cost_analysis()["flops"]
+            return compiled_flops(fn, *args)
 
         ages = make_log_spaced_ages(107)
         sfr = sfr_exponential(ages)
@@ -272,7 +273,7 @@ class TestCspBenchmark:
 
         def _flops(fn, *args) -> float:
             """Compiled FLOP count — deterministic, unlike wall clock."""
-            return jax.jit(fn).lower(*args).compile().cost_analysis()["flops"]
+            return compiled_flops(fn, *args)
 
         ages = make_log_spaced_ages(107)
         sfr = sfr_exponential(ages)

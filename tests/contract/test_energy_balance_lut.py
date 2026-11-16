@@ -39,6 +39,7 @@ from tengri.components.dust.energy_balance_precompute import (
     lut_l_absorbed_stellar,
 )
 from tengri.observation.photometry import FilterCurve
+from tengri.profiling import compiled_flops
 
 pytestmark = pytest.mark.contract
 
@@ -240,8 +241,7 @@ def test_interpolation_does_not_contract_the_whole_optical_depth_grid():
     args = (jnp.asarray(1.8), jnp.asarray(1.0))
 
     def flops(fn):
-        jitted = jax.jit(lambda tb, td: fn(lut, joint_weights, mass_scale, tb, td))
-        return jitted.lower(*args).compile().cost_analysis()["flops"]
+        return compiled_flops(lambda tb, td: fn(lut, joint_weights, mass_scale, tb, td), *args)
 
     sparse = flops(lut_l_absorbed_stellar)
     dense = flops(_dense_weight_vector_reference)

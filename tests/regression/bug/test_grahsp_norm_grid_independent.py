@@ -31,6 +31,7 @@ pytestmark = pytest.mark.regression_bug
 
 C_AA_PER_S = 2.99792458e18
 from tengri.components.agn.grahsp.bolometric import BBB_BOL_CUT_NM
+from tengri.profiling import compiled_flops
 
 BBB_CUT_NM = BBB_BOL_CUT_NM
 COARSE_N = 200
@@ -107,10 +108,7 @@ def _unit_params(**overrides):
 
 
 def _compiled_flops(fn, *args) -> float:
-    cost = jax.jit(fn).lower(*args).compile().cost_analysis()
-    if isinstance(cost, list):
-        cost = cost[0] if cost else {}
-    return float(dict(cost or {}).get("flops", 0.0))
+    return float(compiled_flops(fn, *args))
 
 
 def _dense_log_integral(wave_nm: np.ndarray, f: np.ndarray) -> float:

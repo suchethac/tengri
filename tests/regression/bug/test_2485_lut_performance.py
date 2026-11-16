@@ -21,6 +21,7 @@ import pytest
 
 from tengri import DEFAULT, Fixed, SEDModel, Uniform
 from tengri.forward.sed_model import WavePrecomp
+from tengri.profiling import compiled_flops
 
 pytestmark = pytest.mark.regression_bug
 
@@ -59,15 +60,7 @@ def _single_screen_with_lut(ssp, obs, enable_lut=True):
 
 def _measure_gradient_flops(model, params):
     """Measure FLOPs of the photometry gradient."""
-    cost = (
-        jax.jit(jax.grad(lambda q: jnp.sum(model.predict_photometry(q))))
-        .lower(params)
-        .compile()
-        .cost_analysis()
-    )
-    if isinstance(cost, list):
-        cost = cost[0]
-    return float(cost["flops"])
+    return float(compiled_flops(jax.grad(lambda q: jnp.sum(model.predict_photometry(q))), params))
 
 
 def test_single_screen_lut_consumer_reduces_flops(synthetic_ssp, synthetic_tophat_obs):

@@ -28,6 +28,7 @@ import pytest
 
 from tengri import DEFAULT, Fixed, Observation, SEDModel, WavePrecomp
 from tengri.observation.photometry_config import Photometry
+from tengri.profiling import compiled_flops
 
 FILTERS = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 
@@ -59,10 +60,7 @@ def _params(model):
 
 
 def _compiled_flops(model, params):
-    cost = jax.jit(model.predict_photometry).lower(params).compile().cost_analysis()
-    if isinstance(cost, list):
-        cost = cost[0]
-    return cost["flops"]
+    return compiled_flops(model.predict_photometry, params)
 
 
 @pytest.mark.regression_bug
@@ -185,8 +183,7 @@ def test_spectrum_lut_does_not_evaluate_the_igm_on_the_full_grid():
         )
 
     def flops(m):
-        c = jax.jit(m.predict_spectrum).lower(_params(m)).compile().cost_analysis()
-        return (c[0] if isinstance(c, list) else c)["flops"]
+        return compiled_flops(m.predict_spectrum, _params(m))
 
     on, off = flops(build()), flops(build(igm={"type": "none"}))
     # Applying the factor costs one multiply per pixel and nothing more; the

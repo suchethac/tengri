@@ -35,6 +35,7 @@ import pytest
 
 from tengri import DEFAULT, Fixed, Observation, SEDModel, WavePrecomp
 from tengri.observation.photometry_config import Photometry
+from tengri.profiling import compiled_flops
 
 # w4 (22 um) is where the IR template actually lands at z=0.1.
 FILTERS = ["sdss_g", "sdss_r", "sdss_i", "wise_w4"]
@@ -171,8 +172,7 @@ def test_dust_emission_does_not_force_a_dense_per_call_filter_integral(emission_
     dense integral, and `test_a_non_homogeneous_emitter_is_refused` pins that.
     """
     m = _model(emission_type, SHAPES[emission_type], approx=WavePrecomp())
-    cost = jax.jit(m.predict_photometry).lower(_params(m)).compile().cost_analysis()
-    flops = (cost[0] if isinstance(cost, list) else cost)["flops"]
+    flops = compiled_flops(m.predict_photometry, _params(m))
 
     assert flops < MAX_FLOPS, (
         f"{emission_type}: WavePrecomp photometry compiled {flops:,.0f} FLOPs "

@@ -29,6 +29,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.profiling import compiled_flops
 from tengri.utils.interpolation import (
     compute_grid_weights,
     edges_for_grid,
@@ -99,10 +100,7 @@ def test_does_fewer_kernel_evaluations_than_the_two_slice_form():
     xs = jnp.linspace(-3.5, 1.5, 4096)
 
     def flops(fn):
-        c = jax.jit(jax.vmap(lambda x: fn(x, grid))).lower(xs).compile().cost_analysis()
-        if isinstance(c, list):
-            c = c[0]
-        return c["flops"]
+        return compiled_flops(jax.vmap(lambda x: fn(x, grid)), xs)
 
     two_slice = flops(_two_slice)
     shared = flops(compute_grid_weights)

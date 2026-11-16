@@ -40,6 +40,7 @@ from tengri.components.radio import component as _radio_component
 from tengri.components.xray import component as _xray_component
 from tengri.observation.filters import load_tophat_filter
 from tengri.observation.photometry_config import Photometry
+from tengri.profiling import compiled_flops
 
 pytestmark = pytest.mark.regression_bug
 
@@ -277,7 +278,7 @@ def test_band_response_is_exact_against_the_dense_filter_integral(name, monkeypa
 
 
 def _flops(m):
-    return jax.jit(m.predict_photometry).lower(_params(m)).compile().cost_analysis()["flops"]
+    return compiled_flops(m.predict_photometry, _params(m))
 
 
 @pytest.mark.parametrize("name", sorted(EMITTERS))

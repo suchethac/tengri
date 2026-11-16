@@ -24,6 +24,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.profiling import compiled_flops
+
 pytestmark = pytest.mark.regression_bug
 
 _FILTERS = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z", "des_g", "des_r", "des_i"]
@@ -59,7 +61,7 @@ def _grad_flops(model, fn_name, truth):
         params.update({k: v[i] for i, k in enumerate(free)})
         return jnp.sum(getattr(model, fn_name)(params))
 
-    return int(jax.jit(jax.grad(loss)).lower(v0).compile().cost_analysis()["flops"])
+    return int(compiled_flops(jax.grad(loss), v0))
 
 
 def _assert_joint_matches_references(phot_only, joint, seeds=(1, 2, 3)):

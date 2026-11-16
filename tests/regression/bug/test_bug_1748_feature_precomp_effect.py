@@ -39,6 +39,8 @@ import jax
 import jax.numpy as jnp
 import pytest
 
+from tengri.profiling import compiled_flops
+
 pytestmark = pytest.mark.regression_bug
 
 _PARAMS_BASE = {"sfh_delayed_log_total_mass": 10.0}
@@ -87,7 +89,7 @@ def _grad_flops(model):
         params["sfh_delayed_log_total_mass"] = v
         return jnp.sum(model.predict_photometry(params))
 
-    return int(jax.jit(jax.grad(loss)).lower(jnp.asarray(10.0)).compile().cost_analysis()["flops"])
+    return int(compiled_flops(jax.grad(loss), jnp.asarray(10.0)))
 
 
 def test_setup_the_control_is_really_dust_free(ssp_data_fsps):
