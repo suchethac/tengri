@@ -76,7 +76,12 @@ def test_a_healthy_chain_reports_its_diagnostics_without_a_warning():
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         result = run_sampler(
-            "mcmc_nuts", _target(), key=jax.random.PRNGKey(0), n_chains=4, n_warmup=200, n_samples=500
+            "mcmc_nuts",
+            _target(),
+            key=jax.random.PRNGKey(0),
+            n_chains=4,
+            n_warmup=200,
+            n_samples=500,
         )
     assert not [w for w in caught if issubclass(w.category, RuntimeWarning)]
     assert result.diagnostics["rhat_max"] < 1.1

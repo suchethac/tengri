@@ -76,6 +76,7 @@ from tengri.utils.transforms import to_bounded, to_unbounded
 
 __all__ = ["FlatProblem", "build_flat_problem", "run_flat_sampler"]
 
+
 @dataclass(frozen=True)
 class FlatProblem:
     """A hierarchical population fit expressed on one unconstrained vector.
@@ -803,7 +804,7 @@ def run_flat_sampler(
     chain = result.draws.reshape(-1, prob.n_dim)
     extra = result.diagnostics
 
-    if driver != "map":
+    if method != "map":
         # Effect-side net for every MCMC driver: whatever produced it, a chain
         # that never moved is the initialization echoed n_samples times, not a
         # posterior (#1530's failure mode, generalized past raytrace).

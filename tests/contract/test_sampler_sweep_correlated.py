@@ -233,4 +233,4 @@ def test_the_posterior_covariance_survives_the_flat_seam(method, monkeypatch):
 @pytest.mark.slow
 def test_nuts_fast_samples_the_correlated_posterior_with_its_dense_metric(monkeypatch):
     """``nuts_fast`` is dense by preset: there is no diagonal arm to gain over, only accuracy."""
-    _agrees(_hierarchical("nuts_fast", 1, "diag", monkeypatch))
+    _agrees(_hierarchical("mcmc_nuts_fast", 1, "diag", monkeypatch))

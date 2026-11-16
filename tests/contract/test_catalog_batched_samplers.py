@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """The batched catalog path: which samplers reach it, and on what convention.
 
-``_vmapped_mcmc_tags()`` (read from the backend registry) decides whether a sampler runs K galaxies per
-``lax.map`` step on the accelerator or falls to ``_run_sequential`` and never
+``_vmapped_mcmc_tags()``, read from the backend registry, decides whether a sampler runs K
+galaxies per ``lax.map`` step on the accelerator or falls to ``_run_sequential`` and never
 reaches the GPU at all. Three things about that set are load-bearing enough to
 pin:
 

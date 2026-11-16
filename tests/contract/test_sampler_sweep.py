@@ -290,7 +290,7 @@ def test_a_cell_is_bitwise_reproducible(engine, monkeypatch):
         if engine == "catalog":
             chains, _y = _run_catalog("chees", 4, "dense")
         else:
-            chains, _y = _run_hierarchical("mclmc", 4, "dense", monkeypatch)
+            chains, _y = _run_hierarchical("mcmc_mclmc", 4, "dense", monkeypatch)
         runs.append(np.concatenate([c.reshape(-1) for c in chains]))
     np.testing.assert_array_equal(runs[0], runs[1])
 
@@ -314,9 +314,9 @@ def test_a_backend_registered_after_import_reaches_every_derived_set():
     from tengri.inference.sampling.driver import Sampler, get_sampler, method_map, sampler_names
 
     sampler = Sampler("late", "chain", lambda *a: None, vmappable=True)
-    register_backend(
-        "late_method", aliases=("late_alias",), legacy_fitter=False, sampler=sampler
-    )(lambda *a: None)
+    register_backend("late_method", aliases=("late_alias",), legacy_fitter=False, sampler=sampler)(
+        lambda *a: None
+    )
     try:
         for name in ("late_method", "late_alias"):
             assert get_sampler(name) is sampler
@@ -346,7 +346,10 @@ def test_an_auto_dispatching_entry_is_left_out_of_the_vmapped_set():
     assert "mcmc" not in _vmapped_mcmc_tags()
     sampler = Sampler("pinned", "chain", lambda *a: None, vmappable=True)
     register_backend(
-        "pinned_method", aliases=("pinned_alias",), legacy_fitter=False, sampler=sampler,
+        "pinned_method",
+        aliases=("pinned_alias",),
+        legacy_fitter=False,
+        sampler=sampler,
         sampler_is_pin=True,
     )(lambda *a: None)
     try:

@@ -31,9 +31,9 @@ import numpy as np
 
 from tengri.inference._batching import AUTO, resolve_forward_chunk_size
 from tengri.inference._hierarchical_flat import run_flat_sampler
-from tengri.inference.sampling.driver import method_map as flat_method_map
 from tengri.inference.fitter import _resolve_batch_fit_approx, resolve_method
 from tengri.inference.likelihoods.gaussian import diag_noise_operators
+from tengri.inference.sampling.driver import method_map as flat_method_map
 from tengri.utils.transforms import to_bounded, to_unbounded
 
 #: Acceptance below which a Ray Tracing chain is treated as not having sampled.

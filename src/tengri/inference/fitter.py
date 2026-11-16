@@ -43,7 +43,6 @@ marker lines to jump. In order:
 from __future__ import annotations
 
 import contextlib
-import functools
 import logging
 import threading
 import time

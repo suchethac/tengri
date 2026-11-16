@@ -224,8 +224,13 @@ def test_a_point_estimate_pilots_with_the_curvature_not_a_sampler(monkeypatch):
 def _curvature_record(logdensity, **cfg):
     target = FlatTarget(logdensity, LatentLayout.vector(2), jnp.zeros(2))
     return run_sampler(
-        "map", target, key=jax.random.PRNGKey(0), metric="dense", n_samples=40,
-        health_warnings=False, **cfg,
+        "map",
+        target,
+        key=jax.random.PRNGKey(0),
+        metric="dense",
+        n_samples=40,
+        health_warnings=False,
+        **cfg,
     ).diagnostics
 
 
