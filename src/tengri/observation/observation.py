@@ -682,10 +682,9 @@ def project_spectrum_kernel_split(
     """
     from tengri.observation.spectrum import (
         _serves_on_lattice,
+        broaden_velocity_at_nodes,
         broaden_velocity_only,
         broaden_velocity_only_window,
-        compute_spectrum,
-        instrument_stage_on_pixels,
         project_spectrum,
         rest_grid_observed_window,
     )
@@ -839,7 +838,18 @@ def project_spectrum_kernel_split(
         window = (
             None if window_z is None else rest_grid_observed_window(wave_rest, wave_obs, window_z)
         )
-        if window is None:
+        if not conserving and resolution_matrix is None:
+            # Point mode: the dispersion is read at the model nodes in closed form, so it
+            # does not depend on how the model grid is segmented (#3451).
+            sed_stellar_v = broaden_velocity_at_nodes(
+                sed_stellar_rest,
+                wave_rest,
+                sigma_v_kms,
+                window=window,
+                has_lyc_edge=has_lyc_edge,
+                kernel_sigma_bound_kms=kernel_sigma_bound_kms,
+            )
+        elif window is None:
             sed_stellar_v = broaden_velocity_only(sed_stellar_rest, wave_rest, sigma_v_kms, n_bins)
         else:
             sed_stellar_v = broaden_velocity_only_window(
@@ -902,28 +912,6 @@ def project_spectrum_kernel_split(
                 conserving=conserving,
                 has_lyc_edge=has_lyc_edge,
                 kernel_sigma_bound_kms=kernel_sigma_bound_kms,
-            )
-        elif not conserving:
-            # Point-sampled pixels: resample each piece and apply the shared instrument
-            # stage on the pixel grid (#2958; the LUT runs the same function).
-            flux = instrument_stage_on_pixels(
-                compute_spectrum(
-                    sed_stellar, wave_rest, wave_obs, redshift, dl_cm, has_lyc_edge=has_lyc_edge
-                ),
-                compute_spectrum(
-                    sed_instrument_only,
-                    wave_rest,
-                    wave_obs,
-                    redshift,
-                    dl_cm,
-                    has_lyc_edge=has_lyc_edge,
-                ),
-                wave_obs=wave_obs,
-                resolution=resolution,
-                sigma_lib_kms=sigma_lib_kms,
-                lsf_scale=lsf_scale,
-                n_bins=n_bins,
-                lsf_pad_pixels=lsf_pad_pixels,
             )
         else:
             resolution_scaled = resolution / lsf_scale

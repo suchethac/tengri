@@ -1265,6 +1265,9 @@ def _point_samples(sed_rest, wave_rest, lam_c, edge_aa):
 #: largest velocity-dispersion bound (#3512). Beyond it the Gaussian mass is below 2e-9.
 _POINT_REACH_LN = 6.0 * _LSF_MAX_SIGMA_KMS / _C_KM_S
 
+#: Pixels x window cells evaluated at once by the closed-form readout (32 MB per float64 array).
+_POINT_READOUT_BLOCK_ELEMENTS = 4_000_000
+
 
 def _log_offset(w, wq):
     """``ln(w / wq)`` as ``log1p((w - wq) / wq)``, with the difference formed directly (#3512).
@@ -1380,17 +1383,28 @@ def point_readout_gaussian_ln(
     reach = _POINT_REACH_LN if reach_ln is None else float(reach_ln)
     width = _cell_window_width(wave_rest, reach)
     j0 = jnp.searchsorted(jnp.log(wave_rest[1:]), jnp.log(wq) - reach, side="left")
-    # The window's cells are consecutive, so each node is an edge shared by two cells.
-    edge_idx = j0[:, None] + jnp.arange(width + 1)[None, :]
-    idx = edge_idx[:, :-1]
-    valid = idx < n_cells
-    idx = jnp.minimum(idx, n_cells - 1)
-    wq_col, sig_col = wq[:, None], sig[:, None]
-    node_offsets = _log_offset(wave_rest[jnp.minimum(edge_idx, n_cells)], wq_col)
-    m1, m2 = gaussian_exp_moments_between_edges(node_offsets, sig_col)
-    # e^s F with F = y_a + q (lambda - w_a) and lambda = wq e^s: y_a M1 + q (wq M2 - w_a M1).
-    terms = y_lo[idx] * m1 + q[idx] * (wq_col * m2 - w_lo[idx] * m1)
-    total = jnp.sum(jnp.where(valid, terms, 0.0), axis=1)
+    offsets = jnp.arange(width + 1)
+
+    def one_pixel(args):
+        # The window's cells are consecutive, so each node is an edge shared by two cells.
+        wq_i, sig_i, j0_i = args
+        edge_idx = j0_i + offsets
+        idx = edge_idx[:-1]
+        valid = idx < n_cells
+        idx = jnp.minimum(idx, n_cells - 1)
+        node_offsets = _log_offset(wave_rest[jnp.minimum(edge_idx, n_cells)], wq_i)
+        m1, m2 = gaussian_exp_moments_between_edges(node_offsets, sig_i)
+        # e^s F with F = y_a + q (lambda - w_a), lambda = wq e^s: y_a M1 + q (wq M2 - w_a M1).
+        terms = y_lo[idx] * m1 + q[idx] * (wq_i * m2 - w_lo[idx] * m1)
+        return jnp.sum(jnp.where(valid, terms, 0.0))
+
+    # Pixels are evaluated in blocks, so memory is bounded by the block and not by
+    # n_pix x n_window.
+    block = max(1, _POINT_READOUT_BLOCK_ELEMENTS // (width + 1))
+    if wq.shape[0] <= block:
+        total = jax.vmap(one_pixel)((wq, sig, j0))
+    else:
+        total = jax.lax.map(one_pixel, (wq, sig, j0), batch_size=block)
     if step is not None:
         # The bracketing cell entered above as y_a over its whole width; above the edge
         # the value is y_b.
@@ -1398,6 +1412,76 @@ def point_readout_gaussian_ln(
         m1_step, _ = gaussian_exp_moments(_log_offset(edge, wq), _log_offset(upper, wq), sig)
         total = total + jump * m1_step
     return total
+
+
+def broaden_velocity_at_nodes(
+    sed_rest: jnp.ndarray,
+    wave_rest: jnp.ndarray,
+    sigma_v_kms,
+    *,
+    window: tuple[int, int] | None = None,
+    has_lyc_edge: bool = False,
+    kernel_sigma_bound_kms: float | None = None,
+) -> jnp.ndarray:
+    r"""Velocity-broadened SED at the model's own nodes, in closed form.
+
+    Node :math:`\lambda_i` takes
+    :math:`\mathcal{B}_{\sigma_v/c}(\lambda L_\nu)(\ln\lambda_i)/\lambda_i`, the Gaussian of
+    :func:`broaden_velocity_only` applied to the piecewise-linear interpolant
+    :math:`L_\nu` of ``sed_rest`` and read at the node
+    (:func:`point_readout_gaussian_ln`), with :math:`\sigma_v` the stellar velocity
+    dispersion [km/s] and :math:`c` the speed of light [km/s].
+
+    Parameters
+    ----------
+    sed_rest : ndarray, shape (n_wave,)
+        Rest-frame SED :math:`L_\nu` [erg/s/Hz].
+    wave_rest : ndarray, shape (n_wave,)
+        Rest-frame wavelength grid, ascending [Angstrom].
+    sigma_v_kms : float or tracer
+        Stellar velocity dispersion [km/s].
+    window : tuple of int, optional
+        Static index range ``(lo, hi)`` of the nodes to broaden; the others keep their
+        value. Default: every node.
+    has_lyc_edge : bool, optional
+        The SED is a step at the Lyman edge. Static.
+    kernel_sigma_bound_kms : float, optional
+        Static upper bound on ``sigma_v_kms`` [km/s]. Default: the value itself when it
+        is concrete, 2000 km/s when it is traced.
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Broadened SED at the nodes [erg/s/Hz].
+
+    Notes
+    -----
+    JIT, grad and vmap compatible. The result is a function of the interpolant alone:
+    it does not depend on how the grid is split into segments, where
+    :func:`broaden_velocity_only` on a grid that is not uniform in :math:`\ln\lambda`
+    does (#3451). A zero dispersion returns ``sed_rest``.
+    """
+    if _is_concrete_nonpositive(sigma_v_kms):
+        return sed_rest
+    lo, hi = (0, wave_rest.shape[0]) if window is None else window
+    bound = (
+        _point_kernel_bound_kms(None, sigma_v_kms)
+        if kernel_sigma_bound_kms is None
+        else kernel_sigma_bound_kms
+    )
+    scale_in, scale_out = _peak_factors(sed_rest)
+    sigma_ln = jnp.asarray(sigma_v_kms) / _C_KM_S
+    closed = point_readout_gaussian_ln(
+        sed_rest * scale_in,
+        wave_rest,
+        wave_rest[lo:hi],
+        0.0,
+        sigma_ln,
+        has_lyc_edge=has_lyc_edge,
+        reach_ln=6.0 * float(bound) / _C_KM_S,
+    )
+    broadened = jnp.where(sigma_ln > 0.0, closed * scale_out, sed_rest[lo:hi])
+    return sed_rest.at[lo:hi].set(broadened)
 
 
 def sigma_v_lattice_correction(
@@ -1938,6 +2022,27 @@ def compute_spectrum(
     return lnu_to_fnu(sed_at_pixels, dl_cm, redshift)
 
 
+def _point_kernel_bound_kms(resolution, sigma_v_kms) -> float:
+    """Static upper bound [km/s] on the kernel width the closed-form readout must reach.
+
+    A concrete resolution or dispersion contributes its largest value; a traced one
+    contributes ``_LSF_MAX_SIGMA_KMS``, since its value is unknown when the window is sized.
+    The library dispersion is not subtracted.
+    """
+    squares = 0.0
+    if resolution is not None:
+        if _is_traced(resolution):
+            squares += _LSF_MAX_SIGMA_KMS**2
+        else:
+            r = np.asarray(resolution, np.float64)
+            squares += float(np.max(_resolution_to_sigma_kms(r))) ** 2
+    if _is_traced(sigma_v_kms):
+        squares += _LSF_MAX_SIGMA_KMS**2
+    else:
+        squares += float(np.max(np.maximum(np.asarray(sigma_v_kms, np.float64), 0.0))) ** 2
+    return math.sqrt(squares)
+
+
 def compute_spectrum_point_lsf(
     sed_rest: jnp.ndarray,
     wave_rest: jnp.ndarray,
@@ -1989,8 +2094,8 @@ def compute_spectrum_point_lsf(
         The SED is a step at the Lyman edge. Static.
     kernel_sigma_bound_kms : float, optional
         Static upper bound on the kernel width over every pixel and every value the traced
-        inputs can take [km/s]. The per-pixel segment window reaches six times it. Default
-        :func:`_lsf_sigma_bound_kms`, which assumes 2000 km/s for a traced component.
+        inputs can take [km/s]. The per-pixel segment window reaches six times it. Default:
+        the largest concrete width, with 2000 km/s for a traced component.
 
     Returns
     -------
@@ -2014,7 +2119,7 @@ def compute_spectrum_point_lsf(
         lsf_sigma_eff_kms(resolution, sigma_lib_kms, sigma_v_kms) / _C_KM_S, wave_q.shape
     )
     if kernel_sigma_bound_kms is None:
-        kernel_sigma_bound_kms = _lsf_sigma_bound_kms(resolution, sigma_v_kms)
+        kernel_sigma_bound_kms = _point_kernel_bound_kms(resolution, sigma_v_kms)
     reach_ln = 6.0 * float(kernel_sigma_bound_kms) / _C_KM_S
     closed = point_readout_gaussian_ln(
         sed_in,

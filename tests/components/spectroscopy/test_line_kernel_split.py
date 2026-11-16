@@ -197,31 +197,45 @@ def _build_model_free_sigma_v(z, wave_obs, resolution, ssp, neb):
 
 
 def _hbeta_widths_across_sigma_v_and_library(ssp, neb, sigma_inst_kms):
-    """Shared setup for the H-beta formula/invariance tests below."""
+    """Shared setup for the H-beta formula/invariance tests below.
+
+    The width is fitted on the spectrum minus the same model built without a nebular
+    backend. The stellar H-beta absorption sits under the emission line (18-29% deep on
+    this fixture) and moves with sigma_v, so a fit on the total reads the line 1-2% narrow
+    by an amount that depends on sigma_v (measured: 178.3, 177.0, 176.5 km/s at sigma_v
+    0, 100, 300 against 183.25 at all three on the difference, sigma_inst 150 km/s).
+    """
     z = 0.05
     hbeta_obs = _HBETA_REST * (1.0 + z)
     wave_obs = jnp.linspace(hbeta_obs - 15.0, hbeta_obs + 15.0, 2000)
     resolution = _resolution_for_sigma_inst(sigma_inst_kms)
     model = _build_model_free_sigma_v(z, wave_obs, resolution, ssp, neb)
+    stellar_only = _build_model_free_sigma_v(z, wave_obs, resolution, ssp, {"type": "none"})
     sigma_gas = float(model.spec.get_distribution("neb_eline_sigma_kms").value)
     p0 = dict(model.spec.sample(jax.random.PRNGKey(1)))
     p0["sfh_dpl_log_total_mass"] = jnp.asarray(10.0)
     p0["dust_tau_bc"] = jnp.asarray(0.0)
     p0["dust_tau_diff"] = jnp.asarray(0.0)
 
+    def line_only(with_neb, without_neb, params):
+        stellar_params = {k: v for k, v in params.items() if not k.startswith("neb_")}
+        return np.asarray(with_neb.predict_spectrum(params)) - np.asarray(
+            without_neb.predict_spectrum(stellar_params)
+        )
+
     widths = {}
     for sigma_v in (0.0, 100.0, 300.0):
-        p = dict(p0)
-        p["sigma_v_kms"] = jnp.asarray(sigma_v)
-        flux = np.asarray(model.predict_spectrum(p))
+        flux = line_only(model, stellar_only, {**p0, "sigma_v_kms": jnp.asarray(sigma_v)})
         widths[sigma_v] = _gaussian_fit_width_kms(np.asarray(wave_obs), flux, hbeta_obs)
 
-    model_flat = SEDModel(
-        model.spec.merge_observation_params(sigma_v_kms=Uniform(0.0, 2000.0)),
-        ssp._replace(ssp_resolution_kms=None),
-        observation=model.observation,
-    )
-    flux_flat = np.asarray(model_flat.predict_spectrum({**p0, "sigma_v_kms": jnp.asarray(0.0)}))
+    def flat(base):
+        return SEDModel(
+            base.spec.merge_observation_params(sigma_v_kms=Uniform(0.0, 2000.0)),
+            ssp._replace(ssp_resolution_kms=None),
+            observation=base.observation,
+        )
+
+    flux_flat = line_only(flat(model), flat(stellar_only), {**p0, "sigma_v_kms": jnp.asarray(0.0)})
     widths["flat_curve"] = _gaussian_fit_width_kms(np.asarray(wave_obs), flux_flat, hbeta_obs)
     return sigma_gas, widths
 

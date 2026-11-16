@@ -23,7 +23,11 @@ from tengri import Fixed, SEDModel
 from tengri.cosmology import luminosity_distance
 from tengri.observation import Observation, Photometry, Spectroscopy
 from tengri.observation.photometry import FilterCurve
-from tengri.observation.spectrum import apply_lsf, compute_spectrum, project_spectrum
+from tengri.observation.spectrum import (
+    compute_spectrum,
+    compute_spectrum_point_lsf,
+    project_spectrum,
+)
 
 pytestmark = pytest.mark.contract
 
@@ -53,7 +57,11 @@ def spectrum_inputs(synthetic_ssp_wide):
 
 
 class TestProjectSpectrumDecomposition:
-    """Test 1: project_spectrum == compute_spectrum + apply_lsf (manually composed)."""
+    """Test 1: project_spectrum is the point resampler, or the point readout with its kernel.
+
+    With a resolution, point mode applies the kernel before sampling
+    (``compute_spectrum_point_lsf``, #3500), so the decomposition is one call.
+    """
 
     def test_project_spectrum_no_resolution_equals_compute_spectrum(self, spectrum_inputs):
         """resolution=None should match compute_spectrum exactly."""
@@ -77,21 +85,17 @@ class TestProjectSpectrumDecomposition:
         chex.assert_trees_all_close(flux_direct, flux_via_project, rtol=0, atol=0)
 
     def test_project_spectrum_scalar_resolution(self, spectrum_inputs):
-        """Scalar R: project_spectrum should match manual compose."""
+        """Scalar R: project_spectrum is the point readout with its kernel."""
         resolution = 100.0
         sigma_lib_kms = 70.0
 
-        flux_compute = compute_spectrum(
+        flux_manual = compute_spectrum_point_lsf(
             spectrum_inputs["sed_rest"],
             spectrum_inputs["wave_rest"],
             spectrum_inputs["wave_obs"],
             spectrum_inputs["z"],
             spectrum_inputs["dl_cm"],
-        )
-        flux_manual = apply_lsf(
-            flux_compute,
-            spectrum_inputs["wave_obs"],
-            resolution,
+            resolution=resolution,
             sigma_lib_kms=sigma_lib_kms,
         )
 
@@ -108,24 +112,19 @@ class TestProjectSpectrumDecomposition:
         chex.assert_trees_all_close(flux_manual, flux_via_project, rtol=0, atol=0)
 
     def test_project_spectrum_array_resolution(self, spectrum_inputs):
-        """Array R: project_spectrum should match manual compose."""
+        """Array R: project_spectrum is the point readout with its kernel."""
         wave_um = spectrum_inputs["wave_obs"] / 1e4
         resolution = 30.0 + 55.0 * (wave_um - 0.6)  # NIRSPEC PRISM-like
         resolution = jnp.clip(resolution, 30.0, 330.0)
 
-        flux_compute = compute_spectrum(
+        flux_manual = compute_spectrum_point_lsf(
             spectrum_inputs["sed_rest"],
             spectrum_inputs["wave_rest"],
             spectrum_inputs["wave_obs"],
             spectrum_inputs["z"],
             spectrum_inputs["dl_cm"],
-        )
-        flux_manual = apply_lsf(
-            flux_compute,
-            spectrum_inputs["wave_obs"],
-            resolution,
+            resolution=resolution,
             sigma_lib_kms=70.0,
-            n_bins=16,
         )
 
         flux_via_project = project_spectrum(
@@ -146,17 +145,13 @@ class TestProjectSpectrumDecomposition:
         resolution = 100.0
         sigma_v_kms = 200.0
 
-        flux_compute = compute_spectrum(
+        flux_manual = compute_spectrum_point_lsf(
             spectrum_inputs["sed_rest"],
             spectrum_inputs["wave_rest"],
             spectrum_inputs["wave_obs"],
             spectrum_inputs["z"],
             spectrum_inputs["dl_cm"],
-        )
-        flux_manual = apply_lsf(
-            flux_compute,
-            spectrum_inputs["wave_obs"],
-            resolution,
+            resolution=resolution,
             sigma_lib_kms=0.0,
             sigma_v_kms=sigma_v_kms,
         )

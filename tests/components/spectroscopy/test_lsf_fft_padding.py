@@ -847,18 +847,41 @@ def test_pad_pixels_override_is_taken_literally():
 
 
 def test_project_spectrum_threads_lsf_pad_pixels():
+    """The resolution-matrix branch pads its sigma_v convolution with ``lsf_pad_pixels``."""
+    from tengri.observation.banded import gaussian_resolution_bands
+
+    wave, spec = _log_grid_and_spectrum()
+    obs = jnp.asarray(wave)
+    rest = jnp.asarray(wave)
+    matrix = gaussian_resolution_bands(obs, 300.0)
+
+    def project(**kwargs):
+        return project_spectrum(
+            jnp.asarray(spec),
+            rest,
+            obs,
+            0.0,
+            1.0,
+            resolution_matrix=matrix,
+            sigma_v_kms=1000.0,
+            **kwargs,
+        )
+
+    default = np.asarray(project())
+    assert _rel_err(project(lsf_pad_pixels=wave.size - 1), default) <= 1e-12
+    assert _rel_err(project(lsf_pad_pixels=8), default) > 1e-5
+
+
+def test_point_mode_with_a_resolution_has_no_padding_to_thread():
+    """Point mode applies its kernel in closed form, so the pad and segment count are unused."""
     wave, spec = _log_grid_and_spectrum()
     obs = jnp.asarray(wave)
     rest = jnp.asarray(wave)
     default = project_spectrum(jnp.asarray(spec), rest, obs, 0.0, 1.0, resolution=300.0)
-    same = project_spectrum(
-        jnp.asarray(spec), rest, obs, 0.0, 1.0, resolution=300.0, lsf_pad_pixels=wave.size - 1
+    other = project_spectrum(
+        jnp.asarray(spec), rest, obs, 0.0, 1.0, resolution=300.0, lsf_pad_pixels=8, n_bins=3
     )
-    assert _rel_err(same, np.asarray(default)) <= 1e-12
-    narrow = project_spectrum(
-        jnp.asarray(spec), rest, obs, 0.0, 1.0, resolution=300.0, lsf_pad_pixels=8
-    )
-    assert _rel_err(narrow, np.asarray(default)) > 1e-5
+    np.testing.assert_array_equal(np.asarray(other), np.asarray(default))
 
 
 def test_near_duplicate_pixel_keeps_padding_and_result():

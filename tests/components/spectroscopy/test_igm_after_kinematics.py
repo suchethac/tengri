@@ -117,6 +117,19 @@ def _edge_steepness(wave_obs: np.ndarray, flux: np.ndarray, z: float) -> float:
     return float(np.max(np.abs(np.diff(flux[edge]))))
 
 
+def _away_from_model_ends(wave_rest: np.ndarray, *sigmas_kms: float) -> np.ndarray:
+    """Pixels at least six combined kernel widths inside both ends of the model grid.
+
+    The fixture's model grid ends where the observed window ends. Beyond its last node
+    the model is zero for the point path, as for point sampling, while the numpy reference
+    mirrors the spectrum there, so the two differ at the end pixels by construction
+    (measured: 0.11-0.20 of peak at the first or last pixel, 7e-5 to 5e-4 inside).
+    """
+    reach = 6.0 * float(np.sqrt(sum(s * s for s in sigmas_kms))) / _C_KMS
+    u = np.log(np.asarray(wave_rest))
+    return (u > u[0] + reach) & (u < u[-1] - reach)
+
+
 # ── (a) tengri's actual order vs. an independent numpy physical-order reference ──
 
 
@@ -184,7 +197,8 @@ def test_matches_physical_order_numpy_reference(igm_model, z, sigma_v, sigma_ins
     )
 
     peak = np.max(flux_physical)
-    max_diff = np.max(np.abs(flux_tengri - flux_physical))
+    inside = _away_from_model_ends(np.asarray(wave_rest), sigma_v, sigma_inst_kms)
+    max_diff = np.max(np.abs(flux_tengri - flux_physical)[inside])
     assert max_diff / peak < 1e-3, (igm_model, z, sigma_v, sigma_inst_kms, max_diff / peak)
 
     jump_tengri = _edge_steepness(np.asarray(wave_obs), flux_tengri, z)
@@ -583,14 +597,21 @@ def test_mutation_igm_before_kinematics_would_fail(tmp_path):
     src_path = Path("src/tengri/observation/observation.py")
     original_text = src_path.read_text()
 
-    # The rest-grid pass sits in the window-aware block (#2832): target that whole block,
-    # from the window computation through the IGM multiply, and fold the IGM in first.
+    # Target the whole dispersion block, through the IGM multiply, and fold the IGM in first.
     mutated_text = original_text.replace(
-        "        window = (\n"
-        "            None if window_z is None "
-        "else rest_grid_observed_window(wave_rest, wave_obs, window_z)\n"
-        "        )\n"
-        "        if window is None:\n"
+        "        if not conserving and resolution_matrix is None:\n"
+        "            # Point mode: the dispersion is read at the model nodes in closed form, "
+        "so it\n"
+        "            # does not depend on how the model grid is segmented (#3451).\n"
+        "            sed_stellar_v = broaden_velocity_at_nodes(\n"
+        "                sed_stellar_rest,\n"
+        "                wave_rest,\n"
+        "                sigma_v_kms,\n"
+        "                window=window,\n"
+        "                has_lyc_edge=has_lyc_edge,\n"
+        "                kernel_sigma_bound_kms=kernel_sigma_bound_kms,\n"
+        "            )\n"
+        "        elif window is None:\n"
         "            sed_stellar_v = broaden_velocity_only("
         "sed_stellar_rest, wave_rest, sigma_v_kms, n_bins)\n"
         "        else:\n"
@@ -599,8 +620,8 @@ def test_mutation_igm_before_kinematics_would_fail(tmp_path):
         "            )\n"
         "        sed_stellar = sed_stellar_v * igm_trans\n"
         "        sed_instrument_only = sed_instrument_only_rest * igm_trans\n",
-        "        sed_stellar = broaden_velocity_only(\n"
-        "            sed_stellar_rest * igm_trans, wave_rest, sigma_v_kms, n_bins\n"
+        "        sed_stellar = broaden_velocity_at_nodes(\n"
+        "            sed_stellar_rest * igm_trans, wave_rest, sigma_v_kms\n"
         "        )\n"
         "        sed_instrument_only = sed_instrument_only_rest * igm_trans\n",
         1,
@@ -646,7 +667,8 @@ def test_mutation_igm_before_kinematics_would_fail(tmp_path):
         )
     )
     peak = np.max(flux_physical)
-    max_diff = np.max(np.abs(flux_mutated - flux_physical))
+    inside = _away_from_model_ends(np.asarray(wave_rest), sigma_v, sigma_inst_kms)
+    max_diff = np.max(np.abs(flux_mutated - flux_physical)[inside])
     jump_tengri = _edge_steepness(np.asarray(wave_obs), flux_mutated, z)
     jump_physical = _edge_steepness(np.asarray(wave_obs), flux_physical, z)
 
