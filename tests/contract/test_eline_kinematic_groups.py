@@ -530,9 +530,11 @@ def test_added_component_needs_the_flat_amplitude_prior():
         )
 
 
-def test_batched_path_refuses_kinematic_groups(synthetic_ssp_module):
-    from tengri.forward.batched_spectrum import check_template_model
+def test_batched_path_accepts_kinematic_groups(synthetic_ssp_module):
+    """The batched path serves kinematic groups; parity is in test_batched_elines.py."""
+    from tengri.forward.batched_spectrum import batched_line_set, check_template_model
 
     model = _model(synthetic_ssp_module, redshift=Uniform(0.0, 0.5))
-    with pytest.raises(ValueError, match="kinematic groups"):
-        check_template_model(model)
+    check_template_model(model)
+    catalog = batched_line_set(model).catalog
+    assert catalog.kinematic_groups != ("",)

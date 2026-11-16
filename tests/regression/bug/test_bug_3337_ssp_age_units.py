@@ -54,9 +54,14 @@ def test_age_axis_in_log_yr_is_refused():
 
 
 def test_shipped_default_grid_is_accepted():
-    """The default SSP grid is in log10(Gyr) with a youngest age near 0.3 Myr."""
+    """The default SSP grid is in log10(Gyr) with a youngest age near 0.3 Myr.
+
+    Re-pinned 2026-11-15: default SSP is the MIST c3k_hr wNE grid (#3465), whose
+    oldest age is 20 Gyr (log10 = 1.3). The bound only has to exclude log10(yr) axes,
+    which start near 6.
+    """
     ssp = load_ssp()
-    assert float(np.max(np.asarray(ssp.ssp_lg_age_gyr))) < 1.2
+    assert float(np.max(np.asarray(ssp.ssp_lg_age_gyr))) < 1.5
     model = _model(ssp)
     assert model is not None
 

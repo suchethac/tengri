@@ -103,49 +103,50 @@ def test_forward_predict_under_jit_with_dust_ir(emission_label):
 
 
 # ---------------------------------------------------------------------------
-# B5: tengri.data fetch helpers exist and surface the catalog URL
+# B5: tengri.data lists the catalog; one download_ssp and one catalog URL
 # ---------------------------------------------------------------------------
 
 
-def test_tengri_data_module_exposes_helpers():
-    """``tengri.data`` must expose ``download_ssp`` / ``list_remote_ssps`` /
-    ``SSP_CATALOG_URL`` / ``local_ssp_path``."""
+def test_tengri_data_module_exposes_one_listing_helper():
+    """``tengri.data`` lists the catalog and nothing else: the download and the
+    catalog URL have one implementation each, in ``tengri._data_setup``."""
     from tengri import data
 
-    for name in ("SSP_CATALOG_URL", "download_ssp", "list_remote_ssps", "local_ssp_path"):
-        assert hasattr(data, name), f"tengri.data missing {name}"
+    assert hasattr(data, "list_remote_ssps"), "tengri.data missing list_remote_ssps"
+    for name in ("download_ssp", "SSP_CATALOG_URL", "local_ssp_path"):
+        assert not hasattr(data, name), f"tengri.data still exposes {name}"
 
 
 def test_ssp_catalog_url_looks_sane():
     """The catalog URL must be the canonical https hostname and end in
     a directory path. Guards against typos in future edits."""
-    from tengri.data import SSP_CATALOG_URL
+    from tengri._data_setup import SSP_BASE_URL
 
-    assert SSP_CATALOG_URL.startswith("https://")
-    assert SSP_CATALOG_URL.endswith("/")
-    assert "halos.as.arizona.edu" in SSP_CATALOG_URL
+    assert SSP_BASE_URL.startswith("https://")
+    assert SSP_BASE_URL.endswith("/")
+    assert "halos.as.arizona.edu" in SSP_BASE_URL
 
 
 def test_download_ssp_rejects_path_traversal(tmp_path):
     """``download_ssp`` must reject names with separators so it cannot
     accidentally write outside the destination directory."""
-    from tengri.data import download_ssp
+    from tengri import download_ssp
 
     for bad in ("../escape.h5", "subdir/file.h5", ".hidden.h5", "a\\b.h5"):
         with pytest.raises(ValueError, match="must be a bare filename"):
-            download_ssp(bad, dest_dir=tmp_path)
+            download_ssp(bad, dest=tmp_path)
 
 
 def test_download_ssp_returns_existing_file_without_network(tmp_path):
-    """If the target file already exists and ``overwrite=False``, the
+    """If the target file already exists and ``force=False``, the
     function must return its path without making a network request."""
-    from tengri.data import download_ssp
+    from tengri import download_ssp
 
     name = "already_here.h5"
     target = tmp_path / name
     target.write_bytes(b"fake")
     # No network access at all — would raise URLError if it tried.
-    path = download_ssp(name, dest_dir=tmp_path, overwrite=False, progress=False)
+    path = download_ssp(name, dest=tmp_path, force=False, progress=False)
     assert path == target.resolve()
     assert path.read_bytes() == b"fake"
 

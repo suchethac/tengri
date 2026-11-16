@@ -21,10 +21,11 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 import numpy as np
-from jax.scipy.special import ndtr
 
 from tengri.components.lyc import LYMAN_LIMIT_AA, edge_interp, ionizing_mask
 from tengri.units import lnu_to_fnu
+from tengri.utils.gaussian_segments import gaussian_exp_moments
+from tengri.utils.physics_constants import C_KM_S as _C_KM_S, GAUSSIAN_FWHM_PER_SIGMA
 
 # ── SSP library spectral resolutions (velocity dispersion in km/s) ──
 # Flat fallback used only when the loaded SSP grid has no per-wavelength
@@ -71,8 +72,7 @@ def first_invalid_wavelength(
 
 
 # ── Speed of light ────────────────────────────────────────────────
-_C_KM_S = 299792.458  # km/s
-_FWHM_TO_SIGMA = 2.354820045030949  # 2*sqrt(2*ln(2))
+_FWHM_TO_SIGMA = GAUSSIAN_FWHM_PER_SIGMA
 
 
 # ── Instrument resolution profiles ────────────────────────────────
@@ -1241,30 +1241,6 @@ def _point_samples(sed_rest, wave_rest, lam_c, edge_aa):
 _POINT_REACH_LN = 6.0 * _LSF_MAX_SIGMA_KMS / _C_KM_S
 
 
-def _ndtr_diff(upper, lower):
-    """``Phi(upper) - Phi(lower)`` for ``upper >= lower``, taken in the tail that keeps it exact.
-
-    The mirrored form ``Phi(-lower) - Phi(-upper)`` is used when the midpoint is positive, so
-    the difference never cancels two values near one.
-    """
-    direct = ndtr(upper) - ndtr(lower)
-    mirrored = ndtr(-lower) - ndtr(-upper)
-    return jnp.where(upper + lower > 0.0, mirrored, direct)
-
-
-def _kernel_moments(s_lo, s_hi, sigma):
-    r"""Moments :math:`M_1, M_2` of :math:`e^{ks}` over ``[s_lo, s_hi]`` (#3512).
-
-    With :math:`s = \ln\lambda - \mu` and a unit Gaussian of width ``sigma`` centered at zero,
-    :math:`M_k = \int e^{ks}\,\mathcal{N}(s;0,\sigma)\,ds
-    = e^{k^2\sigma^2/2}\,[\Phi((s_1-k\sigma^2)/\sigma)-\Phi((s_0-k\sigma^2)/\sigma)]`.
-    """
-    s2 = sigma * sigma
-    m1 = jnp.exp(0.5 * s2) * _ndtr_diff((s_hi - s2) / sigma, (s_lo - s2) / sigma)
-    m2 = jnp.exp(2.0 * s2) * _ndtr_diff((s_hi - 2.0 * s2) / sigma, (s_lo - 2.0 * s2) / sigma)
-    return m1, m2
-
-
 def _log_offset(w, wq):
     """``ln(w / wq)`` as ``log1p((w - wq) / wq)``, with the difference formed directly (#3512).
 
@@ -1331,7 +1307,7 @@ def point_readout_gaussian_ln(
     :math:`\mathcal{B}` is a unit Gaussian in :math:`\ell = \ln\lambda` of width ``sigma_ln``
     and :math:`F` the piecewise-linear interpolant of ``sed_rest`` on ``wave_rest``. On a
     segment :math:`F = p + q\lambda`, so :math:`\lambda F = p e^{\ell} + q e^{2\ell}` and the
-    segment integral is exact (:func:`_kernel_moments`):
+    segment integral is exact (:func:`~tengri.utils.gaussian_segments.gaussian_exp_moments`):
 
     .. math::
 
@@ -1378,7 +1354,7 @@ def point_readout_gaussian_ln(
     valid = idx < n_cells
     idx = jnp.minimum(idx, n_cells - 1)
     wq_col, sig_col = wq[:, None], sig[:, None]
-    m1, m2 = _kernel_moments(
+    m1, m2 = gaussian_exp_moments(
         _log_offset(w_lo[idx], wq_col), _log_offset(w_hi[idx], wq_col), sig_col
     )
     # e^s F with F = y_a + q (lambda - w_a) and lambda = wq e^s: y_a M1 + q (wq M2 - w_a M1).
@@ -1386,7 +1362,7 @@ def point_readout_gaussian_ln(
     total = jnp.sum(jnp.where(valid, terms, 0.0), axis=1)
     if step is not None:
         edge, upper, y_b = step
-        m1_step, _ = _kernel_moments(_log_offset(edge, wq), _log_offset(upper, wq), sig)
+        m1_step, _ = gaussian_exp_moments(_log_offset(edge, wq), _log_offset(upper, wq), sig)
         total = total + y_b * m1_step
     return total
 

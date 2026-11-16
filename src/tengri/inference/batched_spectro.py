@@ -87,6 +87,8 @@ from tengri.cosmology import luminosity_distance
 from tengri.forward.batched_spectrum import (
     batched_eline_design,
     batched_line_set,
+    batched_template,
+    batched_template_for_batches,
     check_template_model,
     predict_batched_observables,
     require_model_spec,
@@ -509,6 +511,7 @@ def batched_log_likelihood(
     the marginal over the line amplitudes, and over the calibration polynomial too when
     ``calibration_marginalize=True``, with the normalization constant dropped.
     """
+    model = batched_template(model, spec)
     threaded_default = _prepare_template(model) if threaded is None else threaded
     require_model_spec(model, spec)
     spectroscopy = model.observation.spectroscopy
@@ -646,6 +649,7 @@ def batched_neg_log_posterior(
     ``_unstandardize_parameters`` (``tengri.inference.loss_functions``), and only
     the free names are passed on, so fixed values never reach the forward pass.
     """
+    model = batched_template(model, spec)
     threaded_default = _prepare_template(model) if threaded is None else threaded
     loglik = batched_log_likelihood(
         model,
@@ -1006,6 +1010,7 @@ def fit_spectra_map_vmap(
     Results are returned in the catalog order by permuting with the concatenated
     bucket index arrays.
     """
+    model = batched_template_for_batches(model, batches)
     threaded = _prepare_template(model)
     if calibration_marginalize:
         _refuse_calibration_order(model)
@@ -1356,6 +1361,7 @@ def fit_spectra_catalog_mcmc(
     space of :func:`batched_neg_log_posterior`, whose prior is iid N(0, 1), and the
     draws are unstandardized to physical values only on return.
     """
+    model = batched_template_for_batches(model, batches)
     threaded = _prepare_template(model)
     if init not in ("map", "prior"):
         raise ValueError(f"init must be 'map' or 'prior', got {init!r}")

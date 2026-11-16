@@ -257,7 +257,12 @@ from collections.abc import Sequence
 #: only keeps the sigmoid width finite. Its sibling, ``dsps_wrapper._native_joint``'s
 #: normalization, was added with a clamp and converted in the same PR to the NaN-propagating
 #: form (the joint is normalized to 1, so a vanishing sum is an upstream bug), netting zero.
-EXPECTED_SITES = 74
+#: 74 -> 75 (#3541, native-slope tables): ``utils/grid_interp.subband_quadrature`` also returns
+#: the sub-band numerator ``int lambda L T w``, normalized by the same clamped filter mass as
+#: ``phi`` (``np.maximum(denom, representable_denominator(1e-30))``). Same kind as the existing
+#: ``phi`` site: ``denom`` is the filter's own integrated transmission, a scale floor that is zero
+#: only for an empty filter. Both divisions are written inline so this inventory sees them.
+EXPECTED_SITES = 75
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 

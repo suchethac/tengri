@@ -817,14 +817,11 @@ def _build_eline_G_eff(params, fixed_values, model, eline_wavelengths, constrain
     )
 
     z = params.get("redshift", fixed_values.get("redshift", 0.0))
-    spec_cfg = getattr(getattr(model, "observation", None), "spectroscopy", None)
-    catalog = getattr(spec_cfg, "effective_catalog", None)
-    if catalog is not None and catalog.kinematic_groups != ("",):
-        # Named kinematic groups: each line reads its group's width and offset.
-        sigma_kms, delta_v = line_kinematics(params, fixed_values, catalog)
-    else:
-        sigma_kms = params.get("eline_sigma_kms", 0.0)
-        delta_v = params.get("eline_delta_v_kms", 0.0)
+    # Every line reads its kinematic group's width and offset (the default group's
+    # ``eline_sigma_kms`` / ``eline_delta_v_kms`` when no group is named), sampled or
+    # Fixed, through the one lookup the batched path also uses.
+    catalog = model.observation.spectroscopy.effective_catalog
+    sigma_kms, delta_v = line_kinematics(params, fixed_values, catalog)
     resolution = _eline_line_resolution(model, eline_wavelengths, z)
     G = build_eline_design_matrix(
         model.wave_obs,

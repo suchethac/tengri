@@ -74,7 +74,7 @@ def observation():
     return tengri.Observation(photometry=tengri.Photometry.from_names(BANDS))
 
 
-def _bare_stellar(ssp, observation, approx, z=PROBE_Z):
+def _bare_stellar(ssp, observation, approx, z=PROBE_Z, igm=None):
     """One model, identical in every respect but the approximation path.
 
     Deliberately no dust and no nebular group: this arm must isolate the IGM.
@@ -93,7 +93,7 @@ def _bare_stellar(ssp, observation, approx, z=PROBE_Z):
             "met_logzsol": Fixed(0.0),
         },
         redshift=Fixed(z),
-        igm={"type": "inoue"},
+        igm={"type": "inoue"} if igm is None else igm,
         approx=approx,
     )
 

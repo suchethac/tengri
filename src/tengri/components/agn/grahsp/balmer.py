@@ -20,21 +20,20 @@ References
 
 from __future__ import annotations
 
-import math
-
 import jax.numpy as jnp
 from jax import Array
 from jax.scipy import special as jsp_special
 
+from tengri.utils.physics_constants import C_KM_S, GAUSSIAN_FWHM_PER_SIGMA
+
 __all__ = ["balmer_continuum"]
 
 # Physical constants
-_C_MS = 299792458.0  # speed of light, m/s
 _H_C_PER_K_B_NM_K = 1.439e7  # h*c/k_B in nm*K (Planck constant)
 _BALMER_EDGE_NM = 364.6  # Balmer edge in nm
 _BC_TEMPERATURE_K = 15000.0  # Black-body temperature in K
 _BC_TAU = 1.0  # Optical depth (dimensionless)
-_FWHM_PER_SIGMA = 2.0 * math.sqrt(2.0 * math.log(2.0))  # FWHM = 2 sqrt(2 ln 2) sigma
+_FWHM_PER_SIGMA = GAUSSIAN_FWHM_PER_SIGMA
 _BC_CONVOLUTION_THRESHOLD_NM = 250.0  # Below this, use non-convolved truncation
 
 
@@ -140,7 +139,7 @@ def balmer_continuum(
     # to truncation, then integrate with Gaussian).
     # Constants from upstream: alpha=1.8, beta=-0.8 (linear approx coefficients).
     # linewidth_kms is a FWHM; the Gaussian standard deviation in x = lambda / lambda_edge.
-    sigma_dimensionless = (linewidth_kms * 1000.0) / _C_MS / _FWHM_PER_SIGMA
+    sigma_dimensionless = linewidth_kms / C_KM_S / _FWHM_PER_SIGMA
     z = (x - 1.0) / (jnp.sqrt(2.0) * sigma_dimensionless)
 
     # Gaussian CDF term.
