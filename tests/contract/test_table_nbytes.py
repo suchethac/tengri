@@ -28,6 +28,8 @@ from tengri.components.stellar.sps.precompute import (
 )
 from tengri.utils.filter_convention import FilterConvention
 
+pytestmark = pytest.mark.contract
+
 #: Luminosity distance [cm] and redshift the photometric and spectroscopic builds use.
 DL_CM = 1.0e26
 REDSHIFT = 0.1

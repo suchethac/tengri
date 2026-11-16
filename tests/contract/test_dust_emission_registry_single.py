@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Contract: ``DUST_EMISSION_MODELS`` is defined in exactly one module.
 
 Two definitions of the registry dict were a defect (owner rule: two ways to do
