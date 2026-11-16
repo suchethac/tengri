@@ -13,13 +13,14 @@ reproduction/
 ├── agnfitter/                  # Martínez-Ramírez et al. 2024, A&A 688, A46
 ├── grahsp/                     # Buchner et al. 2024, A&A 692, A161
 ├── prospect_r/                 # Robotham et al. 2020, MNRAS 495, 905
+├── beagle/                     # Chevallard & Charlot 2016, MNRAS 462, 1415
 └── synthesizer/                # Lovell et al. 2025 (OJA) + Roper et al. 2026 (JOSS) — cite both
 ```
 
 Each comparison ships a notebook (`01_<code>.py`, jupytext percent
 format), thin code-specific driver modules under `_drivers/`, and the
-rendered figures. All seven folders are complete; the Synthesizer
-notebook is kept out of the published docs for now. AGNFITTER-RX is the AGN-first member of the series — a
+rendered figures. All eight folders are complete; the Synthesizer
+notebook is kept out of the published index for now. AGNFITTER-RX is the AGN-first member of the series — a
 radio-to-X-ray deep dive on the four accretion-disk and four torus
 libraries — and reads the external code's template libraries directly
 rather than running its fitter. The Synthesizer notebook focuses on the

@@ -66,10 +66,6 @@ _LAZY_DECL_SOURCES: dict[str, tuple[str, str]] = {
     "_CB19_PARAMS": ("tengri.components.nebular._params", "CB19_PARAMS"),
     "_GUTKIN16_PARAMS": ("tengri.components.nebular._params", "GUTKIN16_PARAMS"),
     "_ELINE_PARAMS": ("tengri.components.nebular._params", "ELINE_PARAMS"),
-    "_ELINE_BROAD_PARAMS": (
-        "tengri.components.nebular._params",
-        "ELINE_BROAD_PARAMS",
-    ),
     "_CUE_IONSPEC_PARAMS": (
         "tengri.components.nebular._params",
         "CUE_IONSPEC_PARAMS",
@@ -186,7 +182,7 @@ SETTINGS_KEYS = frozenset(
         "lgmet_scatter",
         # Emission line fitting mode
         "eline_mode",  # "off", "fixed", "marginalized", "fitted"
-        "eline_broad",  # bool: enable broad AGN emission line component
+        "eline_groups",  # tuple of named kinematic groups (width + offset each)
     }
 )
 
@@ -215,7 +211,7 @@ def _build_param_registry(
     chem_evol=False,
     met_mode="delta",
     eline_mode="off",
-    eline_broad=False,
+    eline_groups=(),
 ):
     """Build the parameter registry for a given model configuration.
 
@@ -431,10 +427,13 @@ def _build_param_registry(
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
-    if eline_broad:
-        eline_broad_bucket = _resolve_lazy_bucket("_ELINE_BROAD_PARAMS")
-        for pname, (desc, check, err, default) in eline_broad_bucket.items():
-            registry[pname] = (desc, check, err)
-            defaults[pname] = default
+    if eline_mode in ("marginalized", "fitted"):
+        from tengri.components.nebular._params import eline_group_params
+
+        for group in eline_groups:
+            group_bucket = _bucket_from_declarations(eline_group_params(group))
+            for pname, (desc, check, err, default) in group_bucket.items():
+                registry[pname] = (desc, check, err)
+                defaults[pname] = default
 
     return registry, defaults
