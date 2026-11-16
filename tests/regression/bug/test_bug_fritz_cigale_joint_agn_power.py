@@ -50,7 +50,7 @@ def _pieces_over_budget(case, *, agn_norm="cigale_joint", ir_frac=0.3):
     tau, oa_full, psi = case
     templates = collect_block_templates(
         {k[len("agn_") : -len("_block")]: v for k, v in _SELECTORS.items()}
-    )
+    ).templates
     params = {
         "agn_norm": agn_norm,
         "agn_cos_inc": float(np.sin(np.radians(psi))),

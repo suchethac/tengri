@@ -1573,8 +1573,25 @@ def _emission_band_response(ctx):
         }
 
     if response is None:
-        return Decline(None)
+        return Decline(
+            _dust_gate_decline_reason(
+                emitter, ctx.wave_precomp, free_dust - ctx.atten_free_ok, fw_pad, ft_pad
+            )
+        )
     return BandTable(response)
+
+
+def _dust_gate_decline_reason(emitter, wave_precomp, shape_free, fw_pad, ft_pad) -> str:
+    """Name the first failed condition of the dust band-response gate."""
+    if emitter is None:
+        return "no dust emission component configured"
+    if not wave_precomp:
+        return "approx=WavePrecomp() not enabled"
+    if shape_free:
+        return f"free dust shape parameters: {sorted(shape_free)}"
+    if fw_pad is None or ft_pad is None:
+        return "the padded filter curves are absent, so no band response can be built"
+    return "the dust emitter lacks predict/slice_params, so it cannot be probed"
 
 
 def _emission_shape_table(ctx):

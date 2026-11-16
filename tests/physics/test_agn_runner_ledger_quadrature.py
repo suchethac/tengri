@@ -28,7 +28,7 @@ _W = jnp.asarray(np.geomspace(912.0, 1.0e8, 300))
 
 
 def test_skirtor_torus_power_on_library_nodes_equals_the_dense_integral():
-    tmpl = collect_block_templates({"torus": "skirtor"})["torus/skirtor"]
+    tmpl = collect_block_templates({"torus": "skirtor"}).templates["torus/skirtor"]
     axis = jnp.asarray(tmpl.torus.wave_grid)
     torus = resolve_agn_block("torus", "skirtor")
     kw = dict(agn_log_lbol=11.0, l5100_disc=1e43, templates=tmpl)
@@ -76,7 +76,7 @@ def _compose(**kw):
 
 def test_no_line_block_leaves_the_disc_at_one_minus_the_torus_fraction():
     """With every line stage off the debit is zero: the disc is exactly ``(1 - f)`` of itself."""
-    ts = collect_block_templates({"torus": "skirtor"})
+    ts = collect_block_templates({"torus": "skirtor"}).templates
     debited = np.asarray(_compose(agn_torus_block="skirtor", template_state=ts)["disc"])
     full = np.asarray(
         _compose(agn_torus_block="skirtor", agn_norm="independent", template_state=ts)["disc"]
@@ -97,7 +97,7 @@ def test_concrete_zero_fe2_strength_equals_a_traced_zero():
 
 def test_traced_polar_reference_selection_matches_the_concrete_one():
     """``lax.cond`` on a traced ``agn_ir_frac`` returns what the Python branch returns."""
-    ts = collect_block_templates({"disc": "powerlaw", "torus": "skirtor"})
+    ts = collect_block_templates({"disc": "powerlaw", "torus": "skirtor"}).templates
 
     def total(frac):
         comps = _compose(

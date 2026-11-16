@@ -83,6 +83,7 @@ from tengri.config.exceptions import (
     FilterCoverageWarning,
     ParameterError,
     ParameterMapError,
+    PrecomputeRefusal,
     warn_measured,
 )
 from tengri.config.settings import CUE_FULL_CATALOG_DEFAULT
@@ -2614,7 +2615,9 @@ def _exact_fold_blocker(igm_comp, stellar_state):
     return None
 
 
-def _resolve_igm_fold(igm_fold, igm_comp, stellar_state, ssp_data=None, bands=None) -> str:
+def _resolve_igm_fold(
+    igm_fold, igm_comp, stellar_state, ssp_data=None, bands=None, on_decline=None
+) -> str:
     """Resolve ``"auto"`` to the fold that can actually be built here.
 
     ``"exact"`` cannot be the default: it raises for a transmission carrying
@@ -2639,6 +2642,8 @@ def _resolve_igm_fold(igm_fold, igm_comp, stellar_state, ssp_data=None, bands=No
         without it.
     bands : BandSpec, optional
         The observation's band spec, on the same footing as ``ssp_data``.
+    on_decline : callable, optional
+        Called with the reason whenever ``"auto"`` falls back to ``"node"``.
 
     Returns
     -------
@@ -2658,9 +2663,19 @@ def _resolve_igm_fold(igm_fold, igm_comp, stellar_state, ssp_data=None, bands=No
         return igm_fold
 
     if ssp_data is None or bands is None or bands.n_filters == 0:
+        if on_decline is not None:
+            on_decline(
+                "auto fell back to the node fold: the exact fold needs the SSP "
+                "templates and the filter curves at build time, and one was not passed"
+            )
         return "node"
 
-    return "node" if _exact_fold_blocker(igm_comp, stellar_state) is not None else "exact"
+    blocker = _exact_fold_blocker(igm_comp, stellar_state)
+    if blocker is not None:
+        if on_decline is not None:
+            on_decline(f"auto fell back to the node fold: {blocker}")
+        return "node"
+    return "exact"
 
 
 def _fold_igm_into_subbands(
@@ -2670,6 +2685,8 @@ def _fold_igm_into_subbands(
     ssp_data=None,
     bands=None,
     redshift_spec=None,
+    *,
+    on_decline=None,
 ):
     r"""Fold the IGM transmission into the stellar sub-band quadrature weights.
 
@@ -2708,6 +2725,9 @@ def _fold_igm_into_subbands(
         The spec the tensors were built with, required for "exact" fold.
     redshift_spec : dict, optional
         Redshift specification, required for "exact" fold.
+    on_decline : callable, optional
+        Called with the reason at every point the fold is not built at build
+        time. The caller records it on the model (``record_decline``).
 
     Returns
     -------
@@ -2726,10 +2746,15 @@ def _fold_igm_into_subbands(
     """
     from dataclasses import replace as _replace
 
+    note = on_decline if on_decline is not None else (lambda reason: None)
+
     if stellar_state is None:
+        note("there is no stellar state to fold the IGM transmission into")
         return stellar_state
 
-    igm_fold = _resolve_igm_fold(igm_fold, igm_comp, stellar_state, ssp_data, bands)
+    igm_fold = _resolve_igm_fold(
+        igm_fold, igm_comp, stellar_state, ssp_data, bands, on_decline=note
+    )
 
     # Dispatch to node or exact fold
     if igm_fold == "exact":
@@ -2737,15 +2762,25 @@ def _fold_igm_into_subbands(
             igm_comp, stellar_state, ssp_data, bands, redshift_spec
         )
         built = result is not stellar_state
+        if not built:
+            note(
+                "the exact fold built no table: it needs SSP templates, filter "
+                "curves and a sub-band photometry tensor, and one of these is absent"
+            )
         return _replace(result, igm_fold_resolved=igm_fold if built else None)
 
     # Default: node fold (fast, exact for smooth transmission)
+    patchy_reason = (
+        "patchy reionization or a DLA makes the transmission a free function, so no "
+        "mean-IGM sub-band table is folded at build time; the node fold runs live per call"
+    )
     lut = getattr(stellar_state, "ssp_phot_lut", None)
     if lut is not None and lut.ssp_subband_phot is not None:
         trans = igm_comp.subband_node_transmission(lut.ssp_subband_waves_rest, [lut.redshift])
         if trans is None:
             # Patchy / DLA: nothing to fold at build time; the node fold runs
             # live on the sub-band nodes at every call (#1149).
+            note(patchy_reason)
             return _replace(stellar_state, igm_fold_resolved=igm_fold)
         # The node is flux-free, so the folded table is linear in F and its native-slope
         # sibling is the same product on S (#3541): read by Hermite like the exact fold.
@@ -2768,6 +2803,7 @@ def _fold_igm_into_subbands(
         if trans is None:
             # Patchy / DLA: nothing to fold at build time; the node fold runs
             # live on the sub-band nodes at every call (#1149).
+            note(patchy_reason)
             return _replace(stellar_state, igm_fold_resolved=igm_fold)
         new_ztable = ztable._replace(
             ssp_subband_phot_igm_table=ztable.ssp_subband_phot_table * trans
@@ -2784,6 +2820,7 @@ def _fold_igm_into_subbands(
             igm_fold_resolved=igm_fold,
         )
 
+    note("the stellar state has no sub-band photometry LUT or z-table to fold into")
     return _replace(stellar_state, igm_fold_resolved=None)
 
 
@@ -3386,7 +3423,7 @@ class SEDModel:
         """
         spectro = getattr(observation, "spectroscopy", None)
         if spectro is not None and not spectro.nebular_lines:
-            raise ValueError(
+            raise PrecomputeRefusal(
                 "approx=SpectrumPrecomp() cannot drop the nebular lines from the spectrum: "
                 "the per-pixel lookup table carries the nebular family whole. Use the exact "
                 "path (approx=None) with Spectroscopy(nebular_lines=False)."
@@ -3418,7 +3455,7 @@ class SEDModel:
                     stacklevel=3,
                 )
             if self._spectrum_lut_needs_pixel_integral(observation):
-                raise ValueError(
+                raise PrecomputeRefusal(
                     f"approx=SpectrumPrecomp() samples the model at the pixel "
                     f"centers, but resample="
                     f"{observation.spectroscopy.resample!r} resolves to the "
@@ -3636,7 +3673,7 @@ class SEDModel:
             # attenuation never branches on filter_eff/spec_eff presence, so
             # the dense SED is always computed the same way either way.
             if (wave_cfgs or spec_cfgs) and getattr(spec, "dust_model", None) == "age_binned":
-                raise NotImplementedError(
+                raise PrecomputeRefusal(
                     "dust_attenuation={'type': 'age_binned'} has no WavePrecomp/"
                     "SpectrumPrecomp LUT support (#2528): the per-screen age-window "
                     "weights are not published to the precompute path. Use the "
@@ -4073,7 +4110,7 @@ class SEDModel:
             elif cue_like:
                 lines = []
             else:
-                raise ValueError(
+                raise PrecomputeRefusal(
                     "approx=FeaturePrecomp() has no emission lines to tabulate: the "
                     "Observation carries no line_fluxes and FeaturePrecomp(lines=...) "
                     "was not given. Either fit lines, Observation(..., "
@@ -4086,7 +4123,7 @@ class SEDModel:
             return
 
         if self._has_line_catalog():
-            raise ValueError(
+            raise PrecomputeRefusal(
                 f"approx=FeaturePrecomp() does not support the "
                 f"{type(backend).__name__} nebular backend: it publishes a discrete "
                 "line catalog but is not linear in Q_H, so neither the per-Q_H grid "
@@ -9058,7 +9095,7 @@ class SEDModel:
         if self._nebular_backend is None or not hasattr(
             self._nebular_backend, "predict_nebular_line_luminosities"
         ):
-            raise ValueError(
+            raise PrecomputeRefusal(
                 "enable_fast_nebular requires a Q_H-linear nebular backend with "
                 "line prediction (Cue). The configured backend is "
                 f"{type(self._nebular_backend).__name__ if self._nebular_backend else 'none'}."
@@ -9443,7 +9480,7 @@ class SEDModel:
         )
 
     @staticmethod
-    def _free_agb_dust_lut_error(table: str) -> ValueError:
+    def _free_agb_dust_lut_error(table: str) -> PrecomputeRefusal:
         """The refusal for a precompute table built from the SSP cube (#2534).
 
         Parameters
@@ -9453,10 +9490,10 @@ class SEDModel:
 
         Returns
         -------
-        ValueError
+        PrecomputeRefusal
             Naming the exact path and the Fixed-weight alternative.
         """
-        return ValueError(
+        return PrecomputeRefusal(
             f"A free agb_dust_weight (agb_dust={{'type': 'fsps_shell', 'weight': "
             f"Uniform(...)}}) cannot be represented in a {table} table: the SSP cube it "
             "corrects is parameter-dependent, but the table is built once, before any "
@@ -11968,11 +12005,15 @@ class SEDModel:
             # replaces a gate on ``config.model == "skirtor"``, which published
             # nothing for ``composable`` (the build-grammar default) and so let
             # every torus library bake into the graph (#1383).
-            blocks = component._state.block_templates if component._state is not None else None
-            if blocks is None:
-                blocks = collect_block_templates(component.block_recipe()) or None
-            if blocks:
-                agn_templates["blocks"] = blocks
+            loaded = component._state.block_templates if component._state is not None else None
+            if loaded is None:
+                loaded = collect_block_templates(component.block_recipe())
+            # A loader whose data file is missing or unreadable is recorded here, not skipped:
+            # the block then falls back to its on-disk load (#3505 X1).
+            for what, reason in loaded.declines:
+                self.record_decline("agn", what, reason)
+            if loaded.templates:
+                agn_templates["blocks"] = loaded.templates
 
             band_table = arrays_of(self._band_table("agn", "band_table"))
             if band_table is not None:
@@ -12478,6 +12519,19 @@ class SEDModel:
         # tabulated on it (:meth:`_nebular_grid_will_serve_dust`). Built only then,
         # so a model without the grid keeps its exact absorbed integral.
         needs_l_ir = needs_l_ir or self._nebular_grid_will_serve_dust(chain)
+        # The verdict is recorded where it is made (#3505 X1); the engagement report reads it.
+        if dust is None:
+            decline = "no dust attenuation component in the chain"
+        elif not needs_l_ir:
+            decline = "no consumer of L_ir (dust emission, radio) and no nebular grid dust channel"
+        elif not self._approx.get("wave_precomp"):
+            decline = "approx=WavePrecomp() not enabled"
+        elif unsafe_free:
+            decline = f"free dust parameters outside allowlist: {sorted(unsafe_free)}"
+        elif self.ssp_data is None:
+            decline = "ssp_data is None"
+        else:
+            decline = None
         if (
             needs_l_ir
             and dust is not None
@@ -12680,6 +12734,10 @@ class SEDModel:
                     lyc_escape_geometry=dust.config.lyc_escape_geometry,
                 )
 
+        if lut is None and decline is None:
+            decline = "the energy-balance LUT builder produced no table for this configuration"
+        if lut is None:
+            self.record_decline("energy_balance", "lut", decline)
         self._energy_balance_lut_cache = lut
         return lut
 
@@ -12790,6 +12848,32 @@ class SEDModel:
                 slot,
                 entry.reason,
             )
+        return entry
+
+    def record_decline(self, name: str, slot: str, reason: str) -> Decline:
+        """Record the refusal of a table gate in the one memo, and return the record.
+
+        The band-table providers return a :class:`Decline` that :meth:`_band_table` stores.
+        A gate that is not a provider (the energy-balance LUT, the ``FeaturePrecomp`` top-up
+        of ``approx='auto'``) records its refusal through here, so every outcome is one
+        ``Decline`` in ``_band_tables[name][slot]`` and the engagement report only reads it.
+
+        Parameters
+        ----------
+        name : str
+            Gate or component name, for example ``"energy_balance"`` or ``"approx"``.
+        slot : str
+            The gate's slot, for example ``"lut"`` or ``"feature_precomp"``.
+        reason : str
+            Why the table is not applicable; required.
+
+        Returns
+        -------
+        Decline
+            The stored record.
+        """
+        entry = Decline(reason)
+        self._band_tables.setdefault(name, {})[slot] = entry
         return entry
 
     def band_table(self, name: str, slot: str) -> BandTable | None:
@@ -13500,6 +13584,9 @@ class SEDModel:
                                 ssp_data=chain[0].ssp_data,
                                 bands=bands,
                                 redshift_spec=redshift_spec,
+                                on_decline=lambda reason: self.record_decline(
+                                    "igm", "fold", reason
+                                ),
                             ),
                         )
 

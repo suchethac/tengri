@@ -42,7 +42,7 @@ _DENSE = np.geomspace(1.0e-3, 1.0e10, 130_001)
 
 
 def _templates():
-    return collect_block_templates({"disc": "kubota_done", "torus": "simple"})
+    return collect_block_templates({"disc": "kubota_done", "torus": "simple"}).templates
 
 
 def _run(wave, *, ledger):

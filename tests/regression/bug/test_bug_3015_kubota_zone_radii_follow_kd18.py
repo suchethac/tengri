@@ -194,7 +194,7 @@ def _ledger(log_lbol):
 
     templates = collect_block_templates(
         {k[len("agn_") : -len("_block")]: v for k, v in _SELECTORS.items()}
-    )
+    ).templates
     _, comps = composable_agn_l_nu(
         _LEDGER_WAVE,
         log_lbol,

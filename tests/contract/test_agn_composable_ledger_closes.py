@@ -105,7 +105,9 @@ def _selectors(disc, torus, nlr="none", blr="none", feii="none", atten="none"):
 
 def _templates(sel):
     """The recipe's libraries, threaded as the AGN component threads them."""
-    return collect_block_templates({k[len("agn_") : -len("_block")]: v for k, v in sel.items()})
+    return collect_block_templates(
+        {k[len("agn_") : -len("_block")]: v for k, v in sel.items()}
+    ).templates
 
 
 def _evaluate(wave, sel, params, *, ledger, x64=True, strict=True):

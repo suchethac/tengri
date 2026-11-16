@@ -121,6 +121,22 @@ class ConfigError(TengriError, ValueError):
     """
 
 
+class PrecomputeRefusal(ConfigError):
+    """A precompute table declines a configuration it cannot serve exactly.
+
+    Raised only at the refusal site of a table (nothing to tabulate, a free parameter the
+    table bakes in, an unsupported backend). ``approx='auto'`` catches exactly this class to
+    keep the exact path and record the reason, so a bug that raises a plain ``ValueError``
+    inside a table build can never be mistaken for a decline (#3505 X1). It is a
+    :class:`ConfigError`, so callers that catch ``ValueError`` are unaffected.
+
+    Parameters
+    ----------
+    message : str
+        Human-readable reason, naming the setting and the alternative.
+    """
+
+
 class BackendError(TengriError, RuntimeError):
     """Backend initialization or computation failure.
 

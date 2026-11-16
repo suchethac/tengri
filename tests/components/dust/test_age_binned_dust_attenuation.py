@@ -423,7 +423,9 @@ def test_age_binned_gradients_finite_and_match_finite_difference():
 def test_age_binned_wave_precomp_refuses_loudly(_ssp, _obs):
     """An explicit approx=WavePrecomp() on an age_binned model raises, naming the
     exact path, rather than silently mis-attenuating."""
-    with pytest.raises(NotImplementedError, match="age_binned"):
+    from tengri.config.exceptions import PrecomputeRefusal
+
+    with pytest.raises(PrecomputeRefusal, match="age_binned"):
         SEDModel.build(
             ssp_data=_ssp,
             observation=_obs,

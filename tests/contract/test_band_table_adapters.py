@@ -605,3 +605,25 @@ def test_every_component_with_emission_terms_or_precompute_key_has_a_band_table_
         if owner not in BAND_TABLE_PROVIDERS
     )
     assert missing == [], missing
+
+
+def test_every_band_table_provider_key_is_exercised_and_every_outcome_is_recorded():
+    """#3505 X1: each provider key is asked in some case, and every outcome is a record.
+
+    The reverse direction of the owner test above. A key of ``BAND_TABLE_PROVIDERS`` that no
+    case builds is never shown to engage or decline. Every memo entry across the cases is a
+    ``BandTable`` (engaged) or a ``Decline`` that carries its reason.
+    """
+    from tengri.forward.precompute.registry import BAND_TABLE_PROVIDERS
+
+    asked: dict[str, set[str]] = {}
+    for case_name, build in cases.CASES.items():
+        model = build()
+        for component, slots in model._band_tables.items():
+            for slot, entry in slots.items():
+                assert isinstance(entry, (BandTable, Decline)), (case_name, component, slot)
+                if isinstance(entry, Decline):
+                    assert entry.reason.strip(), (case_name, component, slot)
+                asked.setdefault(component, set()).add(case_name)
+    unexercised = sorted(set(BAND_TABLE_PROVIDERS) - set(asked))
+    assert unexercised == [], f"no case asks these band-table providers: {unexercised}"

@@ -8,7 +8,7 @@
  "platform": "darwin-arm64",
  "repin_note": "Re-captured 2026-11-16 on main 45e59ac86 + #3560 (native-slope table reads, #3541), twice, bit-identical. Against 45e59ac86's golden, matched by leaf path: 6 new native-slope sibling leaves; 0 existing leaves moved, max rel 0 (none); photometry max rel 2.66e-05; compile signature unchanged. ",
  "signature_sha256": "ead6949d2ad44a5a67e29a1b80b0b404310235bd48bce6dfbeb34f78cce5563a",
- "summary": "Precompute Engagement Summary\n===========================\n\n\u2022 Energy-balance LUT: DECLINED\n  Reason: no two-component dust attenuation component\n\u2022 Dust band response: DECLINED\n  Reason: no dust emission component configured\n\n\u2022 Observed facts:\n  components: stellar, nebular, shock\n  dust_emission_configured: False\n  free_params: sfh_dpl_log_total_mass, shock_log_density, shock_log_lhalpha, shock_velocity\n  igm_fold: declared=auto, resolved=None\n  redshift_fixed: 0.1\n  wave_precomp_enabled: True\n  ztable_enabled: False",
+ "summary": "Precompute Engagement Summary\n===========================\n\n\u2022 Energy-balance LUT: DECLINED\n  Reason: no dust attenuation component in the chain\n\u2022 Dust band response: DECLINED\n  Reason: no dust emission component configured\n\n\u2022 Observed facts:\n  components: stellar, nebular, shock\n  dust_emission_configured: False\n  free_params: sfh_dpl_log_total_mass, shock_log_density, shock_log_lhalpha, shock_velocity\n  igm_fold: declared=auto, resolved=None\n  redshift_fixed: 0.1\n  wave_precomp_enabled: True\n  ztable_enabled: False",
  "tree": [
   {
    "dtype": "float64",

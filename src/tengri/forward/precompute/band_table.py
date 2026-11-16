@@ -27,12 +27,16 @@ class Decline:
 
     Parameters
     ----------
-    reason : str or None
-        The reason, as the adapter words it. ``None`` is a silent gate: the table is not built
-        and no reason is recorded.
+    reason : str
+        The reason, as the adapter words it. It is required: a gate that declines without
+        saying why leaves the engagement report to guess (#3505).
     """
 
-    reason: str | None
+    reason: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.reason, str) or not self.reason.strip():
+            raise TypeError(f"Decline needs a non-empty reason string, got {self.reason!r}")
 
 
 @dataclass(frozen=True)

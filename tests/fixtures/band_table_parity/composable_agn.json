@@ -5,7 +5,7 @@
  "platform": "darwin-arm64",
  "repin_note": "Re-captured 2026-11-16 on main 45e59ac86 + #3560 (native-slope table reads, #3541), twice, bit-identical. Against 45e59ac86's golden, matched by leaf path: 6 new native-slope sibling leaves; 0 existing leaves moved, max rel 0 (none); photometry max rel 0; compile signature unchanged. ",
  "signature_sha256": "df22e5e28abac26c2dfbeacd3aa37b13999bd4bfa3c1f0caad46534f262adb4c",
- "summary": "Precompute Engagement Summary\n===========================\n\n\u2022 Energy-balance LUT: DECLINED\n  Reason: unknown reason (gate conditions appear satisfied)\n\u2022 Dust band response: DECLINED\n  Reason: no dust emission component configured\n\n\u2022 Emitter term responses:\n  - agn: ENGAGED\n\n\u2022 Observed facts:\n  components: stellar, nebular, dust, agn\n  dust_emission_configured: False\n  free_params: agn_log_lbol\n  igm_fold: declared=auto, resolved=None\n  redshift_fixed: 0.1\n  wave_precomp_enabled: True\n  ztable_enabled: False",
+ "summary": "Precompute Engagement Summary\n===========================\n\n\u2022 Energy-balance LUT: DECLINED\n  Reason: no consumer of L_ir (dust emission, radio) and no nebular grid dust channel\n\u2022 Dust band response: DECLINED\n  Reason: no dust emission component configured\n\n\u2022 Emitter term responses:\n  - agn: ENGAGED\n\n\u2022 Observed facts:\n  components: stellar, nebular, dust, agn\n  dust_emission_configured: False\n  free_params: agn_log_lbol\n  igm_fold: declared=auto, resolved=None\n  redshift_fixed: 0.1\n  wave_precomp_enabled: True\n  ztable_enabled: False",
  "tree": [
   {
    "dtype": "float64",
