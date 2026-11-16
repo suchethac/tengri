@@ -23,7 +23,7 @@
 # photometry set that is shared across galaxies.
 #
 # ## What you need
-# The `fsps_mist_miles_chabrier` SSP grid, downloaded on first use. Its oldest template is older
+# The `fsps_mist_c3k_a_chabrier` SSP grid, downloaded on first use. Its oldest template is older
 # than the universe at every redshift fitted here. The notebook is sized for a laptop CPU. The
 # mocks are synthetic: the truth of every galaxy is known.
 #
@@ -235,7 +235,7 @@ def build_template():
         cal_scale_prior=(0.0, 0.1),
     )
     model = SEDModel.build(
-        ssp_data=tengri.load_ssp("fsps_mist_miles_chabrier", download=True),
+        ssp_data=tengri.load_ssp("fsps_mist_c3k_a_chabrier", download=True),
         observation=Observation(
             spectroscopy=spectroscopy, photometry=Photometry.from_names(FILTERS)
         ),
