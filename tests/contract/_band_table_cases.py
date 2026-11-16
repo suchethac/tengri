@@ -10,6 +10,7 @@ the exact path with ``approx=None``.
 
 from __future__ import annotations
 
+import functools
 import tempfile
 from pathlib import Path
 
@@ -145,16 +146,18 @@ def build_composable_agn():
     )
 
 
+@functools.cache
 def _synthetic_cloudy_grid() -> str:
-    """Write the deterministic synthetic CLOUDY grid once and return its path.
+    """Write the deterministic synthetic CLOUDY grid once per process and return its path.
 
     The tracked tree carries no CLOUDY grid (the converted ones are untracked), so the case
-    uses the same synthetic grid and ionizing SSP as the CLOUDY accuracy test.
+    uses the same synthetic grid and ionizing SSP as the CLOUDY accuracy test. The file goes
+    in a directory of this process's own: test modules call this at import, every xdist worker
+    imports every module, and two workers creating one HDF5 path fail on its file lock.
     """
     from tests._cloudy_grid import write_synthetic_cloudy_grid
 
-    directory = Path(tempfile.gettempdir()) / "tengri_band_table_parity"
-    directory.mkdir(parents=True, exist_ok=True)
+    directory = Path(tempfile.mkdtemp(prefix="tengri_band_table_parity_"))
     return str(write_synthetic_cloudy_grid(directory / "cloudy_grid.h5"))
 
 
