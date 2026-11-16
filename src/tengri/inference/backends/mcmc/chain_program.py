@@ -27,7 +27,7 @@ import jax.numpy as jnp
 
 from tengri.inference.backends.mcmc import _shared
 from tengri.inference.sampling.chains import (
-    jittered_starts as _jittered_starts,
+    jittered_starts,
     run_jittered_chains,
     start_scale,
 )
@@ -761,36 +761,6 @@ def sample_chain(program, state, chain_keys, ld2, data_args, params, cfg) -> Dra
     return _sample_body(program, state, chain_keys, ld, params, cfg)
 
 
-def _run_jittered_chains(
-    program,
-    state,
-    init_flat,
-    warmup_key,
-    init_key,
-    chain_keys,
-    ld,
-    params,
-    cfg,
-    chain_jitter,
-    adapts_metric=True,
-):
-    """Sample ``chain_keys.shape[0]`` overdispersed chains from one adapted state.
-
-    The chains start at the adapted position plus independent Gaussian offsets, so a
-    split R-hat over them is a real test. The adaptation is kept: only the positions
-    are jittered. Families that do not start from warmup start at ``init_flat``.
-    """
-    base = state.position if program.starts_from_warmup else init_flat
-    scale = start_scale(params[1] if adapts_metric else None, chain_jitter)
-    starts = _jittered_starts(base, warmup_key, chain_keys.shape[0], scale)
-    return run_jittered_chains(
-        lambda s, k: _sample_body(program, s, k, ld, params, cfg),
-        lambda p: program.init(p, ld, init_key, cfg),
-        starts,
-        chain_keys,
-    )
-
-
 @functools.partial(jax.jit, static_argnums=(0, 1, 6, 8, 9))
 def run_chain(
     program,
@@ -863,18 +833,17 @@ def run_chain(
     if chain_keys.ndim == 3:
         if chain_jitter is None:
             raise ValueError("several chains from one adaptation need a chain_jitter scale")
-        return _run_jittered_chains(
-            program,
-            state,
-            init_flat,
-            warmup_key,
-            init_key,
+        # Overdispersed chains from one adapted state: the adaptation is kept and only the
+        # positions are jittered, so a split R-hat over them is a real test. A family that
+        # does not start from warmup starts at ``init_flat``.
+        base = state.position if program.starts_from_warmup else init_flat
+        scale = start_scale(params[1] if adaptation.adapts_metric else None, chain_jitter)
+        starts = jittered_starts(base, warmup_key, chain_keys.shape[0], scale)
+        return run_jittered_chains(
+            lambda s, k: _sample_body(program, s, k, ld, params, cfg),
+            lambda p: program.init(p, ld, init_key, cfg),
+            starts,
             chain_keys,
-            ld,
-            params,
-            cfg,
-            chain_jitter,
-            adaptation.adapts_metric,
         ), params
     if not program.starts_from_warmup:
         state = program.init(init_flat, ld, init_key, cfg)

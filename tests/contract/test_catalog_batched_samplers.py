@@ -514,9 +514,9 @@ def _split_rhat(chains):
 
 def test_window_chains_start_at_distinct_overdispersed_positions():
     """Every chain starts somewhere of its own, at about the requested jitter scale."""
-    from tengri.inference.backends.mcmc.chain_program import _jittered_starts
+    from tengri.inference.sampling.chains import jittered_starts
 
-    starts = np.asarray(_jittered_starts(jnp.zeros(2), jax.random.PRNGKey(0), 4, 0.1))
+    starts = np.asarray(jittered_starts(jnp.zeros(2), jax.random.PRNGKey(0), 4, 0.1))
     assert starts.shape == (4, 2)
     assert len({tuple(np.round(row, 12)) for row in starts}) == 4
     assert 0.02 < starts.std() < 0.3, f"start spread {starts.std():.3f} is not ~0.1"
