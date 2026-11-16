@@ -90,7 +90,7 @@ def _joint_obs():
 def _build(ssp, obs, approx, *, tau_diff=1.5, z=0.05):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        return SEDModel.build(
+        base = SEDModel.build(
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
@@ -105,8 +105,11 @@ def _build(ssp, obs, approx, *, tau_diff=1.5, z=0.05):
             },
             neb={"type": "none"},
             redshift=Fixed(z),
-            approx=approx,
+            approx=None,
         )
+    # A Fixed sigma_v makes the spectrum table servable on point pixels (#3500).
+    spec = base.spec.merge_observation_params(sigma_v_kms=Fixed(150.0))
+    return SEDModel(spec, ssp, observation=obs, approx=approx)
 
 
 @pytest.mark.parametrize("form", sorted(_JOINT_FORMS))
@@ -121,7 +124,9 @@ def test_joint_promotion_keeps_the_dust_quadrature(synthetic_ssp_wide, form):
     model = _build(synthetic_ssp_wide, _joint_obs(), _JOINT_FORMS[form]())
 
     assert model._approx["wave_precomp"] is True
-    assert model._approx["spectrum_precomp"] is True
+    # A bare WavePrecomp promotes the spectrum only where the table may serve it; the
+    # Calzetti step in the rest range keeps it exact (#3500). Explicit forms always engage.
+    assert model._approx["spectrum_precomp"] is (form != "WavePrecomp")
     assert model._approx["n_subbands"] == WavePrecomp().n_subbands
     assert model._approx["taylor_correction"] == WavePrecomp().taylor_correction
 

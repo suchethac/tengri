@@ -20,6 +20,7 @@ import pytest
 
 from tengri import DEFAULT, Fixed, Observation, SEDModel, SpectrumPrecomp
 from tengri.observation.spectroscopy import Spectroscopy
+from tengri.observation.spectrum import lattice_span
 
 pytestmark = pytest.mark.contract
 
@@ -58,14 +59,20 @@ def test_spectrum_precomp_publishes_nonzero_agn_spec_family(synthetic_ssp_wide):
     AGN. A missing or all-zero family means the AGN is dropped from the
     spectrum LUT.
     """
-    m = _build(synthetic_ssp_wide, SpectrumPrecomp())
+    # sigma_v_kms=150 keeps the table serving these point-sampled pixels (#3500).
+    base = _build(synthetic_ssp_wide, None)
+    spec = base.spec.merge_observation_params(sigma_v_kms=Fixed(150.0))
+    m = SEDModel(spec, synthetic_ssp_wide, observation=base.observation, approx=SpectrumPrecomp())
+    assert m._approx.get("spectrum_precomp")
     sf = {}
     derived = m.predict_state(sf).derived
     assert "agn_spec_lnu_precomp" in derived.field_names()
     fam = derived.get("agn_spec_lnu_precomp")
     assert fam is not None
     fam = np.asarray(fam)
-    assert fam.shape == (_WAVE.shape[0],)
+    # The table publishes on the ln-lambda lattice (#3500), one value per cell.
+    _, n_cells = lattice_span(_WAVE, 0.5, 0.5)
+    assert fam.shape == (n_cells,)
     assert np.all(np.isfinite(fam))
     assert np.any(fam > 0.0), "AGN spectrum LUT family is all-zero — AGN dropped"
 

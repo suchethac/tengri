@@ -306,7 +306,13 @@ def test_the_spectrum_precomp_forward_is_finite_and_nonzero_in_float32(ssp_bare)
     arms = {}
     for x64, tag in ((True, "f64"), (False, "f32")):
         with jax.enable_x64(x64):
-            sed = SEDModel.build(ssp_data=ssp_bare, **build)
+            # sigma_v_kms=150 keeps the table serving these point-sampled pixels; an
+            # undeclared sigma is declined (#3500). The approx is re-applied after the merge.
+            base = SEDModel.build(ssp_data=ssp_bare, **{**build, "approx": None})
+            spec = base.spec.merge_observation_params(sigma_v_kms=Fixed(150.0))
+            sed = SEDModel(
+                spec, ssp_bare, observation=build["observation"], approx=build["approx"]
+            )
             assert bool(getattr(sed.approx, "spectrum_precomp", False)), (
                 f"the model resolved to {sed.approx}, which is not the LUT this test is "
                 f"about; a passing result here would be the exact path wearing its label"

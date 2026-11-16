@@ -117,7 +117,11 @@ def test_table_with_dust_and_igm_matches_away_from_the_calzetti_branch_join(ssp_
         resolution=2000.0,
         sigma_v=Fixed(150.0),
         igm={"type": "madau"},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": Fixed(DEFAULT)},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": Fixed(DEFAULT),
+        },
     )
     f_exact = np.asarray(exact.predict_spectrum({}), dtype=float)
     f_table = np.asarray(table.predict_spectrum({}), dtype=float)
@@ -145,7 +149,7 @@ def test_conserving_table_with_a_single_screen_at_the_calzetti_join(ssp_data_wne
     )
     edges = np.asarray(_pixel_edges(jnp.asarray(_COARSE))) / (1.0 + _Z)
     assert np.any((edges[:-1] < 6300.0) & (edges[1:] > 6300.0)), "no pixel straddles the join"
-    # Measured: see the PR body; the bound is the dust-order difference at the join.
+    # Measured: 3.5e-4 of peak, at the join (tau_v = 1); 1.8e-5 elsewhere.
     assert _max_rel(table.predict_spectrum({}), exact.predict_spectrum({})) < 5e-4
 
 
@@ -175,7 +179,8 @@ def test_table_is_on_the_lattice_and_its_size_is_predicted(ssp_data_wne):
         resolution=2000.0,
         sigma_v=Fixed(150.0),
     )
-    table = model._get_component_chain()[0]._state.ssp_spec_lut
+    chain = model._cached_component_chain or model._build_component_chain()
+    table = chain[0]._state.ssp_spec_lut
     assert isinstance(table, SpectrumLatticeTable)
     origin, n_cells = lattice_span(_FINE, _Z, _Z)
     assert (table.origin, table.n_cells) == (origin, n_cells)
@@ -206,7 +211,7 @@ def test_table_declines_a_kernel_the_lattice_does_not_resolve(ssp_data_wne):
 def test_conserving_pixels_are_served_at_any_kernel_width(ssp_data_wne):
     """The pixel mean integrates the cell means exactly, so a narrow kernel is no limit."""
     with warnings.catch_warnings():
-        warnings.simplefilter("error")
+        warnings.filterwarnings("error", message=".*spectrum table cannot serve.*")
         exact, table = _pair(
             ssp_data_wne,
             wave_obs=_COARSE,
@@ -214,7 +219,7 @@ def test_conserving_pixels_are_served_at_any_kernel_width(ssp_data_wne):
             resolution=2000.0,
             sigma_v=Fixed(0.0),
         )
-    # Measured: see the PR body.
+    # Measured: 8.4e-14 of peak; with no baked dispersion the two run the same operations.
     assert _max_rel(table.predict_spectrum({}), exact.predict_spectrum({})) < 5e-5
 
 

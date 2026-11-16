@@ -62,17 +62,19 @@ def _grad_flops(model, fn_name, truth):
     return int(jax.jit(jax.grad(loss)).lower(v0).compile().cost_analysis()["flops"])
 
 
-def _assert_joint_matches_references(phot_only, joint, seeds=(1, 2, 3)):
+def _assert_joint_matches_references(phot_only, joint, seeds=(1, 2, 3), extra=None):
+    """``extra`` holds parameters only the joint model declares (its velocity dispersion)."""
     for seed in seeds:
         truth = phot_only.spec.sample(jax.random.PRNGKey(seed))
+        joint_truth = {**truth, **(extra or {})}
         np.testing.assert_allclose(
-            np.asarray(joint.predict_photometry(truth)),
+            np.asarray(joint.predict_photometry(joint_truth)),
             np.asarray(phot_only.predict_photometry(truth)),
             rtol=1e-12,
         )
         np.testing.assert_allclose(
-            np.asarray(joint.predict_spectrum(truth)),
-            np.asarray(joint.predict(truth).spectrum()),
+            np.asarray(joint.predict_spectrum(joint_truth)),
+            np.asarray(joint.predict(joint_truth).spectrum()),
             rtol=1e-12,
         )
 
@@ -106,13 +108,24 @@ def test_joint_matches_the_photometry_only_lut_and_the_lazy_spectrum(models):
 
 
 def test_free_redshift_with_an_igm_keeps_the_same_parity(ssp_data_fsps):
-    from tengri import Uniform, WavePrecomp
+    from tengri import SEDModel, Uniform, WavePrecomp
 
     extra = {"redshift": Uniform(0.3, 2.5), "igm": {"type": "inoue14"}}
     phot = _model(ssp_data_fsps, joint=False, approx=WavePrecomp(), **extra)
-    joint = _model(ssp_data_fsps, joint=True, approx=WavePrecomp(), **extra)
+    base = _model(ssp_data_fsps, joint=True, approx=None, **extra)
+    # Since #3500 the spectrum table serves these flux-conserving pixels, and this rest range
+    # (1143-5385 A) holds no dust-law step, so a Fixed dispersion would promote the spectrum
+    # onto the table. A free one keeps it exact, which is the mixed route under test.
+    with pytest.warns(UserWarning, match="stays on the exact path"):
+        joint = SEDModel(
+            base.spec.merge_observation_params(sigma_v_kms=Uniform(0.0, 300.0)),
+            ssp_data_fsps,
+            observation=base.observation,
+            approx=WavePrecomp(),
+        )
+    assert joint._approx.get("wave_precomp")
     assert not joint._approx.get("spectrum_precomp")
-    _assert_joint_matches_references(phot, joint, seeds=(1, 2))
+    _assert_joint_matches_references(phot, joint, seeds=(1, 2), extra={"sigma_v_kms": 100.0})
 
 
 def test_a_nebular_grid_keeps_the_photometry_on_the_lut(ssp_data_fsps, monkeypatch):

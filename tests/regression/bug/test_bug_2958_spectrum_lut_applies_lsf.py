@@ -70,24 +70,24 @@ _IDX = [0, 333, 666, 999, 1332, 1666, 1999]
 _MADAU = {"type": "madau"}
 
 
-def _spec(resolution=2000.0):
-    return Spectroscopy(resample="point", wave_obs=_WAVE_OBS, resolution=resolution)
+def _spec(resolution=2000.0, resample="point"):
+    return Spectroscopy(resample=resample, wave_obs=_WAVE_OBS, resolution=resolution)
 
 
-def _build(ssp, approx, *, spectro, igm=None, sigma_v=None, photometry=None):
+def _build(ssp, approx, *, spectro, igm=None, sigma_v=None, photometry=None, law="calzetti"):
     obs = Observation(photometry=photometry, spectroscopy=spectro)
+    dust = {"type": "two_component", "law": law, "all_params": Fixed(DEFAULT)}
+    if law == "power_law":
+        dust["tau_diff"] = 0.3
+    # The base model only supplies the spec; the approximation is resolved on the model
+    # that carries the declared dispersion.
     base = SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        approx=approx,
         redshift=Fixed(_Z),
         igm=igm if igm is not None else {"type": "none"},
         sfh={"type": "tsnorm", "all_params": Fixed(DEFAULT), "log_total_mass": Fixed(10.0)},
-        dust_attenuation={
-            "type": "two_component",
-            "law": "calzetti",
-            "all_params": Fixed(DEFAULT),
-        },
+        dust_attenuation=dust,
         neb={"type": "none"},
     )
     spec = (
@@ -201,13 +201,20 @@ def test_c_fixed_sigma_v_table_matches_exact(ssp_data_wne):
 # ── (g) fixed-sigma_v pre-broadened table equals the full-grid sum route ──────
 
 
+#: A free dispersion the spectrum table serves on point-sampled pixels (#3500).
+_FREE_SERVED = Uniform(20.0, 2000.0)
+
+
 def test_g_prebroadened_table_equals_sum_route(ssp_data_wne):
     table = _build(
         ssp_data_wne, SpectrumPrecomp(), spectro=_spec(), igm=_MADAU, sigma_v=Fixed(300.0)
     )
+    # The per-draw route's dispersion is floored at 20 km/s: the table declines point-sampled
+    # pixels whose kernel can reach zero (#3500), and the comparison would be against exact.
     summed = _build(
-        ssp_data_wne, SpectrumPrecomp(), spectro=_spec(), igm=_MADAU, sigma_v=Uniform(0.0, 2000.0)
+        ssp_data_wne, SpectrumPrecomp(), spectro=_spec(), igm=_MADAU, sigma_v=_FREE_SERVED
     )
+    assert table._approx.get("spectrum_precomp") and summed._approx.get("spectrum_precomp")
     s_table = np.asarray(table.predict_spectrum({}))
     s_sum = _spectrum(summed, 300.0)
     # Same operation in two orders of linear ops: relative to the median flux so FFT
@@ -221,7 +228,7 @@ def test_g_prebroadened_table_equals_sum_route(ssp_data_wne):
 
 
 def test_h_lut_matches_exact_at_r5000_without_fallback(ssp_data_wne):
-    sv = Uniform(0.0, 2000.0)
+    sv = _FREE_SERVED
     exact = _build(ssp_data_wne, None, spectro=_spec(5000.0), igm=_MADAU, sigma_v=sv)
     with warnings.catch_warnings():
         warnings.filterwarnings("error", message=".*falls back.*")
@@ -230,7 +237,8 @@ def test_h_lut_matches_exact_at_r5000_without_fallback(ssp_data_wne):
         )
     assert lut._approx.get("spectrum_precomp")
     s_exact, s_lut = _spectrum(exact, 300.0), _spectrum(lut, 300.0)
-    assert _max_rel_dev(s_lut, s_exact, _mask(s_exact)) <= 2e-3
+    mask = _mask(s_exact)
+    assert _max_rel_dev(s_lut, s_exact, mask) <= 2e-3
 
 
 # ── (d) no instrument: the LUT is bit-for-bit the pre-fix LUT ─────────────────
@@ -265,16 +273,22 @@ _PREFIX_LUT_WNE_RNONE = [
 ]
 
 
-def test_d_resolution_none_is_bit_for_bit_prefix(ssp_data_wne):
-    lut = _build(
-        ssp_data_wne,
-        SpectrumPrecomp(),
-        spectro=_spec(resolution=None),
-        igm=_MADAU,
-        sigma_v=Fixed(0.0),
-    )
-    s = np.asarray(lut.predict_spectrum({}))
-    np.testing.assert_allclose(s[_IDX], np.asarray(_PREFIX_LUT_WNE_RNONE), rtol=_PIN_RTOL, atol=0)
+def test_d_no_kernel_point_pixels_decline_to_the_exact_path(ssp_data_wne):
+    """Point-sampled pixels with no instrument and no dispersion: the table declines (#3500).
+
+    The table holds lattice cell means, which do not give the pixel-center value of an
+    unbroadened model. The model says so and is the exact path, bit for bit. The values
+    pinned above were the pixel table's, 4.4e-6 from the exact path at these pixels.
+    """
+    kwargs = dict(spectro=_spec(resolution=None), igm=_MADAU, sigma_v=Fixed(0.0))
+    exact = _build(ssp_data_wne, None, **kwargs)
+    with pytest.warns(UserWarning, match="spectrum table cannot serve"):
+        lut = _build(ssp_data_wne, SpectrumPrecomp(), **kwargs)
+    assert not lut._approx.get("spectrum_precomp")
+    s_lut, s_exact = np.asarray(lut.predict_spectrum({})), np.asarray(exact.predict_spectrum({}))
+    np.testing.assert_array_equal(s_lut, s_exact)
+    rel = np.max(np.abs(s_lut[_IDX] / np.asarray(_PREFIX_LUT_WNE_RNONE) - 1.0))
+    assert 1e-6 < rel < 1e-5, "the old pixel-table pins sit 4.4e-6 from the exact path"
 
 
 def _brute_ln_lambda_broaden(wave_rest, sed_rest, sigma_v_kms, *, step=2e-6):
@@ -349,18 +363,11 @@ def test_d_sigma_v_zero_lut_agrees_with_exact_without_resolution(ssp_data_wne):
     assert rel <= 1e-5
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "SpectrumPrecomp still broadens on the model grid; fixed by #3413 (conserving) / "
-        "#3500 (point, IGM)"
-    ),
-)
 def test_d_sigma_v_lut_matches_brute_force_without_resolution(ssp_data_wne):
-    """Known gap, #3436 follow-up: the LUT at sigma_v = 150 without resolution.
+    """The LUT at sigma_v = 150 without resolution matches the brute-force reference (#3500).
 
-    Resample mode: point. Same reference and bar as the exact-path test above; expected to
-    fail until the table's dispersion is on the lattice.
+    Resample mode: point. Same reference and bar as the exact-path test above. The table
+    convolves its dispersion on the lattice, so this is a real check, not a known gap.
     """
     exact = _build(
         ssp_data_wne,
@@ -386,27 +393,34 @@ def test_d_sigma_v_lut_matches_brute_force_without_resolution(ssp_data_wne):
 
 _PINNED_EXACT = {
     "synth_B": [
-        2.5081147137035423e-12,
-        1.8381312565409746e-12,
-        1.4118168280720108e-12,
-        1.1214567408671232e-12,
-        9.130946064725257e-13,
-        7.593592545423278e-13,
-        6.414930444347694e-13,
+        2.5081139118082243e-12,
+        1.8381297451705434e-12,
+        1.4118156511701318e-12,
+        1.1214557967824752e-12,
+        9.130938870797045e-13,
+        7.593586524698117e-13,
+        6.414925459336969e-13,
     ],
     # Re-pinned 2026-11-15: monotone PCHIP metallicity read (#3434, owner ruling 'True PCHIP on
     # the spectra'). Main's wne_B pins moved by up to 7.8e-5 relative (index 0); synth_B unchanged
     # to 1e-15 (no metallicity read in that grid's exact path beyond round-off).
     "wne_B": [
-        8.809892332215404e-29,
-        3.0971669624388303e-28,
-        4.97178887693843e-28,
-        7.36909509847369e-28,
-        8.781304804237832e-28,
-        1.165689373104462e-27,
-        1.4115376352795165e-27,
+        8.905642404244887e-29,
+        3.0968951597561074e-28,
+        4.97183102730229e-28,
+        7.368426424015946e-28,
+        8.780656340097938e-28,
+        1.1662876927396995e-27,
+        1.4114629446223282e-27,
     ],
 }
+# Re-pinned 2026-11-16 (#3500): point mode applies the kernel on the ln-lambda lattice before
+# the pixels are read. Old values (main 268d84602): synth_B 2.5081147137035423e-12 ...
+# 6.414930444347694e-13, moved by up to 8.4e-7 relative; wne_B 8.809892332215404e-29 ...
+# 1.4115376352795165e-27, moved by up to 1.09e-2 relative at index 0, the first pixel, where
+# convolving after sampling mirrored the spectrum at the pixel grid's end (the 1-2% end-pixel
+# error of #3500), and by at most 5.1e-4 at the other six. Reference for the new order: the
+# analytic value in test_bug_3500_point_mode_kernel_before_sampling.py (at most 6e-5 of peak).
 
 
 def test_e_exact_path_bit_for_bit_across_extraction(synthetic_ssp_wide, ssp_data_wne):
@@ -444,7 +458,6 @@ def _build_free_z(ssp, sigma_v):
     base = SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        approx=SpectrumPrecomp(n_z=16, z_min=0.04, z_max=0.16),
         redshift=Uniform(0.05, 0.15),
         igm={"type": "none"},
         sfh={"type": "tsnorm", "all_params": Fixed(DEFAULT), "log_total_mass": Fixed(10.0)},
@@ -466,9 +479,10 @@ def test_i_free_z_fixed_sigma_v_cube_equals_sum_route(ssp_data_wne, z):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         cube = _build_free_z(ssp_data_wne, Fixed(300.0))
-        summed = _build_free_z(ssp_data_wne, Uniform(0.0, 2000.0))
+        summed = _build_free_z(ssp_data_wne, _FREE_SERVED)
     chain = cube._cached_component_chain or cube._build_component_chain()
-    assert chain[0]._state.spec_ssp_broadened is not None
+    assert chain[0]._state.ssp_spec_lut is not None
+    assert cube._approx.get("spectrum_precomp") and summed._approx.get("spectrum_precomp")
     s_cube = np.asarray(cube.predict_spectrum({"redshift": z}))
     s_sum = np.asarray(summed.predict_spectrum({"redshift": z, "sigma_v_kms": 300.0}))
     # Route bar at 3x the measured residual with the native-slope Hermite read (#3541: z=0.08
@@ -481,14 +495,15 @@ def test_i_free_z_fixed_sigma_v_cube_equals_sum_route(ssp_data_wne, z):
 # ── (j) routing of a free sigma_v ──────────────────────────────────────────────
 
 
-def _joint(ssp, approx, *, sigma_v):
+def _joint(ssp, approx, *, sigma_v, resample="point", law="calzetti"):
     return _build(
         ssp,
         approx,
-        spectro=_spec(),
+        spectro=_spec(resample=resample),
         igm=_MADAU,
         sigma_v=sigma_v,
         photometry=Photometry.from_names(["des_g"]),
+        law=law,
     )
 
 
@@ -496,29 +511,40 @@ def test_j_joint_wave_precomp_keeps_free_sigma_v_spectrum_exact(ssp_data_wne):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         exact = _joint(ssp_data_wne, None, sigma_v=Uniform(0.0, 2000.0))
-    with pytest.warns(UserWarning, match="sigma_v_kms is free"):
-        joint = _joint(ssp_data_wne, WavePrecomp(), sigma_v=Uniform(0.0, 2000.0))
+    # The point-sampled kernel can be narrower than the table resolves, so the table declines
+    # and the promotion is blocked without the cost warning (#3500).
+    joint = _joint(ssp_data_wne, WavePrecomp(), sigma_v=Uniform(0.0, 2000.0))
     assert joint._approx.get("wave_precomp")
     assert not joint._approx.get("spectrum_precomp")
     np.testing.assert_array_equal(_spectrum(joint, 150.0), _spectrum(exact, 150.0))
 
 
 def test_j_joint_wave_precomp_promotes_fixed_sigma_v_spectrum(ssp_data_wne):
+    # A Calzetti step inside the spectrum keeps the promotion off (#3500); power_law has none.
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("default")
-        joint = _joint(ssp_data_wne, WavePrecomp(), sigma_v=Fixed(150.0))
+        joint = _joint(ssp_data_wne, WavePrecomp(), sigma_v=Fixed(150.0), law="power_law")
     assert joint._approx.get("wave_precomp")
     assert joint._approx.get("spectrum_precomp")
     assert not any("sigma_v_kms is free" in str(w.message) for w in caught)
 
 
 def test_j_joint_explicit_lut_with_free_sigma_v_warns_once_about_cost(ssp_data_wne):
+    # Conserving pixels are served at any kernel width, so the explicit table engages (#3500).
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("default")
-        joint = _joint(ssp_data_wne, SpectrumPrecomp(), sigma_v=Uniform(0.0, 2000.0))
+        joint = _joint(
+            ssp_data_wne, SpectrumPrecomp(), sigma_v=Uniform(0.0, 2000.0), resample="conserving"
+        )
     assert joint._approx.get("wave_precomp")
     assert joint._approx.get("spectrum_precomp")
-    assert sum("full model grid" in str(w.message) for w in caught) == 1
+    assert (
+        sum(
+            "convolves the stellar spectrum on the lattice every draw" in str(w.message)
+            for w in caught
+        )
+        == 1
+    )
     assert not any("sigma_v_kms is free" in str(w.message) for w in caught)
 
 
@@ -528,9 +554,15 @@ def test_j_explicit_lut_with_free_sigma_v_engages_and_warns_once(ssp_data_wne):
         lut = _build(
             ssp_data_wne,
             SpectrumPrecomp(),
-            spectro=_spec(),
+            spectro=_spec(resample="conserving"),
             igm=_MADAU,
             sigma_v=Uniform(0.0, 2000.0),
         )
     assert lut._approx.get("spectrum_precomp")
-    assert sum("full model grid" in str(w.message) for w in caught) == 1
+    assert (
+        sum(
+            "convolves the stellar spectrum on the lattice every draw" in str(w.message)
+            for w in caught
+        )
+        == 1
+    )

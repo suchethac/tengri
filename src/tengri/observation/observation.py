@@ -2685,9 +2685,10 @@ class Observation:
             Segments of the instrument kernel when the resolution varies along the
             spectrum.
         box_in_kernel : bool, default False
-            The stellar family's velocity kernel already has the lattice box removed
+            The stellar family's velocity kernel had the lattice box taken out of it
             (:class:`~tengri.components.stellar.sps.precompute.SpectrumLatticeTable`),
-            so the instrument kernel on the stellar group keeps its full width. Static.
+            so the instrument kernel on the stellar group removes only the remainder
+            (:func:`~tengri.observation.spectrum.lattice_box_split_kms`). Static.
 
         Returns
         -------
@@ -2784,8 +2785,10 @@ class Observation:
             )
 
         from tengri.observation.spectrum import (
+            _LATTICE_BOX_SIGMA_KMS,
             _LATTICE_DLNLAMBDA,
             _peak_factors,
+            lattice_box_split_kms,
             lattice_cell_transmission,
             lattice_pixel_read,
         )
@@ -2831,11 +2834,16 @@ class Observation:
             pixel_lnu = _at_pixels(total_spec_lnu)
         else:
             resolution = spectro.resolution / lsf_scale
+            # The part of the cell-mean box the stellar family's velocity kernel did not
+            # already give up; the nebular family has had no kernel, so the whole box.
+            box_sigma_kms = _LATTICE_BOX_SIGMA_KMS
+            if box_in_kernel:
+                box_sigma_kms = lattice_box_split_kms(state.derived["spec_sigma_v_kms"])[1]
             pixel_lnu = _at_pixels(
                 stellar_group,
                 resolution=resolution,
                 sigma_lib_kms=sigma_lib_kms,
-                remove_box=not box_in_kernel,
+                box_sigma_kms=box_sigma_kms,
             )
             if state.derived.get("nebular_spec_lnu_precomp") is not None:
                 pixel_lnu = pixel_lnu + _at_pixels(nebular_dust, resolution=resolution)

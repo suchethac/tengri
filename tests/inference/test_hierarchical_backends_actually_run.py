@@ -144,8 +144,11 @@ def spectroscopic_population():
     resolution, not high-D sampling.
     """
     ssp = tengri.load_ssp()
-    wave_obs = np.linspace(4000.0, 9000.0, 50)
-    obs = Observation(spectroscopy=Spectroscopy(wave_obs=wave_obs, resample="point"))
+    # ``approx="auto"`` takes the spectrum table where it serves the pixels: flux-conserving
+    # pixels (point-sampled ones with no kernel are declined, #3500), and a rest range
+    # below the 0.63 micron step of the Calzetti law (6190 A at z = 0.05).
+    wave_obs = np.linspace(4000.0, 6500.0, 50)
+    obs = Observation(spectroscopy=Spectroscopy(wave_obs=wave_obs, resample="conserving"))
 
     def factory(psd_sigma, psd_tau_myr):
         return SEDModel.build(

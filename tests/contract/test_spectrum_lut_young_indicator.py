@@ -51,7 +51,9 @@ def test_spectroscopy_only_spectrum_lut_publishes_the_single_indicator(synthetic
     wave_obs = jnp.logspace(jnp.log10(3300.0), jnp.log10(8000.0), 80)
     obs = Observation(spectroscopy=Spectroscopy(resample="point", wave_obs=wave_obs))
 
-    model = SEDModel.build(
+    # sigma_v_kms=150 keeps the kernel above the table's 20 km/s floor, so the table
+    # serves this point-sampled spectrum (#3500); the exact twin shares the config.
+    base = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
         observation=obs,
         sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
@@ -62,23 +64,20 @@ def test_spectroscopy_only_spectrum_lut_publishes_the_single_indicator(synthetic
         },
         neb={"type": "none"},
         redshift=Fixed(0.3),
-        approx=SpectrumPrecomp(),
+        approx=None,
     )
+    spec = base.spec.merge_observation_params(sigma_v_kms=Fixed(150.0))
+    model = SEDModel(spec, synthetic_ssp_wide, observation=obs, approx=SpectrumPrecomp())
+    assert model._approx.get("spectrum_precomp")
 
     st = model.predict_state({})
 
     # The exact path (no approximation) is the definition of the young fraction.
-    exact = SEDModel.build(
-        ssp_data=synthetic_ssp_wide,
+    exact = SEDModel(
+        base.spec.merge_observation_params(sigma_v_kms=Fixed(150.0)),
+        synthetic_ssp_wide,
         observation=obs,
-        sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
-        dust_attenuation={
-            "type": "two_component",
-            **law_screen_keys(law),
-            "all_params": Fixed(DEFAULT),
-        },
-        neb={"type": "none"},
-        redshift=Fixed(0.3),
+        approx=None,
     )
     # The exact path mixes with row 0 of the stellar component's boundary table.
     expected = exact.predict_state({}).derived["age_boundary_younger_fraction"][0]

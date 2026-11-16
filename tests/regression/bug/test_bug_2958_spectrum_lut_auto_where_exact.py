@@ -8,7 +8,9 @@ spectroscopy or joint fit when it can serve the pixels exactly:
 (i)   the pixel integral is not required (point-sampled pixels, or pixels no
       wider than the model grid, #2530);
 (ii)  ``sigma_v_kms`` is Fixed (a free one broadens per draw, ~15x the exact path);
-(iii) there is no banded resolution matrix (the LUT cannot carry it).
+(iii) there is no banded resolution matrix (the LUT cannot carry it);
+(iv)  no dust law steps inside the spectrum's rest range (Calzetti-type laws
+      step at 6300 A rest, #3500).
 
 Otherwise ``auto`` stays exact, and says so once for a free sigma_v. ``None``
 and an explicit ``SpectrumPrecomp()`` are unchanged.
@@ -28,6 +30,7 @@ from tengri import (
     Observation,
     Photometry,
     SEDModel,
+    SpectrumPrecomp,
     Uniform,
 )
 from tengri.inference.fitter import Fitter, _resolve_batch_fit_approx
@@ -50,7 +53,7 @@ def _spec(resample="point", wave_obs=_WAVE_OBS, resolution_matrix=None):
     )
 
 
-def _build(ssp, *, spectro, sigma_v, photometry=None, approx=None):
+def _build(ssp, *, spectro, sigma_v, photometry=None, approx=None, law="calzetti"):
     obs = Observation(photometry=photometry, spectroscopy=spectro)
     base = SEDModel.build(
         ssp_data=ssp,
@@ -60,8 +63,9 @@ def _build(ssp, *, spectro, sigma_v, photometry=None, approx=None):
         sfh={"type": "tsnorm", "all_params": Fixed(DEFAULT), "log_total_mass": Fixed(10.0)},
         dust_attenuation={
             "type": "two_component",
-            "law": "calzetti",
+            "law": law,
             "all_params": Fixed(DEFAULT),
+            "tau_diff": 0.3,
         },
         neb={"type": "none"},
     )
@@ -85,13 +89,19 @@ def _fit(model, *, data_type="spectroscopy", **kwargs):
     return Fitter(_fwd(model), flux, noise, data_type=data_type, **kwargs)
 
 
-# (a) fixed sigma_v, point pixels: auto engages the spectrum LUT ---------------
+# (a) fixed sigma_v, point pixels: auto engages the spectrum LUT unless a dust step -
 
 
-def test_a_auto_fixed_sigma_resolves_to_the_spectrum_lut(ssp_data_wne):
-    model = _build(ssp_data_wne, spectro=_spec(), sigma_v=Fixed(150.0))
+@pytest.mark.parametrize(
+    ("law", "expect_lut"),
+    [("power_law", True), ("calzetti", False)],
+    ids=["no-dust-step", "calzetti-step"],
+)
+def test_a_auto_fixed_sigma_routes_on_the_dust_step(ssp_data_wne, law, expect_lut):
+    """A Calzetti-type law steps at 6300 A rest, so auto keeps the spectrum exact (#3500)."""
+    model = _build(ssp_data_wne, spectro=_spec(), sigma_v=Fixed(150.0), law=law)
     fitter = _fit(model)  # approx="auto" default
-    assert fitter.model.approx.spectrum_precomp
+    assert bool(fitter.model.approx.spectrum_precomp) is expect_lut
 
 
 # (b) free sigma_v: auto stays exact and says so once -------------------------
@@ -132,16 +142,21 @@ def test_d_auto_banded_resolution_matrix_stays_exact(ssp_data_wne):
 # (e) joint observation: both LUTs for fixed sigma_v, photometry only for free --
 
 
-def _joint_obs_model(ssp, sigma_v):
+def _joint_obs_model(ssp, sigma_v, law="calzetti"):
     phot = Photometry.from_names(["des_g"])
-    return _build(ssp, spectro=_spec(), sigma_v=sigma_v, photometry=phot)
+    return _build(ssp, spectro=_spec(), sigma_v=sigma_v, photometry=phot, law=law)
 
 
-def test_e_joint_fixed_sigma_resolves_to_both_luts(ssp_data_wne):
-    model = _joint_obs_model(ssp_data_wne, Fixed(150.0))
+@pytest.mark.parametrize(
+    ("law", "expect_lut"),
+    [("power_law", True), ("calzetti", False)],
+    ids=["no-dust-step", "calzetti-step"],
+)
+def test_e_joint_fixed_sigma_routes_the_spectrum_on_the_dust_step(ssp_data_wne, law, expect_lut):
+    model = _joint_obs_model(ssp_data_wne, Fixed(150.0), law=law)
     fitter = _fit(model, data_type="joint")
     assert fitter.model.approx.wave_precomp
-    assert fitter.model.approx.spectrum_precomp
+    assert bool(fitter.model.approx.spectrum_precomp) is expect_lut
 
 
 def test_e_joint_free_sigma_keeps_photometry_lut_only(ssp_data_wne):
@@ -160,7 +175,7 @@ def test_e_joint_free_sigma_keeps_photometry_lut_only(ssp_data_wne):
 )
 def test_g_batch_resolver_matches_the_single_fit_decision(ssp_data_wne, case, expect_lut):
     if case == "fixed":
-        model = _build(ssp_data_wne, spectro=_spec(), sigma_v=Fixed(150.0))
+        model = _build(ssp_data_wne, spectro=_spec(), sigma_v=Fixed(150.0), law="power_law")
     elif case == "free":
         model = _build(ssp_data_wne, spectro=_spec(), sigma_v=Uniform(0.0, 2000.0))
     elif case == "coarse":
@@ -182,7 +197,7 @@ _TRUTH = {"sfh_tsnorm_log_total_mass": 10.0, "sfh_tsnorm_peak_lbt_frac": 0.5, "d
 
 
 def _free_model(ssp, *, approx=None):
-    """Exact-spec model with three free SFH/dust parameters and a fixed sigma_v."""
+    """Calzetti model with three free SFH/dust parameters and a fixed sigma_v."""
     obs = Observation(spectroscopy=_spec())
     base = SEDModel.build(
         ssp_data=ssp,
@@ -229,7 +244,14 @@ def test_f_map_under_the_lut_agrees_with_exact(ssp_data_wne):
 
     sigma = _laplace_std(exact, jnp.asarray(flux), jnp.asarray(noise), truth)
 
-    lut_fit = Fitter(_fwd(_free_model(ssp_data_wne)), flux, noise, data_type="spectroscopy")
+    # Calzetti steps at 6300 A rest, so the table is requested explicitly here.
+    lut_fit = Fitter(
+        _fwd(_free_model(ssp_data_wne)),
+        flux,
+        noise,
+        data_type="spectroscopy",
+        approx=SpectrumPrecomp(),
+    )
     exact_fit = Fitter(_fwd(exact), flux, noise, data_type="spectroscopy", approx=None)
     assert lut_fit.model.approx.spectrum_precomp
     assert not exact_fit.model.approx.spectrum_precomp

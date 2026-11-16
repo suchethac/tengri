@@ -2119,6 +2119,40 @@ def compute_spectrum_lattice_lsf(
     return lnu_to_fnu(pixel_sed * scale_out, dl_cm, redshift)
 
 
+def lattice_box_split_kms(sigma_v_kms):
+    r"""Split the cell-mean box between the velocity kernel and the kernel after it.
+
+    The center readout samples the lattice's cell means, i.e. the model smoothed by a box
+    of dispersion :math:`\sigma_{\rm box}`. The box is taken out of the velocity kernel
+    first, and whatever the velocity kernel is too narrow to give up is left for the
+    instrument kernel:
+
+    .. math::
+
+        \sigma_v'^2 = \max(\sigma_v^2 - \sigma_{\rm box}^2, 0), \qquad
+        \sigma_{\rm rem}^2 = \sigma_{\rm box}^2 - (\sigma_v^2 - \sigma_v'^2).
+
+    Parameters
+    ----------
+    sigma_v_kms : float or tracer
+        Velocity dispersion [km/s].
+
+    Returns
+    -------
+    kernel_kms : ndarray
+        :math:`\sigma_v'`, the velocity kernel to apply on the lattice [km/s].
+    remainder_kms : ndarray
+        :math:`\sigma_{\rm rem}`, the part of the box left to remove [km/s].
+    """
+    variance = jnp.asarray(sigma_v_kms, dtype=jnp.result_type(float)) ** 2
+    box = _LATTICE_BOX_SIGMA_KMS**2
+    wider = variance > box
+    kernel = jnp.where(wider, jnp.sqrt(jnp.where(wider, variance - box, 1.0)), 0.0)
+    narrower = variance < box
+    remainder = jnp.where(narrower, jnp.sqrt(jnp.where(narrower, box - variance, 1.0)), 0.0)
+    return kernel, remainder
+
+
 def lattice_pixel_read(
     on_lattice: jnp.ndarray,
     span: tuple[float, int],
@@ -2130,7 +2164,7 @@ def lattice_pixel_read(
     sigma_v_kms: jnp.ndarray | float = 0.0,
     n_bins: int = 16,
     conserving: bool = False,
-    remove_box: bool = True,
+    box_sigma_kms: jnp.ndarray | float = _LATTICE_BOX_SIGMA_KMS,
 ) -> jnp.ndarray:
     r"""Instrument kernel on the lattice, then the pixel readout.
 
@@ -2157,9 +2191,11 @@ def lattice_pixel_read(
     conserving : bool, optional
         Pixel means between the pixel edges (``True``) or the value at the pixel centers
         (``False``). Static.
-    remove_box : bool, optional
-        Take the cell-mean box out of the kernel in quadrature for the center readout.
-        ``False`` when an earlier kernel on ``on_lattice`` already had it removed. Static.
+    box_sigma_kms : float or tracer, optional
+        Dispersion [km/s] of the cell-mean box still to be taken out of the kernel in
+        quadrature for the center readout. The whole box by default; less when an earlier
+        kernel on ``on_lattice`` already had part of it removed
+        (:func:`lattice_box_remainder_kms`).
 
     Returns
     -------
@@ -2185,10 +2221,10 @@ def lattice_pixel_read(
         if sigma_lib_kms.ndim > 0:
             sigma_lib_kms = jnp.interp(obs_c, wave_obs, sigma_lib_kms)
         sigma_cells = lsf_sigma_eff_kms(resolution, sigma_lib_kms, sigma_v_kms)
-        if conserving or not remove_box:
+        if conserving:
             sigma_kernel = sigma_cells
         else:
-            excess = sigma_cells**2 - _LATTICE_BOX_SIGMA_KMS**2
+            excess = sigma_cells**2 - jnp.asarray(box_sigma_kms) ** 2
             wider = excess > 0.0
             sigma_kernel = jnp.where(wider, jnp.sqrt(jnp.where(wider, excess, 1.0)), 0.0)
         # One segment when the width is the same on every cell: the lattice is uniform in

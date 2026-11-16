@@ -232,14 +232,15 @@ def test_conserving_models_do_not_collide_in_the_compile_cache(ssp):
     assert sig_point != sig_cons, "point and conserving models share a compile signature"
 
 
-def test_spectrum_precomp_refuses_a_conserving_resample(ssp):
-    """SpectrumPrecomp samples every component at the pixel centers, so pairing it with a
-    pixel integral must raise rather than silently point-sample (#1166, #2530)."""
+def test_spectrum_precomp_serves_a_conserving_resample(ssp):
+    """SpectrumPrecomp serves a flux-conserving pixel integral: the lattice table is active
+    and agrees with the exact conserving path (#1166, #2530, #3500)."""
     from tengri import SpectrumPrecomp
 
     wo = np.geomspace(4000.0, 8500.0, 250)  # coarse → auto/conserving would apply
-    with pytest.raises(ValueError, match="approx=None"):
-        SEDModel.build(
+
+    def _build(approx):
+        return SEDModel.build(
             ssp_data=ssp,
             observation=Observation(
                 photometry=Photometry.from_names(["des_g"]),
@@ -255,8 +256,18 @@ def test_spectrum_precomp_refuses_a_conserving_resample(ssp):
                 "tau_diff": 0.3,
             },
             redshift=Fixed(0.1),
-            approx=SpectrumPrecomp(),
+            approx=approx,
         )
+
+    table = _build(SpectrumPrecomp())
+    exact = _build(None)
+    assert table._approx.get("spectrum_precomp"), "conserving resample did not engage the table"
+    p = dict(table.spec.sample(KEY))
+    f_table = np.asarray(table.predict_spectrum(p))
+    f_exact = np.asarray(exact.predict_spectrum(p))
+    assert np.all(np.isfinite(f_table)) and np.all(f_table >= 0.0)
+    peak = float(np.max(np.abs(f_exact)))
+    assert np.max(np.abs(f_table - f_exact)) / peak < 1e-3, "table disagrees with exact conserving"
 
 
 @pytest.mark.gradient

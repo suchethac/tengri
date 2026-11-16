@@ -3351,26 +3351,19 @@ class SEDModel:
         return lattice_span(np.asarray(wave_obs_np, dtype=np.float64), min(ends), max(ends))
 
     def _spectrum_table_box_in_kernel(self) -> bool:
-        """Whether the table's velocity kernel has the lattice box removed.
+        """Whether the table's velocity kernel has the lattice box taken out of it.
 
-        The center readout samples the lattice's cell means, so one kernel on the stellar
-        group has the cell-mean box taken out of it in quadrature. That is the velocity
-        kernel when the pixels are point-sampled and either there is no instrument
-        resolution or ``sigma_v_kms`` is Fixed at a width the lattice resolves
-        (``_POINT_NARROW_KERNEL_KMS[0]``), which keeps the total width right where the
-        library resolution cancels the instrument's. Otherwise it is the instrument
-        kernel. The flux-conserving readout has no box to remove.
+        True for point-sampled pixels: the center readout samples the lattice's cell
+        means, so the cell-mean box is removed in quadrature, from the velocity kernel
+        first and the remainder from the instrument kernel
+        (:func:`~tengri.observation.spectrum.lattice_box_split_kms`). Taking it from the
+        velocity kernel keeps the total width right where the library resolution cancels
+        the instrument's. The flux-conserving readout has no box to remove.
         """
-        from tengri.observation.spectrum import _POINT_NARROW_KERNEL_KMS
-
         observation = self.observation
-        spectro = getattr(observation, "spectroscopy", None)
-        if spectro is None or self._spectrum_lut_needs_pixel_integral(observation):
+        if getattr(observation, "spectroscopy", None) is None:
             return False
-        if spectro.resolution is None:
-            return True
-        sigma_v = self._fixed_sigma_v_kms()
-        return sigma_v is not None and sigma_v >= _POINT_NARROW_KERNEL_KMS[0]
+        return not self._spectrum_lut_needs_pixel_integral(observation)
 
     def _prior_lower_bound(self, name: str, default: float) -> float:
         """Lower end of a parameter's declared range (its value when Fixed), else ``default``."""
@@ -3463,11 +3456,12 @@ class SEDModel:
         """Largest step of the dust curves inside the rest range the spectrum covers.
 
         The curves are sampled every 0.05 Angstrom over the pixels' rest range at the ends
-        of the redshift range, and a step is a sample-to-sample change more than 100 times
-        the median one. Returns its size in :math:`k/k_V`, or 0.0 when no law has a step
-        there (or the model has no dust screen). Build-time (NumPy).
+        of the redshift range, and a step is a sample-to-sample change more than 20 times
+        both of its neighbors. Returns its size in :math:`k/k_V`, or 0.0 when no law has a
+        step there (or the model has no dust screen). Build-time (NumPy).
 
-        The Calzetti branches join at 0.63 micron with a step of 0.0062.
+        The Calzetti branches (and the laws built on them) join at 0.63 micron with a step
+        of 0.0062; the Cardelli branches at 1.1 inverse micron with one of 0.00031.
         """
         from tengri.components.dust.attenuation import resolve_dust_law
 
@@ -3484,7 +3478,8 @@ class SEDModel:
         largest = 0.0
         for law in {self.spec.dust_law_bc, self.spec.dust_law_diff}:
             change = np.abs(np.diff(np.asarray(resolve_dust_law(law)(jnp.asarray(rest)))))
-            steps = change[change > 100.0 * np.median(change)]
+            neighbors = np.maximum(change[:-2], change[2:])
+            steps = change[1:-1][change[1:-1] > 20.0 * neighbors]
             largest = max(largest, float(steps.max()) if steps.size else 0.0)
         return largest
 

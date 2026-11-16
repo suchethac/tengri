@@ -1,18 +1,19 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""#3541: the free-z pre-broadened spectrum cube reads metallicity from native slopes.
+"""#3541: the spectrum table broadened at build reads metallicity from native slopes.
 
-With a free redshift and a fixed velocity dispersion, the spectrum route stores the SSP
-cube broadened once at build (``spec_ssp_broadened``). Before the native-slope fix that
-cube was read across metallicity by monotone PCHIP over its own stored values, which is
-not the PCHIP of the native cube, so the table route differed from the per-draw sum route
-over the native cube (5.3e-5 at z = 0.08 on the wNE grid, 4.8e-5 at z = 0.12).
+With a fixed velocity dispersion the spectrum table stores the SSP templates broadened
+once at build (on the ln-lambda lattice since #3500; before it, for a free redshift, as a
+cube on the native grid). Before the native-slope fix the stored templates were read
+across metallicity by monotone PCHIP over their own values, which is not the PCHIP of the
+native cube, so the table differed from the per-draw route (5.3e-5 at z = 0.08 on the wNE
+grid, 4.8e-5 at z = 0.12).
 
 The fix (owner ruling 2026-11-15, "Exact: native slopes") broadens the native PCHIP
-tangents with the same linear build and reads the cube by cubic Hermite of (values,
-slopes). The reference here is the per-draw sum over the native cube (a sigma_v that is
-free, same model), which is the stellar route the table replaces: the table must equal it
-to round-off at an off-node metallicity. The redshift does not enter the cube, so the
-bound holds at every z the pixels sample.
+tangents with the same linear build and reads the table by cubic Hermite of (values,
+slopes). The reference here is the per-draw route (a sigma_v that is free, same model),
+which reads the unbroadened table by the same Hermite and then convolves: the two must
+agree to round-off at an off-node metallicity. The redshift does not enter the table, so
+the bound holds at every z the pixels sample.
 
 The metallicity is solar-relative ``met_logzsol = -0.052``, absolute log Z -1.900, between
 the wNE nodes -2.0 and -1.85387.
@@ -44,7 +45,6 @@ def _build(ssp, sigma_v):
     base = SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        approx=SpectrumPrecomp(n_z=16, z_min=0.04, z_max=0.16),
         redshift=Uniform(0.05, 0.15),
         igm={"type": "none"},
         sfh={"type": "tsnorm", "all_params": Fixed(DEFAULT), "log_total_mass": Fixed(10.0)},
@@ -81,20 +81,21 @@ def _stellar_spectrum(model, params):
 
 
 @pytest.mark.parametrize("z", _Z_GRID)
-def test_free_z_prebroadened_cube_matches_summed_route_off_node_z(ssp_data_wne, z):
-    """The stellar piece of the table route equals the per-draw sum route to round-off.
+def test_free_z_table_broadened_at_build_matches_the_per_draw_route_off_node_z(ssp_data_wne, z):
+    """The stellar piece of the table broadened at build equals the per-draw route.
 
-    Compared at the stellar component's own outputs, which are the table read and nothing
-    else: the stellar sum over the cube and over the native templates agrees to 1e-15. The
-    full predicted spectrum differs by a further 7e-8 that does not come from this table
-    (see the notes on the spectrum-level residual in the commit that added this test).
+    Compared at the stellar component's own outputs on the lattice cells, which are the
+    table read and nothing else.
     """
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         cube = _build(ssp_data_wne, Fixed(300.0))
-        summed = _build(ssp_data_wne, Uniform(0.0, 2000.0))
+        # Floored at 20 km/s: the table declines point-sampled pixels whose kernel can
+        # reach zero (#3500), and the reference would then be the exact path.
+        summed = _build(ssp_data_wne, Uniform(20.0, 2000.0))
     chain = cube._cached_component_chain or cube._build_component_chain()
-    assert chain[0]._state.spec_ssp_broadened is not None
+    assert chain[0]._state.ssp_spec_lut is not None
+    assert cube._approx.get("spectrum_precomp") and summed._approx.get("spectrum_precomp")
     tot_c, age_c = _stellar_spectrum(cube, {"redshift": z})
     tot_s, age_s = _stellar_spectrum(summed, {"redshift": z, "sigma_v_kms": 300.0})
     assert _max_rel_to_median(tot_c, tot_s) <= RTOL

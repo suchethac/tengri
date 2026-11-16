@@ -40,8 +40,10 @@ TOL_CEILING = 1e-2
 # (redshift prior, sigma_v prior or None, params that fix the redshift and dispersion)
 CONFIGS = {
     "fixed_z_sigma_fixed": (Fixed(0.05), Fixed(150.0), {}),
-    "fixed_z_sigma_free": (Fixed(0.05), Uniform(0.0, 2000.0), {"sigma_v_kms": 150.0}),
-    "free_z_sigma_undeclared": (Uniform(0.01, 0.5, "redshift"), None, {"redshift": 0.1}),
+    # Free sigma floored at 20 km/s: the table declines a kernel that can reach 0 (#3500).
+    "fixed_z_sigma_free": (Fixed(0.05), Uniform(20.0, 2000.0), {"sigma_v_kms": 150.0}),
+    # Undeclared sigma is declined by the table (#3500); 150 km/s keeps it served.
+    "free_z_sigma_undeclared": (Uniform(0.01, 0.5, "redshift"), Fixed(150.0), {"redshift": 0.1}),
     "free_z_sigma_fixed": (Uniform(0.01, 0.5, "redshift"), Fixed(150.0), {"redshift": 0.1}),
 }
 
@@ -181,31 +183,21 @@ def test_alpha_gradient_on_the_lut_matches_finite_difference(config):
 
 
 @pytest.mark.parametrize("alpha", [0.0, 0.3, 0.6])
-def test_pre_broadened_cube_route_equals_the_per_draw_route(alpha):
-    """With a free redshift and a fixed dispersion the cube is broadened once at build.
+def test_table_broadened_at_build_equals_the_per_draw_route(alpha):
+    """A fixed dispersion is applied to the templates on the lattice once, at build.
 
-    On a grid with an [alpha/Fe] axis that cube carries the axis, and the route that
-    uses it must give the spectrum of the per-draw route, which broadens the summed
-    spectrum instead. The per-draw result comes from the same model with the built
-    cube removed from the stellar component's state.
+    On a grid with an [alpha/Fe] axis the stored table carries the axis, and its read
+    must give the spectrum of the per-draw route, which convolves the summed spectrum
+    with the same dispersion instead. The per-draw result comes from the model with a
+    free dispersion evaluated at the fixed value.
     """
-    import dataclasses
+    at_build = _model(_ssp4d(), "fixed_z_sigma_fixed", alpha=True, approx=SpectrumPrecomp())
+    per_draw = _model(_ssp4d(), "fixed_z_sigma_free", alpha=True, approx=SpectrumPrecomp())
+    tables = [m._cached_component_chain[0]._state.ssp_spec_lut for m in (at_build, per_draw)]
+    assert tables[0].sigma_v_kms == 150.0 and tables[1].sigma_v_kms is None
+    assert np.ndim(tables[0].ssp_on_lattice) == 4, "the table lost the [alpha/Fe] axis"
+    assert CONFIGS["fixed_z_sigma_free"][2] == {"sigma_v_kms": 150.0}
 
-    from tengri.inference._model_cache import _default_owner
-
-    config = "free_z_sigma_fixed"
-    model = _model(_ssp4d(), config, alpha=True, approx=SpectrumPrecomp())
-    stellar = model._cached_component_chain[0]
-    cube = stellar._state.spec_ssp_broadened
-    assert cube is not None and np.ndim(cube) == 4, "the 4D pre-broadened cube was not built"
-    pre_broadened = _spectrum(model, config, alpha)
-
-    object.__setattr__(
-        stellar, "_state", dataclasses.replace(stellar._state, spec_ssp_broadened=None)
-    )
-    _default_owner.clear()
-    jax.clear_caches()
-    per_draw = _spectrum(model, config, alpha)
-    _default_owner.clear()
-
-    assert _rel_err(pre_broadened, per_draw) < 1e-10
+    built = _spectrum(at_build, "fixed_z_sigma_fixed", alpha)
+    drawn = _spectrum(per_draw, "fixed_z_sigma_free", alpha)
+    assert _rel_err(built, drawn) < 1e-10

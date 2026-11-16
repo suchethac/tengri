@@ -46,6 +46,16 @@ def joint_obs():
     )
 
 
+@pytest.fixture(scope="module")
+def joint_obs_conserving():
+    """Same pixels as ``joint_obs``, flux-conserving so the spectrum table serves them."""
+    wave_obs = jnp.logspace(jnp.log10(3300.0), jnp.log10(8000.0), 80)
+    return Observation(
+        photometry=Photometry(filters=tuple(_tophat(c) for c in (3500.0, 4800.0, 6200.0))),
+        spectroscopy=Spectroscopy(resample="conserving", wave_obs=wave_obs),
+    )
+
+
 def _build(joint_obs, ssp, approx):
     return SEDModel.build(
         ssp_data=ssp,
@@ -62,15 +72,15 @@ def _build(joint_obs, ssp, approx):
     )
 
 
-def test_composite_tuple_activates_both_luts(synthetic_ssp_wide, joint_obs):
+def test_composite_tuple_activates_both_luts(synthetic_ssp_wide, joint_obs_conserving):
     """The (WavePrecomp, SpectrumPrecomp) tuple turns on both LUT families."""
-    m = _build(joint_obs, synthetic_ssp_wide, (WavePrecomp(), SpectrumPrecomp()))
+    m = _build(joint_obs_conserving, synthetic_ssp_wide, (WavePrecomp(), SpectrumPrecomp()))
     assert m._approx["wave_precomp"] is True
     assert m._approx["spectrum_precomp"] is True
 
 
-def test_composite_tuple_is_order_independent(synthetic_ssp_wide, joint_obs):
-    m = _build(joint_obs, synthetic_ssp_wide, (SpectrumPrecomp(), WavePrecomp()))
+def test_composite_tuple_is_order_independent(synthetic_ssp_wide, joint_obs_conserving):
+    m = _build(joint_obs_conserving, synthetic_ssp_wide, (SpectrumPrecomp(), WavePrecomp()))
     assert m._approx["wave_precomp"] is True
     assert m._approx["spectrum_precomp"] is True
 

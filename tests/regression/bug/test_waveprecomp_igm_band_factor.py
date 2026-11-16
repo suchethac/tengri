@@ -171,8 +171,11 @@ def test_spectrum_lut_does_not_evaluate_the_igm_on_the_full_grid():
     from tengri.observation.spectroscopy import Spectroscopy
 
     ssp = pytest.importorskip("tengri").load_ssp()
+    wave_obs = np.linspace(4000.0, 9000.0, 2000)
+    # Flux-conserving pixels: with no kernel at all the table declines point-sampled ones
+    # (#3500), and both builds would then be the exact path.
     obs = Observation(
-        spectroscopy=Spectroscopy(wave_obs=jnp.asarray(np.linspace(4000.0, 9000.0, 2000)))
+        spectroscopy=Spectroscopy(wave_obs=jnp.asarray(wave_obs), resample="conserving")
     )
 
     def build(**extra):
@@ -211,8 +214,11 @@ def test_the_igm_is_still_applied_to_the_lut_spectrum():
     from tengri.observation.spectroscopy import Spectroscopy
 
     ssp = pytest.importorskip("tengri").load_ssp()
+    wave_obs = np.linspace(4000.0, 9000.0, 2000)
+    # Flux-conserving pixels: with no kernel at all the table declines point-sampled ones
+    # (#3500), and both builds would then be the exact path.
     obs = Observation(
-        spectroscopy=Spectroscopy(wave_obs=jnp.asarray(np.linspace(4000.0, 9000.0, 2000)))
+        spectroscopy=Spectroscopy(wave_obs=jnp.asarray(wave_obs), resample="conserving")
     )
 
     def build(**extra):

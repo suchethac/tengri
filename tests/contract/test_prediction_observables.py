@@ -366,16 +366,26 @@ def test_spectrum_default_stays_exact_on_a_spectrumprecomp_model(ssp):
 
     wave_obs = jnp.linspace(4000.0, 9000.0, 300)
 
-    def build(**kw):
-        return _model(
+    def build(approx=None):
+        # sigma_v_kms=150 keeps the kernel above the table's 20 km/s floor, so the
+        # table serves this point-sampled spectrum (#3500); both arms share it.
+        base = _model(
             ssp,
             filters=None,
             spectroscopy=Spectroscopy(resample="point", wave_obs=wave_obs, resolution=1000.0),
-            **kw,
+            approx=None,
+        )
+        spec = base.spec.merge_observation_params(sigma_v_kms=Fixed(150.0))
+        return SEDModel(
+            spec,
+            ssp,
+            observation=base.observation,
+            approx=approx,
         )
 
     exact_model = build()
     lut_model = build(approx=SpectrumPrecomp())
+    assert lut_model._approx.get("spectrum_precomp")
 
     reference = np.asarray(exact_model.predict(_params(exact_model)).spectrum())
     pred = lut_model.predict(_params(lut_model))

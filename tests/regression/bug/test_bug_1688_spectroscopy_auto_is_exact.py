@@ -5,12 +5,12 @@
 high-SNR spectrum that bias moves the posterior by about one sigma against
 the exact path (#1688, the spectroscopy sibling of #1671). ``approx="auto"``
 takes the pixel LUT for spectroscopy only where it serves the pixels exactly
-(#2958, ``SEDModel._spectrum_lut_serves_exactly``): pixels that need the bin
-integral (wider than the model grid, #2530) stay exact, as does a fit with a
-free ``sigma_v_kms``. An explicit ``approx=SpectrumPrecomp()`` still engages
-it. The emission-line ``FeaturePrecomp`` is a separate mechanism: a
-spectroscopy fit with a measured line channel keeps it under ``"auto"``, and
-with the coarse pixels used here the pixel LUT stays off.
+(#2958, ``SEDModel._spectrum_lut_serves_exactly``): a fit with a free
+``sigma_v_kms`` stays exact, and point-sampled pixels the table declines stay
+exact. Coarse pixels that need the bin integral are served by the table
+(#3500). An explicit ``approx=SpectrumPrecomp()`` still engages it. The
+emission-line ``FeaturePrecomp`` is a separate mechanism: a spectroscopy fit
+with a measured line channel keeps it under ``"auto"``.
 """
 
 import numpy as np
@@ -34,8 +34,11 @@ _LINES = ("Halpha", "Hbeta", "OIII_5007")
 _WAVES = np.array([6564.61, 4862.71, 5008.24])
 
 
-def _spectroscopy_fixture(ssp, *, line_fluxes=None, coarse=False):
-    """64 point-sampled pixels, or with ``coarse`` 50 pixels that need the bin integral."""
+def _spectroscopy_fixture(ssp, *, line_fluxes=None, coarse=False, sigma_v_kms=None):
+    """64 point-sampled pixels, or with ``coarse`` 50 pixels that need the bin integral.
+
+    ``sigma_v_kms`` declares a Fixed stellar dispersion on the model when given.
+    """
     if coarse:
         wave_obs = np.linspace(4500.0, 7500.0, 50)
         spectro = Spectroscopy(resample="auto", wave_obs=wave_obs)
@@ -58,6 +61,9 @@ def _spectroscopy_fixture(ssp, *, line_fluxes=None, coarse=False):
         neb={"type": "none"},
         redshift=Fixed(0.05),
     )
+    if sigma_v_kms is not None:
+        spec = model.spec.merge_observation_params(sigma_v_kms=Fixed(sigma_v_kms))
+        model = SEDModel(spec, ssp, observation=obs)
     fwd = ForwardModel.build(sed=model, observation=obs)
     n_pix = wave_obs.shape[0]
     return fwd, np.full(n_pix, 1.0), np.full(n_pix, 0.05)
@@ -73,12 +79,21 @@ def _line_flux_channel():
     )
 
 
-def test_auto_resolves_coarse_spectroscopy_to_the_exact_path(synthetic_ssp_wide):
-    """Pixels that need the bin integral cannot be served by the LUT, so auto stays exact."""
+def test_auto_serves_coarse_conserving_pixels_from_the_table(synthetic_ssp_wide):
+    """Coarse pixels that need the bin integral are served by the table under auto.
+
+    The table serves a flux-conserving pixel integral at any kernel width (#3500), and
+    the undeclared sigma_v_kms is Fixed at 0, so auto takes the table. It must agree with
+    the exact path within 1e-3 of the peak.
+    """
     fwd, flux, noise = _spectroscopy_fixture(synthetic_ssp_wide, coarse=True)
     fitter = Fitter(fwd, flux, noise, data_type="spectroscopy")  # approx="auto" default
-    assert not fitter.model._has_modern_approx()
-    assert fitter.model is fwd
+    assert fitter.model._has_modern_approx()
+    exact = Fitter(fwd, flux, noise, data_type="spectroscopy", approx=None)
+    f_auto = np.asarray(fitter.model.predict_spectrum({}))
+    f_exact = np.asarray(exact.model.predict_spectrum({}))
+    peak = float(np.max(np.abs(f_exact)))
+    assert np.max(np.abs(f_auto - f_exact)) / peak < 1e-3, "auto table disagrees with exact"
 
 
 def test_auto_keeps_feature_precomp_for_a_spectroscopy_line_channel(synthetic_ssp_wide):
@@ -89,12 +104,12 @@ def test_auto_keeps_feature_precomp_for_a_spectroscopy_line_channel(synthetic_ss
     fitter = Fitter(fwd, flux, noise, data_type="spectroscopy")  # approx="auto" default
     state = fitter.model.approx
     assert state.feature_precomp, "a spectroscopy line-channel fit lost FeaturePrecomp"
-    assert not state.spectrum_precomp, "auto engaged the biased pixel LUT"
+    assert state.spectrum_precomp, "auto did not serve the conserving pixels from the table"
     assert not state.wave_precomp, "auto engaged WavePrecomp on a spectroscopy fit"
 
 
 def test_explicit_spectrum_precomp_still_engages(synthetic_ssp_wide):
-    fwd, flux, noise = _spectroscopy_fixture(synthetic_ssp_wide)
+    fwd, flux, noise = _spectroscopy_fixture(synthetic_ssp_wide, sigma_v_kms=150.0)
     fitter = Fitter(fwd, flux, noise, data_type="spectroscopy", approx=SpectrumPrecomp())
     assert fitter.model._has_modern_approx()
     inner = fitter.model._inner_sed_for_delegation()

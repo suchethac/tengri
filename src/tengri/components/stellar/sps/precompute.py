@@ -66,52 +66,6 @@ AXIS_PARAMS: tuple[str, ...] = ("met_logzsol",)
 _np_trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
 
 
-def _vectorized_interp(
-    xp_target: np.ndarray, xp_source: np.ndarray, yp_source: np.ndarray
-) -> np.ndarray:
-    """Vectorized linear interpolation: all (met, age) SSPs at once.
-
-    Replaces the inner ``for m in n_met: for a in n_age: np.interp(...)``
-    double loop with a single vectorized NumPy operation.  Computes
-    interpolation indices and weights once, then applies via fancy indexing.
-
-    Parameters
-    ----------
-    xp_target : array, shape (n_target,)
-        Target x-coordinates (e.g. filter wavelengths).
-    xp_source : array, shape (n_source,)
-        Source x-coordinates (must be sorted ascending).
-    yp_source : array, shape (..., n_source)
-        Source y-values; the leading axes are the templates, e.g. (n_met, n_age) or
-        (n_met, n_alpha, n_age) on a grid with an [alpha/Fe] axis.
-
-    Returns
-    -------
-    array, shape (..., n_target)
-        Interpolated values, with out-of-bounds set to 0.
-
-    """
-    n_source = len(xp_source)
-
-    # Compute interpolation indices and fractional weights once
-    idx = np.searchsorted(xp_source, xp_target) - 1
-    idx = np.clip(idx, 0, n_source - 2)
-
-    dx = xp_source[idx + 1] - xp_source[idx]
-    # Guard against zero-width bins (shouldn't happen with sorted grids)
-    dx = np.where(dx > 0, dx, 1.0)
-    frac = (xp_target - xp_source[idx]) / dx
-
-    # Vectorized gather over the template axes via fancy indexing on the last axis
-    result = (1.0 - frac) * yp_source[..., idx] + frac * yp_source[..., idx + 1]
-
-    # Zero out-of-bounds (left and right)
-    oob = (xp_target < xp_source[0]) | (xp_target > xp_source[-1])
-    result[..., oob] = 0.0
-
-    return result
-
-
 class PhotometricPrecomputation(NamedTuple):
     """Pre-computed SSP broadband fluxes for fast photometry.
 
@@ -497,11 +451,9 @@ def lattice_velocity_kernel_kms(sigma_v_kms, box_in_kernel: bool):
     """
     if not box_in_kernel:
         return sigma_v_kms
-    from tengri.observation.spectrum import _LATTICE_BOX_SIGMA_KMS
+    from tengri.observation.spectrum import lattice_box_split_kms
 
-    excess = jnp.asarray(sigma_v_kms) ** 2 - _LATTICE_BOX_SIGMA_KMS**2
-    wider = excess > 0.0
-    return jnp.where(wider, jnp.sqrt(jnp.where(wider, excess, 1.0)), 0.0)
+    return lattice_box_split_kms(sigma_v_kms)[0]
 
 
 def spectrum_lattice_table_nbytes(ssp_flux_shape, n_cells: int, itemsize: int = 8) -> int:
@@ -551,30 +503,39 @@ def precompute_spectrum_lattice(
     )
 
     origin, n_cells = float(lattice[0]), int(lattice[1])
-    centers = lattice_centers(origin, n_cells)
-    wave = jnp.asarray(ssp_data.ssp_wave)
     pad = _lattice_pad_cells()
     fixed = sigma_v_kms is not None and float(sigma_v_kms) > 0.0
-    kernel = lattice_velocity_kernel_kms(float(sigma_v_kms), box_in_kernel) if fixed else None
+    dtype = np.asarray(ssp_data.ssp_flux).dtype
 
-    def _load(row):
-        on_cells = lattice_cell_lnu(centers, wave, row)
-        if kernel is None:
-            return on_cells
-        return (
-            broaden_velocity_only(on_cells * centers, centers, kernel, 1, pad_pixels=pad) / centers
-        )
+    # Built in float64 whatever the session precision: a cell mean is a difference of the
+    # template's cumulative integral, which in float32 loses about four digits.
+    with jax.enable_x64(True):
+        centers = lattice_centers(origin, n_cells)
+        wave = jnp.asarray(np.asarray(ssp_data.ssp_wave, dtype=np.float64))
+        kernel = lattice_velocity_kernel_kms(float(sigma_v_kms), box_in_kernel) if fixed else None
 
-    def _cube(flux):
-        flux = jnp.asarray(flux)
-        flat = flux.reshape(-1, flux.shape[-1])
-        out = jax.lax.map(_load, flat, batch_size=_TEMPLATE_LATTICE_BATCH)
-        return out.reshape((*flux.shape[:-1], n_cells))
+        def _load(row):
+            on_cells = lattice_cell_lnu(centers, wave, row)
+            if kernel is None:
+                return on_cells
+            broadened = broaden_velocity_only(
+                on_cells * centers, centers, kernel, 1, pad_pixels=pad
+            )
+            return broadened / centers
+
+        def _cube(flux):
+            flux = np.asarray(flux, dtype=np.float64)
+            flat = jnp.asarray(flux.reshape(-1, flux.shape[-1]))
+            out = jax.lax.map(_load, flat, batch_size=_TEMPLATE_LATTICE_BATCH)
+            return np.asarray(out).reshape((*flux.shape[:-1], n_cells)).astype(dtype)
+
+        values, slopes = _cube(ssp_data.ssp_flux), _cube(slope_flux)
+        centers = np.asarray(centers).astype(dtype)
 
     return SpectrumLatticeTable(
-        ssp_on_lattice=_cube(ssp_data.ssp_flux),
-        ssp_on_lattice_slope=_cube(slope_flux),
-        cell_centers=centers,
+        ssp_on_lattice=jnp.asarray(values),
+        ssp_on_lattice_slope=jnp.asarray(slopes),
+        cell_centers=jnp.asarray(centers),
         origin=origin,
         n_cells=n_cells,
         sigma_v_kms=None if sigma_v_kms is None else float(sigma_v_kms),

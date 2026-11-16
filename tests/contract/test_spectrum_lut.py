@@ -79,6 +79,19 @@ def _build(ssp, obs, approx, redshift, dust_attenuation=None):
         )
 
 
+def _restate_with_sigma(model, ssp, obs, approx):
+    """Rebuild ``model`` with ``sigma_v_kms=Fixed(150)`` merged into its spec.
+
+    The table declines point-sampled pixels whose kernel is narrower than 20 km/s
+    (#3500); a 150 km/s dispersion keeps it served. Used on the exact twin too so
+    the pair shares one configuration.
+    """
+    from tengri import Fixed, SEDModel
+
+    spec = model.spec.merge_observation_params(sigma_v_kms=Fixed(150.0))
+    return SEDModel(spec, ssp, observation=obs, approx=approx)
+
+
 class TestSpectrumLUTAccuracy:
     """SpectrumPrecomp spec_fnu agrees with the exact path at low–medium R.
 
@@ -118,8 +131,15 @@ class TestSpectrumLUTAccuracy:
             "all_params": Fixed(DEFAULT),
             "tau_bc": 0.0,
         }
-        m_exact = _build(ssp, obs, None, Fixed(0.05), dust_attenuation=diffuse_dust)
-        m_lut = _build(ssp, obs, SpectrumPrecomp(), Fixed(0.05), dust_attenuation=diffuse_dust)
+        m_exact = _restate_with_sigma(
+            _build(ssp, obs, None, Fixed(0.05), dust_attenuation=diffuse_dust), ssp, obs, None
+        )
+        m_lut = _restate_with_sigma(
+            _build(ssp, obs, SpectrumPrecomp(), Fixed(0.05), dust_attenuation=diffuse_dust),
+            ssp,
+            obs,
+            SpectrumPrecomp(),
+        )
         # The LUT path must actually engage (not silently fall through).
         assert m_lut._approx.get("spectrum_precomp") is True
 
@@ -212,7 +232,7 @@ class TestSpectrumLUTGuards:
         )
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
-            m = SEDModel.build(
+            base = SEDModel.build(
                 ssp_data=ssp,
                 observation=obs,
                 sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
@@ -223,8 +243,10 @@ class TestSpectrumLUTGuards:
                 },
                 neb={"type": "none"},
                 redshift=Fixed(0.05),
-                approx=SpectrumPrecomp(),
+                approx=None,
             )
+            # sigma_v_kms=150 keeps the table serving at R=5000 (#3500); resolution stays.
+            m = _restate_with_sigma(base, ssp, obs, SpectrumPrecomp())
         assert m._approx.get("spectrum_precomp") is True
         assert not any("falls back" in str(w.message) for w in caught)
 
@@ -310,8 +332,12 @@ class TestSpectrumLUTLines:
         from tengri import Observation, Spectroscopy, load_ssp_data
 
         ssp = load_ssp_data(bare)
+        # Flux-conserving pixels: the table serves them at any kernel width, and a
+        # Cue nebular component rules out a sigma_v_kms fix (#3500).
         obs = Observation(
-            spectroscopy=Spectroscopy(resample="point", wave_obs=jnp.linspace(4500.0, 7500.0, 64))
+            spectroscopy=Spectroscopy(
+                resample="conserving", wave_obs=jnp.linspace(4500.0, 7500.0, 64)
+            )
         )
         m = self._build_cue(ssp, obs, SpectrumPrecomp())
         # Guard lifted: a line-publishing backend is allowed and engages.
@@ -376,8 +402,11 @@ class TestJointPrecomp:
         )
         return Observation(
             photometry=Photometry(filters=curves),
+            # Rest wavelengths below 6190 A at z = 0.05: a dust-law step inside the spectrum
+            # (the Calzetti branches join at 6300 A) keeps the automatic promotion of the
+            # spectrum channel on the exact path (#3500).
             spectroscopy=Spectroscopy(
-                resample="point", wave_obs=jnp.linspace(4500.0, 7500.0, n_pix)
+                resample="point", wave_obs=jnp.linspace(4500.0, 6500.0, n_pix)
             ),
         )
 
@@ -417,8 +446,17 @@ class TestJointPrecomp:
         ssp = load_ssp_data(ssp_path)
         obs = self._joint_obs()
 
-        m_exact = self._build_joint(ssp, obs, None, Fixed(0.05))
-        m_lut = self._build_joint(ssp, obs, approx_factory(), Fixed(0.05))
+        # sigma_v_kms=150 lets the spectrum table serve the point pixels (#3500); both
+        # arms share it, so the joint promotion to both families can engage.
+        m_exact = _restate_with_sigma(
+            self._build_joint(ssp, obs, None, Fixed(0.05)), ssp, obs, None
+        )
+        m_lut = _restate_with_sigma(
+            self._build_joint(ssp, obs, approx_factory(), Fixed(0.05)),
+            ssp,
+            obs,
+            approx_factory(),
+        )
 
         # Joint promotes to BOTH LUT families (no NotImplementedError).
         assert m_lut._approx.get("wave_precomp") is True

@@ -857,7 +857,7 @@ def _channel_obs(channel, line_data=None):
 
     if channel == "spec":
         return Observation(
-            spectroscopy=Spectroscopy(wave_obs=jnp.asarray(_SPEC_WAVE), resample="point")
+            spectroscopy=Spectroscopy(wave_obs=jnp.asarray(_SPEC_WAVE), resample="conserving")
         )
     if channel == "phot2":
         return Observation(photometry=Photometry.from_names(_PHOT2))
@@ -1748,7 +1748,7 @@ def test_the_spectroscopic_redshift_finite_difference_is_truncation_not_defect(s
 
     with jax.enable_x64(True):
         obs = Observation(
-            spectroscopy=Spectroscopy(wave_obs=jnp.asarray(_SPEC_WAVE), resample="point")
+            spectroscopy=Spectroscopy(wave_obs=jnp.asarray(_SPEC_WAVE), resample="conserving")
         )
         zfac = Uniform(_Z_LO, _Z_HI)
         sed = SEDModel.build(
