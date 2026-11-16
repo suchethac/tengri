@@ -11,8 +11,6 @@ marginalization primitive adds or removes a constant.
 
 from __future__ import annotations
 
-from typing import cast
-
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -127,6 +125,8 @@ def correlated_noise_term(
     """
     if cov_inv is None:
         _, bands, offsets = floored_noise(model_flux, None, chol_data, chol_offsets, f_cal)
+        if bands is None:
+            raise ValueError("a banded covariance needs its Cholesky bands")
         factor = _banded_factor(bands, offsets)
         whitened = banded_forward_substitution(factor, obs - model_flux)
         diagonal = bands[0]
@@ -197,7 +197,7 @@ def floored_noise(model_flux, err, chol_data, chol_offsets, f_cal):
 
 def _banded_factor(chol_data, chol_offsets) -> BandedMatrix:
     """The banded Cholesky factor as the primitive's ``BandedMatrix``."""
-    return BandedMatrix(cast(jnp.ndarray, np.asarray(chol_offsets, dtype=int)), chol_data)
+    return BandedMatrix(np.asarray(chol_offsets, dtype=int), chol_data)
 
 
 def _model_prior_inputs(log_line_lums, match_index, matched, line_wavelengths, prior_inputs):

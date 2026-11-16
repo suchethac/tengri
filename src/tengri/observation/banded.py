@@ -33,6 +33,7 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 import numpy as np
+from jax.core import Tracer
 from jax.scipy import linalg as jax_linalg
 
 from tengri.utils.physics_constants import C_KM_S as _C_KM_S, GAUSSIAN_FWHM_PER_SIGMA
@@ -57,7 +58,7 @@ class BandedMatrix(NamedTuple):
         ``x[i + offsets[k]]`` when forming ``y[i]``.
     """
 
-    offsets: jnp.ndarray
+    offsets: np.ndarray | jnp.ndarray
     data: jnp.ndarray
 
 
@@ -281,7 +282,7 @@ def gaussian_resolution_bands(wave_obs: jnp.ndarray, resolution, n_diag: int = 1
     return BandedMatrix(offsets=jnp.asarray(offsets), data=jnp.asarray(data))
 
 
-def row_sigma_kms(bm: BandedMatrix, wave_obs: jnp.ndarray) -> np.ndarray:
+def row_sigma_kms(bm: BandedMatrix, wave_obs: np.ndarray | jnp.ndarray) -> np.ndarray:
     r"""Gaussian-equivalent velocity width of each row of a banded LSF [km/s].
 
     Second central moment of row :math:`i` over its diagonal offsets,
@@ -555,7 +556,10 @@ def banded_cholesky(
             ),
             0,
         )
-        lower = _lower_rows(dense_to_banded(dense, half=half))
+        banded = dense_to_banded(dense, half=half)
+        if banded is None:
+            raise ValueError("covariance could not be reduced to banded storage")
+        lower = _lower_rows(banded)
     half = lower.shape[0] - 1
     if pix_mask is not None:
         mask = jnp.asarray(pix_mask, dtype=lower.dtype)
@@ -585,7 +589,7 @@ def banded_cholesky(
         _, columns = jax.lax.scan(step, init, ab.T)
         data = jnp.stack([_shifted(columns[:, k], k) for k in range(half + 1)])
 
-    if not isinstance(data, jax.core.Tracer) and not bool(jnp.all(jnp.isfinite(data))):
+    if not isinstance(data, Tracer) and not bool(jnp.all(jnp.isfinite(data))):
         raise ValueError("covariance is not positive definite")
     return BandedMatrix(offsets=-np.arange(half + 1), data=data)
 
@@ -719,7 +723,7 @@ def banded_forward_substitution(chol: BandedMatrix, r: jnp.ndarray) -> jnp.ndarr
 
 
 def dense_to_banded(
-    dense: np.ndarray, rtol: float = 1e-12, half: int | None = None
+    dense: np.ndarray | jnp.ndarray, rtol: float = 1e-12, half: int | None = None
 ) -> BandedMatrix | None:
     r"""Reduce a dense symmetric matrix to banded storage.
 
