@@ -469,14 +469,13 @@ def test_fitter_runtime_redshift_matches_plain_model_loss():
 
 
 def test_non_catalog_params_override_redshift_matches_direct_build():
-    """params_override redshift on a non-catalog model bakes, not routes (#1331).
+    """params_override redshift on a non-catalog model equals a build at that z.
 
-    Without catalog_z_range, params_override redshift is a compile constant
-    rather than a data_args runtime input, but the evaluation methods
-    (fixed_values-aware since this fix) must still see the OVERRIDDEN z, not
-    the model's own build-time Fixed value -- this is exactly mutant M3's
-    target (``_get_dl_cm`` preferring ``_dl_cm_fixed``, which IS set here,
-    over ``fixed_values``).
+    Without catalog_z_range the fixed-z model is promoted to a runtime-redshift
+    model (#3505) and the override rides data_args; the evaluation methods must
+    still see the OVERRIDDEN z, not the model's own declared Fixed value -- this is
+    exactly mutant M3's target (``_get_dl_cm`` preferring a build-time distance over
+    the value the call carries).
     """
     ssp = synthetic_ssp_wide()
     obs = Observation(photometry=Photometry.from_names(BANDS), line_fluxes=line_data())
@@ -500,11 +499,9 @@ def test_non_catalog_params_override_redshift_matches_direct_build():
             plain_08, data=phot, noise=phot_err, data_type="photometry", approx=WavePrecomp()
         )
 
-    assert "redshift" not in f_override._data_args, (
-        "no catalog_z_range: the override must stay a compile constant (#1331), "
-        "not a data_args runtime input -- if this now fails, params_override "
-        "started routing through data_args even without a ztable and this test "
-        "should be updated to match"
+    assert float(f_override._data_args["redshift"]) == 0.8, (
+        "a fixed-z model is promoted to a runtime-redshift model and the override "
+        "rides data_args (#3505)"
     )
 
     ctx_o = InferenceContext.from_target(f_override)
@@ -520,7 +517,7 @@ def test_non_catalog_params_override_redshift_matches_direct_build():
     # factors, ...), so the loss equality above was vacuous for them. The override
     # must evaluate a model built at the override redshift, so its predicted
     # photometry must equal a direct build's, and differ from the z=0.1 model's.
-    phot_o = np.asarray(f_override.model.predict_photometry(PARAMS))
+    phot_o = np.asarray(f_override.model.predict_photometry({**PARAMS, "redshift": 0.8}))
     phot_d = np.asarray(plain_08.predict_photometry(PARAMS))
     np.testing.assert_allclose(phot_o, phot_d, rtol=RTOL)
     assert _relative_diff(np.asarray(plain_01.predict_photometry(PARAMS)), phot_d) > VACUITY_FLOOR
