@@ -96,19 +96,75 @@ def test_a_clean_case_reaches_the_best_mode_and_is_not_flagged(seed):
     assert gap < 0.1
 
 
-@pytest.mark.parametrize("seed", (12, 14, 17))
-def test_a_multimodal_case_reaches_the_better_mode_or_is_flagged(seed):
-    """30 data, 10 columns, 30% outliers at 10 sigma: the multimodal regime."""
+@pytest.mark.parametrize(
+    ("seed", "reaches_best", "flagged"),
+    (
+        (0, True, False),
+        (17, True, True),
+        (12, False, True),
+        (14, False, True),
+        (18, False, False),
+    ),
+)
+def test_a_multimodal_case_reaches_the_best_mode_and_is_flagged_as_measured(
+    seed, reaches_best, flagged
+):
+    """30 data, 10 columns, 30% outliers at 10 sigma: what the mode reached and what warns.
+
+    Seed 18 is a miss that carries no flag: the report does not detect every miss.
+    """
     cell = _cell(30, 10, 0.3, seed, outlier_sigmas=10.0)
     result = _run(cell, 3.0)
     gap = _best_of_restarts(cell, 3.0) - _objective(np.asarray(result.coef_hat), cell, 3.0)
-    assert gap < 0.1 or _flagged(result)
+    assert (gap < 0.1) == reaches_best
+    assert _flagged(result) == flagged
+
+
+def _weighted_solve(cell, weight):
+    model0, sigma, design, data = cell
+    precision = design.T @ (design * (weight / sigma**2)[:, None])
+    precision = precision + np.eye(design.shape[1]) / PRIOR_SIGMA**2
+    return np.linalg.solve(precision, design.T @ (weight * (data - model0) / sigma**2))
+
+
+def _weights(cell, beta, dof):
+    model0, sigma, design, data = cell
+    z = (data - model0 - design @ beta) / sigma
+    return (dof + 1.0) / (dof + z * z)
+
+
+def _laplace_at(cell, beta, dof):
+    """The documented Laplace marginal at ``beta``, from the Fisher information."""
+    model0, sigma, design, data = cell
+    n_col = design.shape[1]
+    fisher = (dof + 1.0) / (dof + 3.0) * design.T @ (design / sigma[:, None] ** 2)
+    fisher = fisher + np.eye(n_col) / PRIOR_SIGMA**2
+    return (
+        _log_student_t(data - model0 - design @ beta, sigma, dof).sum()
+        - 0.5 * np.sum(beta**2) / PRIOR_SIGMA**2
+        - 0.5 * n_col * np.log(PRIOR_SIGMA**2)
+        - 0.5 * np.linalg.slogdet(fisher)[1]
+    )
+
+
+def _reweighted_mode(cell, dof, start_weight):
+    beta = _weighted_solve(cell, start_weight)
+    for _ in range(2000):
+        beta = _weighted_solve(cell, _weights(cell, beta, dof))
+    return beta
 
 
 def test_a_second_start_is_taken_when_it_has_the_larger_marginal():
     """30 data, 10 columns, 30% outliers at 20 sigma, seed 4: the starts reach different modes."""
-    result = _run(_cell(30, 10, 0.3, 4, outlier_sigmas=20.0), 3.0)
+    cell, dof = _cell(30, 10, 0.3, 4, outlier_sigmas=20.0), 3.0
+    result = _run(cell, dof)
+    from_gaussian = _reweighted_mode(cell, dof, np.ones(30))
+    from_prior = _reweighted_mode(cell, dof, _weights(cell, np.zeros(10), dof))
+    marginals = [_laplace_at(cell, b, dof) for b in (from_gaussian, from_prior)]
     assert float(result.start_gap) > START_GAP_WARN
+    assert abs(marginals[0] - marginals[1]) > START_GAP_WARN
+    assert float(result.log_like) == pytest.approx(max(marginals), abs=1e-6)
+    assert float(result.log_like) > min(marginals) + START_GAP_WARN
 
 
 def test_the_gaussian_marginal_has_no_report():
