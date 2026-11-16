@@ -25,9 +25,15 @@ pytestmark = [pytest.mark.contract, pytest.mark.regression_bug]
 
 
 def _stub_model(resolution):
+    """A model stand-in: observed grid, the declared resolution and a default-group catalog."""
+    from tengri.observation.line_list import LineList
+
+    spectroscopy = SimpleNamespace(
+        resolution=resolution, effective_catalog=LineList.from_names(["Hbeta", "Halpha"])
+    )
     return SimpleNamespace(
         wave_obs=jnp.linspace(4000.0, 7000.0, 500),
-        observation=SimpleNamespace(spectroscopy=SimpleNamespace(resolution=resolution)),
+        observation=SimpleNamespace(spectroscopy=spectroscopy),
     )
 
 

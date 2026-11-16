@@ -212,10 +212,9 @@ def test_g_prebroadened_table_equals_sum_route(ssp_data_wne):
     s_sum = _spectrum(summed, 300.0)
     # Same operation in two orders of linear ops: relative to the median flux so FFT
     # roundoff in the deepest absorption pixels does not dominate.
-    # Route bar, 3x the measured 1.21e-5 on the PCHIP read (main, Hermite: 5.4e-8). PCHIP is
-    # non-linear: the prebroadened table reads PCHIP of the broadened columns, the sum route
-    # broadens the PCHIP read of the raw columns, and the two differ at about 1e-5.
-    assert float(np.max(np.abs(s_table - s_sum))) <= 3.6e-5 * float(np.median(np.abs(s_sum)))
+    # Route bar, 3x the measured 5.39e-8 with the native-slope Hermite read (#3541, 2026-11-15;
+    # it was 1.21e-5 when the table read PCHIP of its own broadened columns).
+    assert float(np.max(np.abs(s_table - s_sum))) <= 1.6e-7 * float(np.median(np.abs(s_sum)))
 
 
 # ── (h) no resolution cap: the LUT holds at R = 5000 ──────────────────────────
@@ -250,14 +249,19 @@ def test_h_lut_matches_exact_at_r5000_without_fallback(ssp_data_wne):
 # Re-pinned 2026-11-15: monotone PCHIP metallicity read (#3434, owner ruling 'True PCHIP
 # on the spectra'). Main's values are 8.800566e-29 ... 1.410505e-27; the PCHIP read moves the
 # low-flux pixels by up to 2.4e-4 relative. Control (Hermite read) reproduces main to 1e-15.
+# Re-pinned 2026-11-15 (#3541, owner ruling "Exact: native slopes"): the spectrum table now reads
+# the native PCHIP slopes by Hermite instead of PCHIP of its own resampled values. The move is up
+# to 2.8e-6 relative (index 0: 2.0e-7). Measured against the exact path on this grid, the LUT
+# moved from 7.2e-6 to 4.4e-6 at these pixels; the rest (about 6e-6 at every pixel, with or
+# without Madau IGM) is a separate LUT residual, not the metallicity read, and is not closed here.
 _PREFIX_LUT_WNE_RNONE = [
-    8.801267342704195e-29,
-    3.157198494420064e-28,
-    5.065771660279481e-28,
-    7.304963047431351e-28,
-    8.537459097668553e-28,
-    1.166429892201843e-27,
-    1.4114134809927024e-27,
+    8.801269134494637e-29,
+    3.1571986038432897e-28,
+    5.065771732046372e-28,
+    7.30496310383873e-28,
+    8.53745948244721e-28,
+    1.1664301615680506e-27,
+    1.4114095304577797e-27,
 ]
 
 
@@ -467,9 +471,10 @@ def test_i_free_z_fixed_sigma_v_cube_equals_sum_route(ssp_data_wne, z):
     assert chain[0]._state.spec_ssp_broadened is not None
     s_cube = np.asarray(cube.predict_spectrum({"redshift": z}))
     s_sum = np.asarray(summed.predict_spectrum({"redshift": z, "sigma_v_kms": 300.0}))
-    # Route bar at 3x the measured PCHIP route gap (z=0.08: 1.05e-5, z=0.12: 1.18e-5; main with
-    # the Hermite read: 5.1e-8 and 5.6e-8). Same cause as test_g: PCHIP is non-linear.
-    bar = {0.08: 3.2e-5, 0.12: 3.6e-5}[z]
+    # Route bar at 3x the measured residual with the native-slope Hermite read (#3541: z=0.08
+    # 5.08e-8, z=0.12 5.56e-8, measured 2026-11-15). Before #3541 the PCHIP read of the stored
+    # broadened cube gave 1.05e-5 and 1.18e-5. Same cause as test_g: PCHIP is non-linear.
+    bar = {0.08: 1.6e-7, 0.12: 1.7e-7}[z]
     assert float(np.max(np.abs(s_cube - s_sum))) <= bar * float(np.median(np.abs(s_sum)))
 
 

@@ -737,9 +737,9 @@ def test_float32_is_amplified_by_snr_exactly_as_the_lut_bias_is(snr_interaction)
     """float32 does not make #1671 worse — it *is* #1671, with a smaller coefficient.
 
     The measured answer, and it is not the intuitive one. The float32 error is **not**
-    independent of SNR: it grows linearly, 5.2e-04 at SNR 30 to 5.6e-03 at SNR 300 on
-    this fixture — the same tenfold as the LUT bias over the same tenfold in SNR. That is
-    the same mechanism, not a coincidence. A *relative* forward-model error ``eps``,
+    independent of SNR: it grows linearly, 9.5e-04 at SNR 30 to 1.02e-02 at SNR 300 on
+    this fixture (2026-11-16) — the same tenfold as the LUT bias over the same tenfold in
+    SNR. That is the same mechanism, not a coincidence. A *relative* forward-model error ``eps``,
     constant in SNR, reaches the posterior gradient multiplied by ``1/sigma`` and hence
     by SNR. ``WavePrecomp``'s ``eps`` is its LUT bias (~1e-3); float32's is its forward
     rounding (~1e-6). Both gradient errors therefore scale identically and **their ratio
@@ -748,23 +748,28 @@ def test_float32_is_amplified_by_snr_exactly_as_the_lut_bias_is(snr_interaction)
     Consequences, and the second is the one that gets forgotten:
 
     1. float32 is not what limits a ``WavePrecomp`` fit at any SNR in this range — the
-       LUT leads by more than an order of magnitude throughout;
+       LUT bias leads by about 8x throughout (8.5x at SNR 30, 8.1x at SNR 300);
     2. **float64 is not the fix for a high-SNR LUT fit** either. The bias survives at
        full precision; ``approx=None`` (or a finer LUT) is what removes it.
 
-    float32 does have an SNR ceiling of its own, and it follows directly: extrapolating
-    the linear scaling, the 1e-2 bar this module holds is crossed somewhere between SNR
-    300 and SNR 1000 (measured: 2.3e-02 at SNR 1000 on the same arm). Nothing here
-    licenses float32 at SNR 1000.
+    float32 does have an SNR ceiling of its own, and it follows directly: with the linear
+    scaling, this test's 1.2e-2 bar is crossed just above SNR 300 (an earlier measurement
+    gave 2.3e-02 at SNR 1000 on the same arm). Nothing here licenses float32 at SNR 1000.
     """
     lo, hi = snr_interaction[_SNR_LOW], snr_interaction[_SNR_HIGH]
     f32_lo, f32_hi = _f32_error(lo), _f32_error(hi)
     bias_lo, bias_hi = _bias(lo), _bias(hi)
-    assert f32_hi < 1e-2, (
+    # Bars set by the owner on 2026-11-16 from measurements of this test. Float32 gradient
+    # error at SNR 300: 6.99e-3 before the PCHIP metallicity read (f02bfb30d), 8.98e-3 after
+    # it (#3528), 1.024e-2 with native-slope tables (#3541); LUT bias 8.08e-2 to 8.26e-2,
+    # so bias/error 8.1-9.0. The 1.2e-2 bar keeps 17% margin and a 2x float32 precision
+    # loss (2.05e-2) fails it; the 0.2x-bias bar (ratio >= 5) keeps 61% margin and the same
+    # 2x loss (ratio 4.0) fails it. The float64 route did not move.
+    assert f32_hi < 1.2e-2, (
         f"the float32 posterior gradient error at SNR {_SNR_HIGH:.0f} is {f32_hi:.2e}, "
-        f"outside the 1e-2 bar the rest of this module holds ({_where()})"
+        f"outside the 1.2e-2 bar ({_where()})"
     )
-    assert f32_hi < 0.1 * bias_hi, (
+    assert f32_hi < 0.2 * bias_hi, (
         f"at SNR {_SNR_HIGH:.0f} the float32 error ({f32_hi:.2e}) is no longer small "
         f"beside the LUT's own bias ({bias_hi:.2e}), so precision has become a comparable "
         f"term and the report's conclusion needs re-measuring"

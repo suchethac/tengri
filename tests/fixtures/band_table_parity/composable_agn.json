@@ -3,6 +3,7 @@
   "agn_log_lbol": 12.45911003379033
  },
  "platform": "darwin-arm64",
+ "repin_note": "Re-captured 2026-11-16 on main 45e59ac86 + #3560 (native-slope table reads, #3541), twice, bit-identical. Against 45e59ac86's golden, matched by leaf path: 6 new native-slope sibling leaves; 0 existing leaves moved, max rel 0 (none); photometry max rel 0; compile signature unchanged. ",
  "signature_sha256": "df22e5e28abac26c2dfbeacd3aa37b13999bd4bfa3c1f0caad46534f262adb4c",
  "summary": "Precompute Engagement Summary\n===========================\n\n\u2022 Energy-balance LUT: DECLINED\n  Reason: unknown reason (gate conditions appear satisfied)\n\u2022 Dust band response: DECLINED\n  Reason: no dust emission component configured\n\n\u2022 Emitter term responses:\n  - agn: ENGAGED\n\n\u2022 Observed facts:\n  components: stellar, nebular, dust, agn\n  dust_emission_configured: False\n  free_params: agn_log_lbol\n  igm_fold: declared=auto, resolved=None\n  redshift_fixed: 0.1\n  wave_precomp_enabled: True\n  ztable_enabled: False",
  "tree": [
@@ -61,6 +62,68 @@
    "kind": "array",
    "path": "/stellar/ssp_phot_lut/ssp_subband_waves_rest",
    "sha256": "fbabea2055c452b6088c0f883fb2deb66fe4340903c69446d2ce0d114bc10e19",
+   "shape": [
+    3,
+    25,
+    6,
+    5
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/stellar/ssp_phot_lut/slopes/ssp_phot",
+   "sha256": "fdd384d9aedec17758fee895dce8b5d4273c203aa471ddcba26f58ea087f76e1",
+   "shape": [
+    3,
+    25,
+    6
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/stellar/ssp_phot_lut/slopes/effective_wavelengths",
+   "sha256": "610864f9b4864c3903d8d80ced2d6ccde6c9a0698dcd588508b521171ab95a5c",
+   "shape": [
+    6
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/stellar/ssp_phot_lut/slopes/effective_wavelengths_rest",
+   "sha256": "0de24dc058ca75e66e26d68e7a6118535cc5fe852d77aad907278bf3d67267cd",
+   "shape": [
+    6
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/stellar/ssp_phot_lut/slopes/log10_flux_scale",
+   "sha256": "5490a4173a02c5980b25017f486d3f899d9e9c205290ca9d9b47b12605271091",
+   "shape": [
+    1
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/stellar/ssp_phot_lut/slopes/ssp_subband_phot",
+   "sha256": "0f690d4d337d0c8f2e245d38cfb635d3c2d54b8ce1e33b31510eaca456918fed",
+   "shape": [
+    3,
+    25,
+    6,
+    5
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/stellar/ssp_phot_lut/slopes/ssp_subband_waves_rest",
+   "sha256": "df920c83f9758ea05364f75a17856cfeba9ad4a2a1ab1ac09ad15e0b384ab407",
    "shape": [
     3,
     25,
