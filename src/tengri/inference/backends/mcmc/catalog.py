@@ -80,6 +80,7 @@ from tengri.inference.preconditioning import (
     traced_metric_conditioning,
     traced_preconditioner,
 )
+from tengri.inference.sampling.chains import jittered_starts
 from tengri.inference.sampling.families import DENSE_FAMILIES, run_chain_family
 from tengri.inference.sampling.target import pilot_whitening, whiten_logdensity
 
@@ -209,7 +210,8 @@ def ghmc_superchain_starts(init_flat, key, n_chains, n_superchains, jitter_scale
     init_flat : array_like, shape (D,)
         Seed position in the latent space [dimensionless].
     key : PRNGKey
-        Split into one key per superchain.
+        The key of :func:`~tengri.inference.sampling.chains.jittered_starts`, the one start
+        rule of every sampler; the superchain starts are its ``n_superchains`` rows.
     n_chains : int
         Total number of chains, a multiple of ``n_superchains``.
     n_superchains : int
@@ -227,9 +229,7 @@ def ghmc_superchain_starts(init_flat, key, n_chains, n_superchains, jitter_scale
     -----
     **JIT/vmap-compatible**: the output shape depends only on the static counts.
     """
-    keys = jax.random.split(key, n_superchains)
-    draws = jax.vmap(lambda k: jax.random.normal(k, init_flat.shape, dtype=init_flat.dtype))(keys)
-    starts = init_flat[None, :] + jitter_scale * draws
+    starts = jittered_starts(init_flat, key, n_superchains, jitter_scale)
     return jnp.repeat(starts, n_chains // n_superchains, axis=0)
 
 
