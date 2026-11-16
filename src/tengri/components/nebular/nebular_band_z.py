@@ -176,8 +176,10 @@ def delta_line_band_kernel(
     filter_waves,
     filter_trans,
     convention: FilterConvention,
+    sigma_kms=None,
+    delta_v_kms=None,
 ):
-    r"""Band response of a delta line at the evaluation redshift.
+    r"""Band response of a line at the evaluation redshift.
 
     A line of integrated luminosity :math:`L` at rest wavelength
     :math:`\lambda_0` is :math:`L_\nu = L\,\delta(\nu-\nu_0)`. Through the
@@ -209,6 +211,10 @@ def delta_line_band_kernel(
         Observed-frame filter curves [Angstrom], [dimensionless].
     convention : FilterConvention
         Bandpass weight, the observation's (``BandSpec.convention``).
+    sigma_kms, delta_v_kms : array_like, shape (n_lines,), optional
+        Velocity dispersion and offset of each line [km/s], the observation's kinematic
+        groups through ``line_kinematics_at``; ``None`` is a delta line. A line of finite
+        width is a Gaussian in :math:`\ln\lambda` (:func:`~tengri.utils.band_projection.line_band_weights`).
 
     Returns
     -------
@@ -228,7 +234,14 @@ def delta_line_band_kernel(
     flux).
     """
     spec = _band_spec(filter_waves, filter_trans, convention)
-    return line_band_weights(line_waves, spec, redshift, per_hz=True)
+    return line_band_weights(
+        line_waves,
+        spec,
+        redshift,
+        per_hz=True,
+        sigma_kms=sigma_kms,
+        delta_v_kms=delta_v_kms,
+    )
 
 
 def continuum_z_slab(log_table, lnz_grid, redshift):

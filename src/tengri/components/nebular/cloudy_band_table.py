@@ -14,9 +14,10 @@ filters with a fixed band coefficient per line. Band-level tabulation of the
 line sum is not used: lines with different (Z, U) slopes make the log of the
 sum differ from the sum of the logs by more than 1e-3.
 
-Band coefficients depend on the velocity width the lines are rendered at, so
-a table holds one fixed ``line_sigma_kms``. A caller whose width is free must
-not use it.
+Band coefficients depend on the velocity width and offset the lines are rendered at
+(one per line, from the observation's kinematic groups), so a table holds fixed
+``line_sigma_kms`` and ``line_delta_v_kms``. A caller whose width or offset is free
+must not use it.
 
 Units: band values are in erg/s/Hz (``_LSUN_ERG`` applied), matching
 ``lnu_filter_integral`` on ``predict_nebular_sed``.
@@ -42,6 +43,7 @@ from tengri.components.nebular._shared import (
 from tengri.observation.photometry import lnu_filter_integral
 from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid_interp import interp_nd_pchip
+from tengri.utils.physics_constants import C_KM_S as _C_KM_S
 from tengri.utils.scale import pow10
 
 #: log10 floor for a band that is exactly zero (no filter overlap).
@@ -75,8 +77,10 @@ class CloudyBandTable(NamedTuple):
         Rest-frame line wavelengths [Angstrom]; the Ly-alpha escape is applied
         through ``apply_lya_escape`` (in ``tengri.components.nebular._shared``) on
         these, the same helper the per-call backend uses.
-    line_sigma_kms : float
-        Velocity width the line coefficients were rendered at.
+    line_sigma_kms : ndarray, shape (n_lines,)
+        Velocity width of each line the coefficients were rendered at [km/s].
+    line_delta_v_kms : ndarray, shape (n_lines,)
+        Velocity offset of each line the coefficients were rendered at [km/s].
     redshift : float
         Redshift of the observed frame.
     """
@@ -90,7 +94,8 @@ class CloudyBandTable(NamedTuple):
     log_lines: np.ndarray
     line_coeff: np.ndarray
     line_wavelengths: np.ndarray
-    line_sigma_kms: float
+    line_sigma_kms: np.ndarray
+    line_delta_v_kms: np.ndarray
     redshift: float
 
 
@@ -117,6 +122,7 @@ def _line_band_coefficients(
     wave,
     line_wavelengths,
     sigma_kms,
+    delta_v_kms,
     filter_waves,
     filter_trans,
     redshift,
@@ -130,9 +136,10 @@ def _line_band_coefficients(
     """
     n_lines = line_wavelengths.shape[0]
     eye = jnp.eye(n_lines)
+    shifted = line_wavelengths * (1.0 + delta_v_kms / _C_KM_S)
 
     def _one(lum_vec):
-        sed = render_nebular_lines(line_wavelengths, lum_vec, wave, 0.0, sigma_kms) * _LSUN_ERG
+        sed = render_nebular_lines(shifted, lum_vec, wave, 0.0, sigma_kms) * _LSUN_ERG
         return _band_both_frames(
             sed, wave, filter_waves, filter_trans, redshift, convention=convention
         )
@@ -159,7 +166,8 @@ def build_cloudy_band_table(
     filter_waves,
     filter_trans,
     redshift: float,
-    line_sigma_kms: float,
+    line_sigma_kms,
+    line_delta_v_kms,
     *,
     convention: FilterConvention,
 ) -> CloudyBandTable:
@@ -175,8 +183,9 @@ def build_cloudy_band_table(
         Filter curves, one per band.
     redshift : float
         Source redshift for the observed frame.
-    line_sigma_kms : float
-        Fixed line velocity width the lines are rendered at.
+    line_sigma_kms, line_delta_v_kms : array_like, shape (n_lines,)
+        Fixed velocity width and offset of each line the lines are rendered at [km/s]
+        (``line_kinematics_at`` over the backend's line catalog).
 
     Returns
     -------
@@ -236,7 +245,8 @@ def build_cloudy_band_table(
     coeff = _line_band_coefficients(
         wave,
         jnp.asarray(line_wave),
-        line_sigma_kms,
+        jnp.asarray(line_sigma_kms, dtype=jnp.asarray(line_wave).dtype),
+        jnp.asarray(line_delta_v_kms, dtype=jnp.asarray(line_wave).dtype),
         filter_waves,
         filter_trans,
         redshift,
@@ -256,7 +266,8 @@ def build_cloudy_band_table(
         log_lines=jnp.asarray(_to_log(np.stack(line_tab))),
         line_coeff=jnp.asarray(coeff),
         line_wavelengths=np.asarray(line_wave),
-        line_sigma_kms=float(line_sigma_kms),
+        line_sigma_kms=np.asarray(line_sigma_kms, dtype=np.float64),
+        line_delta_v_kms=np.asarray(line_delta_v_kms, dtype=np.float64),
         redshift=float(redshift),
     )
 

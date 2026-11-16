@@ -74,7 +74,8 @@ def precompute(
     *,
     backend: object = None,
     wave: object = None,
-    line_sigma_kms: float | None = None,
+    line_sigma_kms: object = None,
+    line_delta_v_kms: object = None,
     convention: FilterConvention,
     **kwargs: object,
 ) -> object:
@@ -101,8 +102,9 @@ def precompute(
         The nebular backend whose grid, Q_H table and young bins are tabulated.
     wave : array_like, keyword-only, optional
         SED wavelength grid the per-call path projects onto (``state.wave``).
-    line_sigma_kms : float, keyword-only, optional
-        Fixed line velocity width; required with ``backend``.
+    line_sigma_kms, line_delta_v_kms : array_like, shape (n_lines,), keyword-only, optional
+        Fixed velocity width and offset of each line of the backend's catalog [km/s],
+        from ``line_kinematics_at``; required with ``backend``.
     convention : FilterConvention, keyword-only
         Bandpass weight of the table's band integrals, the observation's.
     **kwargs
@@ -119,8 +121,10 @@ def precompute(
     """
     if backend is None:
         return None
-    if wave is None or line_sigma_kms is None:
-        raise ValueError("cloudy precompute with a backend needs wave= and line_sigma_kms=")
+    if wave is None or line_sigma_kms is None or line_delta_v_kms is None:
+        raise ValueError(
+            "cloudy precompute with a backend needs wave=, line_sigma_kms= and line_delta_v_kms="
+        )
     from tengri.components.nebular.cloudy_band_table import (
         build_cloudy_band_table,
         table_covers,
@@ -132,7 +136,8 @@ def precompute(
         filter_waves,
         filter_trans,
         float(redshift),
-        float(line_sigma_kms),
+        line_sigma_kms,
+        line_delta_v_kms,
         convention=convention,
     )
     if parameters is not None:
@@ -178,6 +183,37 @@ CLOUDY_TABLE_FREE_OK: frozenset[str] = frozenset(
 )
 
 
+def _rendered_line_kinematics(ctx, nebular):
+    """Width, offset and parameter names of the lines the CLOUDY backend renders.
+
+    Returns ``(sigma_kms, delta_v_kms, names)``: the per-line values from the
+    observation's kinematic groups at the spec's Fixed values (``line_kinematics_at``),
+    and the names of the group parameters any rendered line reads.
+    """
+    from tengri.observation.eline_marginalization import (
+        kinematic_membership,
+        kinematic_param_names,
+        line_kinematics_at,
+    )
+
+    waves = np.asarray(nebular.backend.grid.line_wavelengths, dtype=np.float64)
+    membership = kinematic_membership(ctx.observation, waves)
+    names = tuple(
+        name
+        for index in sorted(set(membership.index.tolist()))
+        for name in kinematic_param_names(membership.groups[index])
+    )
+    fixed = {n: float(ctx.spec.fixed_value(n)) for n in names if n in ctx.spec.fixed_params}
+    sigma, delta_v = line_kinematics_at({}, fixed, ctx.observation, waves)
+    return np.asarray(sigma), np.asarray(delta_v), names
+
+
+def _free_line_kinematics(ctx, nebular) -> str:
+    """Names of the free kinematic parameters a rendered line reads, comma-joined ('' if none)."""
+    _, _, names = _rendered_line_kinematics(ctx, nebular)
+    return ", ".join(n for n in names if n in ctx.spec.free_params)
+
+
 def _band_table_refusal(ctx, nebular) -> str | None:
     """Why the CLOUDY band table must not engage, or None when it may.
 
@@ -204,8 +240,12 @@ def _band_table_refusal(ctx, nebular) -> str | None:
         return "the diffuse ionized gas may be active (neb_dig_frac is not pinned to zero)"
     if "redshift" not in ctx.spec.fixed_params or ctx.z_nodes is not None:
         return "redshift is a runtime input (the band table is built at one redshift)"
-    if "neb_eline_sigma_kms" not in ctx.spec.fixed_params:
-        return "neb_eline_sigma_kms is free (line band coefficients are fixed at one width)"
+    free_kinematics = _free_line_kinematics(ctx, nebular)
+    if free_kinematics:
+        return (
+            f"{free_kinematics} is free (line band coefficients are fixed at one width and offset "
+            f"per line)"
+        )
     bad = sorted(
         p
         for p in ctx.spec.free_params
@@ -232,6 +272,7 @@ def band_table(ctx, *, component: str, slot: str):
     reason = _band_table_refusal(ctx, nebular)
     if reason is not None:
         return Decline(reason)
+    sigma_kms, delta_v_kms, _ = _rendered_line_kinematics(ctx, nebular)
     table = precompute(
         nebular._state.filter_waves,
         nebular._state.filter_trans,
@@ -239,7 +280,8 @@ def band_table(ctx, *, component: str, slot: str):
         parameters=ctx.spec,
         backend=nebular.backend,
         wave=ctx.wave,
-        line_sigma_kms=float(ctx.spec.fixed_value("neb_eline_sigma_kms")),
+        line_sigma_kms=sigma_kms,
+        line_delta_v_kms=delta_v_kms,
         convention=ctx.bands.convention,
     )
     if table is None:

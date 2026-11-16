@@ -12881,6 +12881,7 @@ class SEDModel:
             atten_free_ok=self._BAND_RESPONSE_ATTEN_FREE_OK,
             agn_axis_grids=getattr(self.spec, "agn_axis_grids", None),
             ask=self._band_table,
+            observation=self.observation,
         )
 
     #: Provenance tags that mean a caller asked for this parameter's value.

@@ -251,11 +251,20 @@ def project_bands(
     )
 
 
-def line_band_weights(line_waves_rest: Any, spec: BandSpec, z: Any, *, per_hz: bool) -> Any:
-    r"""Band response of delta-function lines: the one line projection.
+def line_band_weights(
+    line_waves_rest: Any,
+    spec: BandSpec,
+    z: Any,
+    *,
+    per_hz: bool,
+    sigma_kms: Any = None,
+    delta_v_kms: Any = None,
+) -> Any:
+    r"""Band response of emission lines: the one line projection.
 
-    A line at rest wavelength :math:`\lambda_0` seen through band :math:`b` of convention
-    weight :math:`w` has the observed wavelength :math:`\lambda_{\rm obs}=(1+z)\lambda_0` and
+    A delta line at rest wavelength :math:`\lambda_0` seen through band :math:`b` of
+    convention weight :math:`w` has the observed wavelength
+    :math:`\lambda_{\rm obs}=(1+z)\lambda_0` and
 
     .. math::
 
@@ -269,6 +278,16 @@ def line_band_weights(line_waves_rest: Any, spec: BandSpec, z: Any, *, per_hz: b
     (:func:`~tengri.utils.filter_convention.photon_relative_weight`). The normalization
     :math:`\int T_b w\,d\lambda` runs over the filter's own nodes, as in the exact integral.
 
+    A line of velocity dispersion :math:`\sigma` is a Gaussian in :math:`\ln\lambda` of width
+    :math:`\sigma/c`, centered at the line shifted by the offset
+    (:math:`\lambda_0(1+\Delta v/c)`). Its response is the Gaussian average of the same
+    integrand, :math:`\int \mathcal{N}(s)\,F(\lambda_c e^{s})\,ds` with :math:`F` the delta
+    response above. :math:`T_b` is linear between filter nodes and :math:`F` a power law in
+    :math:`\lambda`, so each segment is a sum of two moments :math:`\int e^{ks}\mathcal{N}\,ds`,
+    composed from :func:`~tengri.utils.gaussian_segments.ndtr_diff` (``k = 0``) and
+    :func:`~tengri.utils.gaussian_segments.gaussian_exp_moments` (``k = 1, 2``; ``k = -1, -2``
+    by reflecting the segment, since the kernel is symmetric).
+
     Parameters
     ----------
     line_waves_rest : array_like, shape (n_lines,)
@@ -280,6 +299,11 @@ def line_band_weights(line_waves_rest: Any, spec: BandSpec, z: Any, *, per_hz: b
     per_hz : bool
         Include the Jacobian :math:`(1+z)\lambda_0^2/c` (response in [1/Hz]); without it the
         weight is per Angstrom of observed wavelength.
+    sigma_kms : array_like, shape (n_lines,) or scalar, optional
+        Intrinsic velocity dispersion of each line [km/s]; may be traced. ``None`` is a delta
+        line. A width of exactly 0 returns the delta result bit for bit.
+    delta_v_kms : array_like, shape (n_lines,) or scalar, optional
+        Velocity offset of each line from the systemic redshift [km/s]; may be traced.
 
     Returns
     -------
@@ -288,13 +312,22 @@ def line_band_weights(line_waves_rest: Any, spec: BandSpec, z: Any, *, per_hz: b
 
     Notes
     -----
-    **JIT-compatible**: yes (``spec`` is static).
+    **JIT-compatible**: yes (``spec`` is static). **Gradient-safe**: the width enters only
+    through :math:`\sigma/c` divided into the segment limits, with a safe stand-in where the
+    width is 0, so a zero width has a finite gradient (the delta branch, constant in the
+    width); for a positive width the gradient with respect to it is that of the Gaussian
+    average. Float32 loses a few parts in :math:`10^{6}` to the two moments of a segment
+    nearly canceling.
     """
 
     from tengri.utils.filter_convention import filter_weight, photon_relative_weight
     from tengri.utils.physics_constants import C_AA
 
     line_waves = jnp.asarray(line_waves_rest)
+    if delta_v_kms is not None:
+        from tengri.utils.physics_constants import C_KM_S
+
+        line_waves = line_waves * (1.0 + jnp.asarray(delta_v_kms) / C_KM_S)
     obs = (1.0 + jnp.asarray(z)) * line_waves
     cols = []
     for fw, ft in zip(*spec.filters, strict=True):
@@ -304,14 +337,64 @@ def line_band_weights(line_waves_rest: Any, spec: BandSpec, z: Any, *, per_hz: b
         norm = jnp.trapezoid(ft * filter_weight(fw, spec.convention), fw)
         if per_hz:
             rel = photon_relative_weight(obs, spec.convention)
-            cols.append(line_waves * trans * rel / (C_AA * norm))
+            delta = line_waves * trans * rel / (C_AA * norm)
         else:
-            cols.append(
+            delta = (
                 trans
                 * filter_weight(obs, spec.convention)
                 / jnp.maximum(norm, representable_denominator(1e-30))
             )
+        if sigma_kms is None:
+            cols.append(delta)
+            continue
+        gauss = _gaussian_line_response(
+            obs, jnp.asarray(z), sigma_kms, fw, ft, norm, spec.convention, per_hz
+        )
+        cols.append(jnp.where(jnp.asarray(sigma_kms) > 0.0, gauss, delta))
     return jnp.stack(cols, axis=-1)
+
+
+def _gaussian_line_response(obs, z, sigma_kms, fw, ft, norm, convention, per_hz):
+    r"""Response of Gaussian lines (width in :math:`\ln\lambda`) through one band.
+
+    The Gaussian average of the delta response over the piecewise-linear transmission,
+    one segment at a time (see :func:`line_band_weights`). ``sigma_kms`` of 0 is replaced
+    by a stand-in width so no division by zero reaches the graph; the caller selects the
+    delta result there.
+    """
+    from tengri.utils.filter_convention import FilterConvention
+    from tengri.utils.gaussian_segments import gaussian_exp_moments, ndtr_diff
+    from tengri.utils.physics_constants import C_AA, C_KM_S
+
+    sigma = jnp.asarray(sigma_kms)
+    width = jnp.where(sigma > 0.0, sigma / C_KM_S, 1.0)  # ln-lambda width, never 0
+    energy = convention == FilterConvention.ENERGY
+    # F(lambda) = lambda**q T(lambda): the delta response is T w J up to the constant below,
+    # with J = lambda**2 (per_hz) or 1, and w = lambda**-1 or lambda**-2.
+    q = (0 if energy else 1) if per_hz else (-2 if energy else -1)
+
+    lam_lo, lam_hi = fw[:-1], fw[1:]
+    slope = (ft[1:] - ft[:-1]) / (lam_hi - lam_lo)
+    alpha = ft[:-1] - slope * lam_lo
+    mu = jnp.log(obs)[..., None]
+    s_lo = jnp.log(lam_lo) - mu
+    s_hi = jnp.log(lam_hi) - mu
+    w = width[..., None]
+
+    def moment(k):
+        if k == 0:
+            return ndtr_diff(s_hi / w, s_lo / w)
+        if k > 0:
+            return gaussian_exp_moments(s_lo, s_hi, w)[k - 1]
+        return gaussian_exp_moments(-s_hi, -s_lo, w)[-k - 1]
+
+    lam_c = obs[..., None]
+    total = jnp.sum(
+        alpha * lam_c**q * moment(q) + slope * lam_c ** (q + 1) * moment(q + 1), axis=-1
+    )
+    if per_hz:
+        return total / ((1.0 + z) * C_AA * norm)
+    return total / jnp.maximum(norm, representable_denominator(1e-30))
 
 
 def delta_line_matrix(
@@ -320,8 +403,10 @@ def delta_line_matrix(
     filter_trans: Sequence[Any],
     redshift: float,
     convention: FilterConvention,
+    sigma_kms: Any = None,
+    delta_v_kms: Any = None,
 ) -> np.ndarray:
-    r"""Response of each unit-luminosity delta line to each band, as a float64 matrix.
+    r"""Response of each unit-luminosity line to each band, as a float64 matrix.
 
     The build-time form of :func:`line_band_weights` (``per_hz=True``) for the line-emitter
     adapters: ``matrix.T @ line_luminosity [erg/s]`` is the band-averaged :math:`L_\nu`
@@ -337,6 +422,9 @@ def delta_line_matrix(
         Source redshift [dimensionless].
     convention : FilterConvention
         Bandpass weight.
+    sigma_kms, delta_v_kms : array_like, optional
+        Per-line velocity dispersion and offset [km/s] (see :func:`line_band_weights`);
+        ``None`` is a delta line at the systemic redshift.
 
     Returns
     -------
@@ -350,7 +438,12 @@ def delta_line_matrix(
         lyc_gate=False,
     )
     weights = line_band_weights(
-        np.asarray(line_waves_rest, dtype=np.float64), spec, redshift, per_hz=True
+        np.asarray(line_waves_rest, dtype=np.float64),
+        spec,
+        redshift,
+        per_hz=True,
+        sigma_kms=sigma_kms,
+        delta_v_kms=delta_v_kms,
     )
     return np.asarray(weights, dtype=np.float64)
 

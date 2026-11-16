@@ -80,6 +80,9 @@ class BandTableContext:
     ask : callable
         ``ask(name, slot)`` returns the entry of another slot of the same component,
         building it on first ask.
+    observation : Observation or None
+        The model's observation: its spectroscopy's kinematic groups set the width and
+        offset of every line a table renders (``line_kinematics_at``).
     """
 
     spec: Any
@@ -93,6 +96,7 @@ class BandTableContext:
     atten_free_ok: Any
     agn_axis_grids: Any
     ask: Callable[[str, str], Any]
+    observation: Any = None
 
 
 @runtime_checkable

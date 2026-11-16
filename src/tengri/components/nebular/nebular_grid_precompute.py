@@ -101,6 +101,9 @@ _CANDIDATE_AXES = ("met_logzsol", "neb_logU", "neb_logZ_gas")
 _RECONSTRUCTION_SCALED = ("neb_fesc", "neb_fdust_frac")
 #: Nebular parameters applied at reconstruction by mixing two lookups (#2222).
 _RECONSTRUCTION_MIXED = ("neb_dig_frac", "neb_dig_delta_logU")
+#: Name stems of the kinematic parameters (width and offset of the default and every named
+#: group): the grid renders its lines at the build-time values, so a free one is baked.
+_LINE_KINEMATIC_STEMS = ("eline_sigma_kms", "eline_delta_v_kms")
 #: Prefixes of the parameters the nebular component owns.
 _NEBULAR_PREFIXES = ("neb_", "ionspec_", "gas_")
 
@@ -127,7 +130,8 @@ def grid_baked_free_params(spec) -> tuple[str, ...]:
         sorted(
             name
             for name in spec.free_params
-            if name.startswith(_NEBULAR_PREFIXES) and name not in handled
+            if (name.startswith(_NEBULAR_PREFIXES) and name not in handled)
+            or name.startswith(_LINE_KINEMATIC_STEMS)
         )
     )
 
@@ -338,6 +342,10 @@ class NebularGridTable:
     log_sed_lines_per_qh : ndarray, shape ``(*grid_dims, n_sed_lines)`` or None
         ``log10`` of every SED line's luminosity per unit ``nion`` [erg/s per
         (photons/s)], floored at -300 for a dark line.
+    line_sigma_kms, line_delta_v_kms : ndarray, shape (n_sed_lines,) or None
+        Velocity width and offset of each SED line [km/s] (the observation's kinematic
+        groups at the build-time values; a free width or offset refuses the grid), read by
+        the runtime line kernel of a redshift-tabulated table.
     line_band_kernel_fixed : ndarray, shape (n_sed_lines, n_filter) or None
         Exact band response of each rendered unit-luminosity line [1/Hz] at
         ``reference_redshift``. Present only for a model whose redshift is a
@@ -397,6 +405,8 @@ class NebularGridTable:
     log_restband_per_qh: jnp.ndarray | None = None
     reference_redshift: float | None = None
     sed_line_waves: jnp.ndarray | None = None
+    line_sigma_kms: jnp.ndarray | None = None
+    line_delta_v_kms: jnp.ndarray | None = None
     sed_line_node_waves: jnp.ndarray | None = None
     sed_line_node_weights: jnp.ndarray | None = None
     log_sed_lines_per_qh: jnp.ndarray | None = None
@@ -1857,6 +1867,7 @@ def precompute_nebular_grid(
             n_z=n_z,
             n_subbands=n_subbands if collect_sed else None,
             convention=convention,
+            observation=model.observation,
         )
     dust_channels = _build_dust_channels(
         model,
@@ -1901,14 +1912,18 @@ def _split_band_fields(
     n_z,
     n_subbands=None,
     convention: FilterConvention,
+    observation=None,
 ) -> dict:
     """The redshift-dependent band channels of :class:`NebularGridTable`.
 
     Parameters
     ----------
     params0 : dict
-        Resolved reference parameters at the first grid node (source of the line
-        width, the same ``neb_eline_sigma_kms`` the exact path renders with).
+        Resolved reference parameters at the first grid node (source of the width and
+        offset of each line, through ``line_kinematics_at``).
+    observation : Observation or None, keyword-only
+        The model's observation, whose kinematic groups assign each line its width and
+        offset.
     wave : array_like, shape (n_wave,)
         The model's rest wavelength grid [Angstrom].
     cont_nodes : ndarray, shape (n_nodes, n_wave)
@@ -1941,13 +1956,12 @@ def _split_band_fields(
     filter_waves, filter_trans = filters
     wave_np = np.asarray(wave, dtype=np.float64)
     n_lines = int(np.asarray(sed_line_waves).shape[0])
+    sigma, delta_v = line_kinematics_at(params0, {}, observation, np.asarray(sed_line_waves))
+    shifted_waves = jnp.asarray(sed_line_waves) * (1.0 + delta_v / C_KM_S)
     if request is None:
         lnz = ln1pz_grid(ref_z, ref_z, 1)
-        sigma = jnp.asarray(params0.get("neb_eline_sigma_kms", DEFAULT_NEB_ELINE_SIGMA_KMS))
         profiles = jax.vmap(
-            lambda unit: render_nebular_lines(
-                jnp.asarray(sed_line_waves), unit, jnp.asarray(wave_np), 0.0, sigma
-            )
+            lambda unit: render_nebular_lines(shifted_waves, unit, jnp.asarray(wave_np), 0.0, sigma)
         )(jnp.eye(n_lines))
         kernel = rendered_line_band_kernel(
             profiles, wave_np, filter_waves, filter_trans, ref_z, convention=convention
@@ -1992,11 +2006,8 @@ def _split_band_fields(
             "cont_subband_frac": jnp.asarray(frac),
             "cont_subband_waves_rest": jnp.asarray(lam),
         }
-    sigma = jnp.asarray(params0.get("neb_eline_sigma_kms", DEFAULT_NEB_ELINE_SIGMA_KMS))
     unit = jax.vmap(
-        lambda e: render_nebular_lines(
-            jnp.asarray(sed_line_waves), e, jnp.asarray(wave_np), 0.0, sigma
-        )
+        lambda e: render_nebular_lines(shifted_waves, e, jnp.asarray(wave_np), 0.0, sigma)
     )(jnp.eye(n_lines))  # (n_lines, n_wave): each line's rendered profile [1/Hz]
     unit = np.asarray(unit)
     dlam = np.gradient(wave_np)
@@ -2010,6 +2021,8 @@ def _split_band_fields(
         "sed_line_node_waves": jnp.asarray(wave_np[idx]),
         "sed_line_node_weights": jnp.asarray(weights),
         "sed_line_waves": jnp.asarray(sed_line_waves),
+        "line_sigma_kms": sigma,
+        "line_delta_v_kms": delta_v,
         "log_sed_lines_per_qh": jnp.asarray(log_sed_lines).reshape(*grid_shape, n_lines),
         "line_band_kernel_fixed": None if kernel is None else jnp.asarray(kernel),
         "cont_lnz": jnp.asarray(lnz),
@@ -2268,6 +2281,8 @@ def reconstruct_nebular_phot(
             table.band_filter_waves,
             table.band_filter_trans,
             convention=table.band_convention,
+            sigma_kms=table.line_sigma_kms,
+            delta_v_kms=table.line_delta_v_kms,
         )
     lit = kernel > 0.0
     safe = jnp.where(lit, kernel, 1.0)
