@@ -257,7 +257,7 @@ from collections.abc import Sequence
 #: only keeps the sigmoid width finite. Its sibling, ``dsps_wrapper._native_joint``'s
 #: normalization, was added with a clamp and converted in the same PR to the NaN-propagating
 #: form (the joint is normalized to 1, so a vanishing sum is an upstream bug), netting zero.
-EXPECTED_SITES = 74
+EXPECTED_SITES = 73
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 
