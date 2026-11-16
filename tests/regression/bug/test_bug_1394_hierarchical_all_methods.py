@@ -615,7 +615,7 @@ def test_newton_polish_reaches_the_mode_adam_crawls_toward():
     """
     import jax.numpy as jnp
 
-    from tengri.inference.sampling.guards import newton_polish_mode
+    from tengri.inference.newton import newton_polish
 
     a = jnp.array([3.0, 0.5, 10.0])
     center = jnp.array([1.0, -2.0, 0.3])
@@ -628,7 +628,9 @@ def test_newton_polish_reaches_the_mode_adam_crawls_toward():
             return -0.5 * jnp.sum(a * (x - center) ** 2)
 
     start = center + jnp.array([0.8, -1.5, 0.2])
-    mode = newton_polish_mode(_Prob.log_prob, start, tol=1e-8, max_iters=12)
+    mode, _, _, _ = newton_polish(
+        start, lambda x, _data: _Prob.log_prob(x), None, max_steps=12, tol=1e-8
+    )
     import jax
 
     gmax = float(jnp.max(jnp.abs(jax.grad(_Prob.log_prob)(mode))))

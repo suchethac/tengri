@@ -10,7 +10,6 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
-from tengri.inference.newton import newton_polish
 
 
 def _require_moving_chain(chain, method):
@@ -55,29 +54,6 @@ def adam_map_ascent(logp, init, map_steps, map_learning_rate) -> jax.Array:
 
     (best, _), _ = jax.lax.scan(_step, (init, state), None, length=map_steps)
     return jnp.asarray(best)
-
-
-def newton_polish_mode(logp, mode, *, tol, max_iters=12):
-    """Damped-Newton ascent to a Laplace-grade mode, from Adam's endpoint.
-
-    First-order alone cannot deliver a mode at hierarchical D: measured on
-    the D=516 reference fixture, Adam's ``max |grad log_prob|`` was 1.13e3
-    after 300 steps and still 84.6 after 8000. The polish is the shared
-    damped saddle-free Newton of :mod:`tengri.inference.newton`, the same one
-    the Laplace backend uses, so there is one Newton implementation.
-
-    Returns the polished mode. A point no step can improve is returned as is,
-    and the downstream guards then refuse an unconverged point rather than
-    silently sampling it.
-    """
-    position, _, _, _ = newton_polish(
-        mode,
-        lambda x, _data: logp(x),
-        None,
-        max_steps=max_iters,
-        tol=tol,
-    )
-    return position
 
 
 def _require_converged_mode(grad_at_mode, method, map_steps, *, tol):

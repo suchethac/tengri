@@ -19,6 +19,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.config.exceptions import warn_measured
+from tengri.inference.newton import newton_polish
 from tengri.inference.sampling import guards
 from tengri.inference.sampling.chains import (
     OVERDISPERSION,
@@ -433,7 +434,10 @@ def _run_laplace(target, key, n_chains, metric, cfg):
         ).draws[0, 0]
         # Adam alone plateaus at hierarchical D; the Newton polish reaches the actual mode
         # with the same Hessian machinery the covariance needs.
-        mode = guards.newton_polish_mode(logp, mode, tol=cfg["laplace_grad_tol"], max_iters=40)
+        # A point no step can improve is returned as it is, and the guard below refuses it.
+        mode, _, _, _ = newton_polish(
+            mode, lambda x, _data: logp(x), None, max_steps=40, tol=cfg["laplace_grad_tol"]
+        )
         grad_at_mode = jax.grad(logp)(mode)
         guards._require_converged_mode(
             grad_at_mode, "laplace", cfg["map_steps"], tol=cfg["laplace_grad_tol"]
