@@ -124,6 +124,7 @@
 - `SEDModel.precompute_spectroscopy(wave)`, the spectrum table is built at build time from `Observation.spectroscopy.wave_obs`: pass `approx=SpectrumPrecomp()` to `SEDModel.build`. Removed without a changelog entry (#3358).
 
 ### Fixed
+- **A free-redshift fit to a spectrum has a finite redshift gradient (#3546).** `apply_lsf` took the square root of a kernel variance that is exactly zero wherever the SSP library is coarser than the instrument and `sigma_v_kms` is 0; reverse mode returned NaN there. With a per-wavelength library resolution the library width at a pixel depends on redshift, so d(spectrum)/dz was NaN and a free-redshift NIRSpec prism fit stopped at 0 MAP iterations (Laplace returned NaN). Those pixels now take `sigma_v_kms` as their width directly, so the gradient is finite and, at `sigma_v_kms = 0`, equal to the one-sided derivative; predicted spectra are unchanged.
 - **`Fitter(approx='auto')` no longer raises for a spectrum with nuisance line amplitudes and no nebular backend (#3374).** The automatic policy attached `FeaturePrecomp` whenever lines were fitted, and the build refused it when there was no line-flux channel and no backend to tabulate. It now attaches the line table only when there is something to tabulate.
 
 - **The `db` and `dbp` SFH aliases carry their family's age anchor (#3505).** `sfh={'type': 'db'}` and `'dbp'` raised a missing-keyword `TypeError` on the exact forward and the fast path, because the alias did not receive `age_universe_yr`; they now evaluate as `dense_basis` and `dense_basis_pure`.
