@@ -65,12 +65,31 @@ def ssp():
     return load_ssp_data(str(candidates[0].resolve()))
 
 
+def _bare_ssp_or_skip():
+    """A bare-stellar grid from data/ (CB_19 refuses a wNE grid with no bare twin, #3465)."""
+    candidates = sorted(p for p in _SSP_DIR.glob("ssp_*.h5") if "_wNE" not in p.name)
+    if not candidates:
+        pytest.skip(f"no bare-stellar SSP grid available under {_SSP_DIR.resolve()}")
+    return load_ssp_data(str(candidates[0].resolve()))
+
+
 @pytest.fixture(scope="module")
 def obs():
     return Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i"]))
 
 
+def _grid_for(groups, ssp):
+    """The grid a case runs on. Re-pinned 2026-11-15 (#3465): CB_19 needs a bare-stellar grid.
+
+    The BakedIn cases keep the wNE grid, whose nebular emission they read.
+    """
+    if (groups.get("neb") or {}).get("type") == "cb19" and "_wNE" in str(ssp.source):
+        return _bare_ssp_or_skip()
+    return ssp
+
+
 def _build(ssp, obs, groups, approx=None):
+    ssp = _grid_for(groups, ssp)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return SEDModel.build(
@@ -266,7 +285,13 @@ def test_cases_are_live(ssp, obs, groups):
     3.61 MB constant, so the perf assertion passed while the equivalence
     assertion compared a component against itself doing nothing.
     """
-    bare = _rest_sed(_build(ssp, obs, {}))
+    # The baseline runs on the same grid as the case. A CB_19 case moves to the bare grid,
+    # so a baseline left on the wNE grid compares two different grids (#3465). On the bare
+    # grid the default baked-in nebular backend refuses (no emission to read), so that
+    # baseline carries no nebular component.
+    grid = _grid_for(groups, ssp)
+    baseline_groups = {} if grid is ssp else {"neb": {"type": "none"}}
+    bare = _rest_sed(_build(grid, obs, baseline_groups))
     with_component = _rest_sed(_build(ssp, obs, groups))
     assert with_component.shape == bare.shape
     n_changed = int(np.sum(np.abs(with_component - bare) > 0))

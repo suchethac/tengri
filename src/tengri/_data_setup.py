@@ -7,12 +7,14 @@ variable is found by the loaders, the downloaders, and ``tengri.doctor()``
 alike.
 """
 
+import hashlib
 import os
 import urllib.error
 import urllib.parse
 import urllib.request
 import warnings
 from pathlib import Path
+from typing import NamedTuple
 
 __all__ = [
     "KNOWN_SSP_FILENAMES",
@@ -444,22 +446,49 @@ def package_or_env_data_path(filename: str) -> Path:
 
 SSP_BASE_URL = "https://halos.as.arizona.edu/suchethacooray/ssp-spectra/"
 
+#: Public host of the nebular-baked (``_wNE_``) grids that the quickstart and the
+#: benchmark harness load. It is a separate path from :data:`SSP_BASE_URL`, and
+#: its ``SHA256SUMS`` file lists every grid in it.
+DSPS_SSP_BASE_URL = "https://halos.as.arizona.edu/suchethacooray/dsps_ssp/"
+
+
+class _SSPEntry(NamedTuple):
+    """One downloadable SSP grid: its file, its host, and its checksum when published."""
+
+    filename: str
+    base_url: str = SSP_BASE_URL
+    sha256: str | None = None  # verified after download when set
+    nbytes: int | None = None
+
+
+#: Bare-stellar twin of each nebular-baked grid. Same wavelength, metallicity and
+#: age axes and the same surviving-mass table; only the nebular emission differs.
+#: A model that asks for a nebular backend other than baked-in is built on the
+#: twin, so the backend is not stacked on emission the grid already contains.
+#: Keys are the wNE short names; values are the bare short names.
+_BARE_TWIN_OF_WNE: dict[str, str] = {
+    "mist_c3k_hr_chabrier_wNE": "mist_c3k_hr_chabrier_noNE",
+}
+
 #: The default SSP identifier: one constant consumed by BOTH
 #: :func:`download_ssp` and :func:`~tengri.load_ssp`, so a fresh user's
 #: ``tengri.download_ssp()`` fetches exactly what a subsequent
-#: ``tengri.load_ssp()`` loads. It is *bare-stellar* (no baked-in nebular
-#: emission): it is present in the hosted catalog, in :data:`_KNOWN_SSPS`, and
-#: is the grid the Cue/CloudyGrid nebular backends and every
-#: ``tengri.recipes.*`` config require. The ``_wNE_*`` (with-Nebular-Emission)
-#: grids are produced locally, are not shipped from the catalog, and must be
-#: named explicitly (``load_ssp("prsc_miles_chabrier_wNE")``).
-DEFAULT_SSP = "fsps_prsc_miles_chabrier"
+#: ``tengri.load_ssp()`` loads. It is the MIST isochrone grid with the C3K HR
+#: spectral library and nebular emission baked in at logU = -3 (#3465). The
+#: Padova grids give old populations almost no far-UV, so they are not the
+#: default; they remain available by name. A model built on this default with
+#: neb={'type': 'cue'} (or any nebular backend other than baked-in) is paired with
+#: the bare twin in :data:`_BARE_TWIN_OF_WNE`, so the nebular backend never stacks
+#: on the baked emission. Explicit wNE grids keep the refusals.
+DEFAULT_SSP = "mist_c3k_hr_chabrier_wNE"
 
-# Short alias → filename, matches the live public catalog. The catalog
-# only ships *bare-stellar* SSPs; the ``_wNE_*`` variants in local ``data/``
-# trees are post-processed (FSPS+nebular). Cue / CloudyGrid backends require
-# bare SSPs and will silently under-predict if fed wNE.
-_KNOWN_SSPS = {
+# Data literal for the registry below: short alias → filename on SSP_BASE_URL. It
+# matches the live public catalog, which ships *bare-stellar* SSPs. The ``_wNE_*``
+# variants in local ``data/`` trees are post-processed (FSPS+nebular), and the
+# catalog's own nebular-baked grids are the entries added to _KNOWN_SSPS below.
+# Cue / CloudyGrid backends require bare SSPs and will silently under-predict if
+# fed wNE.
+_CATALOG_SSP_FILENAMES: dict[str, str] = {
     "fsps_prsc_miles_chabrier": "fsps_prsc_miles_chabrier.h5",
     "fsps_mist_c3k_a_chabrier": "fsps_mist_c3k_a_chabrier.h5",
     "fsps_mist_miles_chabrier": "fsps_mist_miles_chabrier.h5",
@@ -660,6 +689,29 @@ _KNOWN_SSPS = {
     "smiles_bsti_unimodal3.50_afe": "smiles_bsti_unimodal3.50_afe.h5",
 }
 
+#: THE SSP registry: every grid :func:`download_ssp` can fetch, by short name. Each
+#: entry says where its file is hosted. The catalog literal above is on
+#: :data:`SSP_BASE_URL`. The two nebular-baked grids are on
+#: :data:`DSPS_SSP_BASE_URL`, whose ``SHA256SUMS`` file lists every grid in it, and
+#: they carry a checksum, verified after every download. The ``hr`` grid (C3K HR,
+#: lambda/dlambda about 6000 over 3000-9000 A) is the quickstart grid; the file is
+#: named after the grid's logU/logZ gas point (-3.0, 0.0).
+_KNOWN_SSPS: dict[str, _SSPEntry] = {
+    **{name: _SSPEntry(filename) for name, filename in _CATALOG_SSP_FILENAMES.items()},
+    "mist_c3k_hr_chabrier_wNE": _SSPEntry(
+        filename="ssp_mist_c3k_hr_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5",
+        base_url=DSPS_SSP_BASE_URL,
+        sha256="6df07d9375cf25af9e4574d9e954213cf3ad589a451f0042103ecdd7f29dac3a",
+        nbytes=95872755,
+    ),
+    "mist_c3k_hr_chabrier_noNE": _SSPEntry(
+        filename="ssp_mist_c3k_hr_chabrier_noNE.h5",
+        base_url=DSPS_SSP_BASE_URL,
+        sha256="275f282da934f82235add974c15881747d39e46e9bc3fce762bc1db65b0b0699",
+        nbytes=96065690,
+    ),
+}
+
 # Reverse lookup used by ``load_ssp_data`` to fetch a missing local file when
 # the basename matches a known catalog entry *and* the caller passed
 # ``download=True``.  It also selects which of the two FileNotFoundError
@@ -667,7 +719,7 @@ _KNOWN_SSPS = {
 # name outside it must already be on disk.  The fetch is opt-in because the
 # match is on the basename only, so an unconditional one answers a mistyped
 # directory by writing the grid into it (#1553).
-KNOWN_SSP_FILENAMES = frozenset(_KNOWN_SSPS.values())
+KNOWN_SSP_FILENAMES = frozenset(e.filename for e in _KNOWN_SSPS.values())
 
 
 def find_ssp_files() -> list[Path]:
@@ -726,12 +778,11 @@ def list_known_ssps():
     """
     from tengri.registry import _RegistryTable
 
-    return _RegistryTable(
-        [
-            {"name": name, "kind": "ssp", "filename": filename}
-            for name, filename in sorted(_KNOWN_SSPS.items())
-        ]
-    )
+    rows = [
+        {"name": name, "kind": "ssp", "filename": entry.filename}
+        for name, entry in _KNOWN_SSPS.items()
+    ]
+    return _RegistryTable(sorted(rows, key=lambda r: r["name"]))
 
 
 def list_available_ssps() -> list[dict]:
@@ -770,19 +821,19 @@ def list_available_ssps() -> list[dict]:
     list_known_ssps : The flat ``name → filename`` mapping that this
         view groups and enriches.
     """
-    from tengri.components.stellar.sps.dsps_wrapper import _KNOWN_IMFS
+    from tengri.components.stellar.sps.dsps_wrapper import _detect_imf
 
     out: list[dict] = []
-    for name, filename in _KNOWN_SSPS.items():
-        # Strip the trailing IMF token to recover the family stem.
-        imf = "unknown"
+    for name, entry in _KNOWN_SSPS.items():
+        filename = entry.filename
+        # The IMF is the last IMF token of the name (the loader's own rule, which also
+        # reads "mist_c3k_hr_chabrier_wNE"); the family is the name without it.
+        imf = _detect_imf(None, name)
         family = name
-        for token in _KNOWN_IMFS:
-            suffix = "_" + token
-            if name.endswith(suffix):
-                imf = token
-                family = name[: -len(suffix)]
-                break
+        if imf != "unknown":
+            tokens = name.split("_")
+            del tokens[len(tokens) - 1 - tokens[::-1].index(imf)]
+            family = "_".join(tokens)
         out.append(
             {
                 "name": name,
@@ -818,6 +869,26 @@ def _ssp_file_present(filename: str) -> bool:
     return False
 
 
+def catalog_short_name(filename: str) -> str | None:
+    """The short name a fetchable grid's basename is downloaded under, else ``None``.
+
+    Covers every entry of :data:`_KNOWN_SSPS`, bare and nebular-baked alike.
+    """
+    for short, entry in _KNOWN_SSPS.items():
+        if entry.filename == filename:
+            return short
+    return None
+
+
+def _sha256_file(path: Path, chunk_size: int = 1 << 20) -> str:
+    """Hex SHA-256 of a file, read in chunks so a large grid is never held whole."""
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        while chunk := f.read(chunk_size):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def _resolve_ssp_filename(name: str) -> str:
     """Map a short SSP identifier or a catalog filename to a catalog filename.
 
@@ -841,7 +912,7 @@ def _resolve_ssp_filename(name: str) -> str:
             f"it cannot write outside the destination directory."
         )
     if name in _KNOWN_SSPS:
-        return _KNOWN_SSPS[name]
+        return _KNOWN_SSPS[name].filename
     if name.endswith(".h5"):
         # A filename the curated table does not carry may still be live in the
         # catalog (tengri.data.list_remote_ssps reads it directly); let the HTTP
@@ -866,9 +937,9 @@ def download_ssp(
     ----------
     name : str, optional
         Short SSP identifier (see ``list_known_ssps()``) or a bare catalog
-        filename ending in ``.h5``. Defaults to ``"fsps_prsc_miles_chabrier"``
-        (FSPS PARSEC tracks + MILES library, Chabrier IMF, bare-stellar,
-        Cue/CloudyGrid-compatible).
+        filename ending in ``.h5``. Defaults to ``DEFAULT_SSP``,
+        ``"mist_c3k_hr_chabrier_wNE"`` (FSPS MIST tracks + C3K HR library, Chabrier
+        IMF, nebular emission baked in at logU = -3).
     dest : path-like, optional
         Target directory. Defaults to :func:`download_dir`, ``$TENGRI_DATA_DIR``
         if set, else ``data/`` relative to the working directory. Either way it
@@ -895,7 +966,7 @@ def download_ssp(
     Examples
     --------
     >>> import tengri
-    >>> tengri.download_ssp()  # doctest: +SKIP
+    >>> tengri.download_ssp()  # default nebular-baked MIST+C3K HR grid → data/  # doctest: +SKIP
     >>> tengri.download_ssp("bc03_pdva_stelib_chabrier", dest="/scratch/ssp")  # doctest: +SKIP
     """
     # Resolve target directory
@@ -904,7 +975,9 @@ def download_ssp(
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
 
-    filename = _resolve_ssp_filename(name)
+    short = name if name in _KNOWN_SSPS else catalog_short_name(name)
+    entry = _KNOWN_SSPS.get(short) if short is not None else None
+    filename = entry.filename if entry is not None else _resolve_ssp_filename(name)
     filepath = dest / filename
 
     # Skip if already exists and force=False
@@ -915,7 +988,7 @@ def download_ssp(
         return filepath
 
     # Download with progress
-    url = SSP_BASE_URL + filename
+    url = (entry.base_url if entry is not None else SSP_BASE_URL) + filename
     partial_filepath = filepath.with_suffix(filepath.suffix + ".partial")
 
     try:
@@ -932,6 +1005,17 @@ def download_ssp(
         if partial_filepath.exists():
             partial_filepath.unlink()
         raise
+
+    if entry is not None and entry.sha256 is not None:
+        # A wrong or truncated grid would load and predict without error, so the
+        # hash gates the rename: a mismatch leaves nothing behind.
+        actual = _sha256_file(partial_filepath)
+        if actual != entry.sha256:
+            partial_filepath.unlink()
+            raise RuntimeError(
+                f"SHA-256 mismatch for {url}: expected {entry.sha256}, got {actual}. "
+                f"The download was discarded; retry, or check the host's SHA256SUMS."
+            )
 
     # Atomic rename
     partial_filepath.replace(filepath)

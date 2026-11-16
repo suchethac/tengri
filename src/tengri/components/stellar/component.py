@@ -115,7 +115,8 @@ class SFHBeyondOldestTemplateWarning(UserWarning):
 
     Emitted once per ``SEDModel.build`` when the redshift range reaches an
     ``age_at_z(z)`` greater than the grid's oldest template age (PARSEC's
-    12.589 Gyr is younger than the 13.787 Gyr universe at ``z = 0``). A star
+    12.589 Gyr is younger than the 13.787 Gyr universe at ``z = 0``; the default
+    MIST grid's 19.95 Gyr is older, so it never fires for ``z >= 0``, #3465). A star
     formed in that gap is older than every template, so both age kernels
     assign it wholly to the oldest template (the closest population the grid
     has); the formed mass is conserved and the stars carry the colors of the
