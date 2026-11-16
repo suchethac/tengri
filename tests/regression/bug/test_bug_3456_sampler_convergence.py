@@ -71,6 +71,17 @@ class TestSharedConvergenceCheck:
         assert post.diagnostics["convergence_warning"] is not None
         assert "R-hat" in post.diagnostics["convergence_warning"]
 
+    def test_the_post_run_ess_is_the_sum_of_the_per_chain_ess(self):
+        """Chains centered apart are not one slow series: same estimator as the driver's."""
+        from tengri.inference.sampler_health import _worst_ess
+        from tengri.inference.sampling.health import chain_diagnostics
+
+        draws = _RNG.normal(size=(2, 400)) + np.array([[0.0], [8.0]])
+        record, _ = chain_diagnostics(draws[..., None], ["x"])
+        value, name, count = _worst_ess({"x": draws.reshape(-1)}, 2)
+        assert (name, count) == ("x", 800)
+        np.testing.assert_allclose(value, record["ess_bulk_min"], rtol=1e-9)
+
     def test_a_column_with_a_nan_draw_gets_a_verdict_naming_it(self):
         """A NaN column is a named problem from the shared check, not a skipped column."""
         draws = _RNG.normal(size=400)

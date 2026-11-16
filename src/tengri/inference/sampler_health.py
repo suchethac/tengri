@@ -23,7 +23,7 @@ import warnings
 
 import numpy as np
 
-from tengri.analysis.diagnostics.autocorrelation import effective_sample_size, split_rhat
+from tengri.analysis.diagnostics.autocorrelation import split_rhat
 
 #: Split R-hat above this marks a run that has not mixed. Looser than the
 #: Vehtari+2021 value of 1.01 on purpose: the check speaks only for clear failures.
@@ -65,12 +65,18 @@ def _worst_rhat(columns: dict[str, np.ndarray], n_chains: int) -> tuple[float, s
     return worst
 
 
-def _worst_ess(columns: dict[str, np.ndarray]) -> tuple[float, str, int] | None:
-    """Smallest bulk ESS over the columns, with its name and draw count."""
-    info = effective_sample_size(columns)
+def _worst_ess(columns: dict[str, np.ndarray], n_chains: int) -> tuple[float, str, int] | None:
+    """Smallest bulk ESS over the columns, with its name and draw count.
+
+    The ESS of a column is the sum of its per-chain ESS (:func:`summed_chain_ess`), the same
+    estimator the sampling driver judges a run by.
+    """
+    from tengri.inference.sampling.health import summed_chain_ess
+
     worst = None
     for name, arr in columns.items():
-        value = float(info[name]["ess"])
+        chains = n_chains if n_chains >= 2 and arr.size % n_chains == 0 else 1
+        value = summed_chain_ess(arr.reshape(chains, -1), name)
         if np.isfinite(value) and (worst is None or value < worst[0]):
             worst = (value, name, int(arr.size))
     return worst
@@ -126,7 +132,7 @@ def _problems(posterior, backend: str) -> list[str]:
         if smc_problem is not None:
             found.append(smc_problem)
     elif columns:
-        worst_ess = _worst_ess(columns)
+        worst_ess = _worst_ess(columns, n_chains)
         if worst_ess is not None and (problem := ess_problem(*worst_ess)):
             found.append(problem)
     return found

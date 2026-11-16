@@ -92,6 +92,27 @@ def nonfinite_problems(draws, names) -> tuple[np.ndarray, list[str]]:
     return finite_columns, problems
 
 
+def summed_chain_ess(column, name: str) -> float:
+    """Return the bulk ESS of one coordinate: the sum of the per-chain ESS.
+
+    The one ESS estimator of the package's convergence checks (the driver's and the post-run
+    check of a finished fit). Chains centered apart are not one slow series, so the chains are
+    never concatenated before the estimate.
+
+    Parameters
+    ----------
+    column : ndarray, shape (n_chains, n)
+        One coordinate's draws.
+    name : str
+        Its name.
+    """
+    total = 0.0
+    for chain in column:
+        entry = effective_sample_size({name: chain}, exclude_prefixes=())
+        total += float(entry[name]["ess"]) if name in entry else 0.0
+    return total
+
+
 def chain_diagnostics(
     draws, names, *, exchangeable: bool = False, divergent=None
 ) -> tuple[dict, list[str]]:
@@ -175,10 +196,7 @@ def chain_diagnostics(
     if not exchangeable:
         low = None
         for j in moving[:_MAX_ESS_COLUMNS]:
-            total = 0.0
-            for chain in draws[..., j]:
-                entry = effective_sample_size({names[j]: chain}, exclude_prefixes=())
-                total += float(entry[names[j]]["ess"]) if names[j] in entry else 0.0
+            total = summed_chain_ess(draws[..., j], names[j])
             if not np.isfinite(total):
                 problems.append(f"ESS is not finite for '{names[j]}'")
             elif low is None or total < low[0]:
