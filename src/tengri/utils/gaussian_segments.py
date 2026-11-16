@@ -12,7 +12,7 @@ velocity-broadened lines both compose them, rather than each forming its own.
 from __future__ import annotations
 
 import jax.numpy as jnp
-from jax.scipy.special import erfc, ndtr
+from jax.scipy.special import erfc
 
 _INV_SQRT2 = 0.7071067811865476
 
@@ -37,9 +37,25 @@ def ndtr_diff(upper, lower):
     -----
     **JIT-compatible**: yes. **Gradient-safe**: yes.
     """
-    direct = ndtr(upper) - ndtr(lower)
-    mirrored = ndtr(-lower) - ndtr(-upper)
-    return jnp.where(upper + lower > 0.0, mirrored, direct)
+    upper, lower = jnp.broadcast_arrays(jnp.asarray(upper), jnp.asarray(lower))
+    return _cdf_differences(jnp.stack([lower, upper], axis=-1))[..., 0]
+
+
+def _cdf_differences(x):
+    """Normal CDF differences between neighboring entries of ``x`` along its last axis.
+
+    One ``erfc`` per entry gives the tail on that entry's own side of zero; the other tail
+    is its complement, exact to round-off there because it is near one. A difference whose
+    midpoint is positive is formed from the upper tails, so it never cancels two values
+    near one.
+    """
+    tail = 0.5 * erfc(jnp.abs(x) * _INV_SQRT2)
+    below = x < 0.0
+    lower_tail = jnp.where(below, tail, 1.0 - tail)
+    upper_tail = jnp.where(below, 1.0 - tail, tail)
+    direct = lower_tail[..., 1:] - lower_tail[..., :-1]
+    mirrored = upper_tail[..., :-1] - upper_tail[..., 1:]
+    return jnp.where(x[..., 1:] + x[..., :-1] > 0.0, mirrored, direct)
 
 
 def gaussian_exp_moments(s_lo, s_hi, sigma):
@@ -115,16 +131,6 @@ def gaussian_exp_moments_between_edges(s_edges, sigma):
     s2 = sigma * sigma
 
     def moment(k):
-        x = (s_edges - k * s2) / sigma
-        # One evaluation per edge: the tail on the edge's own side of the center. The other
-        # tail is its complement, which is exact to round-off there because it is near one.
-        tail = 0.5 * erfc(jnp.abs(x) * _INV_SQRT2)
-        below = x < 0.0
-        lower = jnp.where(below, tail, 1.0 - tail)
-        upper = jnp.where(below, 1.0 - tail, tail)
-        direct = lower[..., 1:] - lower[..., :-1]
-        mirrored = upper[..., :-1] - upper[..., 1:]
-        in_upper_tail = x[..., 1:] + x[..., :-1] > 0.0
-        return jnp.exp(0.5 * k * k * s2) * jnp.where(in_upper_tail, mirrored, direct)
+        return jnp.exp(0.5 * k * k * s2) * _cdf_differences((s_edges - k * s2) / sigma)
 
     return moment(1.0), moment(2.0)

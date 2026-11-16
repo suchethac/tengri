@@ -149,6 +149,18 @@ ALLOWLIST: dict[str, str] = {
         "traced model grid -> every cell in the window, the exact general path; the static "
         "window width is only an optimization for a concrete grid (#3512)"
     ),
+    "observation/spectrum.py::_point_lsf_closed_form": (
+        "the dispersion is read at the model nodes unless it is a concrete zero; a traced "
+        "value takes the read and is gated to the input where it is not positive"
+    ),
+    "observation/spectrum.py::compute_spectrum_point_lsf": (
+        "with an IGM a concrete zero dispersion multiplies the model at its nodes; a traced "
+        "value takes the lattice order sigma_v, IGM, instrument (equal at zero)"
+    ),
+    "observation/spectrum.py::point_lattice_span": (
+        "a traced redshift with no window, or a traced pixel grid, returns None and the "
+        "caller reads every pixel in closed form"
+    ),
     "observation/spectrum.py::_concrete_z_range": (
         "traced redshift with no static window -> ValueError at build naming the fix (a fixed "
         "redshift or finite prior bounds); never a lattice spanned from a guessed z (#3436)"
