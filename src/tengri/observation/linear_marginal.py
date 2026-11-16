@@ -53,6 +53,9 @@ class MarginalResult(NamedTuple):
     coef_cov : ndarray, shape (k, k)
         Posterior covariance of the nuisance coefficients (units of the design columns
         squared). With Student-t noise, the inverse curvature at the mode.
+    log_det_cov : ndarray, shape ()
+        Natural log of ``det(coef_cov)``, from the triangular factor of the solve
+        (``-2 sum ln |R_ii|`` plus the scale), not from a determinant of ``coef_cov``.
     weight_change : ndarray, shape () or None
         Student-t noise only: the largest change of an iteratively-reweighted weight under one
         further iteration (dimensionless), the convergence diagnostic of the mode. ``None``
@@ -66,18 +69,15 @@ class MarginalResult(NamedTuple):
         Student-t noise only: the number of unmasked data [dimensionless], with the number of
         coefficients (``coef_hat.shape[0]``) the size of the problem the other two diagnostics
         describe. ``None`` for the Gaussian marginal.
-    log_det_cov : ndarray, shape ()
-        Natural log of ``det(coef_cov)``, from the triangular factor of the solve
-        (``-2 sum ln |R_ii|`` plus the scale), not from a determinant of ``coef_cov``.
     """
 
     log_like: jnp.ndarray
     coef_hat: jnp.ndarray
     coef_cov: jnp.ndarray
+    log_det_cov: jnp.ndarray
     weight_change: jnp.ndarray | None = None
     start_gap: jnp.ndarray | None = None
     n_data: jnp.ndarray | None = None
-    log_det_cov: jnp.ndarray | None = None
 
 
 def marginalize_linear_nuisance(
@@ -150,7 +150,7 @@ def marginalize_linear_nuisance(
     Returns
     -------
     MarginalResult
-        Named tuple ``(log_like, coef_hat, coef_cov, weight_change, start_gap, n_data)``.
+        Named tuple ``(log_like, coef_hat, coef_cov, log_det_cov, weight_change, start_gap, n_data)``.
         ``log_like`` has shape ``()``, ``coef_hat`` shape ``(k,)``, ``coef_cov`` shape
         ``(k, k)``. The last three are the Student-t diagnostics, scalars with shape ``()``,
         and ``None`` for Gaussian noise (see :class:`MarginalResult`).
