@@ -25,7 +25,6 @@ the continuum model (enabling gradient-based inference of physical
 parameters).
 """
 
-import math
 from typing import NamedTuple
 
 import jax
@@ -39,7 +38,7 @@ from tengri.observation.eline_catalog import (
 )
 from tengri.observation.linear_marginal import marginalize_linear_nuisance
 from tengri.utils.physics_constants import C_AA, C_KM_S, GAUSSIAN_FWHM_PER_SIGMA
-from tengri.utils.scale import log10_four_pi_dl2
+from tengri.utils.scale import diag_gaussian_log_normalization, log10_four_pi_dl2
 
 # ── Public API ────────────────────────────────────────────────────
 
@@ -700,6 +699,67 @@ def unit_model_line_prior(
     )
 
 
+def line_marginal(
+    residual,
+    noise,
+    design_matrix,
+    prior_variance=None,
+    *,
+    pix_mask=None,
+    col_mask=None,
+    scale=None,
+    prior_sigma=None,
+    chol_data=None,
+    chol_offsets=None,
+    dof=None,
+):
+    r"""The normalized marginal of line amplitudes under a Gaussian prior, as a primitive result.
+
+    Builds the unit-width line prior of :func:`marginalize_emission_lines` and calls
+    :func:`~tengri.observation.linear_marginal.marginalize_linear_nuisance` on it, with a
+    zero model offset so the residual is the data. Arguments are those of
+    :func:`marginalize_emission_lines`.
+
+    Returns
+    -------
+    tuple
+        ``(result, width, scatter)``: the
+        :class:`~tengri.observation.linear_marginal.MarginalResult` in units of the prior
+        width (its ``log_like`` is the full normalized density, constants included), the prior
+        width of each line [data units], and the noise scale the width was built with
+        (``noise``, or the diagonal of the Cholesky factor) [data units].
+    """
+    n_lines = design_matrix.shape[1]
+    if prior_sigma is not None and prior_variance is not None:
+        raise ValueError("pass prior_variance or prior_sigma, not both")
+    if prior_sigma is None:
+        _pv = jnp.full((n_lines,), 1e10) if prior_variance is None else prior_variance
+        width = jnp.sqrt(jnp.broadcast_to(jnp.atleast_1d(_pv), (n_lines,)))
+    else:
+        width = jnp.broadcast_to(jnp.atleast_1d(prior_sigma), (n_lines,))
+    if chol_data is None:
+        scatter, whitening = noise, {"sigma": noise}
+    else:
+        factor = BandedMatrix(np.asarray(chol_offsets, dtype=int), chol_data)
+        scatter, whitening = chol_data[0], {"chol_lower": factor}
+    line = unit_line_prior(design_matrix, width, noise=scatter, pix_mask=pix_mask)
+    coef_scale = line.scale if scale is None else scale
+
+    result = marginalize_linear_nuisance(
+        residual,
+        jnp.zeros_like(residual),
+        line.design,
+        **whitening,
+        pix_mask=pix_mask,
+        prior_mean=line.prior_mean,
+        prior_precision=line.prior_precision,
+        col_mask=col_mask,
+        scale=coef_scale,
+        dof=dof,
+    )
+    return result, width, scatter
+
+
 def marginalize_emission_lines(
     residual: jnp.ndarray,
     noise: jnp.ndarray | None,
@@ -712,6 +772,7 @@ def marginalize_emission_lines(
     prior_sigma: jnp.ndarray | None = None,
     chol_data: jnp.ndarray | None = None,
     chol_offsets: tuple[int, ...] | None = None,
+    dof: jnp.ndarray | None = None,
 ) -> tuple:
     r"""Analytically marginalize emission-line amplitudes under a Gaussian prior.
 
@@ -759,6 +820,13 @@ def marginalize_emission_lines(
     chol_offsets : tuple of int, optional
         Diagonal offsets ``(0, -1, ..., -p)`` of ``chol_data``. Static. Required with
         ``chol_data``.
+    dof : float, optional
+        Student-t degrees of freedom of the noise. Given, the value is the Laplace
+        approximation at the iteratively reweighted mode of
+        :func:`~tengri.observation.linear_marginal.marginalize_linear_nuisance` (independent
+        Student-t data, or one multivariate Student-t with ``chol_data``), and the Gaussian
+        normalization added back below is the one the caller removes again. Default: None
+        (Gaussian, exact).
 
     Returns
     -------
@@ -803,37 +871,20 @@ def marginalize_emission_lines(
     line or pixel is selected out rather than floored.
 
     """
-    n_lines = design_matrix.shape[1]
-    if prior_sigma is not None and prior_variance is not None:
-        raise ValueError("pass prior_variance or prior_sigma, not both")
-    if prior_sigma is None:
-        _pv = jnp.full((n_lines,), 1e10) if prior_variance is None else prior_variance
-        width = jnp.sqrt(jnp.broadcast_to(jnp.atleast_1d(_pv), (n_lines,)))
-    else:
-        width = jnp.broadcast_to(jnp.atleast_1d(prior_sigma), (n_lines,))
-    if chol_data is None:
-        scatter, whitening = noise, {"sigma": noise}
-    else:
-        factor = BandedMatrix(np.asarray(chol_offsets, dtype=int), chol_data)
-        scatter, whitening = chol_data[0], {"chol_lower": factor}
-    line = unit_line_prior(design_matrix, width, noise=scatter, pix_mask=pix_mask)
-    weight = jnp.ones_like(scatter) if pix_mask is None else pix_mask
-    n_eff = jnp.sum(weight)
-    log_noise_sum = jnp.sum(weight * jnp.log(scatter))
-    coef_scale = line.scale if scale is None else scale
-
-    result = marginalize_linear_nuisance(
+    result, width, scatter = line_marginal(
         residual,
-        jnp.zeros_like(residual),
-        line.design,
-        **whitening,
+        noise,
+        design_matrix,
+        prior_variance,
         pix_mask=pix_mask,
-        prior_mean=line.prior_mean,
-        prior_precision=line.prior_precision,
         col_mask=col_mask,
-        scale=coef_scale,
+        scale=scale,
+        prior_sigma=prior_sigma,
+        chol_data=chol_data,
+        chol_offsets=chol_offsets,
+        dof=dof,
     )
-    ln_l_marg = result.log_like + 0.5 * n_eff * math.log(2.0 * math.pi) + log_noise_sum
+    ln_l_marg = result.log_like - diag_gaussian_log_normalization(scatter, pix_mask)
     a_hat = width * result.coef_hat
     a_cov = (width[:, None] * width[None, :]) * result.coef_cov
     return ln_l_marg, a_hat, a_cov

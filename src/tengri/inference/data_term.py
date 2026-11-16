@@ -14,22 +14,29 @@ program serves every galaxy with the same structure.
 
 from __future__ import annotations
 
-import warnings
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 
 from tengri.inference._prediction import _build_prediction, _resolve_measured_line_defs
-from tengri.inference.likelihoods.gaussian import (
-    LOG_2PI,
-    inv_noise_std,
-    standardized_residual,
-    student_t_log_norm_per_point,
+from tengri.inference.channels import (
+    NoiseSpec,
+    Predictions,
+    has_student_t_marginal,
+    log_normalization,
+    mode_summary,
+    score,
+    selected_channels,
+    validate,
 )
+from tengri.inference.likelihoods.gaussian import inv_noise_std
+from tengri.inference.likelihoods.noise_spec import ColumnBuilders, noise_spec_of
 from tengri.inference.likelihoods.protocol import log_normalization_of
+from tengri.observation.banded import banded_cholesky
 
 __all__ = [
     "DataTerm",
@@ -229,6 +236,8 @@ class DataTerm:
     cache_key: tuple
     _log_lik: Callable = field(repr=False)
     _log_norm: Callable | None = field(repr=False, default=None)
+    noise: NoiseSpec | None = None
+    _predict: Callable | None = field(repr=False, default=None)
 
     def log_prob(self, params: Mapping, data_args: Mapping):
         """Evaluate ``log p(d | params)``.
@@ -246,6 +255,56 @@ class DataTerm:
             Log-likelihood [nats], rank 0.
         """
         return self._log_lik(params, data_args)
+
+    def predictions(self, params: Mapping, data_args: Mapping) -> Predictions:
+        """The model observables :func:`~tengri.inference.channels.score` reads.
+
+        Parameters
+        ----------
+        params : dict
+            Resolved physical parameters, free and fixed, with mirrors merged.
+        data_args : dict
+            The traced data bundle, with the same structure as ``self.data_args``.
+
+        Returns
+        -------
+        Predictions
+            Band, line, spectrum and design-column observables at ``params``. Together with
+            ``data_args`` and :attr:`noise` they give ``log_prob`` through ``score``.
+
+        Raises
+        ------
+        ValueError
+            If the term wraps a likelihood that is not a shipped adapter, which has no
+            noise specification to score under.
+        """
+        if self._predict is None:
+            raise ValueError("this data term wraps a user likelihood and has no NoiseSpec")
+        return self._predict(params, data_args)
+
+    def mode_report(self, params: Mapping, data_args: Mapping):
+        """Convergence report of the Student-t marginals at ``params``, or ``None``.
+
+        Parameters
+        ----------
+        params : dict
+            Resolved physical parameters, free and fixed, with mirrors merged.
+        data_args : dict
+            The traced data bundle, with the same structure as ``self.data_args``.
+
+        Returns
+        -------
+        dict or None
+            See :func:`~tengri.inference.channels.mode_summary`; ``None`` when the term has no
+            Student-t marginal, or wraps a user likelihood.
+        """
+        if self.noise is None or not has_student_t_marginal(data_args, self.noise):
+            return None
+
+        def diagnosed(p, d):
+            return score(self.predictions(p, d), d, self.noise, return_diagnostics=True)[1]
+
+        return mode_summary(jax.jit(diagnosed)(params, data_args))
 
     def log_normalization(self, data_args: Mapping):
         """Return the constant :meth:`log_prob` omits, in nats (#3427).
@@ -377,6 +436,9 @@ def _add_observation_channels(args, obs, model, line_flux_data, line_model_sigma
             args["spec_chol_data"] = spec_cfg.chol_data
         else:
             args["spec_cov_inv"] = spec_cfg.cov_inv
+            args["spec_cov_chol_data"] = banded_cholesky(
+                np.linalg.inv(np.asarray(spec_cfg.cov_inv, dtype=np.float64))
+            ).data
 
     line_flux_cfg = (
         line_flux_data if line_flux_data is not None else getattr(obs, "line_fluxes", None)
@@ -462,14 +524,14 @@ def resolve_data_term_options(model: Any, options: DataTermOptions) -> ResolvedD
     obs = getattr(model, "observation", None)
     spec_config = obs.spectroscopy if obs is not None else None
     has_spec = options.data_type in ("spectroscopy", "joint")
-    has_mode = spec_config is not None and hasattr(spec_config, "eline_mode")
+    eline_mode = getattr(spec_config, "eline_mode", None)
 
     eline_marginalize = options.eline_marginalize
     if eline_marginalize is None:
-        eline_marginalize = has_mode and spec_config.eline_mode == "marginalized"
+        eline_marginalize = eline_mode == "marginalized"
     eline_marginalize = bool(eline_marginalize) and has_spec
 
-    eline_fitted = bool(has_mode and spec_config.eline_mode == "fitted") and has_spec
+    eline_fitted = eline_mode == "fitted" and has_spec
 
     eline_prior_type = options.eline_prior_type
     if eline_prior_type is None:
@@ -602,18 +664,12 @@ def build_data_term(
     **JIT compatibility**: the returned ``log_prob`` is pure and safe inside
     :func:`jax.jit`, :func:`jax.grad` and :func:`jax.vmap`.
     """
-    from tengri.observation.noise import (
-        censored_neg_log_likelihood,
-        get_noise_dof,
-        uses_student_t,
-    )
+    from tengri.observation.noise import get_noise_dof, uses_student_t
 
     spec = model.spec if spec is None else spec
     fixed_values = spec.get_fixed_values() if fixed_values is None else fixed_values
     data_type = options.data_type
-    free_names = set(spec.free_params)
     noise_dof = get_noise_dof(spec) if uses_student_t(spec) else None
-    use_censored = "data_mask" in data_args
     has_line_fluxes = "line_flux_waves" in data_args
     has_line_ratios = "line_ratio_obs" in data_args
     has_indices = "index_obs" in data_args
@@ -625,11 +681,8 @@ def build_data_term(
     measured_line_defs = _resolve_measured_line_defs(model, has_line_fluxes=has_line_fluxes)
     needs_line_lums = options.eline_prior_type == "model"
     use_components = options.use_components
-    # The likelihood adapters take ``data_args`` at call time; a user likelihood with the
-    # two-argument signature keeps working on its baked arrays.
-    _likelihood_takes_data_args = likelihood is not None and "data_args" in _signature_parameters(
-        likelihood.log_prob
-    )
+    noise_spec, resolved_builders = _noise_of(likelihood, options, data_args, noise_dof)
+    builders = ColumnBuilders() if resolved_builders is None else resolved_builders
 
     # Template threading: every channel routes through the threaded orchestrator so the
     # outer JIT trace sees the SSP grid and template arrays as Parameters, not Constants.
@@ -655,11 +708,13 @@ def build_data_term(
             has_line_ratios=has_line_ratios,
             measured_line_defs=measured_line_defs,
             needs_line_lums=needs_line_lums,
+            noise=noise_spec,
+            builders=builders,
         )
 
-    def log_lik(params, call_data_args):
-        """log p(d | params), positive, for one structure."""
-        prediction, predicted, _pred_phot, _pred_spec = _build_prediction(
+    def predict(params, call_data_args):
+        """The channel dictionary of the forward model at ``params``."""
+        return _build_prediction(
             model,
             params,
             data_type,
@@ -673,37 +728,49 @@ def build_data_term(
             jit_inputs=call_data_args.get("_jit_inputs"),
             threaded_impl=_threaded_impl,
             needs_line_lums=needs_line_lums,
-        )
+        )[0]
 
-        if likelihood is not None:
-            if _likelihood_takes_data_args:
-                return likelihood.log_prob(prediction, params, data_args=call_data_args)
-            return likelihood.log_prob(prediction, params)
-
-        return _censored_fallthrough(
-            model,
+    def predictions(params, call_data_args):
+        """The observables :func:`score` reads, design columns included."""
+        return Predictions.from_mapping(
+            predict(params, call_data_args),
             params,
-            call_data_args,
-            predicted,
-            free_names=free_names,
-            noise_dof=noise_dof,
-            has_line_fluxes=has_line_fluxes,
-            has_line_ratios=has_line_ratios,
-            has_indices=has_indices,
-            index_defs=index_defs,
-            use_censored=use_censored,
-            censored_nll=censored_neg_log_likelihood,
+            eline_design=builders.design_for(params),
+            eline_prior_inputs=builders.prior_inputs_for(params),
         )
+
+    # The adapters take ``data_args`` at call time; a user likelihood with the two-argument
+    # signature keeps working on its baked arrays.
+    takes_data_args = (
+        noise_spec is None
+        and likelihood is not None
+        and "data_args" in _signature_parameters(likelihood.log_prob)
+    )
+
+    def log_lik(params, call_data_args):
+        """log p(d | params), positive, for one structure."""
+        if noise_spec is not None:
+            return score(predictions(params, call_data_args), call_data_args, noise_spec)
+        if likelihood is None:
+            raise AssertionError(
+                "Legacy χ² fall-through reached for an unexpected configuration. "
+                "Auto-build (Fitter._maybe_build_default_likelihood) returned None "
+                "but use_censored is False. Either extend the auto-build cohort to "
+                "cover this configuration, or raise NotImplementedError at the "
+                "auto-build bail-out site rather than falling through here."
+            )
+        prediction = predict(params, call_data_args)
+        if takes_data_args:
+            return likelihood.log_prob(prediction, params, data_args=call_data_args)
+        return likelihood.log_prob(prediction, params)
 
     def log_norm(call_data_args):
         """The constant ``log_lik`` omits, for the same structure (#3427)."""
-        if likelihood is not None:
-            return log_normalization_of(likelihood, call_data_args)
-        return _censored_fallthrough_normalization(
-            call_data_args,
-            noise_dof=noise_dof,
-            has_extra_channels=has_line_fluxes or has_line_ratios or has_indices,
-        )
+        if noise_spec is not None:
+            return log_normalization(call_data_args, noise_spec)
+        if likelihood is None:
+            return 0.0
+        return log_normalization_of(likelihood, call_data_args)
 
     return DataTerm(
         data_args=data_args,
@@ -712,29 +779,30 @@ def build_data_term(
         cache_key=_data_term_cache_key(options, data_args),
         _log_lik=log_lik,
         _log_norm=log_norm,
+        noise=noise_spec,
+        _predict=predictions if noise_spec is not None else None,
     )
 
 
-def _censored_fallthrough_normalization(data_args, *, noise_dof, has_extra_channels):
-    """Normalization of the censored fall-through: its detected photometric bands (#3427).
+def _noise_of(likelihood, options, data_args, noise_dof):
+    """The noise model and column builders a term scores under, or ``(None, None)``.
 
-    The fall-through's censored energy carries ``log sigma_eff`` for the detected bands
-    already. Its line-flux, line-ratio and index channels are chi-squared forms with no
-    normalization here, so their constants are not included and a warning says so.
+    A shipped likelihood cohort is read as a :class:`NoiseSpec`. With no likelihood the
+    data must carry a censoring mask and the censored term scores it; any other missing
+    likelihood is a hole in the auto-built cohort and is refused. A user's own likelihood
+    has no spec and is called directly.
     """
-    if "data_mask" not in data_args:
-        return 0.0
-    if has_extra_channels:
-        warnings.warn(
-            "The censored fall-through has line-flux, line-ratio or index channels; their "
-            "normalization constants are not in log_evidence (#3427).",
-            stacklevel=3,
-        )
-    n_detected = jnp.sum(data_args["data_mask"] == 0)
-    if noise_dof is not None:
-        # The Student-t density carries its own -(1/2) log(nu pi); no separate 2 pi.
-        return n_detected * student_t_log_norm_per_point(noise_dof)
-    return -0.5 * n_detected * LOG_2PI
+    if likelihood is None:
+        if "data_mask" not in data_args:
+            return None, None
+        spec = NoiseSpec(data_type=options.data_type, dof=noise_dof, f_cal_param="noise_frac_cal")
+        validate(spec, data_args.keys())
+        return spec, ColumnBuilders()
+    resolved = noise_spec_of(likelihood, options.data_type, data_args.keys())
+    if resolved is None:
+        return None, None
+    validate(resolved[0], data_args.keys())
+    return resolved
 
 
 def _signature_parameters(fn) -> set:
@@ -742,6 +810,25 @@ def _signature_parameters(fn) -> set:
     import inspect
 
     return set(inspect.signature(fn).parameters)
+
+
+@dataclass(frozen=True, eq=False)
+class _ChannelProbe:
+    """One channel scored on its own, shaped like the cohort member the scale check reads."""
+
+    name: str
+    channel: Any
+    noise: NoiseSpec
+    builders: ColumnBuilders
+
+    def log_prob(self, prediction, params, data_args=None):
+        preds = Predictions.from_mapping(
+            prediction,
+            params,
+            eline_design=self.builders.design_for(params),
+            eline_prior_inputs=self.builders.prior_inputs_for(params),
+        )
+        return self.channel.loglik(preds, data_args, self.noise)
 
 
 def _check_reference_channel_scales(
@@ -758,8 +845,10 @@ def _check_reference_channel_scales(
     has_line_ratios,
     measured_line_defs,
     needs_line_lums,
+    noise=None,
+    builders=None,
 ):
-    """Evaluate every likelihood channel once at a reference draw and refuse mismatched scales.
+    """Evaluate every channel once at a reference draw and refuse mismatched scales.
 
     A units-mismatched channel makes a chi-squared that silently annihilates the others by
     floating-point absorption. This turns that into a construction error naming the channel.
@@ -786,87 +875,15 @@ def _check_reference_channel_scales(
         measured_line_defs=measured_line_defs,
         needs_line_lums=needs_line_lums,
     )
-    channels = (
-        likelihood.likelihoods if isinstance(likelihood, CompositeLikelihood) else (likelihood,)
-    )
-    _check_channel_scales(channels, ref_prediction, ref_params, data_args)
-
-
-def _censored_fallthrough(
-    model,
-    params,
-    data_args,
-    predicted,
-    *,
-    free_names,
-    noise_dof,
-    has_line_fluxes,
-    has_line_ratios,
-    has_indices,
-    index_defs,
-    use_censored,
-    censored_nll,
-):
-    """Log-likelihood for ``data_mask`` with no adapter: censored photometry plus line extras."""
-    if not use_censored:
-        raise AssertionError(
-            "Legacy χ² fall-through reached for an unexpected configuration. "
-            "Auto-build (Fitter._maybe_build_default_likelihood) returned None "
-            "but use_censored is False. Either extend the auto-build cohort to "
-            "cover this configuration, or raise NotImplementedError at the "
-            "auto-build bail-out site rather than falling through here."
+    if noise is not None:
+        members = tuple(
+            _ChannelProbe(channel.name, channel, noise, builders)
+            for channel in selected_channels(data_args, noise)
         )
-    data = data_args["data"]
-    noise = data_args["noise"]
-    ll = -censored_nll(
-        data,
-        noise,
-        predicted,
-        data_args["data_mask"],
-        f_cal=params.get("noise_frac_cal", 0.0),
-        dof=noise_dof,
-    )
-    free_params = {k: v for k, v in params.items() if k in free_names}
-    if has_line_fluxes:
-        ll = ll + _line_flux_extra(model, params, free_params, data_args, censored_nll)
-    if has_line_ratios:
-        model_lr = model.predict_line_ratios(free_params, model.observation.line_ratios)
-        chi2_ratios = jnp.sum(
-            standardized_residual(
-                data_args["line_ratio_obs"], model_lr, data_args["line_ratio_err"]
-            )
-            ** 2
+    else:
+        members = (
+            likelihood.likelihoods
+            if isinstance(likelihood, CompositeLikelihood)
+            else (likelihood,)
         )
-        ll = ll - 0.5 * chi2_ratios
-    if has_indices:
-        model_idx = model.predict_spectral_indices(free_params, index_defs)
-        chi2_idx = jnp.sum(
-            standardized_residual(data_args["index_obs"], model_idx, data_args["index_err"]) ** 2
-        )
-        ll = ll - 0.5 * chi2_idx
-    return ll
-
-
-def _line_flux_extra(model, params, free_params, data_args, censored_nll):
-    """Line-flux term of the fall-through: censored when limits or model sigma are packed."""
-    model_lf = model.predict_line_fluxes(
-        free_params, target_wavelengths=data_args["line_flux_waves"]
-    )
-    model_lf = model_lf * params.get("line_flux_scaling", 1.0)
-    limit_mask = data_args.get("line_flux_limit_mask")
-    model_sigma = data_args.get("line_flux_model_sigma_frac")
-    if limit_mask is None and model_sigma is None:
-        chi2_lines = jnp.sum(
-            standardized_residual(data_args["line_flux_obs"], model_lf, data_args["line_flux_err"])
-            ** 2
-        )
-        return -0.5 * chi2_lines
-    if limit_mask is None:
-        limit_mask = jnp.zeros(data_args["line_flux_obs"].shape[0], dtype=jnp.int32)
-    return -censored_nll(
-        data_args["line_flux_obs"],
-        data_args["line_flux_err"],
-        model_lf,
-        limit_mask,
-        model_sigma_frac=model_sigma,
-    )
+    _check_channel_scales(members, ref_prediction, ref_params, data_args)

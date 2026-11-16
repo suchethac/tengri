@@ -1323,6 +1323,10 @@ def _profile_stats(
     )
     ell_ref = jnp.asarray(phys[mass_name])
 
+    if presence is not None and jnp.ndim(presence) == 1 and presence.shape[0] < data.shape[-1]:
+        # Presence of joint data has one entry per photometric band; the spectrum is present.
+        presence = jnp.concatenate([presence, jnp.ones(data.shape[-1] - presence.shape[0])])
+
     # Concatenate the line-flux block if supplied, matching the data side
     # to the prediction side. Both must be resolved here and in matching order.
     if line_flux_block is not None:

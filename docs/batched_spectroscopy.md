@@ -344,8 +344,12 @@ Each limit below names what to do instead.
 
 - **A template covariance.** Give each `GalaxySpectrum` its own `covariance=BandedMatrix` and
   build the template without one.
-- **Student-t noise and a calibration floor.** The batched likelihood is Gaussian with no floor.
-  Use Gaussian noise.
+- **Student-t noise and a calibration floor.** The batched likelihood is Gaussian with no floor,
+  and a template with `NoiseModel(student_t_dof=...)` or a nonzero `calibration_floor` is
+  refused. Use the per-galaxy `Fitter`, which takes both with marginalized calibration and
+  marginalized lines: a floor gives an exact marginal, and Student-t noise gives a Laplace
+  approximation at the iteratively reweighted least-squares mode (a pixel covariance makes it
+  one multivariate Student-t).
 - **The Cloudy line prior.** Use `eline_prior_type="flat"` or `"model"`, or `eline_mode="fitted"`
   or `"off"`. Lines in kinematic groups (`eline_kinematics`) are fitted on the batch as on the
   per-galaxy `Fitter`, each line at its group's width and offset.

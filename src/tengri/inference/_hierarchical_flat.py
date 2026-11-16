@@ -334,6 +334,7 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
                 )
 
     from tengri.config.exceptions import ConfigError, ParameterError
+    from tengri.inference.channels import has_student_t_marginal
     from tengri.inference.data_term import DataTermOptions, build_data_args, build_data_term
     from tengri.observation.noise import has_noise_model
 
@@ -341,7 +342,8 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
     if mask_stack is not None and has_noise_model(spec) and bool(jnp.any(mask_stack != 0)):
         raise ParameterError(
             "PopulationFitter(data_mask=...) flags upper or lower limits, and the hierarchical "
-            "flat seam cannot score them with a free noise model (noise_frac_cal / noise_dof): "
+            "flat seam cannot score them with a free noise model (NoiseModel "
+            "calibration_floor / student_t_dof, parameters noise_frac_cal / noise_dof): "
             "the band's sigma would depend on the parameters while the censored term assumes a "
             "fixed one. Fix the noise parameters, or drop the limits."
         )
@@ -370,6 +372,14 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
         options=DataTermOptions(data_type),
         likelihood=likelihood,
     )
+    if term.noise is not None and has_student_t_marginal(data_args0, term.noise):
+        raise ParameterError(
+            "PopulationFitter cannot score a Student-t noise model with marginalized "
+            "calibration or marginalized lines: the Student-t marginal is a Laplace "
+            "approximation at a per-galaxy mode, and the hierarchical flat seam has no mode "
+            "check for it. Use Gaussian noise (no student_t_dof) or fitted lines, or fit "
+            "each galaxy with Fitter."
+        )
     shared_args = {k: v for k, v in data_args0.items() if k not in per_galaxy}
     _data_args = {"per_galaxy": per_galaxy, "shared": shared_args}
 

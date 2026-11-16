@@ -45,17 +45,15 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, shape
-from tengri.inference.likelihoods.gaussian import (
-    LOG_2PI,
-    diag_gaussian_log_normalization,
-    diag_gaussian_log_prob,
-    student_t_log_norm_per_point,
+from tengri.inference.likelihoods.gaussian import diag_gaussian_log_prob
+from tengri.inference.likelihoods.terms import (
+    censored_term,
+    correlated_noise_term,
+    correlated_term,
+    floor_value,
+    student_t_term,
 )
-from tengri.observation.banded import BandedMatrix, banded_forward_substitution
-from tengri.observation.noise import (
-    censored_neg_log_likelihood as _censored_neg_log_lik,
-    variable_noise_hamiltonian as _student_t_neg_log_lik,
-)
+from tengri.utils.scale import diag_gaussian_log_normalization
 
 __all__ = [
     "CensoredLikelihood",
@@ -251,6 +249,17 @@ _GAUSSIAN_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
 }
 
 
+def _channel_norm(name, data, **noise_fields):
+    """The constant a channel of :mod:`tengri.inference.channels` omits, for these arrays.
+
+    The shipped likelihood classes keep a ``log_normalization`` method for the composite and
+    the user-likelihood path; the constant itself lives once, in the channel's ``log_norm``.
+    """
+    from tengri.inference.channels import NoiseSpec, channel_keys
+
+    return channel_keys()[name].log_norm(data, NoiseSpec(**noise_fields))
+
+
 # ─────────────────────────────────────────────────────────────────────
 # 2. Student-t, heavy-tailed
 # ─────────────────────────────────────────────────────────────────────
@@ -306,16 +315,13 @@ class StudentTLikelihood:
         # free parameter the inference engine fits, read it from the
         # params dict each call. Otherwise fall back to the static
         # ``f_cal`` constant.
-        if self.f_cal_param is not None and params is not None and self.f_cal_param in params:
-            f_cal = params[self.f_cal_param]
-        else:
-            f_cal = self.f_cal
-        return -_student_t_neg_log_lik(
-            data=resolve_channel_data(self.obs, self.obs_key, self.data_slice, data_args),
-            noise_obs=resolve_channel_data(self.err, self.err_key, self.data_slice, data_args),
-            predicted=prediction[self.channel],
-            f_cal=f_cal,
-            dof=self.dof,
+        f_cal = floor_value(params, self.f_cal_param, self.f_cal)
+        return student_t_term(
+            prediction[self.channel],
+            resolve_channel_data(self.obs, self.obs_key, self.data_slice, data_args),
+            resolve_channel_data(self.err, self.err_key, self.data_slice, data_args),
+            f_cal,
+            self.dof,
         )
 
     def declared_parameters(self):
@@ -336,7 +342,14 @@ class StudentTLikelihood:
         constant is missing.
         """
         obs = resolve_channel_data(self.obs, self.obs_key, self.data_slice, data_args)
-        return -0.5 * jnp.size(obs) * LOG_2PI
+        err = resolve_channel_data(self.err, self.err_key, self.data_slice, data_args)
+        photometry = self.channel == "phot_fnu"
+        return _channel_norm(
+            "photometry" if photometry else "spectrum",
+            {"data": obs, "noise": err},
+            data_type="photometry" if photometry else "spectroscopy",
+            student_t=True,
+        )
 
 
 _STUDENT_T_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
@@ -412,18 +425,15 @@ class CensoredLikelihood:
         params: Mapping[str, jnp.ndarray] | None = None,
         data_args: Mapping[str, jnp.ndarray] | None = None,
     ) -> jnp.ndarray:
-        if self.f_cal_param is not None and params is not None and self.f_cal_param in params:
-            f_cal = params[self.f_cal_param]
-        else:
-            f_cal = self.f_cal
-        return -_censored_neg_log_lik(
-            data=resolve_channel_data(self.obs, self.obs_key, self.data_slice, data_args),
-            noise_obs=resolve_channel_data(self.err, self.err_key, self.data_slice, data_args),
-            predicted=prediction[self.channel],
-            mask=resolve_channel_data(self.mask, self.mask_key, self.data_slice, data_args),
-            f_cal=f_cal,
-            dof=self.dof,
-            model_sigma_frac=resolve_channel_data(
+        f_cal = floor_value(params, self.f_cal_param, self.f_cal)
+        return censored_term(
+            prediction[self.channel],
+            resolve_channel_data(self.obs, self.obs_key, self.data_slice, data_args),
+            resolve_channel_data(self.err, self.err_key, self.data_slice, data_args),
+            resolve_channel_data(self.mask, self.mask_key, self.data_slice, data_args),
+            f_cal,
+            self.dof,
+            resolve_channel_data(
                 self.model_sigma_frac, self.model_sigma_frac_key, self.data_slice, data_args
             ),
         )
@@ -450,11 +460,7 @@ class CensoredLikelihood:
         which :func:`~tengri.observation.noise.censored_neg_log_likelihood` leaves out.
         """
         mask = resolve_channel_data(self.mask, self.mask_key, self.data_slice, data_args)
-        n_detected = jnp.sum(mask == 0)
-        if self.dof is not None:
-            # The Student-t density carries its own -(1/2) log(nu pi); no separate 2 pi.
-            return n_detected * student_t_log_norm_per_point(self.dof)
-        return -0.5 * n_detected * LOG_2PI
+        return _channel_norm("censoring", {"data_mask": mask}, dof=self.dof)
 
 
 _CENSORED_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
@@ -525,6 +531,9 @@ class MultivariateGaussianLikelihood:
     obs_key: str | None = None
     presence_key: str | None = None
     data_slice: tuple[int, int] | None = None
+    student_t: bool = False
+    dof: float | None = None
+    f_cal_param: str | None = None
 
     def log_prob(
         self,
@@ -537,10 +546,8 @@ class MultivariateGaussianLikelihood:
         With ``chol_data`` the quadratic form is ``-0.5 |L^-1 diff|^2`` for the lower
         factor ``L`` of the covariance, so the dense inverse is never formed.
         """
-        del params
         obs = resolve_channel_data(self.obs, self.obs_key, self.data_slice, data_args)
-        diff = obs - prediction[self.channel]
-        # Presence zeroes absent pixels before whitening; with no key it is a no-op.
+        presence = None
         if (
             data_args is not None
             and self.presence_key is not None
@@ -549,15 +556,23 @@ class MultivariateGaussianLikelihood:
             presence = data_args[self.presence_key]
             if self.data_slice is not None:
                 presence = presence[self.data_slice[0] : self.data_slice[1]]
-            diff = jnp.where(presence > 0, diff, 0.0)
-        if self.chol_data is None:
-            return -0.5 * (diff @ self.cov_inv @ diff)
-        factor = BandedMatrix(
-            offsets=np.asarray(self.chol_offsets, dtype=int),
-            data=resolve_channel_data(self.chol_data, self.chol_key, None, data_args),
+        chol = None
+        if self.chol_data is not None:
+            chol = resolve_channel_data(self.chol_data, self.chol_key, None, data_args)
+        if self.student_t:
+            f_cal = floor_value(params, self.f_cal_param)
+            return correlated_noise_term(
+                prediction[self.channel],
+                obs,
+                cov_inv=self.cov_inv,
+                chol_data=chol,
+                chol_offsets=self.chol_offsets,
+                f_cal=f_cal,
+                dof=self.dof,
+            )
+        return correlated_term(
+            prediction[self.channel], obs, self.cov_inv, chol, self.chol_offsets, presence
         )
-        whitened = banded_forward_substitution(factor, diff)
-        return -0.5 * jnp.dot(whitened, whitened)
 
     def declared_parameters(self):
         return []
@@ -578,17 +593,27 @@ class MultivariateGaussianLikelihood:
 
         The determinant comes from the banded Cholesky factor when one is given (twice
         the sum of the log of its diagonal), otherwise from the dense inverse. The
-        covariance is per model, so this does not depend on the parameters.
+        covariance is per model, so this does not depend on the parameters. The correlated
+        floor and Student-t variants return their normalization inside ``log_prob``.
         """
+        if self.student_t:
+            return 0.0
         obs = resolve_channel_data(self.obs, self.obs_key, self.data_slice, data_args)
         if self.chol_data is None:
-            log_det = -jnp.linalg.slogdet(self.cov_inv)[1]
-        else:
-            chol = resolve_channel_data(self.chol_data, self.chol_key, None, data_args)
-            offsets = np.asarray(self.chol_offsets, dtype=int)
-            diagonal = chol[int(np.where(offsets == 0)[0][0])]
-            log_det = 2.0 * jnp.sum(jnp.log(diagonal))
-        return -0.5 * log_det - 0.5 * jnp.size(obs) * LOG_2PI
+            return _channel_norm(
+                "spectrum",
+                {"data": obs, "spec_cov_inv": self.cov_inv},
+                data_type="spectroscopy",
+                covariance="dense",
+            )
+        chol = resolve_channel_data(self.chol_data, self.chol_key, None, data_args)
+        return _channel_norm(
+            "spectrum",
+            {"data": obs, "spec_chol_data": chol},
+            data_type="spectroscopy",
+            covariance="banded",
+            chol_offsets=tuple(int(k) for k in np.asarray(self.chol_offsets)),
+        )
 
 
 _MULTIVARIATE_GAUSSIAN_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
@@ -599,6 +624,9 @@ _MULTIVARIATE_GAUSSIAN_LIKELIHOOD_CACHE_KEY_POLICY: KeyPolicy = {
     "chol_data": shape("banded factor bands; only their shape fixes the program"),
     "chol_offsets": content("diagonal offsets of the factor are static program structure"),
     "chol_key": content("data_args routing key changes which traced input is read"),
+    "student_t": content("heavy-tailed scoring changes the likelihood"),
+    "dof": content("degrees of freedom changes the tail weight"),
+    "f_cal_param": content("routing to a free calibration floor changes the graph"),
     "channel": content("which prediction-dict key to read determines the graph"),
     "name": content("diagnostic identifier, cheap and harmless to key"),
     "obs_key": content("data_args routing key changes which traced input is read"),

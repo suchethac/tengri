@@ -24,6 +24,7 @@ import warnings
 import numpy as np
 
 from tengri.analysis.diagnostics.autocorrelation import split_rhat
+from tengri.config.exceptions import warn_measured
 
 #: Split R-hat above this marks a run that has not mixed. Looser than the
 #: Vehtari+2021 value of 1.01 on purpose: the check speaks only for clear failures.
@@ -173,4 +174,84 @@ def check_sampler_convergence(posterior, *, backend: str):
         warnings.warn(message, RuntimeWarning, stacklevel=3)
 
     posterior.diagnostics = {**(posterior.diagnostics or {}), "convergence_warning": message}
+    return posterior
+
+
+def check_student_t_mode(fitter, posterior):
+    """Warn once when a Student-t marginal of a finished fit may not have reached its best mode.
+
+    Not an entry of :func:`check_sampler_convergence`: that one reads the draws of a chain
+    sampler, while this one applies to every backend (MAP and variational fits too) and needs
+    the fitter's data term. The marginal is evaluated once more, eagerly, at the posterior's
+    point estimate; no draw is touched.
+
+    A warning is emitted when the weights of the iteratively reweighted mode still move by
+    more than ``WEIGHT_CHANGE_WARN``, when the two starting points reach marginals more than
+    ``START_GAP_WARN`` nats apart, or when the ratio of nuisance columns to data reaches
+    ``RELIABLE_COLUMN_RATIO``. The measured values are recorded in ``posterior.diagnostics`` under
+    ``student_t_weight_change``, ``student_t_start_gap`` and ``student_t_column_ratio``.
+
+    Parameters
+    ----------
+    fitter : Fitter
+        The fitter that produced ``posterior``.
+    posterior : Posterior
+        The result; returned unchanged apart from ``diagnostics``.
+
+    Returns
+    -------
+    Posterior
+        The same object. Without a Student-t marginal nothing is recorded.
+    """
+    from tengri.inference.loss_functions import build_data_term_for_fitter
+    from tengri.observation.linear_marginal import (
+        RELIABLE_COLUMN_RATIO,
+        START_GAP_WARN,
+        WEIGHT_CHANGE_WARN,
+    )
+    from tengri.observation.noise import uses_student_t
+
+    marginalized = getattr(fitter, "_calibration_marginalize", False) or getattr(
+        fitter, "_eline_marginalize", False
+    )
+    if not (marginalized and uses_student_t(fitter.spec)) or not posterior.params:
+        return posterior
+    params = {
+        name: posterior.params[name] for name in fitter._free_names if name in posterior.params
+    }
+    params.update(fitter._fixed_values)
+    params = fitter.spec.resolve_mirrors(params)
+    report = build_data_term_for_fitter(fitter).mode_report(params, fitter._data_args)
+    if report is None:
+        return posterior
+
+    ratio = report["n_columns"] / max(report["n_data"], 1.0)
+    found = []
+    if report["weight_change"] > WEIGHT_CHANGE_WARN:
+        found.append(f"the weights still change by {report['weight_change']:.1e}")
+    if report["start_gap"] > START_GAP_WARN:
+        found.append(f"two starting points reach marginals {report['start_gap']:.2f} nat apart")
+    if ratio >= RELIABLE_COLUMN_RATIO:
+        found.append(
+            f"{report['n_columns']} nuisance columns for {report['n_data']:.0f} data "
+            f"(ratio {ratio:.2f}, at or above {RELIABLE_COLUMN_RATIO})"
+        )
+    if found:
+        warn_measured(
+            "Student-t marginal over the nuisance coefficients: "
+            + "; ".join(found)
+            + ". Its posterior can have several modes and the reported one may not be the "
+            "global one; compare with Gaussian noise or fewer nuisance columns.",
+            RuntimeWarning,
+            stacklevel=3,
+            weight_change=report["weight_change"],
+            start_gap=report["start_gap"],
+            column_ratio=ratio,
+        )
+    posterior.diagnostics = {
+        **(posterior.diagnostics or {}),
+        "student_t_weight_change": report["weight_change"],
+        "student_t_start_gap": report["start_gap"],
+        "student_t_column_ratio": ratio,
+    }
     return posterior

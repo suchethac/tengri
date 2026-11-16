@@ -37,6 +37,22 @@ inactive and the code uses the standard ``jft.Gaussian`` likelihood. When
 ``noise_frac_cal`` is a free parameter (e.g., ``Uniform(0.01, 0.2)``), the
 code switches to ``jft.VariableCovarianceGaussian``.
 
+The floor is scaled by the model before any nuisance term: the noise covariance is
+``N = diag(sigma^2 + (noise_frac_cal * m0)^2)`` (``C + diag((noise_frac_cal * m0)^2)`` with a
+pixel covariance ``C``), where ``m0`` is the model that the calibration polynomial multiplies
+or the line amplitudes are added to, not the calibrated or line-added spectrum. With
+``calibration_marginalize`` or marginalized emission lines the nuisance coefficients are then
+integrated out exactly given ``N`` for Gaussian noise; ``ln det N`` depends on the model and
+enters the value and the gradient. The batched catalog path does not take a floor.
+
+A Student-t ``noise_dof`` with ``calibration_marginalize`` or marginalized emission lines
+has no closed-form marginal. The marginal is then a Laplace approximation of the integral over
+the coefficients at the mode found by iteratively reweighted least squares (the Gaussian
+scale-mixture form of the Student-t), with the expected information as its curvature (the
+mixing-weight curvature with a pixel covariance); it equals the Gaussian marginal as
+``noise_dof`` tends to infinity. See
+:func:`~tengri.observation.linear_marginal.marginalize_linear_nuisance`.
+
 Example::
 
     spec = Parameters(
@@ -49,13 +65,14 @@ Example::
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import jax
 import jax.numpy as jnp
 from jax.core import Tracer
 
-from tengri.utils.scale import whiten
+from tengri.utils.scale import LOG_2PI, whiten
 
 # ── Core noise computation (pure JAX, JIT-compatible) ─────────────
 
@@ -460,6 +477,33 @@ def censored_neg_log_likelihood(
 # ── Energy and metric for JIT EVI engine ──────────────────────────
 
 
+def student_t_log_norm(dof: float | jnp.ndarray, dim: float | jnp.ndarray = 1.0) -> jnp.ndarray:
+    r"""Normalization constant of a Student-t of dimension ``dim``, without the scale determinant.
+
+    The constant is :math:`\log\Gamma\!\left(\tfrac{\nu+d}{2}\right)
+    - \log\Gamma\!\left(\tfrac{\nu}{2}\right) - \tfrac d2\log(\nu\pi)`. It is the one
+    place this expression is written: ``dim = 1`` is the per-point constant of a location-scale
+    Student-t, and :func:`multivariate_student_t_log_density` uses the general ``dim``.
+
+    Parameters
+    ----------
+    dof : float or array
+        Degrees of freedom :math:`\nu` [dimensionless].
+    dim : float or array, optional
+        Dimension :math:`d` of the variate [dimensionless]. Default 1.
+
+    Returns
+    -------
+    scalar jnp.ndarray
+        The constant of the log-density [nats].
+    """
+    return (
+        jax.scipy.special.gammaln(0.5 * (dof + dim))
+        - jax.scipy.special.gammaln(0.5 * dof)
+        - 0.5 * dim * jnp.log(dof * math.pi)
+    )
+
+
 def variable_noise_hamiltonian(
     data: jnp.ndarray,
     noise_obs: jnp.ndarray,
@@ -536,15 +580,92 @@ def variable_noise_hamiltonian(
         #            - n [lgamma((ν+1)/2) - lgamma(ν/2) - ½log(ν/2)]
         energy = 0.5 * (dof + 1.0) * jnp.sum(jnp.log(1.0 + r**2 / dof)) + logdet
         n_data = data.shape[0]
-        norm_term = (
-            jax.scipy.special.gammaln((dof + 1.0) / 2.0)
-            - jax.scipy.special.gammaln(dof / 2.0)
-            - 0.5 * jnp.log(dof / 2.0)
-        )
-        return energy - n_data * norm_term
+        return energy - n_data * (student_t_log_norm(dof) + 0.5 * LOG_2PI)
     else:
         # Gaussian: ½ Σ r² + Σ log(σ_eff)
         return 0.5 * jnp.sum(r**2) + logdet
+
+
+def student_t_log_density(
+    data: jnp.ndarray,
+    noise_obs: jnp.ndarray,
+    predicted: jnp.ndarray,
+    dof: float,
+    present: jnp.ndarray | None = None,
+    f_cal: float | jnp.ndarray = 0.0,
+) -> jnp.ndarray:
+    r"""Normalized log-density of independent location-scale Student-t data.
+
+    The energy is :func:`variable_noise_hamiltonian`; adding the
+    :math:`-\tfrac12 n \ln 2\pi` it omits makes the value the full log-density of the
+    present data. This is the one Student-t density; the marginalized terms evaluate it too.
+
+    Parameters
+    ----------
+    data, noise_obs, predicted : array_like, shape (n,)
+        Data, one-sigma scale and model [flux units].
+    dof : float
+        Degrees of freedom :math:`\nu` [dimensionless].
+    present : array_like of bool, shape (n,), optional
+        Entries that exist. An absent entry adds exactly zero, whatever its value.
+    f_cal : float, optional
+        Fractional calibration floor [dimensionless]. Default 0.
+
+    Returns
+    -------
+    scalar
+        :math:`\sum_i \ln t_\nu(d_i - m_i; \sigma_i)` over the present entries [nats].
+
+    Notes
+    -----
+    **JIT-compatible**: yes; ``present`` may be traced.
+    """
+    n_total = data.shape[0]
+    if present is not None:
+        data = jnp.where(present, data, 0.0)
+        predicted = jnp.where(present, predicted, 0.0)
+        noise_obs = jnp.where(present, noise_obs, 1.0)
+    value = -variable_noise_hamiltonian(data, noise_obs, predicted, f_cal, dof)
+    value = value - 0.5 * n_total * LOG_2PI
+    if present is None:
+        return value
+    zero = jnp.zeros(1)
+    baseline = -variable_noise_hamiltonian(zero, jnp.ones(1), zero, 0.0, dof) - 0.5 * LOG_2PI
+    return value - jnp.sum(jnp.logical_not(present)) * baseline
+
+
+def multivariate_student_t_log_density(
+    chi2: jnp.ndarray, log_det: jnp.ndarray, n: float | jnp.ndarray, dof: float | jnp.ndarray
+) -> jnp.ndarray:
+    r"""Log-density of a multivariate Student-t with scale matrix :math:`C`, constants included.
+
+    .. math::
+
+        \ln\Gamma\!\left(\tfrac{\nu+n}{2}\right) - \ln\Gamma\!\left(\tfrac{\nu}{2}\right)
+        - \tfrac{n}{2}\ln(\nu\pi) - \tfrac12\ln\det C
+        - \tfrac{\nu+n}{2}\ln\!\left(1 + \chi^2/\nu\right).
+
+    Parameters
+    ----------
+    chi2 : scalar
+        :math:`r^\mathsf{T} C^{-1} r` [dimensionless].
+    log_det : scalar
+        :math:`\ln\det C` [log flux units squared times n].
+    n : scalar
+        Number of data [dimensionless].
+    dof : float
+        Degrees of freedom :math:`\nu` [dimensionless].
+
+    Returns
+    -------
+    scalar
+        Log-density [nats]; tends to the Gaussian log-density as ``dof`` tends to infinity.
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+    """
+    return student_t_log_norm(dof, n) - 0.5 * log_det - 0.5 * (dof + n) * jnp.log1p(chi2 / dof)
 
 
 def variable_noise_metric_vec(
@@ -1064,7 +1185,7 @@ class StudentTLikelihood:
 
     Notes
     -----
-    **JIT-compatible**: yes, uses ``jax.scipy.stats.t.logpdf``.
+    **JIT-compatible**: yes, evaluates :func:`student_t_log_density` per datum.
 
     The log-likelihood per data point is:
 
@@ -1116,8 +1237,7 @@ class StudentTLikelihood:
 
         Notes
         -----
-        **JIT-compatible**: yes, delegates to
-        ``jax.scipy.stats.t.logpdf``.
+        **JIT-compatible**: yes, delegates to :func:`student_t_log_density`.
 
         Avoids numerical instability by clamping σ to ≥ eps internally.
 
@@ -1137,8 +1257,7 @@ class StudentTLikelihood:
         eps = 1e-8
         sigma_safe = jnp.maximum(sigma, eps)
 
-        # Standardize residuals
-        residual = (observed - predicted) / sigma_safe
-
-        # Student-t log-pdf from JAX; include -log(sigma) normalization
-        return jax.scipy.stats.t.logpdf(residual, self.dof) - jnp.log(sigma_safe)
+        # One datum at a time through the one Student-t density.
+        return jax.vmap(
+            lambda d, m, e: student_t_log_density(d[None], e[None], m[None], self.dof)
+        )(observed, predicted, sigma_safe)

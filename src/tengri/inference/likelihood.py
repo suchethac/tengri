@@ -124,53 +124,73 @@ def build_base_likelihood(context: InferenceContext):
     # uncertainty from the params dict at log_prob time. The same
     # f_cal applies to both phot and spec channels for joint data,
     # matches the legacy `variable_noise_hamiltonian` semantics.
+    floor_param = None
+    marginal_dof = None
     if has_noise_model(context.spec) or uses_student_t(context.spec):
         dof = get_noise_dof(context.spec) if uses_student_t(context.spec) else None
-        if context.data_type == "photometry":
-            return StudentTLikelihood(
-                obs=context.data,
-                err=context.noise,
-                dof=dof,
-                f_cal_param="noise_frac_cal",
-                channel="phot_fnu",
-                obs_key="data",
-                err_key="noise",
-            )
-        if context.data_type == "spectroscopy":
-            return StudentTLikelihood(
-                obs=context.data,
-                err=context.noise,
-                dof=dof,
-                f_cal_param="noise_frac_cal",
-                channel="spec_fnu",
-                obs_key="data",
-                err_key="noise",
-            )
-        if context.data_type == "joint":
-            n_phot = _n_phot_split(context)
-            n_total = len(context.data)
-            return CompositeLikelihood(
-                StudentTLikelihood(
-                    obs=context.data[:n_phot],
-                    err=context.noise[:n_phot],
+        if context.has_spectroscopy:
+            _validate_variable_noise(context, dof)
+        # A floor with a marginalized calibration or line block is scored by the marginal
+        # adapters, which whiten with the floored noise and, with a Student-t dof, score the
+        # Laplace approximation of the marginal.
+        marginalizing = context.has_spectroscopy and (
+            context.calibration_marginalize or context.eline_marginalize
+        )
+        if marginalizing:
+            floor_param = "noise_frac_cal"
+            marginal_dof = dof
+        else:
+            if context.has_spectroscopy:
+                if context.eline_fitted:
+                    return _student_t_fitted_lines(context, dof)
+                correlated = _student_t_covariance(context, dof)
+                if correlated is not None:
+                    return correlated
+            if context.data_type == "photometry":
+                return StudentTLikelihood(
+                    obs=context.data,
+                    err=context.noise,
                     dof=dof,
                     f_cal_param="noise_frac_cal",
                     channel="phot_fnu",
                     obs_key="data",
                     err_key="noise",
-                    data_slice=(0, n_phot),
-                ),
-                StudentTLikelihood(
-                    obs=context.data[n_phot:],
-                    err=context.noise[n_phot:],
+                )
+            if context.data_type == "spectroscopy":
+                return StudentTLikelihood(
+                    obs=context.data,
+                    err=context.noise,
                     dof=dof,
                     f_cal_param="noise_frac_cal",
                     channel="spec_fnu",
                     obs_key="data",
                     err_key="noise",
-                    data_slice=(n_phot, n_total),
-                ),
-            )
+                )
+            if context.data_type == "joint":
+                n_phot = _n_phot_split(context)
+                n_total = len(context.data)
+                return CompositeLikelihood(
+                    StudentTLikelihood(
+                        obs=context.data[:n_phot],
+                        err=context.noise[:n_phot],
+                        dof=dof,
+                        f_cal_param="noise_frac_cal",
+                        channel="phot_fnu",
+                        obs_key="data",
+                        err_key="noise",
+                        data_slice=(0, n_phot),
+                    ),
+                    StudentTLikelihood(
+                        obs=context.data[n_phot:],
+                        err=context.noise[n_phot:],
+                        dof=dof,
+                        f_cal_param="noise_frac_cal",
+                        channel="spec_fnu",
+                        obs_key="data",
+                        err_key="noise",
+                        data_slice=(n_phot, n_total),
+                    ),
+                )
 
     # ── Spec covariance (correlated noise on spectroscopy) ──────
     # A banded covariance enters as its Cholesky factor, read through data_args; the
@@ -182,12 +202,24 @@ def build_base_likelihood(context: InferenceContext):
             "chol_offsets": context.model.observation.spectroscopy.chol_offsets,
             "chol_key": "spec_chol_data",
         }
+    elif "spec_cov_chol_data" in context.data_args:
+        dense_factor = context.data_args["spec_cov_chol_data"]
+        chol_kw = {
+            "chol_data": dense_factor,
+            "chol_offsets": tuple(-k for k in range(dense_factor.shape[1])),
+            "chol_key": "spec_cov_chol_data",
+        }
     marginalizes = context.calibration_marginalize or context.eline_marginalize
-    if "spec_cov_inv" in context.data_args or (chol_kw and not marginalizes):
+    has_lines = marginalizes or context.eline_fitted
+    plain_covariance = "spec_cov_inv" in context.data_args or "spec_chol_data" in context.data_args
+    if plain_covariance and not has_lines:
         cov_inv = context.data_args.get("spec_cov_inv")
+        # The correlated Gaussian reads a banded factor or the dense inverse, never the
+        # dense factor the marginalized terms whiten with.
+        mvn_kw = chol_kw if "spec_chol_data" in context.data_args else {}
         if context.data_type == "spectroscopy":
             return MultivariateGaussianLikelihood(
-                obs=context.data, cov_inv=cov_inv, channel="spec_fnu", obs_key="data", **chol_kw
+                obs=context.data, cov_inv=cov_inv, channel="spec_fnu", obs_key="data", **mvn_kw
             )
         if context.data_type == "joint":
             n_phot = _n_phot_split(context)
@@ -203,7 +235,7 @@ def build_base_likelihood(context: InferenceContext):
                     channel="spec_fnu",
                     obs_key="data",
                     data_slice=(n_phot, len(context.data)),
-                    **chol_kw,
+                    **mvn_kw,
                 ),
             )
 
@@ -275,6 +307,8 @@ def build_base_likelihood(context: InferenceContext):
             else (_n_phot_split(context), len(context.data))
         )
         cal_eline_lk = CalibrationELineMarginalizedLikelihood(
+            f_cal_param=floor_param,
+            dof=marginal_dof,
             fnu_obs=spec_obs,
             fnu_err=spec_err,
             fnu_obs_key="data",
@@ -296,11 +330,7 @@ def build_base_likelihood(context: InferenceContext):
         if context.data_type == "spectroscopy":
             return cal_eline_lk
         return CompositeLikelihood(
-            PhotometryLikelihood(
-                fnu_obs=context.data[:n_phot],
-                fnu_err=context.noise[:n_phot],
-                data_slice=(0, n_phot),
-            ),
+            _phot_block(context, n_phot, floor_param, marginal_dof),
             cal_eline_lk,
         )
 
@@ -313,6 +343,8 @@ def build_base_likelihood(context: InferenceContext):
                 "wavelength grid (model.wave_obs)."
             )
         cal_lk = CalibrationMarginalizedLikelihood(
+            f_cal_param=floor_param,
+            dof=marginal_dof,
             fnu_obs=context.data
             if context.data_type == "spectroscopy"
             else context.data[_n_phot_split(context) :],
@@ -337,11 +369,7 @@ def build_base_likelihood(context: InferenceContext):
             return cal_lk
         n_phot = _n_phot_split(context)
         return CompositeLikelihood(
-            PhotometryLikelihood(
-                fnu_obs=context.data[:n_phot],
-                fnu_err=context.noise[:n_phot],
-                data_slice=(0, n_phot),
-            ),
+            _phot_block(context, n_phot, floor_param, marginal_dof),
             cal_lk,
         )
 
@@ -381,10 +409,14 @@ def build_base_likelihood(context: InferenceContext):
                 design_matrix_builder=builder,
                 amplitude_names=tuple(context.eline_amplitude_names),
                 channel="spec_fnu",
+                cov_inv=context.data_args.get("spec_cov_inv"),
+                **(chol_kw if "spec_chol_data" in context.data_args else {}),
             )
         elif context.eline_prior_type == "cloudy":
             _require_cloudy_prior_params(context)
             eline_lk = CloudyELineMarginalizedLikelihood(
+                f_cal_param=floor_param,
+                dof=marginal_dof,
                 fnu_obs=spec_obs,
                 fnu_err=spec_err,
                 fnu_obs_key="data",
@@ -403,6 +435,8 @@ def build_base_likelihood(context: InferenceContext):
         elif context.eline_prior_type == "model":
             match_index, matched = _model_line_match(context)
             eline_lk = ModelELineMarginalizedLikelihood(
+                f_cal_param=floor_param,
+                dof=marginal_dof,
                 fnu_obs=spec_obs,
                 fnu_err=spec_err,
                 fnu_obs_key="data",
@@ -419,9 +453,12 @@ def build_base_likelihood(context: InferenceContext):
                 line_wavelengths=context.eline_independent_wavelengths,
                 prior_width_dex=context.eline_prior_width_dex,
                 channel="spec_fnu",
+                **chol_kw,
             )
         else:
             eline_lk = ELineMarginalizedLikelihood(
+                f_cal_param=floor_param,
+                dof=marginal_dof,
                 fnu_obs=spec_obs,
                 fnu_err=spec_err,
                 fnu_obs_key="data",
@@ -439,11 +476,7 @@ def build_base_likelihood(context: InferenceContext):
         if context.data_type == "spectroscopy":
             return eline_lk
         return CompositeLikelihood(
-            PhotometryLikelihood(
-                fnu_obs=context.data[: _n_phot_split(context)],
-                fnu_err=context.noise[: _n_phot_split(context)],
-                data_slice=(0, _n_phot_split(context)),
-            ),
+            _phot_block(context, _n_phot_split(context), floor_param, marginal_dof),
             eline_lk,
         )
 
@@ -571,6 +604,145 @@ def build_likelihood_extras(context: InferenceContext):
 
 
 # ── Helpers (private) ────────────────────────────────────────────────
+
+
+def _phot_block(context, n_phot, floor_param, marginal_dof):
+    """The photometric block of a joint marginal: Gaussian, or floored and heavy-tailed."""
+    from tengri.inference.likelihoods import StudentTLikelihood
+    from tengri.inference.photometry_likelihood import PhotometryLikelihood
+
+    if floor_param is None:
+        return PhotometryLikelihood(
+            fnu_obs=context.data[:n_phot],
+            fnu_err=context.noise[:n_phot],
+            data_slice=(0, n_phot),
+        )
+    return StudentTLikelihood(
+        obs=context.data[:n_phot],
+        err=context.noise[:n_phot],
+        dof=marginal_dof,
+        f_cal_param=floor_param,
+        channel="phot_fnu",
+        obs_key="data",
+        err_key="noise",
+        data_slice=(0, n_phot),
+    )
+
+
+def _validate_variable_noise(context, dof) -> None:
+    """Ask the scorer whether heavy-tailed noise can be combined with the requested nuisance."""
+    from tengri.inference.channels import CalibrationSpec, LineSpec, NoiseSpec, validate
+
+    lines = None
+    if context.eline_marginalize:
+        lines = LineSpec(mode="marginalized")
+    elif context.eline_fitted:
+        lines = LineSpec(mode="fitted")
+    noise = NoiseSpec(
+        data_type=context.data_type,
+        student_t=True,
+        dof=dof,
+        f_cal_param="noise_frac_cal",
+        calibration=CalibrationSpec(wavelength=None) if context.calibration_marginalize else None,
+        lines=lines,
+    )
+    validate(noise, ())
+
+
+def _covariance_kw(context):
+    """Keywords naming the dense inverse or banded factor of the spectrum covariance."""
+    if "spec_chol_data" in context.data_args:
+        return {
+            "chol_data": context.data_args["spec_chol_data"],
+            "chol_offsets": context.model.observation.spectroscopy.chol_offsets,
+            "chol_key": "spec_chol_data",
+        }
+    if "spec_cov_inv" in context.data_args:
+        return {"cov_inv": context.data_args["spec_cov_inv"]}
+    return {}
+
+
+def _student_t_covariance(context, dof):
+    """Variable noise on a spectrum with a pixel covariance; ``None`` when it has none."""
+    from tengri.inference.composite_likelihood import CompositeLikelihood
+    from tengri.inference.likelihoods import MultivariateGaussianLikelihood, StudentTLikelihood
+
+    kw = _covariance_kw(context)
+    if not kw:
+        return None
+    joint = context.data_type == "joint"
+    n_phot = _n_phot_split(context) if joint else 0
+    spectrum = MultivariateGaussianLikelihood(
+        obs=context.data[n_phot:],
+        channel="spec_fnu",
+        obs_key="data",
+        data_slice=(n_phot, len(context.data)) if joint else None,
+        student_t=True,
+        dof=dof,
+        f_cal_param="noise_frac_cal",
+        **kw,
+    )
+    if not joint:
+        return spectrum
+    return CompositeLikelihood(
+        StudentTLikelihood(
+            obs=context.data[:n_phot],
+            err=context.noise[:n_phot],
+            dof=dof,
+            f_cal_param="noise_frac_cal",
+            channel="phot_fnu",
+            obs_key="data",
+            err_key="noise",
+            data_slice=(0, n_phot),
+        ),
+        spectrum,
+    )
+
+
+def _student_t_fitted_lines(context, dof):
+    """Heavy-tailed noise with explicit line amplitudes: the spectrum block carries the lines."""
+    from tengri.inference.composite_likelihood import CompositeLikelihood
+    from tengri.inference.likelihoods import ELineFittedLikelihood, StudentTLikelihood
+
+    builder = _make_eline_design_builder(context)
+    if builder is None:
+        raise ValueError(
+            "Emission-line path requires _eline_wavelengths and "
+            "_eline_constraint_matrix to be set on the fitter."
+        )
+    joint = context.data_type == "joint"
+    n_phot = _n_phot_split(context) if joint else 0
+    n_total = len(context.data)
+    spec_slice = (n_phot, n_total) if joint else None
+    fitted = ELineFittedLikelihood(
+        fnu_obs=context.data[n_phot:],
+        fnu_err=context.noise[n_phot:],
+        fnu_obs_key="data",
+        fnu_err_key="noise",
+        data_slice=spec_slice,
+        design_matrix_builder=builder,
+        amplitude_names=tuple(context.eline_amplitude_names),
+        channel="spec_fnu",
+        student_t=True,
+        dof=dof,
+        f_cal_param="noise_frac_cal",
+        **_covariance_kw(context),
+    )
+    if not joint:
+        return fitted
+    return CompositeLikelihood(
+        StudentTLikelihood(
+            obs=context.data[:n_phot],
+            err=context.noise[:n_phot],
+            dof=dof,
+            f_cal_param="noise_frac_cal",
+            channel="phot_fnu",
+            obs_key="data",
+            err_key="noise",
+            data_slice=(0, n_phot),
+        ),
+        fitted,
+    )
 
 
 def _calibration_segment_kwargs(context: InferenceContext, wavelength) -> dict:

@@ -23,9 +23,9 @@ from functools import partial
 import jax
 import jax.numpy as jnp
 import numpy as np
-from scipy import special
 
 from tengri.inference.backends._psis import PSISResult, psis
+from tengri.observation.noise import multivariate_student_t_log_density
 
 
 @dataclass(frozen=True)
@@ -126,13 +126,7 @@ def student_t_logpdf(proposal: StudentTProposal, x: jnp.ndarray) -> jnp.ndarray:
     # log det(Σ) = 2 * sum(log diag(L))
     log_det_sigma = 2.0 * jnp.sum(jnp.log(jnp.abs(jnp.diag(chol))))
 
-    const = (
-        float(special.loggamma((nu + dim) / 2.0))
-        - float(special.loggamma(nu / 2.0))
-        - (dim / 2.0) * jnp.log(jnp.pi * nu)
-    )
-
-    return const - 0.5 * log_det_sigma - ((nu + dim) / 2.0) * jnp.log(1.0 + mahal_sq / nu)
+    return multivariate_student_t_log_density(mahal_sq, log_det_sigma, dim, nu)
 
 
 def sample_student_t(key: jax.Array, proposal: StudentTProposal, n_draws: int) -> jnp.ndarray:

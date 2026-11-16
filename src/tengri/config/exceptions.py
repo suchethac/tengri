@@ -969,7 +969,7 @@ class ShockPhotoionizedMixedWarning(UserWarning):
 _RESERVED_MEASUREMENT_NAMES = frozenset({"args", "with_traceback", "add_note", "measurements"})
 
 
-def warn_measured(message, category=UserWarning, *, stacklevel=2, **measurements):
+def warn_measured(message, category: type[Warning] = UserWarning, *, stacklevel=2, **measurements):
     """Emit a warning that carries the quantities it reports (#1645).
 
     A warn site that renders a computed number into prose and discards the value

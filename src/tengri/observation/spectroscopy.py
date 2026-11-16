@@ -131,8 +131,11 @@ class Spectroscopy:
         Default: None, every fitted pixel of the segment that contains the r band's
         effective wavelength (6231 Angstrom). Needs ``cal_scale_prior``.
     eline_prior_sigma : float
-        Prior width on emission line amplitudes for marginalization.
-        Default: 100.0.
+        Width ``w`` [data units] of the zero-mean Gaussian prior on each emission-line
+        amplitude that is marginalized. The marginal is exact at that finite width, not the
+        improper-prior limit, so each constrained line lowers the evidence by about
+        ``ln w`` nats; compare the evidences of models with different numbers of
+        marginalized lines only at the same width. Default: 100.0.
     eline_mode : str
         Emission line fitting mode. One of:
 

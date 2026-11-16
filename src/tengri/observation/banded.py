@@ -33,8 +33,8 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 import numpy as np
+from jax.core import Tracer
 from jax.scipy import linalg as jax_linalg
-from scipy import linalg as scipy_linalg
 
 from tengri.utils.physics_constants import C_KM_S as _C_KM_S, GAUSSIAN_FWHM_PER_SIGMA
 
@@ -58,7 +58,7 @@ class BandedMatrix(NamedTuple):
         ``x[i + offsets[k]]`` when forming ``y[i]``.
     """
 
-    offsets: jnp.ndarray
+    offsets: np.ndarray | jnp.ndarray
     data: jnp.ndarray
 
 
@@ -282,7 +282,7 @@ def gaussian_resolution_bands(wave_obs: jnp.ndarray, resolution, n_diag: int = 1
     return BandedMatrix(offsets=jnp.asarray(offsets), data=jnp.asarray(data))
 
 
-def row_sigma_kms(bm: BandedMatrix, wave_obs: jnp.ndarray) -> np.ndarray:
+def row_sigma_kms(bm: BandedMatrix, wave_obs: np.ndarray | jnp.ndarray) -> np.ndarray:
     r"""Gaussian-equivalent velocity width of each row of a banded LSF [km/s].
 
     Second central moment of row :math:`i` over its diagonal offsets,
@@ -463,19 +463,32 @@ def deconvolve_library_lsf(
     return BandedMatrix(offsets=bm.offsets, data=jnp.asarray(out[inv]))
 
 
-def _lower_storage(bm: BandedMatrix) -> np.ndarray:
-    """Lower-band storage ``ab[k, j] = A[j + k, j]`` of a symmetric banded matrix."""
+def _lower_rows(bm: BandedMatrix) -> jnp.ndarray:
+    """Lower-band rows ``rows[k, i] = A[i, i - k]`` of a symmetric banded matrix, ``k = 0..p``.
+
+    Accepts the symmetric layout (offsets ``-p..p``) and the lower one (offsets ``0..-p``);
+    the offsets are static.
+    """
     offs = np.asarray(bm.offsets).ravel()
-    data = np.asarray(bm.data, dtype=float)
+    data = jnp.asarray(bm.data)
     n = data.shape[1]
-    half = int(max(-offs.min(), offs.max()))
-    ab = np.zeros((half + 1, n))
+    half = int(max(-offs.min(), offs.max(), 0))
+    rows = []
     for k in range(half + 1):
         if -k in offs:
-            ab[k, : n - k] = data[int(np.where(offs == -k)[0][0]), k:]
-        elif k in offs:
-            ab[k, : n - k] = data[int(np.where(offs == k)[0][0]), : n - k]
-    return ab
+            rows.append(data[int(np.where(offs == -k)[0][0])])
+        elif k in offs and k < n:
+            upper = data[int(np.where(offs == k)[0][0])]
+            rows.append(jnp.pad(upper[: n - k], (k, 0)))
+        else:
+            rows.append(jnp.zeros(n, data.dtype))
+    return jnp.stack(rows)
+
+
+def _shifted(row: jnp.ndarray, lag: int) -> jnp.ndarray:
+    """``out[i] = row[i - lag]`` with zeros before the start (static ``lag``)."""
+    n = row.shape[0]
+    return jnp.pad(row[: max(n - lag, 0)], (min(lag, n), 0))
 
 
 def banded_cholesky(
@@ -483,15 +496,16 @@ def banded_cholesky(
 ) -> BandedMatrix:
     r"""Lower Cholesky factor of a banded covariance, with masked pixels set to identity.
 
-    Factors :math:`C' = M C M + (I - M)` once on the host, where :math:`M` is the
-    diagonal pixel mask. A masked row of the factor is the identity row, so a masked
-    pixel carries no information and no normalization.
+    Factors :math:`C' = M C M + (I - M)`, where :math:`M` is the diagonal pixel mask. A
+    masked row of the factor is the identity row, so a masked pixel carries no information
+    and no normalization. This is the one banded Cholesky of the package.
 
     Parameters
     ----------
     cov : BandedMatrix or array_like, shape (n, n)
         Symmetric positive-definite covariance [data units squared]. A dense array is
-        reduced to the banded storage of its nonzero bandwidth.
+        reduced to the banded storage of its nonzero bandwidth, which is read from the
+        values, so a dense array must be concrete.
     pix_mask : array_like, shape (n,), optional
         Pixel mask :math:`w \in \{0, 1\}^n`. Default: all ones.
 
@@ -504,22 +518,25 @@ def banded_cholesky(
     Raises
     ------
     ValueError
-        If the masked covariance is not positive definite.
+        If the inputs are concrete and the masked covariance is not positive definite.
 
     Notes
     -----
-    **JIT-compatible**: no. Build-time NumPy and SciPy routine; call it outside traced
-    code, once per data vector.
+    **JIT-compatible**: yes for a :class:`BandedMatrix` input, whose offsets are static;
+    **gradient-safe**: yes for a positive-definite matrix. Under ``jit`` a matrix that is not
+    positive definite gives non-finite entries, since a check needs concrete values. The
+    scan runs over columns; each step is one :math:`O(p^2)` vectorized update, so the cost is
+    :math:`O(n p^2)`. Entries keep the dtype of the input. No clamp or jitter is applied.
 
     The factor satisfies :math:`C' = L L^\mathsf{T}` with
 
     .. math::
 
         L_{ii} = \sqrt{C'_{ii} - \sum_{k=1}^{p} L_{i,i-k}^2}, \qquad
-        L_{ij} = \frac{1}{L_{jj}}\Bigl(C'_{ij} - \sum_{k} L_{i,k} L_{j,k}\Bigr),
+        L_{ij} = \frac{1}{L_{jj}}\Bigl(C'_{ij} - \sum_{k} L_{i,k} L_{j,k}\Bigr).
 
-    computed by LAPACK band Cholesky (:func:`scipy.linalg.cholesky_banded`). The
-    cost is :math:`O(n p^2)`.
+    Column :math:`j` of the factor needs the previous :math:`p` columns only, and the carry
+    of the scan is those columns.
 
     References
     ----------
@@ -527,35 +544,88 @@ def banded_cholesky(
        Johns Hopkins University Press, Section 4.3.6 (band Cholesky).
     """
     if isinstance(cov, BandedMatrix):
-        bm = cov
+        lower = _lower_rows(cov)
     else:
-        dense = np.asarray(cov, dtype=float)
-        n_dense = dense.shape[0]
-        i_idx, j_idx = np.nonzero(dense)
-        half = int(np.max(np.abs(i_idx - j_idx))) if i_idx.size else 0
-        offs = np.arange(-half, half + 1)
-        data = np.zeros((offs.size, n_dense))
-        for k, off in enumerate(offs):
-            rows = np.arange(max(0, -off), min(n_dense, n_dense - off))
-            data[k, rows] = dense[rows, rows + off]
-        bm = BandedMatrix(offsets=jnp.asarray(offs), data=jnp.asarray(data))
-    ab = _lower_storage(bm)
-    half, n = ab.shape[0] - 1, ab.shape[1]
-    if pix_mask is None:
-        mask = np.ones(n)
+        dense = jnp.asarray(cov)
+        values = np.asarray(dense)
+        half = next(
+            (
+                k
+                for k in range(values.shape[0] - 1, 0, -1)
+                if np.any(np.diagonal(values, -k) != 0.0)
+            ),
+            0,
+        )
+        banded = dense_to_banded(dense, half=half)
+        if banded is None:
+            raise ValueError("covariance could not be reduced to banded storage")
+        lower = _lower_rows(banded)
+    half = lower.shape[0] - 1
+    if pix_mask is not None:
+        mask = jnp.asarray(pix_mask, dtype=lower.dtype)
+        lower = jnp.stack([lower[k] * mask * _shifted(mask, k) for k in range(half + 1)])
+        lower = lower.at[0].add(1.0 - mask)
+
+    if half == 0:
+        data = jnp.sqrt(lower)
     else:
-        mask = np.asarray(pix_mask, dtype=float)
-    for k in range(half + 1):
-        ab[k, : n - k] = ab[k, : n - k] * mask[: n - k] * mask[k:]
-    ab[0] = mask * ab[0] + (1.0 - mask)
-    try:
-        ab_l = scipy_linalg.cholesky_banded(ab, lower=True)
-    except scipy_linalg.LinAlgError as exc:
-        raise ValueError(f"covariance is not positive definite: {exc}") from exc
-    data_l = np.zeros((half + 1, n))
-    for lag in range(half + 1):
-        data_l[lag, lag:] = ab_l[lag, : n - lag]
-    return BandedMatrix(offsets=jnp.asarray(-np.arange(half + 1)), data=jnp.asarray(data_l))
+        # Column layout ab[k, j] = C[j + k, j], the right-hand side of the scan.
+        ab = jnp.stack([jnp.pad(lower[k, k:], (0, k)) for k in range(half + 1)])
+        lag = jnp.arange(1, half + 1)[:, None]
+        src = lag + jnp.arange(half + 1)[None, :]
+        inside = src <= half
+        src = jnp.minimum(src, half)
+        rows = jnp.arange(half)[:, None]
+
+        def step(prev, column):
+            # prev[q - 1] is column j - q of the factor, ``prev[q - 1][d] = L[j - q + d, j - q]``.
+            own = prev[rows[:, 0], jnp.arange(1, half + 1)]
+            pairs = jnp.where(inside, prev[rows, src], 0.0) * own[:, None]
+            column = column - jnp.sum(pairs, axis=0)
+            column = column / jnp.sqrt(column[0])
+            return jnp.concatenate([column[None], prev[:-1]]), column
+
+        init = jnp.zeros((half, half + 1), lower.dtype)
+        _, columns = jax.lax.scan(step, init, ab.T)
+        data = jnp.stack([_shifted(columns[:, k], k) for k in range(half + 1)])
+
+    if not isinstance(data, Tracer) and not bool(jnp.all(jnp.isfinite(data))):
+        raise ValueError("covariance is not positive definite")
+    return BandedMatrix(offsets=-np.arange(half + 1), data=data)
+
+
+def banded_gram(chol: BandedMatrix) -> BandedMatrix:
+    r"""Banded covariance :math:`C = L L^\mathsf{T}` of a lower banded factor, lower-stored.
+
+    Parameters
+    ----------
+    chol : BandedMatrix
+        Lower factor :math:`L` with ``offsets = (0, -1, ..., -p)``.
+
+    Returns
+    -------
+    BandedMatrix
+        :math:`C` in lower storage, ``offsets = (0, -1, ..., -p)`` and
+        ``data[k, i] = C[i, i - k]``; the half-bandwidth is that of :math:`L`.
+
+    Notes
+    -----
+    **JIT-compatible**: yes; the offsets are static. The cost is :math:`O(n p^2)`, one loop
+    step per lag with :math:`O(n p)` memory. The result is the input of
+    :func:`banded_cholesky`, so a diagonal can be added without leaving the band.
+    """
+    rows = _lower_rows(chol)
+    half, n = rows.shape[0] - 1, rows.shape[1]
+    padded = jnp.concatenate([rows, jnp.zeros_like(rows)])
+    columns = jnp.arange(n)
+
+    def lag_row(k, out):
+        left = jax.lax.dynamic_slice(padded, (k, 0), (half + 1, n))
+        right = jnp.where(columns >= k, jnp.roll(rows, k, axis=1), 0.0)
+        return out.at[k].set(jnp.sum(left * right, axis=0))
+
+    data = jax.lax.fori_loop(0, half + 1, lag_row, jnp.zeros_like(rows))
+    return BandedMatrix(offsets=-np.arange(half + 1), data=data)
 
 
 def banded_forward_substitution(chol: BandedMatrix, r: jnp.ndarray) -> jnp.ndarray:
@@ -652,53 +722,64 @@ def banded_forward_substitution(chol: BandedMatrix, r: jnp.ndarray) -> jnp.ndarr
     return y.reshape((n_pad, *tail_shape))[:n]
 
 
-def dense_to_banded(dense: np.ndarray, rtol: float = 1e-12) -> BandedMatrix | None:
-    r"""Reduce a dense symmetric matrix to banded storage when it is banded.
+def dense_to_banded(
+    dense: np.ndarray | jnp.ndarray, rtol: float = 1e-12, half: int | None = None
+) -> BandedMatrix | None:
+    r"""Reduce a dense symmetric matrix to banded storage.
 
     Parameters
     ----------
     dense : array_like, shape (n, n)
         Symmetric matrix [data units squared].
     rtol : float, optional
-        Entries with :math:`|A_{ij}| \le` ``rtol`` :math:`\max_k |A_{kk}|` count as zero.
-        Default: 1e-12.
+        Entries with :math:`|A_{ij}| \le` ``rtol`` :math:`\max_k |A_{kk}|` count as zero
+        when the half-bandwidth is read from the values. Default: 1e-12.
+    half : int, optional
+        Static half-bandwidth :math:`p`. Given, the matrix is gathered onto offsets
+        ``-p..p`` and nothing is read from the values, so the call is jit-compatible and
+        never returns ``None``.
 
     Returns
     -------
     BandedMatrix or None
         Symmetric banded storage with ``offsets = (-p, ..., p)``, or ``None`` when the
-        half-bandwidth :math:`p` reaches a quarter of the matrix size, where banded
-        storage saves nothing.
+        half-bandwidth :math:`p` read from the values reaches a quarter of the matrix size,
+        where banded storage saves nothing.
 
     Notes
     -----
-    **JIT-compatible**: no. Build-time NumPy routine.
-
-    Entries beyond the half-bandwidth are dropped, so the stored matrix differs from
-    ``dense`` by at most ``rtol`` times the largest diagonal entry per element.
+    **JIT-compatible**: with ``half``; without it the bandwidth is read from concrete values.
+    With ``half`` smaller than the true bandwidth, the entries beyond it are dropped.
     """
-    a = np.asarray(dense, dtype=float)
+    a = jnp.asarray(dense)
     n = a.shape[0]
-    cutoff = rtol * np.max(np.abs(np.diag(a)))
-    i_idx, j_idx = np.nonzero(np.abs(a) > cutoff)
-    half = int(np.max(np.abs(i_idx - j_idx))) if i_idx.size else 0
-    if 4 * half >= n:
-        return None
+    if half is None:
+        values = np.asarray(a)
+        cutoff = rtol * np.max(np.abs(np.diag(values)))
+        i_idx, j_idx = np.nonzero(np.abs(values) > cutoff)
+        half = int(np.max(np.abs(i_idx - j_idx))) if i_idx.size else 0
+        if 4 * half >= n:
+            return None
     offs = np.arange(-half, half + 1)
-    data = np.zeros((offs.size, n))
-    for k, off in enumerate(offs):
-        rows = np.arange(max(0, -off), min(n, n - off))
-        data[k, rows] = a[rows, rows + off]
-    return BandedMatrix(offsets=offs, data=jnp.asarray(data))
+    rows = jnp.arange(n)[None, :]
+    cols = rows + offs[:, None]
+    inside = (cols >= 0) & (cols < n)
+    data = jnp.where(inside, a.at[rows, cols].get(mode="clip"), 0.0)
+    return BandedMatrix(offsets=offs, data=data)
 
 
-def banded_to_dense(bm: BandedMatrix) -> np.ndarray:
-    """Dense ``(n, n)`` matrix of a banded matrix, with ``A[i, i + offsets[k]] = data[k, i]``."""
+def banded_to_dense(bm: BandedMatrix) -> jnp.ndarray:
+    """Dense ``(n, n)`` matrix of a banded matrix, with ``A[i, i + offsets[k]] = data[k, i]``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes; the offsets are static.
+    """
     offs = np.asarray(bm.offsets).ravel()
-    data = np.asarray(bm.data, dtype=float)
+    data = jnp.asarray(bm.data)
     n = data.shape[1]
-    out = np.zeros((n, n))
+    out = jnp.zeros((n, n), data.dtype)
     for k, off in enumerate(offs):
         rows = np.arange(max(0, -off), min(n, n - off))
-        out[rows, rows + off] = data[k, rows]
+        out = out.at[rows, rows + off].add(data[k, rows])
     return out

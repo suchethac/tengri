@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import dataclasses
 
-import jax
 import jax.numpy as jnp
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, shape
@@ -237,8 +236,10 @@ class LineFluxData:
         chi2_per_line = jnp.where(detected, chi2_per_line, 0.0)
         return jnp.sum(chi2_per_line)
 
-    def log_likelihood(self, model_fluxes: jnp.ndarray) -> jnp.ndarray:
-        """Log-likelihood: Gaussian for detections, censored for limits.
+    def log_likelihood(
+        self, model_fluxes: jnp.ndarray, model_sigma_frac: jnp.ndarray | None = None
+    ) -> jnp.ndarray:
+        """Normalized log-likelihood: Gaussian for detections, censored for limits.
 
         For detected lines:
             ln L = -0.5 * ((obs - model) / error)^2 - ln(error) - 0.5*ln(2π)
@@ -255,6 +256,8 @@ class LineFluxData:
         ----------
         model_fluxes : ndarray, shape (n_lines,)
             Model-predicted line fluxes [erg/s/cm^2].
+        model_sigma_frac : ndarray, shape (n_lines,), optional
+            Fractional 1-sigma model error per line [dimensionless]. Default: none.
 
         Returns
         -------
@@ -263,40 +266,28 @@ class LineFluxData:
 
         Notes
         -----
-        **JIT-compatible**: yes, uses only jnp primitives.
+        **JIT-compatible**: yes. **Gradient-safe**: yes, differentiable w.r.t.
+        ``model_fluxes``.
 
-        **Gradient-safe**: yes, differentiable w.r.t. ``model_fluxes``.
-
-        Handles detections, upper limits, and lower limits via the limit_mask
-        (trinary: 0=detected, 1=upper, -1=lower). All limits evaluated with
-        jax.scipy.stats.norm.logcdf (no clamps).
+        The energy is :func:`~tengri.observation.noise.censored_neg_log_likelihood`, the one
+        censored term every inference path scores line fluxes and photometry with; the
+        Gaussian constant ``-0.5 ln(2π)`` of each detected line is added here so the value
+        is normalized.
         """
-        # Get the limit mask: 0=detection, 1=upper, -1=lower
+        from tengri.observation.noise import censored_neg_log_likelihood
+
         mask = self.limit_mask
-
-        # Compute detection likelihood for all lines
-        residual = (self.fluxes - model_fluxes) / self.errors
-        ll_detected = -0.5 * residual**2 - jnp.log(self.errors) - 0.5 * jnp.log(2.0 * jnp.pi)
-
-        # If no limits, return detection likelihood sum
         if mask is None:
-            return jnp.sum(ll_detected)
-
-        # Upper limit: ln L = ln Φ((f_upper - model) / error)
-        z_upper = (self.fluxes - model_fluxes) / self.errors
-        ll_upper = jax.scipy.stats.norm.logcdf(z_upper)
-
-        # Lower limit: ln L = ln Φ((model - f_lower) / error)
-        z_lower = (model_fluxes - self.fluxes) / self.errors
-        ll_lower = jax.scipy.stats.norm.logcdf(z_lower)
-
-        # Select per line based on mask
-        ll_per_line = jnp.where(
-            mask == 1.0,
-            ll_upper,
-            jnp.where(mask == -1.0, ll_lower, ll_detected),
+            mask = jnp.zeros(len(self.names), dtype=jnp.int32)
+        energy = censored_neg_log_likelihood(
+            self.fluxes,
+            self.errors,
+            model_fluxes,
+            mask,
+            model_sigma_frac=model_sigma_frac,
         )
-        return jnp.sum(ll_per_line)
+        n_detected = jnp.sum(mask == 0)
+        return -energy - 0.5 * n_detected * jnp.log(2.0 * jnp.pi)
 
     @classmethod
     def from_dict(

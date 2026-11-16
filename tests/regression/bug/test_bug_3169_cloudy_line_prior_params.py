@@ -17,7 +17,6 @@ import pytest
 from tengri.inference.context import InferenceContext
 from tengri.inference.fitter import Fitter
 from tengri.inference.likelihood import build_base_likelihood
-from tengri.inference.likelihoods.marginalized import CalibrationELineMarginalizedLikelihood
 
 pytestmark = pytest.mark.regression_bug
 
@@ -91,12 +90,13 @@ def test_fixed_met_logzsol_and_neb_logU_reach_cloudy_marginal_prior(monkeypatch)
     lk = replace(lk, design_matrix_builder=lambda _params: jnp.eye(3, 2))
 
     seen = {}
+    real = eline_priors.cloudy_line_priors
 
-    def spy(*args, **kwargs):
+    def spy(**kwargs):
         seen.update(kwargs)
-        return jnp.asarray(0.0), jnp.zeros(2), jnp.zeros(2)
+        return real(**kwargs)
 
-    monkeypatch.setattr(eline_priors, "marginalize_emission_lines_cloudy", spy)
+    monkeypatch.setattr(eline_priors, "cloudy_line_priors", spy)
     # Params as the data term hands them over: free values plus the merged fixed values.
     lk.log_prob({"spec_fnu": jnp.asarray([1.0, 2.0, 3.0])}, dict(fixed))
 
@@ -116,13 +116,10 @@ def test_fixed_values_reach_calibration_cloudy_line_prior(monkeypatch):
         return real(**kwargs)
 
     monkeypatch.setattr(eline_priors, "cloudy_line_priors", spy)
-    stub = SimpleNamespace(
-        eline_prior_type="cloudy",
-        eline_line_wavelengths=_LINES,
-        eline_prior_width_dex=0.5,
-    )
+    from tengri.inference.likelihoods.terms import _calibration_line_prior
+
     params = {"met_logzsol": -0.5, "neb_logU": -2.0}
-    CalibrationELineMarginalizedLikelihood._line_prior(stub, params, 2)
+    _calibration_line_prior("cloudy", params, jnp.zeros((4, 2)), 1.0, _LINES, 0.5)
 
     assert seen["log_z"] == pytest.approx(-0.5)
     assert seen["neb_logU"] == pytest.approx(-2.0)

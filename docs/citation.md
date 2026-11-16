@@ -75,6 +75,9 @@ the forward model, and listed oldest first within each group.
 - Optimal scaling of Langevin diffusions: the 0.574 acceptance rate the
   Barker and MALA backends tune to. Roberts & Rosenthal (1998),
   [doi:10.1111/1467-9868.00123](https://doi.org/10.1111/1467-9868.00123).
+- Student-t noise as a Gaussian scale mixture, whose reweighted least squares finds the
+  mode of the heavy-tailed marginal over nuisance coefficients. Lange et al. (1989),
+  [doi:10.1080/01621459.1989.10478852](https://doi.org/10.1080/01621459.1989.10478852).
 - Pathfinder: fast approximate-posterior sampler. Zhang et al. (2022),
   *Journal of Machine Learning Research* **23**(306), 1–49.
 - [NIFTy.re](https://github.com/NIFTy-PPL/NIFTy): information field theory,

@@ -17,6 +17,7 @@ from tengri import DEFAULT, Fitter, Fixed, SEDModel, Uniform, parse_groups
 from tengri.inference.data_term import build_data_term
 from tengri.inference.loss_functions import build_loglikelihood_fn
 from tengri.observation.line_flux_data import LineFluxData
+from tengri.observation.line_list import LineList
 from tengri.observation.observation import Observation
 from tengri.observation.photometry_config import Photometry
 from tengri.observation.spectroscopy import Spectroscopy
@@ -137,16 +138,28 @@ _BANDS = ["sdss_g", "sdss_r", "sdss_i"]
 _FLAT_FREE = ("sfh_dpl_alpha", "sfh_dpl_beta")
 _NOISE = np.array([0.1, 0.2, 0.3])
 _FLUXES = (np.array([3.0, 2.0, 1.0]), np.array([1.5, 2.5, 0.5]))
+_WAVE_OBS = np.linspace(4000.0, 8000.0, 40)
 
 
-def _population_model_factory(*, free_noise_frac_cal: bool = False):
+def _population_model_factory(
+    *, free_noise_frac_cal: bool = False, student_t_marginal_lines: bool = False
+):
     """A stochastic photometry factory on the small grid; the PSD and the shape are free.
 
     ``free_noise_frac_cal`` declares the calibration noise floor FREE on the spec, which is
-    the one noise configuration the censored flat term refuses.
+    the one noise configuration the censored flat term refuses. ``student_t_marginal_lines``
+    swaps the photometry for a spectrum with marginalized lines and Student-t noise.
     """
     ssp = _small_ssp()
     obs = Observation(photometry=Photometry.from_names(_BANDS))
+    if student_t_marginal_lines:
+        obs = Observation(
+            spectroscopy=Spectroscopy(
+                wave_obs=_WAVE_OBS,
+                eline_mode="marginalized",
+                eline_catalog=LineList.default_13(),
+            )
+        )
 
     def factory(psd_sigma, psd_tau_myr):
         groups = {
@@ -167,6 +180,11 @@ def _population_model_factory(*, free_noise_frac_cal: bool = False):
             },
             "neb": {"type": "none"},
         }
+        if student_t_marginal_lines:
+            spec = parse_groups(**groups).merge_observation_params(
+                noise_dof=Fixed(4.0), noise_frac_cal=Uniform(0.0, 0.3)
+            )
+            return SEDModel(spec, ssp, observation=obs)
         if free_noise_frac_cal:
             spec = parse_groups(**groups).merge_observation_params(
                 noise_frac_cal=Uniform(0.0, 0.3)
@@ -300,6 +318,22 @@ def test_data_mask_with_a_free_noise_frac_cal_is_refused_by_name():
 
     with pytest.raises(ParameterError, match="free noise model"):
         _flat_problem(galaxies, factory=factory)
+
+
+def test_student_t_marginal_lines_are_refused_by_the_population_fit():
+    from tengri.config.exceptions import ParameterError
+    from tengri.inference._hierarchical_flat import build_flat_problem
+    from tengri.inference.hierarchical import PopulationFitter
+
+    galaxies = [
+        {"flux_obs": np.full(_WAVE_OBS.size, 1.0 + k), "noise": np.full(_WAVE_OBS.size, 0.1)}
+        for k in range(2)
+    ]
+    factory = _population_model_factory(student_t_marginal_lines=True)
+    fitter = PopulationFitter(factory, galaxies, data_type="spectroscopy", _via_routing=True)
+
+    with pytest.raises(ParameterError, match="Student-t noise model with marginalized"):
+        build_flat_problem(fitter, key=jax.random.PRNGKey(0), map_steps=0)
 
 
 def test_precheck_reference_point_takes_the_fixed_values_it_is_given(monkeypatch):

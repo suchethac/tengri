@@ -259,7 +259,10 @@ def test_eline_marginalized_matches_legacy_primitive():
         prior_variance=None,
     )
     actual = float(lk.log_prob({"spec_fnu": model}))
-    assert actual == pytest.approx(float(expected_ll), rel=1e-10)
+    # The primitive returns the marginal without its Gaussian constant; the adapter returns
+    # the normalized log-likelihood, 0.5 N ln 2pi + sum ln sigma lower.
+    constant = 0.5 * n_pix * np.log(2.0 * np.pi) + float(np.sum(np.log(err)))
+    assert actual == pytest.approx(float(expected_ll) - constant, rel=1e-10)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -318,8 +321,8 @@ def _log_sum_exp(x):
 def _gauss_hermite_joint(obs, err, model, basis_col, g_mat, prior_sigma, eline_sigma, nodes=40):
     """Marginal log-likelihood over (c, a_1, a_2) by Gauss-Hermite quadrature.
 
-    The value carries the normalization of the adapters: the constant
-    -1/2 N ln 2pi and the -sum ln sigma of the Gaussian are left out.
+    The value is the normalized log-likelihood: the Gaussian constants -1/2 N ln 2pi and
+    -sum ln sigma are included.
     """
     z, w = np.polynomial.hermite_e.hermegauss(nodes)
     log_w = np.log(w / np.sqrt(2.0 * np.pi))
@@ -341,8 +344,7 @@ def _gauss_hermite_joint(obs, err, model, basis_col, g_mat, prior_sigma, eline_s
         - np.sum(np.log(err))
         - 0.5 * n_pix * np.log(2.0 * np.pi)
     )
-    full = _log_sum_exp((loglik + log_weight).ravel())
-    return full + 0.5 * n_pix * np.log(2.0 * np.pi) + np.sum(np.log(err))
+    return _log_sum_exp((loglik + log_weight).ravel())
 
 
 def _joint_toy():
@@ -385,10 +387,7 @@ def test_calibration_eline_joint_matches_primitive_and_quadrature():
         sigma=err,
         prior_precision=precision,
     )
-    n_pix = obs.shape[0]
-    expected_primitive = (
-        float(primitive.log_like) + 0.5 * n_pix * np.log(2.0 * np.pi) + np.sum(np.log(err))
-    )
+    expected_primitive = float(primitive.log_like)
     expected_quadrature = _gauss_hermite_joint(
         obs, err, model, model * basis[:, 0], g_mat, prior_sigma, eline_sigma
     )
