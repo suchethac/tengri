@@ -1,6 +1,7 @@
 ## [Unreleased]
 
 ### Fixed
+- **A Fixed `eline_sigma_kms` now sets the per-galaxy line width (#3332).** The per-galaxy line design read the default group's width and offset from the sampled parameters only, so `eline_sigma_kms=Fixed(120)` drew fitted and marginalized lines at the instrument resolution. Every line now reads its group's width and offset, sampled or Fixed, through `line_kinematics`, the lookup the batched path uses.
 - **Velocity dispersion broadens the spectrum with no instrument resolution (#3436).** With `resolution=None`, `sigma_v_kms` had no effect on the spectrum, so a free dispersion was silently inert. It now broadens the stellar group at library resolution (the owner ruling of 2026-11-13): the output is the unbroadened projection plus the dispersion's correction on a ln-lambda lattice, so it does not depend on how the model grid is partitioned. **Behaviour change for existing fits without a resolution that set `sigma_v_kms` > 0:** their spectra now broaden by the dispersion, and their free-dispersion posteriors change. Fits at `sigma_v_kms = 0` are bit-identical. `sigma_lib_kms` and `lsf_scale` still have no effect without a resolution.
 
 ### Added
