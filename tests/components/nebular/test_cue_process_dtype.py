@@ -110,10 +110,15 @@ _CI_JAX = re.search(r"^jax==(\S+)$", _CI_CONSTRAINTS.read_text(), re.MULTILINE).
 #: in CI. An exact digest holds only at one platform and JAX version; the reference bounds above
 #: cover everywhere else. Checked only on Linux at the pinned version; a stale pin fails.
 _CI_LINUX_SPEC_JAX = "0.12.0"
-#: Re-pinned 2026-11-15 from CI Linux (jax 0.12.0) on main 210a9c6c9: #3434 (in #3462, no
-#: metallicity scatter at fixed Z) moved the spectrum; the x64-off reference was re-recorded in
-#: #3525. Previous digest 697f52a76b402428cc153a88ae8c76facf79356354e6c202ad302a1d1da80e0f.
-_CI_LINUX_SPEC_SHA256 = "9fbf05710951089e9ccb0e862c6de925c04a5fa706d00d8ea76da274246e2289"
+#: Re-pinned 2026-11-15 (#3538) with the reference, both recorded by
+#: ``fixtures/make_cue_x64_off_reference.py`` on CI Linux at jax 0.12.0, main 0d6a253ed. Three
+#: runners on two CPU models (AMD EPYC 9V45 and 7763) printed this digest, and a 10-runner
+#: probe over four CPU models, with and without the restored JAX cache, gave one digest per
+#: commit: the digest follows the code, not the host. Two landings moved the spectrum after
+#: the previous pin: #3529 (exact velocity line profiles) by 1.68e-5 of peak on 67 of 1500
+#: pixels, and #3528 (monotone PCHIP read of the SSP tables) by 8.2e-5 of peak on every pixel.
+#: Previous digest 9fbf05710951089e9ccb0e862c6de925c04a5fa706d00d8ea76da274246e2289.
+_CI_LINUX_SPEC_SHA256 = "4c64dd19067508546752324c04e939dbc801ffd0d1b8bdc458356f6f0dc37671"
 
 
 def _build(ssp, *, neb: str = "cue"):

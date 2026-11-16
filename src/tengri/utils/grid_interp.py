@@ -27,6 +27,7 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 import numpy as np
+from jax.custom_derivatives import SymbolicZero
 
 from tengri.utils.filter_convention import FilterConvention, filter_weight_np as _filter_weight_np
 from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
@@ -1615,8 +1616,8 @@ def _pchip_slopes(x: jnp.ndarray, y: jnp.ndarray) -> jnp.ndarray:
     # skirtor_disc_dust_ratio, #892). Replacing d_left/d_right with 1.0 wherever
     # the harmonic is unused keeps the denominator = w1+w2 > 0, so the reverse
     # pass stays finite. Forward is unchanged: interior is 0 in exactly the same
-    # places (d_left*d_right <= 0).
-    mono = d_left * d_right > 0.0
+    # places (the secants have opposite signs or one is zero).
+    mono = ((d_left > 0.0) & (d_right > 0.0)) | ((d_left < 0.0) & (d_right < 0.0))
     d_left_safe = jnp.where(mono, d_left, 1.0)
     d_right_safe = jnp.where(mono, d_right, 1.0)
     harmonic = (w1 + w2) / (w1 / d_left_safe + w2 / d_right_safe)
@@ -2049,20 +2050,16 @@ def _evaluate_stencils(grid: jnp.ndarray, stencils, kinds) -> jnp.ndarray:
     return reduced
 
 
-def _window_eval_axis0(st: _AxisStencil, ys: jnp.ndarray, kind: str) -> jnp.ndarray:
-    """Evaluate one window along axis 0 of ``ys`` at the stencil's query."""
-    x0 = st.xs[st.cell]
-    x1 = st.xs[st.cell + 1]
-    h = x1 - x0
-    y0 = jax.lax.dynamic_index_in_dim(ys, st.cell, axis=0, keepdims=False)
-    y1 = jax.lax.dynamic_index_in_dim(ys, st.cell + 1, axis=0, keepdims=False)
-    if kind == "linear":
-        t = (st.xq - x0) / jnp.where(h > 0.0, h, 1.0)
-        return (1.0 - t) * y0 + t * y1
-    slopes = _pchip_slopes(st.xs, ys)
-    m0 = jax.lax.dynamic_index_in_dim(slopes, st.cell, axis=0, keepdims=False)
-    m1 = jax.lax.dynamic_index_in_dim(slopes, st.cell + 1, axis=0, keepdims=False)
-    t = (st.xq - x0) / h
+def _unit_window_cubic(yn, xs, cell, xq):
+    """Hermite cubic through a window whose node values are already O(1) (see below)."""
+    x0 = xs[cell]
+    h = xs[cell + 1] - x0
+    y0 = jax.lax.dynamic_index_in_dim(yn, cell, axis=0, keepdims=False)
+    y1 = jax.lax.dynamic_index_in_dim(yn, cell + 1, axis=0, keepdims=False)
+    slopes = _pchip_slopes(xs, yn)
+    m0 = jax.lax.dynamic_index_in_dim(slopes, cell, axis=0, keepdims=False)
+    m1 = jax.lax.dynamic_index_in_dim(slopes, cell + 1, axis=0, keepdims=False)
+    t = (xq - x0) / h
     t2 = t * t
     t3 = t2 * t
     return (
@@ -2071,6 +2068,75 @@ def _window_eval_axis0(st: _AxisStencil, ys: jnp.ndarray, kind: str) -> jnp.ndar
         + (-2.0 * t3 + 3.0 * t2) * y1
         + (t3 - t2) * h * m1
     )
+
+
+@jax.custom_jvp
+def _scaled_window_cubic(ys, scale, xs, cell, xq):
+    """``scale * cubic(ys / scale)`` for a power-of-two ``scale`` of shape ``(1, ...)``."""
+    return scale[0] * _unit_window_cubic(ys / scale, xs, cell, xq)
+
+
+def _scaled_window_cubic_jvp(primals, tangents):
+    """Tangent in which the scale cancels exactly instead of being divided back out.
+
+    The cubic is positively homogeneous of degree one in the node values, so the
+    derivative with respect to a node value is the scale-free derivative of the unit
+    cubic, and only the derivative with respect to the query (or the node coordinates)
+    carries the scale. Autodiff of ``scale * cubic(ys / scale)`` would form the node
+    cotangent as ``(ct * scale) * weights / scale``, and for a table of ~1e-37 (float32)
+    or ~1e-300 (float64) the middle product underflows.
+    """
+    ys, scale, xs, cell, xq = primals
+    d_ys, _, d_xs, _, d_xq = tangents
+    yn = ys / scale
+    value = scale[0] * _unit_window_cubic(yn, xs, cell, xq)
+    tangent = jnp.zeros_like(value)
+    if not isinstance(d_ys, SymbolicZero):
+        tangent = (
+            tangent + jax.jvp(lambda y: _unit_window_cubic(y, xs, cell, xq), (yn,), (d_ys,))[1]
+        )
+    coords = [(c, d) for c, d in ((xs, d_xs), (xq, d_xq)) if not isinstance(d, SymbolicZero)]
+    if coords:
+        primals_c = tuple(c for c, _ in coords)
+        tangents_c = tuple(d for _, d in coords)
+
+        def at_coords(*cs):
+            args = {"xs": xs, "xq": xq}
+            names = [n for n, d in (("xs", d_xs), ("xq", d_xq)) if not isinstance(d, SymbolicZero)]
+            args.update(dict(zip(names, cs, strict=True)))
+            return _unit_window_cubic(yn, args["xs"], cell, args["xq"])
+
+        tangent = tangent + scale[0] * jax.jvp(at_coords, primals_c, tangents_c)[1]
+    return value, tangent
+
+
+_scaled_window_cubic.defjvp(_scaled_window_cubic_jvp, symbolic_zeros=True)
+
+
+def _window_eval_axis0(st: _AxisStencil, ys: jnp.ndarray, kind: str) -> jnp.ndarray:
+    """Evaluate one window along axis 0 of ``ys`` at the stencil's query."""
+    if kind == "linear":
+        x0 = st.xs[st.cell]
+        h = st.xs[st.cell + 1] - x0
+        y0 = jax.lax.dynamic_index_in_dim(ys, st.cell, axis=0, keepdims=False)
+        y1 = jax.lax.dynamic_index_in_dim(ys, st.cell + 1, axis=0, keepdims=False)
+        t = (st.xq - x0) / jnp.where(h > 0.0, h, 1.0)
+        return (1.0 - t) * y0 + t * y1
+    # The cubic is positively homogeneous in the node values, so it is formed on each
+    # column divided by a power of two near its window peak and scaled back: the
+    # harmonic-mean test multiplies two secants, so a table of ~1e19 per-Lsun values
+    # overflows float32 and one of ~1e-20 underflows it. A power of two is exact in
+    # binary floating point. The exponent is held in [-(maxexp - 3), maxexp - 3] so both the
+    # scale and its reciprocal are normal numbers: a divide that XLA lowers to a multiply by
+    # the reciprocal returns 0 when that reciprocal is subnormal (measured for a peak of
+    # 5e307 in float64), which a plain ``maxexp - 1`` clamp would still allow.
+    peak = jax.lax.stop_gradient(jnp.max(jnp.abs(ys), axis=0, keepdims=True))
+    usable = jnp.isfinite(peak) & (peak > 0.0)
+    _, exponent = jnp.frexp(jnp.where(usable, peak, 1.0))
+    limit = jnp.finfo(ys.dtype).maxexp - 3
+    exponent = jnp.clip(exponent, -limit, limit)
+    scale = jnp.ldexp(jnp.ones_like(peak), exponent)
+    return _scaled_window_cubic(ys, scale, st.xs, st.cell, st.xq)
 
 
 def _library_axis_query(ax: jnp.ndarray, p, extrapolate: bool):

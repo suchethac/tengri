@@ -335,8 +335,8 @@ def _band_table_refusal(ctx, shock, stellar) -> str | None:
         return "approx=WavePrecomp() not enabled"
     if shock is None:
         return "no composable shock component"
-    if "redshift" not in ctx.spec.fixed_params:
-        return "redshift is free (the band coefficients are built at one redshift)"
+    if "redshift" not in ctx.spec.fixed_params or ctx.z_nodes is not None:
+        return "redshift is a runtime input (the band coefficients are built at one redshift)"
     st = getattr(stellar, "_state", None)
     if st is None or getattr(st, "phot_fw_padded", None) is None:
         return "the photometry filter cache is absent (no WavePrecomp filters)"

@@ -39,6 +39,8 @@ OPT_BANDS = ["des_g", "des_r", "des_z", "wise_w1", "wise_w2"]
 IR_BANDS = ["des_r", "des_z", "wise_w1", "wise_w2", "wise_w3", "wise_w4"]
 
 RTOL = 1e-6
+#: Tabulated nebular grids on different redshift nodes: the runtime-z contract bound.
+TABULATED_RTOL = 3e-3
 #: Two genuinely different redshifts must disagree by far more than RTOL.
 VACUITY_FLOOR = 1e-3
 Z_BASE = 0.05
@@ -180,18 +182,20 @@ def _override_vs_direct(builder, ssp, bands, approx, z2=Z_OVERRIDE):
     return f_over, f_direct, f_base, base, direct
 
 
-def _assert_matches_direct(builder, ssp, bands, approx, z2=Z_OVERRIDE):
+def _assert_matches_direct(builder, ssp, bands, approx, z2=Z_OVERRIDE, rtol=RTOL):
     f_over, f_direct, f_base, _, _ = _override_vs_direct(builder, ssp, bands, approx, z2)
     loss_o, loss_d, loss_b = _loss(f_over), _loss(f_direct), _loss(f_base)
-    np.testing.assert_allclose(loss_o, loss_d, rtol=RTOL)
+    np.testing.assert_allclose(loss_o, loss_d, rtol=rtol)
     assert abs(loss_b - loss_d) > VACUITY_FLOOR * abs(loss_d), (
         "vacuity: the un-overridden z1 model has the same loss as the z2 build, "
         "so the equality above cannot observe a stale table"
     )
     params = _params_for(f_direct.model)
-    phot_o = np.asarray(f_over.model.predict_photometry(params))
+    # The override model reads redshift at call time: at the override z it equals the
+    # model built Fixed at that z.
+    phot_o = np.asarray(f_over.model.predict_photometry({**params, "redshift": z2}))
     phot_d = np.asarray(f_direct.model.predict_photometry(params))
-    np.testing.assert_allclose(phot_o, phot_d, rtol=RTOL)
+    np.testing.assert_allclose(phot_o, phot_d, rtol=rtol)
     phot_b = np.asarray(f_base.model.predict_photometry(params))
     assert np.max(np.abs(phot_b - phot_d) / np.abs(phot_d)) > VACUITY_FLOOR
     return f_over, f_direct
@@ -205,13 +209,52 @@ def test_photometry_override_matches_direct_build(synthetic_ssp_wide):
 def test_cue_nebular_override_matches_direct_build(synthetic_ssp_wide):
     """T2: a dust-free Cue model, so the nebular grid's reference redshift matters."""
     approx = (WavePrecomp(), FeaturePrecomp(n_grid=4))
+    # Two tabulations of the nebular grid, on different redshift nodes: they agree to
+    # the tabulated bound of the runtime-redshift contract (3e-3, see the sweep in
+    # tests/contract/test_redshift_runtime_sweep.py), not to round-off.
     f_over, f_direct = _assert_matches_direct(
-        _cue_dust_free, synthetic_ssp_wide, OPT_BANDS, approx
+        _cue_dust_free, synthetic_ssp_wide, OPT_BANDS, approx, rtol=TABULATED_RTOL
     )
     grid_o = _inner(f_over.model)._nebular_grid_table
     grid_d = _inner(f_direct.model)._nebular_grid_table
     assert grid_o is not None, "the model has no nebular grid, so T2 tests nothing about it"
     np.testing.assert_allclose(np.asarray(grid_o.wavelengths), np.asarray(grid_d.wavelengths))
+
+
+def test_cue_override_tabulation_is_exact_to_the_bound_and_deterministic(synthetic_ssp_wide):
+    """The Cue override vs the EXACT Fixed-z build, and two tabulations of one span.
+
+    The test above compares two tabulations on different nodes and so needs the tabulated
+    bound. These checks keep the z-table honest. The wave table alone is held against the
+    exact build at the tabulated bound (the coarse four-node nebular grid of the test above
+    carries its own error of several percent in a Fixed-z build too, so it is not the
+    reference for the z-table), and independent builds of the grid model's table agree to
+    round-off.
+    """
+    from tengri.inference.fitter import promote_to_runtime_redshift
+
+    obs = Observation(photometry=Photometry.from_names(OPT_BANDS))
+    exact = _cue_dust_free(synthetic_ssp_wide, obs, Z_OVERRIDE, None)
+    params = _params_for(exact)
+    expected = np.asarray(exact.predict_photometry(params))
+
+    wave_only = promote_to_runtime_redshift(
+        _cue_dust_free(synthetic_ssp_wide, obs, Z_BASE, WavePrecomp()), [Z_OVERRIDE]
+    )
+    got = np.asarray(wave_only.predict_photometry({**params, "redshift": Z_OVERRIDE}))
+    np.testing.assert_allclose(got, expected, rtol=TABULATED_RTOL, atol=0.0)
+
+    grid = (WavePrecomp(), FeaturePrecomp(n_grid=4))
+    first, second = (
+        promote_to_runtime_redshift(
+            _cue_dust_free(synthetic_ssp_wide, obs, Z_BASE, grid), [Z_OVERRIDE]
+        )
+        for _ in range(2)
+    )
+    assert first is not second, "the check needs two independent tabulations"
+    a = np.asarray(first.predict_photometry({**params, "redshift": Z_OVERRIDE}))
+    b = np.asarray(second.predict_photometry({**params, "redshift": Z_OVERRIDE}))
+    np.testing.assert_allclose(a, b, rtol=1e-10, atol=0.0)
 
 
 def test_dust_emission_band_response_override_matches_direct_build(synthetic_ssp_wide):
@@ -256,19 +299,21 @@ def test_two_overrides_on_one_base_model_do_not_share_a_program(synthetic_ssp_wi
     for z in (0.3, 2.5):
         np.testing.assert_allclose(losses[z], expected[z], rtol=RTOL)
     assert abs(losses[0.3] - losses[2.5]) > VACUITY_FLOOR * abs(losses[2.5])
-    assert fitters[0.3]._engine_cache_key() != fitters[2.5]._engine_cache_key()
+    # The override rides as data on a runtime-redshift promotion (#3505), not as a
+    # compile constant, so each fitter carries its own z and the losses above differ.
+    assert {z: fitters[z]._runtime_redshift for z in (0.3, 2.5)} == {0.3: 0.3, 2.5: 2.5}
     assert fitters[0.3].model is not fitters[2.5].model
 
 
 def test_the_callers_model_is_not_mutated(synthetic_ssp_wide):
-    """The override rebuilds; it never rewrites the model the caller passed in."""
+    """The override promotes a copy; it never rewrites the model the caller passed in."""
     obs = Observation(photometry=Photometry.from_names(OPT_BANDS))
     base = _phot_only(synthetic_ssp_wide, obs, Z_BASE, WavePrecomp())
     data, noise = _mock(base, _params_for(base))
     f = _fitter(base, data, noise, WavePrecomp(), params_override={"redshift": Z_OVERRIDE})
     assert base.spec.get_fixed_values()["redshift"] == Z_BASE
-    assert f.spec.get_fixed_values()["redshift"] == Z_OVERRIDE
-    assert f._fixed_values["redshift"] == Z_OVERRIDE
+    assert f._runtime_redshift == Z_OVERRIDE
+    assert f.model is not base
 
 
 # ── Catalog rows: the per-galaxy redshift rides params_override ────────────
@@ -420,8 +465,8 @@ def test_checkpointed_rows_recover_each_galaxys_truth(synthetic_ssp_wide, tmp_pa
         )
 
 
-def test_catalog_rebuilds_once_per_distinct_redshift(synthetic_ssp_wide):
-    """Repeated catalog redshifts share one rebuilt model, and the advisory still fires."""
+def test_catalog_promotes_once_for_all_redshifts(synthetic_ssp_wide):
+    """A catalog of several redshifts is served by one promoted model; no recompile advisory."""
     obs = Observation(photometry=Photometry.from_names(OPT_BANDS))
     approx = WavePrecomp()
     zs = (0.3, 0.9, 0.3, 0.9, 0.3)
@@ -430,15 +475,14 @@ def test_catalog_rebuilds_once_per_distinct_redshift(synthetic_ssp_wide):
 
     from tengri.forward.forward_model import ForwardModel
 
-    real = ForwardModel.with_fixed_redshift
+    real = ForwardModel.with_runtime_redshift
     with (
         mock.patch.object(
-            ForwardModel, "with_fixed_redshift", autospec=True, side_effect=real
+            ForwardModel, "with_runtime_redshift", autospec=True, side_effect=real
         ) as spy,
-        pytest.warns(
-            UserWarning, match=r"catalog_z_range.*recompiles|recompiles.*catalog_z_range"
-        ),
+        warnings.catch_warnings(record=True) as caught,
     ):
+        warnings.simplefilter("always")
         convenience.fit_batch(
             base,
             rows,
@@ -449,9 +493,12 @@ def test_catalog_rebuilds_once_per_distinct_redshift(synthetic_ssp_wide):
             n_steps=2,
             verbose=False,
         )
-    assert sorted(round(c.args[1], 6) for c in spy.call_args_list) == [0.3, 0.9], (
-        "expected exactly one rebuild per distinct catalog redshift"
-    )
+    assert not [w for w in caught if "recompiles" in str(w.message)]
+    # One promoted model, whose table spans every catalog redshift, serves the catalog.
+    spans = [c.args[1] for c in spy.call_args_list]
+    assert len(spans) == 1, f"expected exactly one promotion for the catalog, got {spans}"
+    lo, hi = spans[0]
+    assert lo <= min(zs) and max(zs) <= hi
 
 
 # ── Multi-population forwards ─────────────────────────────────────────────
@@ -562,7 +609,7 @@ def test_default_profile_mass_override_matches_direct_build_on_real_ssp(ssp_data
     assert abs(loss_b - loss_d) > VACUITY_FLOOR * abs(loss_d), (
         "vacuity: the un-overridden model has the same default-path loss"
     )
-    phot_o = np.asarray(f_over.model.predict_photometry(params))
+    phot_o = np.asarray(f_over.model.predict_photometry({**params, "redshift": Z_OVERRIDE}))
     np.testing.assert_allclose(phot_o, data, rtol=RTOL)
 
 
