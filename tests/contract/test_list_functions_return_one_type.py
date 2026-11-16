@@ -69,7 +69,7 @@ FORMER_SUBMODULE_OUTLIERS = [
     "tengri.list_instruments",  # top level, but via _CURATED_DIR not __all__
     "tengri.observation.filters.list_available_filters",
     "tengri.observation.filters.list_filter_aliases",
-    "tengri.presets.list_presets",
+    "tengri.list_presets",  # exported top level (#3505 D15); was tengri.presets.list_presets
 ]
 
 #: A mass import failure would empty the census and pass everything.
@@ -184,12 +184,13 @@ def test_the_census_reaches_past_the_top_level():
 
 
 def test_the_census_reads_both_export_lists():
-    """``list_instruments`` is in ``_CURATED_DIR`` but not ``__all__``.
+    """``list_instruments`` must sit in both export lists, and the census reads both.
 
-    Reading only ``__all__`` is why a top-level, tab-completable lister
-    returned ``list[dict]`` under a guard that claimed otherwise.
+    It used to be in ``_CURATED_DIR`` only, which is why a top-level,
+    tab-completable lister returned ``list[dict]`` under a guard that claimed
+    otherwise. Both lists now carry it, so the census check holds either way.
     """
-    assert "list_instruments" not in tengri.__all__
+    assert "list_instruments" in tengri.__all__
     assert "list_instruments" in tengri._CURATED_DIR
     assert hasattr(tengri, "list_instruments")
     # The label is the discriminator, not mere presence: the object is also
@@ -337,3 +338,103 @@ def test_every_filter_row_carries_its_alias():
     rows = tengri.list_filters()
     missing = [r["name"] for r in rows if not r.get("alias")]
     assert not missing, f"{len(missing)} filter rows have no alias, e.g. {missing[:5]}"
+
+
+# ── one top-level lister per component family (#3505, #3547 D15) ──────────
+
+#: Every discovery menu that must be reachable as ``tengri.list_*``: the six
+#: that resolved only through a module ``__getattr__`` (absent from ``dir``),
+#: ``list_instruments`` (curated but not exported), ``list_presets`` (exported
+#: from ``tengri.presets`` only) and the families added for D15.
+TOP_LEVEL_LISTERS = [
+    "list_available_ssps",
+    "list_filter_conventions",
+    "list_instruments",
+    "list_known_ssps",
+    "list_parameters",
+    "list_presets",
+    "list_properties",
+    "list_registered_filters",
+    "list_synthetic_bands",
+    "list_imfs",
+    "list_foreground_laws",
+    "list_approx_configs",
+    "list_spatial_models",
+]
+
+
+@pytest.mark.parametrize("name", TOP_LEVEL_LISTERS)
+def test_top_level_lister_is_exported_and_visible(name):
+    """Reachable by attribute access alone is not enough: it must be in both lists."""
+    assert name in tengri.__all__, f"{name} missing from tengri.__all__"
+    assert name in dir(tengri), f"{name} missing from dir(tengri)"
+    assert callable(getattr(tengri, name))
+
+
+@pytest.mark.parametrize("name", TOP_LEVEL_LISTERS)
+def test_top_level_lister_is_a_menu_in_list_all(name):
+    """``list_all`` is derived from the exports, so a menu it lacks is a hole in describe().
+
+    ``list_all`` drops a menu with no rows, so an empty one is skipped rather
+    than counted as missing.
+    """
+    if not getattr(tengri, name)():
+        pytest.skip(f"{name}() is empty in this build")
+    menus = tengri.list_all()
+    assert name.removeprefix("list_") in menus, f"{name} is not a menu in list_all()"
+
+
+def test_list_presets_is_the_presets_module_function():
+    """Export the existing function, never a copy of it."""
+    from tengri.presets import list_presets as presets_list
+
+    assert tengri.list_presets is presets_list
+
+
+def test_list_components_reads_the_real_component_registry():
+    """No hand table: the rows are exactly the SEDModelComponent registry keys."""
+    from tengri.components.sed_model_component import _REGISTRY
+
+    names = tengri.list_components().names()
+    assert sorted(names) == sorted(_REGISTRY)
+
+
+def test_the_hand_component_table_is_gone():
+    from tengri import registry
+
+    assert not hasattr(registry, "_COMPONENT_DOCS")
+
+
+def test_list_imfs_names_are_the_imf_registry():
+    from tengri.components.stellar.sps.mass_remaining import _IMF_REGISTRY
+
+    assert sorted(tengri.list_imfs().names()) == sorted(_IMF_REGISTRY)
+
+
+def test_list_foreground_laws_names_are_the_foreground_registry():
+    from tengri.components.dust.foreground import FOREGROUND_LAWS
+
+    assert sorted(tengri.list_foreground_laws().names()) == sorted(FOREGROUND_LAWS)
+
+
+def test_list_approx_configs_names_are_the_precompute_registry():
+    from tengri.forward.precompute.registry import _REGISTRY
+
+    assert sorted(tengri.list_approx_configs().names()) == sorted(_REGISTRY)
+
+
+def test_list_spatial_models_names_are_the_spatial_registry():
+    from tengri.components.spatial_model_component import _SPATIAL_REGISTRY
+
+    assert sorted(tengri.list_spatial_models().names()) == sorted(_SPATIAL_REGISTRY)
+
+
+@pytest.mark.parametrize(
+    "lister", ["list_imfs", "list_foreground_laws", "list_approx_configs", "list_spatial_models"]
+)
+def test_new_listers_carry_the_menu_columns(lister):
+    rows = getattr(tengri, lister)()
+    assert rows, f"{lister}() is empty"
+    for row in rows:
+        assert {"name", "kind", "status", "short_doc"} <= set(row), row
+        assert row["status"] in {"production", "comparison", "broken"}

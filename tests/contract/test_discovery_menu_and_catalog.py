@@ -123,20 +123,15 @@ def test_ambiguity_disclosure_fires_exactly_when_a_name_is_shared():
     """
     from collections import Counter
 
-    from tengri.registry import (
-        _menu_listers,
-        list_components,
-        list_filters,
-        list_plots,
-        list_recipes,
-    )
+    from tengri.registry import _every_menu_lister
 
-    # The same sources describe() itself consults.
-    sources = (*_menu_listers(), list_components, list_filters, list_plots, list_recipes)
+    # The same sources describe() itself consults: every discovered menu, so a
+    # new family (#3505) is counted here exactly when describe() counts it.
+    sources = _every_menu_lister()
     counts: Counter[str] = Counter(name for fn in sources for name in fn().names())
     assert counts, "no names at all — this guard would pass vacuously"
 
-    menu_names = {name for fn in _menu_listers() for name in fn().names()}
+    menu_names = {name for fn in sources for name in fn().names()}
     shared = [n for n in menu_names if counts[n] > 1]
     unique = [n for n in menu_names if counts[n] == 1]
     assert shared and unique, f"need both cases to test; got {len(shared)}/{len(unique)}"

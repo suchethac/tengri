@@ -25,7 +25,7 @@ BLE001	src/tengri/inference/mass_profile.py	1
 BLE001	src/tengri/inference/posterior.py	1
 BLE001	src/tengri/observation/filters/__init__.py	2
 BLE001	src/tengri/profiling/pipeline.py	1
-BLE001	src/tengri/registry.py	7
+BLE001	src/tengri/registry.py	6
 BLE001	src/tengri/results.py	1
 BLE001	src/tengri/utils/compile_log.py	2
 BLE001	src/tengri/utils/interpolation.py	2

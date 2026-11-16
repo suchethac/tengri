@@ -1707,37 +1707,6 @@ def list_age_kernels(*, status: str | None = None) -> _RegistryTable:
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
-_COMPONENT_DOCS: tuple[tuple[str, str, str], ...] = (
-    (
-        "stellar",
-        "tengri.components.stellar.component",
-        "SSP integration over SFH (DSPS), metallicity history, mass remaining",
-    ),
-    (
-        "dust",
-        "tengri.components.dust.component",
-        "Two-component attenuation (BC + diffuse); see list_dust_laws()",
-    ),
-    (
-        "agn",
-        "tengri.components.agn.component",
-        "Disc + torus + polar dust + BLR/NLR; see list_agn_models / list_agn_blocks",
-    ),
-    (
-        "nebular",
-        "tengri.components.nebular.component",
-        "Emission lines + continuum: BakedIn / CUE / CloudyGrid / CB19",
-    ),
-    (
-        "radio",
-        "tengri.components.radio.component",
-        "SF synchrotron + AGN jets + free-free continuum",
-    ),
-    ("igm", "tengri.components.igm.component", "IGM transmission (Inoue+2014) + DLA absorption"),
-    ("xray", "tengri.components.xray.component", "X-ray binaries + AGN corona"),
-)
-
-
 _PLOT_HELPERS: tuple[tuple[str, str], ...] = (
     ("plot_sed_fit", "Plot observed photometry/spectrum + posterior SED + uncertainty band"),
     ("plot_spectrum_fit", "Plot spectrum + posterior model with calibration polynomial"),
@@ -2305,34 +2274,163 @@ def list_filters(survey: str | None = None) -> _RegistryTable:
     return _RegistryTable(out)
 
 
-def list_components() -> _RegistryTable:
-    """List the SEDComponent adapters currently wired into the forward model."""
+def _first_doc_line(obj: object) -> str:
+    """Return the first non-empty line of ``obj.__doc__``, or ``""``."""
+    lines = (getattr(obj, "__doc__", "") or "").strip().splitlines()
+    return lines[0].strip() if lines else ""
+
+
+def _rows_from_registry(registry: dict, *, kind: str) -> list[dict]:
+    """Menu rows for a ``name -> object`` registry, read live from the registry.
+
+    The summary is the object's first docstring line; ``status`` and
+    ``citation`` are carried only when the object itself declares them.
+    """
+    return [
+        {
+            "name": name,
+            "kind": kind,
+            "status": getattr(obj, "status", "production"),
+            "citation": getattr(obj, "citation", ""),
+            "short_doc": _first_doc_line(obj),
+            "use": _usage_hint(name, kind),
+        }
+        for name, obj in registry.items()
+    ]
+
+
+def list_components(*, status: str | None = None) -> _RegistryTable:
+    """List the SEDModelComponent classes registered by name.
+
+    Reads the live component registry, so a component that declares itself
+    with ``name = ...`` appears here without any edit to this module.
+
+    Parameters
+    ----------
+    status : str, optional
+        Filter to one status.
+
+    Returns
+    -------
+    _RegistryTable
+        One row per component: ``name``, ``kind``, ``status``, ``citation``,
+        ``module``, ``short_doc``, ``use``.
+    """
+    from tengri.components.sed_model_component import _REGISTRY
+
+    out = _rows_from_registry(_REGISTRY, kind="component")
+    for row, cls in zip(out, _REGISTRY.values(), strict=True):
+        row["module"] = cls.__module__
+    out = _filter_menu(out, "status", status, listing="list_components")
+    return _RegistryTable(sorted(out, key=lambda m: m["name"]))
+
+
+def list_imfs(*, status: str | None = None) -> _RegistryTable:
+    """List the initial mass functions the stellar population model implements.
+
+    Parameters
+    ----------
+    status : str, optional
+        Filter to one status.
+
+    Returns
+    -------
+    _RegistryTable
+        One row per IMF: ``name``, ``kind``, ``status``, ``citation``,
+        ``short_doc``, ``use``.
+    """
+    from tengri.components.stellar.sps.mass_remaining import _IMF_REGISTRY
+
+    out = _rows_from_registry(_IMF_REGISTRY, kind="imf")
+    out = _filter_menu(out, "status", status, listing="list_imfs")
+    return _RegistryTable(sorted(out, key=lambda m: m["name"]))
+
+
+def list_foreground_laws(*, status: str | None = None) -> _RegistryTable:
+    """List the extinction laws usable for the Milky Way foreground screen.
+
+    Parameters
+    ----------
+    status : str, optional
+        Filter to one status.
+
+    Returns
+    -------
+    _RegistryTable
+        One row per law: ``name``, ``kind``, ``status``, ``citation``,
+        ``short_doc``, ``use``.
+    """
+    from tengri.components.dust.foreground import FOREGROUND_LAWS
+
+    out = _rows_from_registry(FOREGROUND_LAWS, kind="foreground_law")
+    out = _filter_menu(out, "status", status, listing="list_foreground_laws")
+    return _RegistryTable(sorted(out, key=lambda m: m["name"]))
+
+
+def list_spatial_models(*, status: str | None = None) -> _RegistryTable:
+    """List the spatial morphology models (``SpatialModelComponent`` subclasses).
+
+    Parameters
+    ----------
+    status : str, optional
+        Filter to one status.
+
+    Returns
+    -------
+    _RegistryTable
+        One row per model: ``name``, ``kind``, ``status``, ``citation``,
+        ``short_doc``, ``use``.
+    """
+    from tengri.components.spatial_model_component import _SPATIAL_REGISTRY
+
+    out = _rows_from_registry(_SPATIAL_REGISTRY, kind="spatial_model")
+    out = _filter_menu(out, "status", status, listing="list_spatial_models")
+    return _RegistryTable(sorted(out, key=lambda m: m["name"]))
+
+
+def list_approx_configs(*, status: str | None = None) -> _RegistryTable:
+    """List the components with a precompute (``approx=``) adapter.
+
+    Each row is a component whose photometry or line response can be served
+    from a precomputed table. ``short_doc`` is the first line of the adapter
+    module's docstring. An adapter whose module fails to import is listed with
+    ``status='broken'`` and the import error as its summary, not dropped.
+
+    Parameters
+    ----------
+    status : str, optional
+        Filter to one status: ``"production"`` or ``"broken"``.
+
+    Returns
+    -------
+    _RegistryTable
+        One row per component: ``name``, ``kind``, ``status``, ``citation``,
+        ``module``, ``short_doc``.
+    """
+    import importlib
+
+    from tengri.forward.precompute.registry import _REGISTRY
+
     out = []
-    for name, module_path, short_doc in _COMPONENT_DOCS:
+    for name, module_path in _REGISTRY.items():
         try:
-            __import__(module_path)
-            out.append(
-                {
-                    "name": name,
-                    "kind": "component",
-                    "status": "production",
-                    "module": module_path,
-                    "short_doc": short_doc,
-                    "use": _usage_hint(name, "component"),
-                }
-            )
-        except Exception as e:
-            out.append(
-                {
-                    "name": name,
-                    "kind": "component",
-                    "status": "broken",
-                    "module": module_path,
-                    "short_doc": f"import failed: {e!r}",
-                    "use": "",
-                }
-            )
-    return _RegistryTable(out)
+            module = importlib.import_module(module_path)
+        except ImportError as exc:
+            row_status, short_doc = "broken", f"import failed: {exc!r}"
+        else:
+            row_status, short_doc = "production", _first_doc_line(module)
+        out.append(
+            {
+                "name": name,
+                "kind": "approx_config",
+                "status": row_status,
+                "citation": "",
+                "module": module_path,
+                "short_doc": short_doc,
+            }
+        )
+    out = _filter_menu(out, "status", status, listing="list_approx_configs")
+    return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
 def _inference_method_row(entry, target: object | None = None) -> dict:
