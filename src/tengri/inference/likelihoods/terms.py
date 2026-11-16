@@ -18,7 +18,12 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.inference.likelihoods.gaussian import diag_gaussian_chi2
-from tengri.observation.banded import BandedMatrix, banded_forward_substitution
+from tengri.observation.banded import (
+    BandedMatrix,
+    banded_cholesky,
+    banded_forward_substitution,
+    banded_gram,
+)
 from tengri.observation.calibration import (
     _ERR_FLOOR,
     calibration_basis,
@@ -46,7 +51,6 @@ __all__ = [
     "censored_term",
     "correlated_noise_term",
     "correlated_term",
-    "dense_covariance",
     "eline_cloudy_marginal_term",
     "eline_fitted_term",
     "eline_flat_marginal_term",
@@ -106,18 +110,6 @@ def correlated_term(predicted, obs, cov_inv, chol_data, chol_offsets, presence=N
     return -0.5 * jnp.dot(whitened, whitened)
 
 
-def dense_covariance(cov_inv=None, chol_data=None, chol_offsets=None):
-    """The pixel covariance as a dense matrix, from its inverse or its banded Cholesky factor."""
-    if chol_data is None:
-        return jnp.linalg.inv(cov_inv)
-    n = chol_data.shape[1]
-    lower = jnp.zeros((n, n))
-    for row, offset in enumerate(np.asarray(chol_offsets, dtype=int)):
-        lag = -int(offset)
-        lower = lower + jnp.diag(chol_data[row, lag:], -lag)
-    return lower @ lower.T
-
-
 def correlated_noise_term(
     model_flux, obs, *, cov_inv=None, chol_data=None, chol_offsets=None, f_cal=0.0, dof=None
 ):
@@ -130,15 +122,21 @@ def correlated_noise_term(
 
     Notes
     -----
-    The floor depends on the model, so the covariance is factored on every evaluation,
-    ``O(n^3)`` in the number of pixels; a banded input is densified for it.
+    The floor depends on the model, so the covariance is factored on every evaluation: a
+    banded input stays banded (``O(n p^2)``), a dense one costs ``O(n^3)``.
     """
-    cov = dense_covariance(cov_inv, chol_data, chol_offsets)
-    cov = cov + jnp.diag((f_cal * model_flux) ** 2)
-    lower = jnp.linalg.cholesky(cov)
-    whitened = jax.scipy.linalg.solve_triangular(lower, obs - model_flux, lower=True)
+    if cov_inv is None:
+        _, bands, offsets = floored_noise(model_flux, None, chol_data, chol_offsets, f_cal)
+        factor = _banded_factor(bands, offsets)
+        whitened = banded_forward_substitution(factor, obs - model_flux)
+        diagonal = bands[0]
+    else:
+        cov = jnp.linalg.inv(cov_inv) + jnp.diag((f_cal * model_flux) ** 2)
+        lower = jnp.linalg.cholesky(cov)
+        whitened = jax.scipy.linalg.solve_triangular(lower, obs - model_flux, lower=True)
+        diagonal = jnp.diagonal(lower)
     n = whitened.shape[0]
-    log_det = 2.0 * jnp.sum(jnp.log(jnp.diagonal(lower)))
+    log_det = 2.0 * jnp.sum(jnp.log(diagonal))
     chi2 = jnp.dot(whitened, whitened)
     if dof is None:
         return -0.5 * chi2 - 0.5 * log_det - 0.5 * n * LOG_2PI
@@ -177,11 +175,13 @@ def floored_noise(model_flux, err, chol_data, chol_offsets, f_cal):
     -------
     tuple
         ``(err, chol_data, chol_offsets)`` for the marginal primitive. A diagonal ``N`` is an
-        error vector; a covariance is refactored and returned as a full-width banded factor.
+        error vector; a covariance is refactored and returned as a banded factor of the
+        bandwidth it came in with.
 
     Notes
     -----
-    **JIT-compatible**: yes. A covariance is refactored on every evaluation (``O(n^3)``).
+    **JIT-compatible**: yes. A covariance is refactored on every evaluation, banded
+    (``O(n p^2)`` for half-bandwidth ``p``) with no dense matrix formed.
     """
     if f_cal is None or (isinstance(f_cal, int | float) and f_cal == 0.0):
         return err, chol_data, chol_offsets
@@ -189,14 +189,10 @@ def floored_noise(model_flux, err, chol_data, chol_offsets, f_cal):
         from tengri.observation.noise import compute_effective_noise
 
         return compute_effective_noise(err, model_flux, f_cal), None, None
-    cov = dense_covariance(None, chol_data, chol_offsets) + jnp.diag((f_cal * model_flux) ** 2)
-    lower = jnp.linalg.cholesky(cov)
-    n = lower.shape[0]
-    rows = jnp.arange(n)[None, :]
-    lag = jnp.arange(n)[:, None]
-    cols = rows - lag
-    bands = jnp.where(cols >= 0, lower[rows, jnp.where(cols >= 0, cols, 0)], 0.0)
-    return err, bands, tuple(-k for k in range(n))
+    covariance = banded_gram(_banded_factor(chol_data, chol_offsets))
+    floor = covariance.data.at[0].add((f_cal * model_flux) ** 2)
+    factor = banded_cholesky(BandedMatrix(covariance.offsets, floor))
+    return err, factor.data, tuple(int(o) for o in chol_offsets)
 
 
 def _banded_factor(chol_data, chol_offsets) -> BandedMatrix:
