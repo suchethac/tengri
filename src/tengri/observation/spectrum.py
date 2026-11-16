@@ -1367,8 +1367,8 @@ def point_readout_gaussian_ln(
         The SED is a step at the Lyman edge (:func:`edge_interp` semantics). Static.
     reach_ln : float, optional
         Half-width of the per-pixel segment window in :math:`\ln\lambda`. Static. Default
-        ``_POINT_REACH_LN``, six times a 2000 km/s dispersion; a caller with a wider kernel
-        passes six times its own static bound.
+        ``_POINT_REACH_LN``, six times a 2000 km/s dispersion. A caller whose kernel is
+        narrower everywhere passes six times its own bound and pays for fewer segments.
 
     Returns
     -------
@@ -1412,76 +1412,6 @@ def point_readout_gaussian_ln(
         m1_step, _ = gaussian_exp_moments(_log_offset(edge, wq), _log_offset(upper, wq), sig)
         total = total + jump * m1_step
     return total
-
-
-def broaden_velocity_at_nodes(
-    sed_rest: jnp.ndarray,
-    wave_rest: jnp.ndarray,
-    sigma_v_kms,
-    *,
-    window: tuple[int, int] | None = None,
-    has_lyc_edge: bool = False,
-    kernel_sigma_bound_kms: float | None = None,
-) -> jnp.ndarray:
-    r"""Velocity-broadened SED at the model's own nodes, in closed form.
-
-    Node :math:`\lambda_i` takes
-    :math:`\mathcal{B}_{\sigma_v/c}(\lambda L_\nu)(\ln\lambda_i)/\lambda_i`, the Gaussian of
-    :func:`broaden_velocity_only` applied to the piecewise-linear interpolant
-    :math:`L_\nu` of ``sed_rest`` and read at the node
-    (:func:`point_readout_gaussian_ln`), with :math:`\sigma_v` the stellar velocity
-    dispersion [km/s] and :math:`c` the speed of light [km/s].
-
-    Parameters
-    ----------
-    sed_rest : ndarray, shape (n_wave,)
-        Rest-frame SED :math:`L_\nu` [erg/s/Hz].
-    wave_rest : ndarray, shape (n_wave,)
-        Rest-frame wavelength grid, ascending [Angstrom].
-    sigma_v_kms : float or tracer
-        Stellar velocity dispersion [km/s].
-    window : tuple of int, optional
-        Static index range ``(lo, hi)`` of the nodes to broaden; the others keep their
-        value. Default: every node.
-    has_lyc_edge : bool, optional
-        The SED is a step at the Lyman edge. Static.
-    kernel_sigma_bound_kms : float, optional
-        Static upper bound on ``sigma_v_kms`` [km/s]. Default: the value itself when it
-        is concrete, 2000 km/s when it is traced.
-
-    Returns
-    -------
-    ndarray, shape (n_wave,)
-        Broadened SED at the nodes [erg/s/Hz].
-
-    Notes
-    -----
-    JIT, grad and vmap compatible. The result is a function of the interpolant alone:
-    it does not depend on how the grid is split into segments, where
-    :func:`broaden_velocity_only` on a grid that is not uniform in :math:`\ln\lambda`
-    does (#3451). A zero dispersion returns ``sed_rest``.
-    """
-    if _is_concrete_nonpositive(sigma_v_kms):
-        return sed_rest
-    lo, hi = (0, wave_rest.shape[0]) if window is None else window
-    bound = (
-        _point_kernel_bound_kms(None, sigma_v_kms)
-        if kernel_sigma_bound_kms is None
-        else kernel_sigma_bound_kms
-    )
-    scale_in, scale_out = _peak_factors(sed_rest)
-    sigma_ln = jnp.asarray(sigma_v_kms) / _C_KM_S
-    closed = point_readout_gaussian_ln(
-        sed_rest * scale_in,
-        wave_rest,
-        wave_rest[lo:hi],
-        0.0,
-        sigma_ln,
-        has_lyc_edge=has_lyc_edge,
-        reach_ln=6.0 * float(bound) / _C_KM_S,
-    )
-    broadened = jnp.where(sigma_ln > 0.0, closed * scale_out, sed_rest[lo:hi])
-    return sed_rest.at[lo:hi].set(broadened)
 
 
 def sigma_v_lattice_correction(
@@ -1637,7 +1567,7 @@ def project_spectrum(
     has_lyc_edge: bool = False,
     lsf_pad_pixels: int | None = None,
     z_window: tuple[float, float] | None = None,
-    kernel_sigma_bound_kms: float | None = None,
+    lattice_window: tuple[float, int] | None = None,
 ) -> jnp.ndarray:
     r"""Project a panchromatic model SED onto an observed-frame spectrum grid.
 
@@ -1828,8 +1758,9 @@ def project_spectrum(
         )
         resolution = None
     elif resolution is not None and resolution_matrix is None:
-        # Point mode with an instrument: the kernel is applied before sampling, in closed
-        # form, so the pixel value does not depend on the pixel or model grid (#3500).
+        # Point mode with an instrument: the kernel is applied on the ln-lambda lattice
+        # before the pixel centers are read, so a pixel does not depend on the pixel grid
+        # or on how the model grid is segmented (#3451, #3500).
         flux = compute_spectrum_point_lsf(
             sed_rest,
             wave_rest,
@@ -1837,10 +1768,15 @@ def project_spectrum(
             redshift,
             dl_cm,
             resolution=resolution,
+            span=(
+                lattice_window
+                if lattice_window is not None
+                else lattice_span(wave_obs, *_concrete_z_range(redshift, z_window))
+            ),
             sigma_lib_kms=sigma_lib_kms,
             sigma_v_kms=sigma_v_kms,
+            n_bins=n_bins,
             has_lyc_edge=has_lyc_edge,
-            kernel_sigma_bound_kms=kernel_sigma_bound_kms,
         )
         resolution = None
     else:
@@ -2022,25 +1958,30 @@ def compute_spectrum(
     return lnu_to_fnu(sed_at_pixels, dl_cm, redshift)
 
 
-def _point_kernel_bound_kms(resolution, sigma_v_kms) -> float:
-    """Static upper bound [km/s] on the kernel width the closed-form readout must reach.
+def _lattice_center_readout(g, origin, n_cells, lam):
+    """Value at ``lam`` [Angstrom] of the function sampled as ``g`` at the lattice cell centers.
 
-    A concrete resolution or dispersion contributes its largest value; a traced one
-    contributes ``_LSF_MAX_SIGMA_KMS``, since its value is unknown when the window is sized.
-    The library dispersion is not subtracted.
+    A 4-point cubic through the two centers on each side, so the read is fourth order in
+    the lattice spacing. ``origin`` may be traced.
     """
-    squares = 0.0
-    if resolution is not None:
-        if _is_traced(resolution):
-            squares += _LSF_MAX_SIGMA_KMS**2
-        else:
-            r = np.asarray(resolution, np.float64)
-            squares += float(np.max(_resolution_to_sigma_kms(r))) ** 2
-    if _is_traced(sigma_v_kms):
-        squares += _LSF_MAX_SIGMA_KMS**2
-    else:
-        squares += float(np.max(np.maximum(np.asarray(sigma_v_kms, np.float64), 0.0))) ** 2
-    return math.sqrt(squares)
+    x = (jnp.log(lam) - origin) / _LATTICE_DLNLAMBDA - 0.5
+    i = jnp.clip(jnp.floor(x).astype(jnp.int32), 1, n_cells - 3)
+    t = x - i
+    return (
+        (-t * (t - 1.0) * (t - 2.0) / 6.0) * g[i - 1]
+        + ((t + 1.0) * (t - 1.0) * (t - 2.0) / 2.0) * g[i]
+        + (-(t + 1.0) * t * (t - 2.0) / 2.0) * g[i + 1]
+        + ((t + 1.0) * t * (t - 1.0) / 6.0) * g[i + 2]
+    )
+
+
+#: Dispersion [km/s] of the box a lattice cell mean applies, h c / sqrt(12).
+_LATTICE_BOX_SIGMA_KMS = _LATTICE_DLNLAMBDA * _C_KM_S / math.sqrt(12.0)
+
+#: Kernel widths [km/s] between which point mode hands over from the closed form to the
+#: lattice. Below the first the lattice (15 km/s cells) does not resolve the kernel; above
+#: the second it is within 1e-4 of the closed form, which costs more the wider the kernel.
+_POINT_NARROW_KERNEL_KMS = (20.0, 40.0)
 
 
 def compute_spectrum_point_lsf(
@@ -2051,26 +1992,30 @@ def compute_spectrum_point_lsf(
     dl_cm: float,
     *,
     resolution: jnp.ndarray | float,
+    span: tuple[float, int],
     sigma_lib_kms: jnp.ndarray | float = 0.0,
     sigma_v_kms: jnp.ndarray | float = 0.0,
+    igm_rest: jnp.ndarray | None = None,
+    n_bins: int = 16,
     has_lyc_edge: bool = False,
-    kernel_sigma_bound_kms: float | None = None,
 ) -> jnp.ndarray:
-    r"""Point-sampled spectrum with the instrument and velocity kernel applied before sampling.
+    r"""Point-sampled spectrum with the kernels applied before sampling, on the ln-lambda lattice.
 
-    Each pixel is the model convolved with its own Gaussian in :math:`\ln\lambda` and read at
-    the pixel center, in closed form (:func:`point_readout_gaussian_ln`):
+    The model is loaded onto the uniform :math:`\ln\lambda` lattice as exact cell means of
+    :math:`\lambda L_\nu`, broadened there, and read at the pixel centers:
 
     .. math::
 
         F_\nu(\lambda_c) = \frac{1 + z}{4\pi d_L^2}\,
-        \frac{\mathcal{B}_{\sigma_c}(\lambda L_\nu)(\ln\lambda_c)}{\lambda_c},
-        \qquad \sigma_c = \sigma_{\rm eff}(\lambda_c) / c ,
+        \frac{\bigl[\mathcal{B}_{\rm inst}\,T\,\mathcal{B}_{\sigma_v}
+        (\lambda L_\nu)\bigr](\ln\lambda_c)}{\lambda_c},
 
     with :math:`L_\nu` the piecewise-linear interpolant of ``sed_rest`` [erg/s/Hz],
     :math:`\lambda_c` the rest wavelength of the pixel center [Angstrom],
-    :math:`\sigma_{\rm eff}` from :func:`lsf_sigma_eff_kms` [km/s], :math:`c` the speed of light
-    [km/s], :math:`z` the redshift and :math:`d_L` the luminosity distance [cm].
+    :math:`\mathcal{B}_{\sigma_v}` the velocity kernel, :math:`T` the IGM transmission,
+    :math:`\mathcal{B}_{\rm inst}` the instrument kernel of width
+    :func:`lsf_sigma_eff_kms`, :math:`z` the redshift and :math:`d_L` the luminosity
+    distance [cm]. With no IGM the two kernels are one Gaussian of the combined width.
 
     Parameters
     ----------
@@ -2086,16 +2031,20 @@ def compute_spectrum_point_lsf(
         Luminosity distance [cm].
     resolution : float or ndarray, shape (n_pix,)
         Resolving power :math:`R = \lambda / \mathrm{FWHM}` at each pixel.
+    span : tuple of (float, int)
+        Static lattice ``(origin, n_cells)`` covering the rest range the pixels read
+        (:func:`lattice_span`).
     sigma_lib_kms : float or ndarray, shape (n_pix,), optional
         Library velocity dispersion [km/s].
     sigma_v_kms : float or tracer, optional
         Stellar velocity dispersion [km/s].
+    igm_rest : ndarray, shape (n_wave,), optional
+        IGM transmission on ``wave_rest``. Applied after the velocity kernel and before
+        the instrument kernel.
+    n_bins : int, optional
+        Segments of the instrument kernel when the resolution varies along the spectrum.
     has_lyc_edge : bool, optional
         The SED is a step at the Lyman edge. Static.
-    kernel_sigma_bound_kms : float, optional
-        Static upper bound on the kernel width over every pixel and every value the traced
-        inputs can take [km/s]. The per-pixel segment window reaches six times it. Default:
-        the largest concrete width, with 2000 km/s for a traced component.
 
     Returns
     -------
@@ -2104,35 +2053,99 @@ def compute_spectrum_point_lsf(
 
     Notes
     -----
-    JIT, grad and vmap compatible. The kernel acts on :math:`\lambda L_\nu`, the convention of
-    :func:`broaden_velocity_only`. The result does not depend on the pixel grid or on how
-    the model grid is segmented: a pixel is the exact integral of the model's own
-    interpolant, where convolving after sampling aliases features narrower than a pixel
-    and couples neighboring pixels (#3451, #3500). A pixel whose kernel has zero width takes
-    the point sample of the interpolant.
+    JIT, grad and vmap compatible. The kernels act on :math:`\lambda L_\nu`, the convention
+    of :func:`broaden_velocity_only`. A pixel depends on the model's interpolant and not on
+    the pixel grid or the model grid's segmentation, where convolving after sampling aliases
+    features narrower than a pixel and couples neighboring pixels (#3451, #3500).
+
+    Approximation: the lattice has spacing ``_LATTICE_DLNLAMBDA`` (15 km/s). A cell mean is
+    the model smoothed by a box of dispersion ``_LATTICE_BOX_SIGMA_KMS``, which is removed
+    from the instrument kernel in quadrature, and the pixel centers are read with a cubic.
+    Measured against the closed form for a constant resolution: 4e-7 to 2e-5 of peak for a
+    kernel of 64 km/s and wider, 1e-4 at 25 km/s.
+
+    A kernel narrower than the lattice spacing is not resolved by it. With no IGM a pixel
+    whose kernel is below ``_POINT_NARROW_KERNEL_KMS[0]`` is read in closed form
+    (:func:`point_readout_gaussian_ln`), one above ``_POINT_NARROW_KERNEL_KMS[1]`` on the
+    lattice, and the two are blended with a smooth weight in between; a zero-width kernel
+    returns the point sample of the interpolant. With an IGM transmission every pixel is
+    read on the lattice.
     """
+    origin, n_cells = span
     edge_aa = LYMAN_LIMIT_AA if has_lyc_edge else None
     scale_in, scale_out = _peak_factors(sed_rest)
-    sed_in = sed_rest * scale_in
+    pad = _lattice_pad_cells()
     wave_q = wave_obs / (1.0 + redshift)
-    sigma_ln = jnp.broadcast_to(
-        lsf_sigma_eff_kms(resolution, sigma_lib_kms, sigma_v_kms) / _C_KM_S, wave_q.shape
+    lam_c = jnp.exp(
+        origin + _LATTICE_DLNLAMBDA * (jnp.arange(n_cells, dtype=jnp.result_type(float)) + 0.5)
     )
-    if kernel_sigma_bound_kms is None:
-        kernel_sigma_bound_kms = _point_kernel_bound_kms(resolution, sigma_v_kms)
-    reach_ln = 6.0 * float(kernel_sigma_bound_kms) / _C_KM_S
+    on_lattice = _lattice_cell_means(wave_rest, sed_rest * scale_in, origin, n_cells, edge_aa)
+    if igm_rest is not None:
+        # sigma_v, then the IGM, then the instrument (#2589).
+        on_lattice = broaden_velocity_only(on_lattice, lam_c, sigma_v_kms, 1, pad_pixels=pad)
+        on_lattice = on_lattice * jnp.interp(lam_c, wave_rest, igm_rest)
+        sigma_v_kms = 0.0
+    resolution = jnp.asarray(resolution)
+    sigma_lib_kms = jnp.asarray(sigma_lib_kms)
+    resolution_pix, sigma_lib_pix = resolution, sigma_lib_kms
+    obs_c = lam_c * (1.0 + redshift)
+    if resolution.ndim > 0:
+        resolution = jnp.interp(obs_c, wave_obs, resolution)
+    if sigma_lib_kms.ndim > 0:
+        sigma_lib_kms = jnp.interp(obs_c, wave_obs, sigma_lib_kms)
+    # The cell mean has already smoothed the model by the lattice box, so the kernel
+    # applied here is the wanted width with the box removed in quadrature.
+    sigma_cells = lsf_sigma_eff_kms(resolution, sigma_lib_kms, sigma_v_kms)
+    excess = sigma_cells**2 - _LATTICE_BOX_SIGMA_KMS**2
+    wider = excess > 0.0
+    sigma_kernel = jnp.where(wider, jnp.sqrt(jnp.where(wider, excess, 1.0)), 0.0)
+    # One segment when the width is the same on every cell: the lattice is uniform in
+    # ln lambda, so a single sigma covers it.
+    broadened = broaden_velocity_only(
+        on_lattice, lam_c, sigma_kernel, 1 if sigma_cells.ndim == 0 else n_bins, pad_pixels=pad
+    )
+    pixel_sed = _lattice_center_readout(broadened, origin, n_cells, wave_q) / wave_q
+    if igm_rest is None:
+        pixel_sed = _blend_narrow_kernel(
+            pixel_sed,
+            sed_rest * scale_in,
+            wave_rest,
+            wave_obs,
+            redshift,
+            lsf_sigma_eff_kms(resolution_pix, sigma_lib_pix, sigma_v_kms),
+            has_lyc_edge,
+        )
+    return lnu_to_fnu(pixel_sed * scale_out, dl_cm, redshift)
+
+
+def _blend_narrow_kernel(
+    lattice_sed, sed_rest, wave_rest, wave_obs, redshift, sigma_eff_kms, has_lyc_edge
+):
+    """Replace the lattice read by the closed form where the kernel is narrow (#3500).
+
+    The weight of the lattice rises smoothly from 0 to 1 across ``_POINT_NARROW_KERNEL_KMS``.
+    The closed form is evaluated with a window that reaches six times the upper width, so
+    it costs a few model cells per pixel; where the kernel is wider its value is not used.
+    """
+    lo, hi = _POINT_NARROW_KERNEL_KMS
+    wave_q = wave_obs / (1.0 + redshift)
+    sigma_eff_kms = jnp.broadcast_to(sigma_eff_kms, wave_q.shape)
+    t = jnp.clip((sigma_eff_kms - lo) / (hi - lo), 0.0, 1.0)
+    weight = t * t * (3.0 - 2.0 * t)
+    narrow_sigma = jnp.minimum(sigma_eff_kms, hi)
     closed = point_readout_gaussian_ln(
-        sed_in,
+        sed_rest,
         wave_rest,
         wave_obs,
         redshift,
-        sigma_ln,
+        narrow_sigma / _C_KM_S,
         has_lyc_edge=has_lyc_edge,
-        reach_ln=reach_ln,
+        reach_ln=6.0 * hi / _C_KM_S,
     )
-    plain = _point_samples(sed_in, wave_rest, wave_q, edge_aa)
-    pixel_sed = jnp.where(sigma_ln > 0.0, closed, plain)
-    return lnu_to_fnu(pixel_sed * scale_out, dl_cm, redshift)
+    edge_aa = LYMAN_LIMIT_AA if has_lyc_edge else None
+    plain = _point_samples(sed_rest, wave_rest, wave_q, edge_aa)
+    exact = jnp.where(narrow_sigma > 0.0, closed, plain)
+    return weight * lattice_sed + (1.0 - weight) * exact
 
 
 def _flux_conserving_resample(

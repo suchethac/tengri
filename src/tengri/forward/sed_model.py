@@ -3305,37 +3305,6 @@ class SEDModel:
             return None
         return lattice_span(np.asarray(wave_obs_np, dtype=np.float64), min(ends), max(ends))
 
-    def _upper_bound(self, name: str, absent: float) -> float | None:
-        """Largest value parameter ``name`` can take: its Fixed value or prior upper bound.
-
-        ``absent`` is returned when the parameter is not declared, ``None`` when it has no
-        finite upper bound.
-        """
-        try:
-            dist = self.spec.get_distribution(name)
-        except KeyError:
-            return absent
-        bound = dist.bounds[0] if dist.is_fixed else dist.bounds[1]
-        return float(bound) if bound is not None and np.isfinite(bound) else None
-
-    def _point_kernel_bound_static(self, spectroscopy) -> float | None:
-        """Static upper bound [km/s] on the point-mode kernel width of this spectrum (#3500).
-
-        The largest instrument dispersion over the pixels, at the upper bound of
-        ``lsf_scale``, in quadrature with the upper bound of ``sigma_v_kms``. The library
-        dispersion is not subtracted. Returns ``None`` with no resolution or with an
-        unbounded prior, so the projection falls back to its own bound.
-        """
-        from tengri.observation.spectrum import _resolution_to_sigma_kms
-
-        resolution = getattr(spectroscopy, "resolution", None)
-        lsf_scale = self._upper_bound("lsf_scale", 1.0)
-        sigma_v = self._upper_bound("sigma_v_kms", 0.0)
-        if resolution is None or lsf_scale is None or sigma_v is None:
-            return None
-        sigma_inst = float(np.max(_resolution_to_sigma_kms(np.asarray(resolution, np.float64))))
-        return float(np.hypot(sigma_inst * lsf_scale, sigma_v))
-
     def _spectrum_lut_serves_exactly(self, observation) -> bool:
         """Whether the spectrum LUT can serve this spectrum channel exactly (#2958).
 
@@ -8044,7 +8013,6 @@ class SEDModel:
         lattice_window = self._lattice_window_static(
             w_np if w_np is not None else getattr(spectroscopy, "wave_obs", None)
         )
-        kernel_sigma_bound_kms = self._point_kernel_bound_static(spectroscopy)
 
         def _impl(params, fixed_values, wave_obs, ssp_data, template_data, ztable_data):
             from tengri.cosmology import luminosity_distance
@@ -8088,7 +8056,6 @@ class SEDModel:
                 resolution_matrix=resolution_matrix,
                 nebular_lines=nebular_lines,
                 lattice_window=lattice_window,
-                kernel_sigma_bound_kms=kernel_sigma_bound_kms,
             )
 
         if traced_grid:
@@ -11650,11 +11617,6 @@ class SEDModel:
             if observation is None or not observation.can_do_spectroscopy
             else observation.spectroscopy.wave_obs
         )
-        kernel_sigma_bound_kms = (
-            None
-            if observation is None or not observation.can_do_spectroscopy
-            else self._point_kernel_bound_static(observation.spectroscopy)
-        )
 
         def _forward(params, fixed_values, ssp_data, template_data, ztable_data):
             # The one caller that may take the publication shortcuts: this
@@ -11729,7 +11691,6 @@ class SEDModel:
                     resample_z_ref=resample_z_ref,
                     window_z=window_z,
                     lattice_window=lattice_window,
-                    kernel_sigma_bound_kms=kernel_sigma_bound_kms,
                     observables_type=None if mixed_phot_lut else observables_type,
                 )
                 if mixed_phot_lut:

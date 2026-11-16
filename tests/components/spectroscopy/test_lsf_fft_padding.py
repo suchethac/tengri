@@ -379,15 +379,13 @@ def test_observation_branch_uses_cropped_pass_for_concrete_redshift(monkeypatch)
     from tengri.observation import observation as obs_mod
 
     calls = []
-    real = spectrum_mod.broaden_velocity_at_nodes
+    real = spectrum_mod.broaden_velocity_only_window
 
     def spy(*args, **kwargs):
-        # Point mode crops the dispersion to the observed window through ``window``.
-        if kwargs.get("window") is not None:
-            calls.append(tuple(kwargs["window"]))
+        calls.append(args[4:6])
         return real(*args, **kwargs)
 
-    monkeypatch.setattr(spectrum_mod, "broaden_velocity_at_nodes", spy)
+    monkeypatch.setattr(spectrum_mod, "broaden_velocity_only_window", spy)
     n = 4000
     wave_rest = np.geomspace(1000.0, 20000.0, n)
     wave_obs = np.linspace(3600.0, 9824.0, 1500)
@@ -512,15 +510,13 @@ def test_window_z_cropped_split_matches_full_grid(z, monkeypatch):
     """A concrete window_z crops the rest pass; the observed flux is unchanged to 1e-10."""
     wave_rest, wave_obs, sed, _ = _kernel_split_inputs(z=z)
     calls = []
-    real = spectrum_mod.broaden_velocity_at_nodes
+    real = spectrum_mod.broaden_velocity_only_window
 
     def spy(*args, **kwargs):
-        # Point mode crops the dispersion to the observed window through ``window``.
-        if kwargs.get("window") is not None:
-            calls.append(tuple(kwargs["window"]))
+        calls.append(args[4:6])
         return real(*args, **kwargs)
 
-    monkeypatch.setattr(spectrum_mod, "broaden_velocity_at_nodes", spy)
+    monkeypatch.setattr(spectrum_mod, "broaden_velocity_only_window", spy)
     full = _kernel_split(sed, wave_rest, wave_obs, z, window_z=None)
     assert calls == [], "window_z=None must keep the full-grid pass"
     cropped = _kernel_split(sed, wave_rest, wave_obs, z, window_z=z)
@@ -577,15 +573,13 @@ def test_window_z_observation_predict_on_fixed_z_igm_model(synthetic_ssp_wide, m
     full_params = merge_fixed_params(model.spec, p)
     kwargs = model._observation_predict_kwargs(p)
     calls = []
-    real = spectrum_mod.broaden_velocity_at_nodes
+    real = spectrum_mod.broaden_velocity_only_window
 
     def spy(*args, **kw):
-        # Point mode crops the dispersion to the observed window through ``window``.
-        if kw.get("window") is not None:
-            calls.append(tuple(kw["window"]))
+        calls.append(args[4:6])
         return real(*args, **kw)
 
-    monkeypatch.setattr(spectrum_mod, "broaden_velocity_at_nodes", spy)
+    monkeypatch.setattr(spectrum_mod, "broaden_velocity_only_window", spy)
     base_out = model.observation.predict(state, full_params, wave_obs=wave_obs, **kwargs)
     assert calls == []
     crop_out = model.observation.predict(
@@ -643,15 +637,13 @@ def test_fixed_redshift_public_predict_spectrum_crops_and_matches_full_grid(
     p = _public_params(model, 300.0)
 
     calls = []
-    real = spectrum_mod.broaden_velocity_at_nodes
+    real = spectrum_mod.broaden_velocity_only_window
 
     def spy(*args, **kwargs):
-        # Point mode crops the dispersion to the observed window through ``window``.
-        if kwargs.get("window") is not None:
-            calls.append(tuple(kwargs["window"]))
+        calls.append(args[4:6])
         return real(*args, **kwargs)
 
-    monkeypatch.setattr(spectrum_mod, "broaden_velocity_at_nodes", spy)
+    monkeypatch.setattr(spectrum_mod, "broaden_velocity_only_window", spy)
     public = np.asarray(model.predict_spectrum(p))
     assert len(calls) >= 1, "the public predict_spectrum path did not take the cropped pass"
     lo, hi = calls[0]
@@ -855,41 +847,18 @@ def test_pad_pixels_override_is_taken_literally():
 
 
 def test_project_spectrum_threads_lsf_pad_pixels():
-    """The resolution-matrix branch pads its sigma_v convolution with ``lsf_pad_pixels``."""
-    from tengri.observation.banded import gaussian_resolution_bands
-
-    wave, spec = _log_grid_and_spectrum()
-    obs = jnp.asarray(wave)
-    rest = jnp.asarray(wave)
-    matrix = gaussian_resolution_bands(obs, 300.0)
-
-    def project(**kwargs):
-        return project_spectrum(
-            jnp.asarray(spec),
-            rest,
-            obs,
-            0.0,
-            1.0,
-            resolution_matrix=matrix,
-            sigma_v_kms=1000.0,
-            **kwargs,
-        )
-
-    default = np.asarray(project())
-    assert _rel_err(project(lsf_pad_pixels=wave.size - 1), default) <= 1e-12
-    assert _rel_err(project(lsf_pad_pixels=8), default) > 1e-5
-
-
-def test_point_mode_with_a_resolution_has_no_padding_to_thread():
-    """Point mode applies its kernel in closed form, so the pad and segment count are unused."""
     wave, spec = _log_grid_and_spectrum()
     obs = jnp.asarray(wave)
     rest = jnp.asarray(wave)
     default = project_spectrum(jnp.asarray(spec), rest, obs, 0.0, 1.0, resolution=300.0)
-    other = project_spectrum(
-        jnp.asarray(spec), rest, obs, 0.0, 1.0, resolution=300.0, lsf_pad_pixels=8, n_bins=3
+    same = project_spectrum(
+        jnp.asarray(spec), rest, obs, 0.0, 1.0, resolution=300.0, lsf_pad_pixels=wave.size - 1
     )
-    np.testing.assert_array_equal(np.asarray(other), np.asarray(default))
+    assert _rel_err(same, np.asarray(default)) <= 1e-12
+    narrow = project_spectrum(
+        jnp.asarray(spec), rest, obs, 0.0, 1.0, resolution=300.0, lsf_pad_pixels=8
+    )
+    assert _rel_err(narrow, np.asarray(default)) > 1e-5
 
 
 def test_near_duplicate_pixel_keeps_padding_and_result():

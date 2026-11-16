@@ -453,7 +453,6 @@ def project_spectrum_kernel_split(
     nebular_lines: bool = True,
     z_window: tuple[float, float] | None = None,
     lattice_window: tuple[float, int] | None = None,
-    kernel_sigma_bound_kms: float | None = None,
 ) -> jnp.ndarray:
     r"""Project a rest-frame SED to an observed spectrum with the #2519/#2526/#2589 kernel split.
 
@@ -681,10 +680,12 @@ def project_spectrum_kernel_split(
            ApJ, 592, 728. arXiv:astro-ph/0305378.
     """
     from tengri.observation.spectrum import (
+        _concrete_z_range,
         _serves_on_lattice,
-        broaden_velocity_at_nodes,
         broaden_velocity_only,
         broaden_velocity_only_window,
+        compute_spectrum_point_lsf,
+        lattice_span,
         project_spectrum,
         rest_grid_observed_window,
     )
@@ -697,10 +698,10 @@ def project_spectrum_kernel_split(
     # Rest-frame line light to drop from the instrument-only group (None keeps the lines).
     lines_rest = None if nebular_lines else _nebular_lines_rest_sed(state)
 
+    if z_window is None and window_z is not None:
+        z_window = (float(window_z), float(window_z))
     if _serves_on_lattice(resolution, resolution_matrix, sigma_v_kms):
         # No instrument kernel: sigma_v and the IGM act on the ln-lambda lattice (#3436).
-        if z_window is None and window_z is not None:
-            z_window = (float(window_z), float(window_z))
         return _project_stellar_on_lattice(
             state,
             sed_rest,
@@ -745,7 +746,8 @@ def project_spectrum_kernel_split(
                 conserving=conserving,
                 has_lyc_edge=has_lyc_edge,
                 resolution_matrix=resolution_matrix,
-                kernel_sigma_bound_kms=kernel_sigma_bound_kms,
+                z_window=z_window,
+                lattice_window=lattice_window,
             )
             flux_instrument_only = project_spectrum(
                 sed_instrument_only,
@@ -762,7 +764,8 @@ def project_spectrum_kernel_split(
                 conserving=conserving,
                 has_lyc_edge=has_lyc_edge,
                 resolution_matrix=resolution_matrix,
-                kernel_sigma_bound_kms=kernel_sigma_bound_kms,
+                z_window=z_window,
+                lattice_window=lattice_window,
             )
             flux = flux_stellar + flux_instrument_only
         elif resolution is None:
@@ -780,7 +783,8 @@ def project_spectrum_kernel_split(
                 cal_coeffs=None,
                 conserving=conserving,
                 has_lyc_edge=has_lyc_edge,
-                kernel_sigma_bound_kms=kernel_sigma_bound_kms,
+                z_window=z_window,
+                lattice_window=lattice_window,
             )
         else:
             sed_stellar, sed_instrument_only = _split_stellar_and_instrument_only_sed(
@@ -803,7 +807,8 @@ def project_spectrum_kernel_split(
                 cal_coeffs=None,
                 conserving=conserving,
                 has_lyc_edge=has_lyc_edge,
-                kernel_sigma_bound_kms=kernel_sigma_bound_kms,
+                z_window=z_window,
+                lattice_window=lattice_window,
             )
             flux_instrument_only = project_spectrum(
                 sed_instrument_only,
@@ -819,7 +824,8 @@ def project_spectrum_kernel_split(
                 cal_coeffs=None,
                 conserving=conserving,
                 has_lyc_edge=has_lyc_edge,
-                kernel_sigma_bound_kms=kernel_sigma_bound_kms,
+                z_window=z_window,
+                lattice_window=lattice_window,
             )
             flux = flux_stellar + flux_instrument_only
     else:
@@ -831,123 +837,161 @@ def project_spectrum_kernel_split(
         sed_stellar_rest, sed_instrument_only_rest = (
             _split_stellar_and_instrument_only_sed_pre_igm(state, sed_rest)
         )
-        # The rest-grid pass only has to be exact where the observed grid reads it (#2832):
-        # with a concrete ``window_z`` and concrete grids, broaden the rest-frame window the
-        # observed range maps into, leaving the rest unbroadened. ``window_z=None`` or a
-        # traced grid keeps the full-grid pass.
-        window = (
-            None if window_z is None else rest_grid_observed_window(wave_rest, wave_obs, window_z)
-        )
-        if not conserving and resolution_matrix is None:
-            # Point mode: the dispersion is read at the model nodes in closed form, so it
-            # does not depend on how the model grid is segmented (#3451).
-            sed_stellar_v = broaden_velocity_at_nodes(
+        if not conserving and resolution is not None and resolution_matrix is None:
+            # Point mode with an instrument: the dispersion, the IGM and the instrument
+            # kernel act on the ln-lambda lattice, in that order, before the pixel
+            # centers are read (#3451, #3500).
+            span = (
+                lattice_window
+                if lattice_window is not None
+                else lattice_span(wave_obs, *_concrete_z_range(redshift, z_window))
+            )
+            if lines_rest is not None:
+                sed_instrument_only_rest = sed_instrument_only_rest - lines_rest
+            resolution_scaled = resolution / lsf_scale
+            flux = compute_spectrum_point_lsf(
                 sed_stellar_rest,
                 wave_rest,
-                sigma_v_kms,
-                window=window,
-                has_lyc_edge=has_lyc_edge,
-                kernel_sigma_bound_kms=kernel_sigma_bound_kms,
-            )
-        elif window is None:
-            sed_stellar_v = broaden_velocity_only(sed_stellar_rest, wave_rest, sigma_v_kms, n_bins)
-        else:
-            sed_stellar_v = broaden_velocity_only_window(
-                sed_stellar_rest, wave_rest, sigma_v_kms, n_bins, *window
-            )
-        sed_stellar = sed_stellar_v * igm_trans
-        sed_instrument_only = sed_instrument_only_rest * igm_trans
-        if lines_rest is not None:
-            sed_instrument_only = sed_instrument_only - lines_rest * igm_trans
-
-        if resolution_matrix is not None:
-            flux_stellar = project_spectrum(
-                sed_stellar,
-                wave_rest,
                 wave_obs,
                 redshift,
                 dl_cm,
-                resolution=resolution,
+                resolution=resolution_scaled,
+                span=span,
                 sigma_lib_kms=sigma_lib_kms,
+                sigma_v_kms=sigma_v_kms,
+                igm_rest=igm_trans,
                 n_bins=n_bins,
-                lsf_pad_pixels=lsf_pad_pixels,
-                sigma_v_kms=0.0,
-                cal_coeffs=None,
-                conserving=conserving,
                 has_lyc_edge=has_lyc_edge,
-                resolution_matrix=resolution_matrix,
-                kernel_sigma_bound_kms=kernel_sigma_bound_kms,
-            )
-            flux_instrument_only = project_spectrum(
-                sed_instrument_only,
-                wave_rest,
-                wave_obs,
-                redshift,
-                dl_cm,
-                resolution=resolution,
-                sigma_lib_kms=sigma_lib_kms,
-                n_bins=n_bins,
-                lsf_pad_pixels=lsf_pad_pixels,
-                sigma_v_kms=0.0,
-                cal_coeffs=None,
-                conserving=conserving,
-                has_lyc_edge=has_lyc_edge,
-                resolution_matrix=resolution_matrix,
-                kernel_sigma_bound_kms=kernel_sigma_bound_kms,
-            )
-            flux = flux_stellar + flux_instrument_only
-        elif resolution is None:
-            flux = project_spectrum(
-                sed_stellar + sed_instrument_only,
-                wave_rest,
-                wave_obs,
-                redshift,
-                dl_cm,
-                resolution=None,
-                sigma_lib_kms=sigma_lib_kms,
-                n_bins=n_bins,
-                lsf_pad_pixels=lsf_pad_pixels,
-                sigma_v_kms=0.0,
-                cal_coeffs=None,
-                conserving=conserving,
-                has_lyc_edge=has_lyc_edge,
-                kernel_sigma_bound_kms=kernel_sigma_bound_kms,
-            )
-        else:
-            resolution_scaled = resolution / lsf_scale
-            flux_stellar = project_spectrum(
-                sed_stellar,
+            ) + compute_spectrum_point_lsf(
+                sed_instrument_only_rest,
                 wave_rest,
                 wave_obs,
                 redshift,
                 dl_cm,
                 resolution=resolution_scaled,
-                sigma_lib_kms=sigma_lib_kms,
-                n_bins=n_bins,
-                lsf_pad_pixels=lsf_pad_pixels,
-                sigma_v_kms=0.0,
-                cal_coeffs=None,
-                conserving=conserving,
-                has_lyc_edge=has_lyc_edge,
-                kernel_sigma_bound_kms=kernel_sigma_bound_kms,
-            )
-            flux_instrument_only = project_spectrum(
-                sed_instrument_only,
-                wave_rest,
-                wave_obs,
-                redshift,
-                dl_cm,
-                resolution=resolution_scaled,
+                span=span,
                 sigma_lib_kms=0.0,
-                n_bins=n_bins,
-                lsf_pad_pixels=lsf_pad_pixels,
                 sigma_v_kms=0.0,
-                cal_coeffs=None,
-                conserving=conserving,
+                igm_rest=igm_trans,
+                n_bins=n_bins,
                 has_lyc_edge=has_lyc_edge,
-                kernel_sigma_bound_kms=kernel_sigma_bound_kms,
             )
-            flux = flux_stellar + flux_instrument_only
+        else:
+            # The rest-grid pass only has to be exact where the observed grid reads it (#2832):
+            # with a concrete ``window_z`` and concrete grids, broaden the rest-frame window the
+            # observed range maps into, leaving the rest unbroadened. ``window_z=None`` or a
+            # traced grid keeps the full-grid pass.
+            window = (
+                None
+                if window_z is None
+                else rest_grid_observed_window(wave_rest, wave_obs, window_z)
+            )
+            if window is None:
+                sed_stellar_v = broaden_velocity_only(
+                    sed_stellar_rest, wave_rest, sigma_v_kms, n_bins
+                )
+            else:
+                sed_stellar_v = broaden_velocity_only_window(
+                    sed_stellar_rest, wave_rest, sigma_v_kms, n_bins, *window
+                )
+            sed_stellar = sed_stellar_v * igm_trans
+            sed_instrument_only = sed_instrument_only_rest * igm_trans
+            if lines_rest is not None:
+                sed_instrument_only = sed_instrument_only - lines_rest * igm_trans
+
+            if resolution_matrix is not None:
+                flux_stellar = project_spectrum(
+                    sed_stellar,
+                    wave_rest,
+                    wave_obs,
+                    redshift,
+                    dl_cm,
+                    resolution=resolution,
+                    sigma_lib_kms=sigma_lib_kms,
+                    n_bins=n_bins,
+                    lsf_pad_pixels=lsf_pad_pixels,
+                    sigma_v_kms=0.0,
+                    cal_coeffs=None,
+                    conserving=conserving,
+                    has_lyc_edge=has_lyc_edge,
+                    resolution_matrix=resolution_matrix,
+                    z_window=z_window,
+                    lattice_window=lattice_window,
+                )
+                flux_instrument_only = project_spectrum(
+                    sed_instrument_only,
+                    wave_rest,
+                    wave_obs,
+                    redshift,
+                    dl_cm,
+                    resolution=resolution,
+                    sigma_lib_kms=sigma_lib_kms,
+                    n_bins=n_bins,
+                    lsf_pad_pixels=lsf_pad_pixels,
+                    sigma_v_kms=0.0,
+                    cal_coeffs=None,
+                    conserving=conserving,
+                    has_lyc_edge=has_lyc_edge,
+                    resolution_matrix=resolution_matrix,
+                    z_window=z_window,
+                    lattice_window=lattice_window,
+                )
+                flux = flux_stellar + flux_instrument_only
+            elif resolution is None:
+                flux = project_spectrum(
+                    sed_stellar + sed_instrument_only,
+                    wave_rest,
+                    wave_obs,
+                    redshift,
+                    dl_cm,
+                    resolution=None,
+                    sigma_lib_kms=sigma_lib_kms,
+                    n_bins=n_bins,
+                    lsf_pad_pixels=lsf_pad_pixels,
+                    sigma_v_kms=0.0,
+                    cal_coeffs=None,
+                    conserving=conserving,
+                    has_lyc_edge=has_lyc_edge,
+                    z_window=z_window,
+                    lattice_window=lattice_window,
+                )
+            else:
+                resolution_scaled = resolution / lsf_scale
+                flux_stellar = project_spectrum(
+                    sed_stellar,
+                    wave_rest,
+                    wave_obs,
+                    redshift,
+                    dl_cm,
+                    resolution=resolution_scaled,
+                    sigma_lib_kms=sigma_lib_kms,
+                    n_bins=n_bins,
+                    lsf_pad_pixels=lsf_pad_pixels,
+                    sigma_v_kms=0.0,
+                    cal_coeffs=None,
+                    conserving=conserving,
+                    has_lyc_edge=has_lyc_edge,
+                    z_window=z_window,
+                    lattice_window=lattice_window,
+                )
+                flux_instrument_only = project_spectrum(
+                    sed_instrument_only,
+                    wave_rest,
+                    wave_obs,
+                    redshift,
+                    dl_cm,
+                    resolution=resolution_scaled,
+                    sigma_lib_kms=0.0,
+                    n_bins=n_bins,
+                    lsf_pad_pixels=lsf_pad_pixels,
+                    sigma_v_kms=0.0,
+                    cal_coeffs=None,
+                    conserving=conserving,
+                    has_lyc_edge=has_lyc_edge,
+                    z_window=z_window,
+                    lattice_window=lattice_window,
+                )
+                flux = flux_stellar + flux_instrument_only
 
     if cal_coeffs is not None:
         from tengri.observation.calibration import apply_calibration
@@ -1571,7 +1615,6 @@ class Observation:
         observables_type=None,
         window_z: float | None = None,
         lattice_window: tuple[float, int] | None = None,
-        kernel_sigma_bound_kms: float | None = None,
     ) -> dict[str, jnp.ndarray]:
         r"""Project an orchestrator :class:`ForwardState` into observable channels.
 
@@ -1773,7 +1816,6 @@ class Observation:
                 window_z=window_z,
                 nebular_lines=self.spectroscopy.nebular_lines,
                 lattice_window=lattice_window,
-                kernel_sigma_bound_kms=kernel_sigma_bound_kms,
             )
 
         # If observables_type is provided, populate and return the NamedTuple.
