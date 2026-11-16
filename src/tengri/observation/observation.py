@@ -680,12 +680,11 @@ def project_spectrum_kernel_split(
            ApJ, 592, 728. arXiv:astro-ph/0305378.
     """
     from tengri.observation.spectrum import (
-        _concrete_z_range,
         _serves_on_lattice,
         broaden_velocity_only,
         broaden_velocity_only_window,
         compute_spectrum_point_lsf,
-        lattice_span,
+        point_lattice_span,
         project_spectrum,
         rest_grid_observed_window,
     )
@@ -841,11 +840,7 @@ def project_spectrum_kernel_split(
             # Point mode with an instrument: the dispersion, the IGM and the instrument
             # kernel act on the ln-lambda lattice, in that order, before the pixel
             # centers are read (#3451, #3500).
-            span = (
-                lattice_window
-                if lattice_window is not None
-                else lattice_span(wave_obs, *_concrete_z_range(redshift, z_window))
-            )
+            span = point_lattice_span(wave_obs, redshift, z_window, lattice_window)
             if lines_rest is not None:
                 sed_instrument_only_rest = sed_instrument_only_rest - lines_rest
             resolution_scaled = resolution / lsf_scale

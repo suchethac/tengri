@@ -1768,11 +1768,7 @@ def project_spectrum(
             redshift,
             dl_cm,
             resolution=resolution,
-            span=(
-                lattice_window
-                if lattice_window is not None
-                else lattice_span(wave_obs, *_concrete_z_range(redshift, z_window))
-            ),
+            span=point_lattice_span(wave_obs, redshift, z_window, lattice_window),
             sigma_lib_kms=sigma_lib_kms,
             sigma_v_kms=sigma_v_kms,
             n_bins=n_bins,
@@ -1992,7 +1988,7 @@ def compute_spectrum_point_lsf(
     dl_cm: float,
     *,
     resolution: jnp.ndarray | float,
-    span: tuple[float, int],
+    span: tuple[float, int] | None,
     sigma_lib_kms: jnp.ndarray | float = 0.0,
     sigma_v_kms: jnp.ndarray | float = 0.0,
     igm_rest: jnp.ndarray | None = None,
@@ -2031,9 +2027,11 @@ def compute_spectrum_point_lsf(
         Luminosity distance [cm].
     resolution : float or ndarray, shape (n_pix,)
         Resolving power :math:`R = \lambda / \mathrm{FWHM}` at each pixel.
-    span : tuple of (float, int)
+    span : tuple of (float, int) or None
         Static lattice ``(origin, n_cells)`` covering the rest range the pixels read
-        (:func:`lattice_span`).
+        (:func:`point_lattice_span`). ``None`` when no static range is known, e.g. a traced
+        redshift with no bounds given: every pixel is then read in closed form, which is
+        exact and several times slower.
     sigma_lib_kms : float or ndarray, shape (n_pix,), optional
         Library velocity dispersion [km/s].
     sigma_v_kms : float or tracer, optional
@@ -2071,6 +2069,19 @@ def compute_spectrum_point_lsf(
     returns the point sample of the interpolant. With an IGM transmission every pixel is
     read on the lattice.
     """
+    if span is None:
+        return _point_lsf_closed_form(
+            sed_rest,
+            wave_rest,
+            wave_obs,
+            redshift,
+            dl_cm,
+            resolution=resolution,
+            sigma_lib_kms=sigma_lib_kms,
+            sigma_v_kms=sigma_v_kms,
+            igm_rest=igm_rest,
+            has_lyc_edge=has_lyc_edge,
+        )
     origin, n_cells = span
     edge_aa = LYMAN_LIMIT_AA if has_lyc_edge else None
     scale_in, scale_out = _peak_factors(sed_rest)
@@ -2125,6 +2136,63 @@ def compute_spectrum_point_lsf(
             has_lyc_edge,
         )
     return lnu_to_fnu(pixel_sed * scale_out, dl_cm, redshift)
+
+
+def point_lattice_span(wave_obs, redshift, z_window, lattice_window):
+    """Static lattice for point mode with an instrument, or ``None`` when none is known.
+
+    ``lattice_window`` wins; otherwise the lattice spans ``z_window``, or a concrete
+    redshift. A traced redshift with neither, or a traced pixel grid, gives ``None`` and
+    the caller reads in closed form.
+    """
+    if lattice_window is not None:
+        return lattice_window
+    if _is_traced(wave_obs) or (z_window is None and _is_traced(redshift)):
+        return None
+    return lattice_span(wave_obs, *_concrete_z_range(redshift, z_window))
+
+
+def _point_lsf_closed_form(
+    sed_rest,
+    wave_rest,
+    wave_obs,
+    redshift,
+    dl_cm,
+    *,
+    resolution,
+    sigma_lib_kms,
+    sigma_v_kms,
+    igm_rest,
+    has_lyc_edge,
+):
+    """Point mode with an instrument read in closed form at every pixel (#3500).
+
+    The route without a lattice: the dispersion is read at the model nodes, multiplied by
+    the IGM there, and each pixel is read with its instrument width
+    (:func:`point_readout_gaussian_ln`). Exact on the model's interpolant. The readout's
+    default window reaches six times 2000 km/s.
+    """
+    edge_aa = LYMAN_LIMIT_AA if has_lyc_edge else None
+    scale_in, scale_out = _peak_factors(sed_rest)
+    sed_in = sed_rest * scale_in
+    wave_q = wave_obs / (1.0 + redshift)
+    if igm_rest is not None:
+        if not _is_concrete_nonpositive(sigma_v_kms):
+            sigma_v_ln = jnp.asarray(sigma_v_kms) / _C_KM_S
+            at_nodes = point_readout_gaussian_ln(
+                sed_in, wave_rest, wave_rest, 0.0, sigma_v_ln, has_lyc_edge=has_lyc_edge
+            )
+            sed_in = jnp.where(sigma_v_ln > 0.0, at_nodes, sed_in)
+        sed_in = sed_in * igm_rest
+        sigma_v_kms = 0.0
+    sigma_ln = jnp.broadcast_to(
+        lsf_sigma_eff_kms(resolution, sigma_lib_kms, sigma_v_kms) / _C_KM_S, wave_q.shape
+    )
+    closed = point_readout_gaussian_ln(
+        sed_in, wave_rest, wave_obs, redshift, sigma_ln, has_lyc_edge=has_lyc_edge
+    )
+    plain = _point_samples(sed_in, wave_rest, wave_q, edge_aa)
+    return lnu_to_fnu(jnp.where(sigma_ln > 0.0, closed, plain) * scale_out, dl_cm, redshift)
 
 
 def _blend_narrow_kernel(
