@@ -3,8 +3,8 @@
   "sfh_dpl_log_total_mass": 8.444870947551594
  },
  "platform": "darwin-arm64",
- "repin_note": "Re-pinned 2026-11-15: monotone PCHIP metallicity read (#3434, owner ruling 'True PCHIP on the spectra'). Against real main: the PCHIP move is up to 4.1e-4 relative (dust_fixed_z, exact, shock) and 3.3e-5 (free_z_radio_xray); the re-pinned arrays also carry 1-6 ulp (max 1.3e-15 relative) from the restructured contraction order, measured on a Hermite control.",
- "signature_sha256": "410a6dca179b1de84d1bc667d07d3e922f096d1b996557f9fc6583157a303738",
+ "repin_note": "Re-pinned 2026-11-15: monotone PCHIP metallicity read (#3434, owner ruling 'True PCHIP on the spectra'). Against real main: the PCHIP move is up to 4.1e-4 relative (dust_fixed_z, exact, shock) and 3.3e-5 (free_z_radio_xray); the re-pinned arrays also carry 1-6 ulp (max 1.3e-15 relative) from the restructured contraction order, measured on a Hermite control. | Re-pinned 2026-11-16 (merge of origin/main 68243016c into #3541): signature_sha256 only. compile_signature() gained the '_z_runtime' entry with the runtime-redshift flag (#3531, _signature_policy.py); the key set at 40a20916a^ and 40a20916a differs by that one name, and every build's digest moves by that entry. Array leaves, photometry, params and summary are unchanged on the merged tree (they match this golden, captured before the merge).",
+ "signature_sha256": "a39b3ab5d3342bbfcbab291becfc3300688b44401dd3322ded3409e8a9bfa1ad",
  "summary": "Precompute Engagement Summary\n===========================\n\n\u2022 Energy-balance LUT: DECLINED\n  Reason: approx=WavePrecomp() not enabled\n\u2022 Dust band response: DECLINED\n  Reason: approx=WavePrecomp() not enabled\n\n\u2022 Observed facts:\n  components: stellar, nebular, dust, dust_emission\n  dust_emission_configured: True\n  free_params: sfh_dpl_log_total_mass\n  igm_fold: declared=None, resolved=None\n  redshift_fixed: 0.1\n  wave_precomp_enabled: False\n  ztable_enabled: False",
  "tree": []
 }

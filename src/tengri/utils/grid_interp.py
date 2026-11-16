@@ -563,7 +563,11 @@ def subband_quadrature(
 
     total = sums[..., -1]
     resid = np.abs(i_k.sum(axis=-1) - total)
-    scale = np.maximum(np.abs(total), 1e-300)
+    # Scaled by the magnitude of the summed terms, not by |total|: a signed integrand (the
+    # native PCHIP slope across Z, #3541) can cancel to a total far below its terms, and the
+    # rounding of those terms is then large relative to the total alone. For a positive flux
+    # the two scales agree to rounding, so the check is unchanged there.
+    scale = np.maximum(np.abs(i_k).sum(axis=-1), 1e-300)
     if not np.all(resid / scale < 1e-10):
         raise AssertionError(
             "sub-band partition is not flux-conserving (max relative residual "
