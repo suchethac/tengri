@@ -29,6 +29,7 @@ import pytest
 from tengri import load_ssp_data
 from tengri.components.nebular.cue import _MAX_NEB_LOG_AGE, CueBackend
 from tengri.components.nebular.ionizing_spectrum import fit_ionizing_spectrum
+from tests._cue_lnu import cue_lnu_age_ion
 
 pytestmark = pytest.mark.regression_bug
 
@@ -88,8 +89,13 @@ def _linear_composite_reference(ssp, im, weights):
     return i7, float(ref["gas_logqion"])
 
 
-def _raw_seven(be, weights, ages, log_z):
-    raw = be._weighted_cue_params_raw(jnp.asarray(weights), jnp.asarray(ages), log_z)
+def _raw_seven(be, ssp, weights, ages, log_z):
+    raw = be._weighted_cue_params_raw(
+        jnp.asarray(weights),
+        jnp.asarray(ages),
+        log_z,
+        ssp_lnu_ion=cue_lnu_age_ion(ssp, weights, log_z),
+    )
     return raw, jnp.stack([raw[k] for k in _IONSPEC_KEYS])
 
 
@@ -107,7 +113,7 @@ def test_f64_exactness_vs_linear_composite_reference():
             w = w / np.sum(w)
             w_eff = np.where(young & (w > 0), w, 0.0)  # the window the weighted path uses
             ref7, ref_q = _linear_composite_reference(ssp, im, w_eff)
-            raw, got7 = _raw_seven(be, w, ages, log_z)
+            raw, got7 = _raw_seven(be, ssp, w, ages, log_z)
             ctx = f"met node {im} (log_z={log_z:.3f}), sfh={kind}"
             np.testing.assert_allclose(
                 float(raw["gas_logqion"]), ref_q, rtol=1e-10, err_msg=f"Q_H at {ctx}"
@@ -130,7 +136,7 @@ def test_pure_float32_correctness():
     ssp_weights_f64 = np.ones(n_age) / n_age
     log_z = -2.0
 
-    raw64, i7_f64 = _raw_seven(be64, ssp_weights_f64, ages, log_z)
+    raw64, i7_f64 = _raw_seven(be64, ssp, ssp_weights_f64, ages, log_z)
     gas_logqion_f64 = raw64["gas_logqion"]
 
     with jax.enable_x64(False):
@@ -138,10 +144,12 @@ def test_pure_float32_correctness():
         assert be32._logqion_table.dtype == jnp.float32, (
             f"CueBackend was NOT rebuilt in f32 context: dtype={be32._logqion_table.dtype}"
         )
+        w32 = jnp.asarray(ssp_weights_f64, dtype=jnp.float32)
         raw32 = be32._weighted_cue_params_raw(
-            jnp.asarray(ssp_weights_f64, dtype=jnp.float32),
+            w32,
             jnp.asarray(ages, dtype=jnp.float32),
             jnp.float32(log_z),
+            ssp_lnu_ion=cue_lnu_age_ion(ssp, w32, jnp.float32(log_z)),
         )
         gas_logqion_f32 = raw32["gas_logqion"]
         i7_f32 = jnp.stack([raw32[k] for k in _IONSPEC_KEYS])
@@ -168,7 +176,10 @@ def test_degenerate_population():
 
     weights_old = np.where(young, 0.0, 1.0)
     result_old = be._compute_weighted_cue_params(
-        jnp.asarray(weights_old), jnp.asarray(ages), log_z=-2.0
+        jnp.asarray(weights_old),
+        jnp.asarray(ages),
+        log_z=-2.0,
+        ssp_lnu_ion=cue_lnu_age_ion(ssp, weights_old, -2.0),
     )
     assert result_old["gas_logqion"] == -99.0, (
         f"all-old population should have gas_logqion=-99.0, got {result_old['gas_logqion']}"
@@ -176,8 +187,12 @@ def test_degenerate_population():
     i7_old = jnp.stack([result_old[k] for k in _IONSPEC_KEYS])
     assert jnp.all(jnp.isfinite(i7_old)), f"all-old ionspec should be finite, got {i7_old}"
 
+    zeros = jnp.zeros(ages.shape[0])
     result_zero = be._compute_weighted_cue_params(
-        jnp.zeros(ages.shape[0]), jnp.asarray(ages), log_z=-2.0
+        zeros,
+        jnp.asarray(ages),
+        log_z=-2.0,
+        ssp_lnu_ion=cue_lnu_age_ion(ssp, zeros, -2.0),
     )
     assert result_zero["gas_logqion"] == -99.0, (
         f"zero weights should have gas_logqion=-99.0, got {result_zero['gas_logqion']}"
@@ -195,7 +210,12 @@ def test_gradient_nonzero_and_smooth():
     log_z = -2.0
 
     def gas_logqion_fn(w):
-        return be._compute_weighted_cue_params(w, jnp.asarray(ages), log_z)["gas_logqion"]
+        return be._compute_weighted_cue_params(
+            w,
+            jnp.asarray(ages),
+            log_z,
+            ssp_lnu_ion=cue_lnu_age_ion(ssp, w, log_z),
+        )["gas_logqion"]
 
     g_young = jax.grad(gas_logqion_fn)(ssp_weights)
     assert jnp.all(jnp.isfinite(g_young)), f"gradient has NaN/inf (young): {g_young}"
@@ -214,7 +234,12 @@ def test_gradient_finite_on_all_old_population():
     w_old = jnp.asarray(np.where(young, 0.0, 1.0) / np.sum(~young))
 
     def gas_logqion_fn(w):
-        return be._compute_weighted_cue_params(w, jnp.asarray(ages), log_z)["gas_logqion"]
+        return be._compute_weighted_cue_params(
+            w,
+            jnp.asarray(ages),
+            log_z,
+            ssp_lnu_ion=cue_lnu_age_ion(ssp, w, log_z),
+        )["gas_logqion"]
 
     g_old = jax.grad(gas_logqion_fn)(w_old)
     # grad-assert: finite-only - this arm is the degenerate one on purpose
@@ -228,7 +253,12 @@ def test_all_old_population_counts_its_photons_by_default():
     ages, _ = _grid(be)
     weights = _weights(ages, "old_only")
     weights = weights / np.sum(weights)
-    result = be._compute_weighted_cue_params(jnp.asarray(weights), jnp.asarray(ages), log_z=-2.0)
+    result = be._compute_weighted_cue_params(
+        jnp.asarray(weights),
+        jnp.asarray(ages),
+        log_z=-2.0,
+        ssp_lnu_ion=cue_lnu_age_ion(ssp, weights, -2.0),
+    )
     assert float(result["gas_logqion"]) > -99.0
     assert all(np.isfinite(float(v)) for v in result.values())
 
@@ -241,8 +271,8 @@ def test_cut_composite_uses_exactly_the_counted_bins():
     ages, young = _grid(be_all)
     w = _weights(ages, "young_burst") + 0.5 * _weights(ages, "old_only")
     log_z = float(np.asarray(ssp.ssp_lgmet)[7])
-    raw_cut, got_cut = _raw_seven(be_cut, w, ages, log_z)
-    raw_ref, got_ref = _raw_seven(be_all, np.where(young, w, 0.0), ages, log_z)
+    raw_cut, got_cut = _raw_seven(be_cut, ssp, w, ages, log_z)
+    raw_ref, got_ref = _raw_seven(be_all, ssp, np.where(young, w, 0.0), ages, log_z)
     np.testing.assert_allclose(
         float(raw_cut["gas_logqion"]), float(raw_ref["gas_logqion"]), rtol=1e-10
     )

@@ -27,6 +27,7 @@ import pytest
 from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.cosmology import age_at_z
+from tests._cue_lnu import cue_lnu_age_ion
 from tests._old_lyc_ssp import FSPS_PRSC, ssp_with_old_lyc
 
 _HALPHA_AA = 6564.61
@@ -183,18 +184,29 @@ def test_cut_option_reproduces_the_100_myr_result(case):
     assert q_h == pytest.approx(want_q_h, rel=1e-5)
 
 
+#: Platform the combine pins were recorded on. Exactness (1e-13) is asserted there;
+#: elsewhere XLA rounds the Newton fit and its logs differently in the last bits (as
+#: the band-table parity goldens record), so the pins hold to 1e-9.
+_CAPTURE_PLATFORM = "darwin-arm64"
+
+
 @pytest.mark.regression_bug
 def test_cut_option_combine_pins_the_composite_fit_under_the_cut():
     """The float64 Q_H and shape combine under the cut equal the pinned composite-fit values."""
+    from tests.contract._band_table_capture import current_platform
+
+    tol = 1e-13 if current_platform() == _CAPTURE_PLATFORM else 1e-9
     model = _model(1.0e8)
     derived = model.predict_state(_params(1.0, 5.0)).derived
+    weights = jnp.asarray(derived["age_weights"])
     got = model._nebular_backend._compute_weighted_cue_params(
-        jnp.asarray(derived["age_weights"]),
+        weights,
         jnp.log10(jnp.asarray(derived["ssp_ages_yr"])),
         _LOG_Z_ABS,
+        ssp_lnu_ion=cue_lnu_age_ion(_ssp(), weights, _LOG_Z_ABS),
     )
     for key, want in _CUT_COMBINE.items():
-        assert float(got[key]) == pytest.approx(want, rel=1e-13, abs=1e-13), key
+        assert float(got[key]) == pytest.approx(want, rel=tol, abs=tol), key
 
 
 @pytest.mark.regression_bug
@@ -277,10 +289,14 @@ def test_combine_gradient_wrt_weights_is_finite_with_zero_weight_bins():
     weights = jnp.asarray(derived["age_weights"])
 
     def gas_qion(w):
-        return backend._compute_weighted_cue_params(w, log_ages, _LOG_Z_ABS)["gas_logqion"]
+        return backend._compute_weighted_cue_params(
+            w, log_ages, _LOG_Z_ABS, ssp_lnu_ion=cue_lnu_age_ion(_ssp(), w, _LOG_Z_ABS)
+        )["gas_logqion"]
 
     def shape_index(w):
-        return backend._compute_weighted_cue_params(w, log_ages, _LOG_Z_ABS)["ionspec_index4"]
+        return backend._compute_weighted_cue_params(
+            w, log_ages, _LOG_Z_ABS, ssp_lnu_ion=cue_lnu_age_ion(_ssp(), w, _LOG_Z_ABS)
+        )["ionspec_index4"]
 
     for fn in (gas_qion, shape_index):
         g = np.asarray(jax.grad(fn)(weights))
@@ -299,10 +315,12 @@ def test_cue_qh_and_stellar_log_nion_are_the_same_quantity(case):
     """
     model = _model()
     derived = model.predict_state(_params(*case)).derived
+    weights = jnp.asarray(derived["age_weights"])
     got = model._nebular_backend._compute_weighted_cue_params(
-        jnp.asarray(derived["age_weights"]),
+        weights,
         jnp.log10(jnp.asarray(derived["ssp_ages_yr"])),
         _LOG_Z_ABS,
+        ssp_lnu_ion=cue_lnu_age_ion(_ssp(), weights, _LOG_Z_ABS),
     )["gas_logqion"]
     assert float(got) == pytest.approx(float(derived["log_nion"]), abs=0.02)
 
@@ -327,7 +345,9 @@ def test_empty_population_gets_no_emission_and_a_finite_gradient():
     )
 
     def combine(w):
-        return backend._compute_weighted_cue_params(w, log_ages, _LOG_Z_ABS)
+        return backend._compute_weighted_cue_params(
+            w, log_ages, _LOG_Z_ABS, ssp_lnu_ion=cue_lnu_age_ion(_ssp(), w, _LOG_Z_ABS)
+        )
 
     zeros = jnp.zeros(log_ages.shape)
     out = combine(zeros)

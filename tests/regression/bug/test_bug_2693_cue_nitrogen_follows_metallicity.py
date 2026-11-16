@@ -180,18 +180,33 @@ _ALL_AGES_DEFAULT_FLUXES = {
 }
 
 
+#: Platform the composite-fit fluxes above were recorded on. Exactness (rtol 1e-12) is
+#: asserted there; elsewhere XLA rounds the same Newton fit and its logs differently in
+#: the last bits (as the band-table parity goldens record), so the pins hold to 1e-7,
+#: still far inside the 1e-2 the composite fit moved them by.
+_CAPTURE_PLATFORM = "darwin-arm64"
+
+
+def _pin_rtol():
+    from tests.contract._band_table_capture import current_platform
+
+    return 1e-12 if current_platform() == _CAPTURE_PLATFORM else 1e-7
+
+
 @pytest.mark.parametrize("log_z", sorted(_CUT_DEFAULT_FLUXES))
 def test_cut_is_pinned(log_z):
     """``lyc_max_age_yr=1e8`` reproduces the pinned fluxes of the 100 Myr cut."""
     flux = _line_fluxes("cue", log_z, lyc_max_age_yr=1.0e8)
-    np.testing.assert_allclose(flux, _CUT_DEFAULT_FLUXES[log_z], rtol=1e-12, atol=0)
+    np.testing.assert_allclose(flux, _CUT_DEFAULT_FLUXES[log_z], rtol=_pin_rtol(), atol=0)
 
 
 @pytest.mark.parametrize("log_z", sorted(_ALL_AGES_DEFAULT_FLUXES))
 def test_default_counts_every_age(log_z):
     """The default (nitrogen='absolute', every age counted) is pinned."""
     flux = _line_fluxes("cue", log_z)
-    np.testing.assert_allclose(flux, _ALL_AGES_DEFAULT_FLUXES[log_z], rtol=1e-9, atol=0)
+    np.testing.assert_allclose(
+        flux, _ALL_AGES_DEFAULT_FLUXES[log_z], rtol=max(_pin_rtol(), 1e-9), atol=0
+    )
 
 
 @pytest.mark.parametrize("log_z", [0.0, math.log10(0.3)])

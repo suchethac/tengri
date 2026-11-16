@@ -23,6 +23,7 @@ import pytest
 from numpy.testing import assert_allclose
 
 from tengri.components.nebular.ionizing_spectrum import interpolate_ionizing_params
+from tests._cue_lnu import cue_lnu_age_ion
 
 pytestmark = pytest.mark.regression_bug
 
@@ -101,7 +102,10 @@ class TestQuiescentCueParamsFinite:
         n_age = backend._ssp_log_age_yr.shape[0]
         weights = jnp.full((n_age,), 1e-5)  # every bin weighted, incl. age 0
         params = backend._compute_weighted_cue_params(
-            weights, jnp.asarray(backend._ssp_log_age_yr), log_z=-1.79
+            weights,
+            jnp.asarray(backend._ssp_log_age_yr),
+            log_z=-1.79,
+            ssp_lnu_ion=cue_lnu_age_ion(ssp_data_bc03, weights, -1.79),
         )
         vals = np.array([float(params[k]) for k in sorted(params)])
         assert np.all(np.isfinite(vals)), f"non-finite Cue params: {params}"

@@ -172,3 +172,55 @@ def test_single_age_composite_reproduces_the_table_fit(ion_grid):
     raw = np.concatenate([table["powerlaw_params"][:, 0], np.diff(table["log_seglum"])])
     got = fit_ionizing_shape(jnp.asarray(_log10(3.7e5 * flux[met_index, age_index])), layout)
     np.testing.assert_allclose(np.asarray(got.i7), raw, rtol=0, atol=1e-9)
+
+
+def _stationarity_residual(log_flux, layout):
+    """``|phi'(alpha*)| / phi''(alpha*)`` per segment at the returned slopes: a Newton step."""
+    from tengri.components.nebular.ionizing_fit import _profile, _segment_stats
+
+    stats, *_ = _segment_stats(log_flux, layout)
+    slopes = fit_ionizing_shape(log_flux, layout).slopes
+    out = []
+    for k in range(4):
+        s_k = tuple(v[k] for v in stats)
+        d1 = jax.grad(_profile)(slopes[k], s_k)
+        d2 = jax.grad(jax.grad(_profile))(slopes[k], s_k)
+        out.append(float(jnp.abs(d1) / jnp.maximum(jnp.abs(d2), 1e-300)))
+    return np.array(out)
+
+
+def test_newton_reaches_the_stationary_point_on_every_ssp_row_and_composites(ion_grid):
+    """At the returned slope the remaining Newton step is below 1e-8 in slope units.
+
+    Every (metallicity, age) row of the SSP grid, and constant-SFR composites over the
+    ages below 3, 10, 30 and 100 Myr and all ages at every metallicity.
+    """
+    _, flux, log_age, layout = ion_grid
+    spectra = [flux[m, a] for m in range(flux.shape[0]) for a in range(flux.shape[1])]
+    for m in range(flux.shape[0]):
+        for cut in (6.5, 7.0, 7.5, 8.0, 11.0):
+            spectra.append(flux[m, log_age <= cut].sum(axis=0))
+    worst = 0.0
+    for spec in spectra:
+        if not np.any(spec > 0):
+            continue
+        worst = max(
+            worst, float(np.max(_stationarity_residual(jnp.asarray(_log10(spec)), layout)))
+        )
+    assert worst < 1e-8, worst
+
+
+@pytest.mark.gradient
+def test_all_zero_spectrum_is_finite_in_float32(ion_grid):
+    """A spectrum with no flux anywhere: values and gradients finite, in float32."""
+    _, flux, _, layout = ion_grid
+
+    def readout(lf):
+        return jnp.sum(fit_ionizing_shape(lf, layout).i7 * _WEIGHTS)
+
+    with jax.enable_x64(False):
+        lf = jnp.full(flux.shape[-1], -jnp.inf, dtype=jnp.float32)
+        value = readout(lf)
+        grad = jax.grad(readout)(lf)
+    assert np.isfinite(float(value))
+    assert np.all(np.isfinite(np.asarray(grad)))

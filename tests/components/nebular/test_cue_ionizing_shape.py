@@ -140,10 +140,11 @@ def test_ionizing_shape_gradient_wrt_sfh_is_nonzero_and_exact():
 def test_effective_shape_matches_a_refit_of_the_composite_spectrum():
     """The backend's 7 params are the fit of the population's summed ionizing spectrum.
 
-    Ground truth: sum the young bins of the stellar component's per-age ionizing
-    spectrum (``lnu_age_ion``, the spectrum the model's SED is built from) and fit the
-    broken power law with the reference recipe. The backend must reach the same
-    minimum from the same published spectrum (unclamped values compared).
+    A wiring test, not an independent check of the fit: ``fit_ionizing_spectrum`` and
+    the backend run the same solver, so this pins that the backend sums the young bins
+    of the stellar component's published ``lnu_age_ion`` and fits that sum (unclamped
+    values compared). The fit itself is checked against an independent BFGS polish and
+    for convergence in ``test_ionizing_fit.py``.
     """
     import warnings
 
@@ -151,7 +152,6 @@ def test_effective_shape_matches_a_refit_of_the_composite_spectrum():
         MAX_NEB_LOG_AGE,
         fit_ionizing_spectrum,
     )
-    from tengri.parameters.translate import LOG10_ZSUN
 
     m, _lw, ssp = _model()
     be = m._nebular_backend
@@ -170,12 +170,7 @@ def test_effective_shape_matches_a_refit_of_the_composite_spectrum():
     truth = fit_ionizing_spectrum(wave, cube[young].sum(axis=0))
     t_raw = np.concatenate([truth["powerlaw_params"][:, 0], np.diff(truth["log_seglum"])])
 
-    got = be._composite_ionizing_shape(
-        jnp.asarray(st.derived["age_weights"]),
-        met + LOG10_ZSUN,
-        jnp.asarray(young),
-        ssp_lnu_ion=st.derived["lnu_age_ion"],
-    )
+    got = be._composite_ionizing_shape(jnp.asarray(young), st.derived["lnu_age_ion"])
     np.testing.assert_allclose(np.asarray(got), t_raw, rtol=0, atol=1e-6)
 
 
@@ -194,14 +189,14 @@ def test_forward_pass_fits_the_stellar_components_published_spectrum(monkeypatch
     calls = []
     original = CueBackend._composite_ionizing_shape
 
-    def recording(self, *args, ssp_lnu_ion=None, **kwargs):
+    def recording(self, counted_mask, ssp_lnu_ion):
         calls.append(None if ssp_lnu_ion is None else tuple(ssp_lnu_ion.shape))
-        return original(self, *args, ssp_lnu_ion=ssp_lnu_ion, **kwargs)
+        return original(self, counted_mask, ssp_lnu_ion)
 
     monkeypatch.setattr(CueBackend, "_composite_ionizing_shape", recording)
     m, _lw, _ssp = _model()
-    # Building the backend runs its trained-box check, a weights-only composite at the
-    # metallicity nodes; only the forward pass is under test here.
+    # Building the backend only tabulates the per-SSP shape and never fits the composite,
+    # so the recording starts empty; only the forward pass is under test here.
     calls.clear()
     p = dict(m.spec.sample(jax.random.PRNGKey(1)))
     with warnings.catch_warnings():
@@ -210,3 +205,39 @@ def test_forward_pass_fits_the_stellar_components_published_spectrum(monkeypatch
     assert calls, "the forward pass never fitted the composite ionizing spectrum"
     assert all(c is not None for c in calls), f"a forward call fitted from weights: {calls}"
     assert calls[0] == tuple(np.asarray(st.derived["lnu_age_ion"]).shape)
+
+
+@pytest.mark.gradient
+def test_float32_gradient_from_lnu_age_ion_to_a_line_flux():
+    """With x64 off, a line luminosity's gradient in the per-age spectrum is finite and nonzero.
+
+    The path a fit differentiates: per-age ionizing spectrum -> composite -> four-segment
+    fit -> clamp -> Cue -> H-alpha and [O III] luminosities.
+    """
+    import warnings
+
+    from tengri.components.nebular.cue import CueBackend
+    from tests._cue_lnu import cue_lnu_age_ion
+
+    if not Path(_BARE).is_file():
+        pytest.skip(f"missing bare SSP {_BARE}")
+    ssp = load_ssp_data(_BARE)
+    with jax.enable_x64(False), warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        be = CueBackend("data/cue_weights.npz", ssp_data=ssp)
+        ages = jnp.asarray(be._ssp_log_age_yr, dtype=jnp.float32)
+        weights = jnp.where(ages <= 7.5, 1.0, 1e-3).astype(jnp.float32)
+        log_z = jnp.float32(-1.85)
+        cube = jnp.asarray(cue_lnu_age_ion(ssp, weights, log_z), dtype=jnp.float32)
+
+        def lines(c):
+            lum = be.predict_nebular_line_luminosities(
+                ssp_weights=weights, ssp_log_ages_yr=ages, log_z=log_z, ssp_lnu_ion=c
+            )
+            return jnp.log10(jnp.sum(jnp.asarray(lum)))
+
+        value = lines(cube)
+        grad = jax.grad(lines)(cube)
+    assert np.isfinite(float(value))
+    g = np.asarray(grad)
+    assert np.all(np.isfinite(g)) and np.any(g != 0.0)

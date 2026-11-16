@@ -29,6 +29,7 @@ from tengri.components.nebular.cue import (
     predict_all_lines,
 )
 from tengri.utils.physics_constants import LOG10_ZSUN
+from tests._cue_lnu import cue_lnu_age_ion
 
 pytestmark = pytest.mark.regression_bug
 
@@ -154,6 +155,7 @@ def test_high_level_neb_logu_matches_the_low_level_call(backend, ssp_data_fsps):
     for logu in (-3.0, -2.0, -1.5):
         _, hi = be.predict_nebular_line_luminosities(
             ssp_weights=w,
+            ssp_lnu_ion=cue_lnu_age_ion(ssp_data_fsps, w, log_z),
             ssp_log_ages_yr=log_ages,
             log_z=log_z,
             neb_logU=logu,

@@ -21,6 +21,7 @@ from tengri.components.nebular import (
     _DEFAULT_CUE_WEIGHTS_PATH,
     CueBackend,
 )
+from tests._cue_lnu import cue_lnu_age_ion
 
 pytestmark = pytest.mark.regression_bug
 
@@ -167,6 +168,7 @@ def test_cue_low_level_matches_high_level_gas_logz_conversion():
         low = be._resolve_cue_params(ssp_weights=None, neb_logZ_gas=x)
         high = be._resolve_cue_params(
             ssp_weights=ssp_weights,
+            ssp_lnu_ion=cue_lnu_age_ion(ssp, ssp_weights, -2.0),
             ssp_log_ages_yr=ssp_log_ages_yr,
             log_z=-2.0,  # irrelevant: neb_logZ_gas is explicit on both paths
             neb_logZ_gas=x,

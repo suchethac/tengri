@@ -286,6 +286,54 @@ def _solve_slope(stats, alpha0):
     return jax.lax.custom_root(slope_gradient, alpha0, newton, tangent_solve)
 
 
+def _segment_stats(log_flux, layout: IonizingLayout):
+    """Per-segment statistics of the centered objective, from a log10 spectrum.
+
+    Returns ``(stats, y_mean, log_norm, (lum_log10_hi, lum_ell))``, ``stats`` being the
+    tuple :func:`_profile` and :func:`_delta` read, in the input's float precision.
+    """
+    log_flux = jnp.asarray(log_flux)
+    if not jnp.issubdtype(log_flux.dtype, jnp.floating):
+        log_flux = log_flux.astype(jnp.result_type(float))
+    dtype = log_flux.dtype
+
+    def const(a):
+        # Layout constants follow the input precision, so a float32 spectrum is
+        # fitted in float32 even in a float64 process.
+        return jnp.asarray(a, dtype=dtype)
+
+    # Floored before the log-sum, so two empty edge pixels give a finite gradient.
+    pair = jnp.maximum(log_flux[layout.ref_pair], _LOG_TINY)
+    log_ref = jnp.maximum(logsumexp(_LN10 * pair) / _LN10 - _LOG10_2, _LOG_TINY)
+    log_norm = _LOG_NORM_TARGET - log_ref
+    lnorm = jnp.maximum(log_flux, _LOG_CLIP_FLOOR) + log_norm
+
+    seg = lnorm[layout.seg_index]  # (4, n_max)
+    mask = jnp.asarray(layout.seg_mask)
+    n = const(layout.n_pix)
+    y = jnp.where(mask, jnp.maximum(seg, _LOG_TINY), 0.0)
+    y_mean = jnp.sum(y, axis=1) / n
+    y_centered = jnp.where(mask, y - y_mean[:, None], 0.0)
+    sum_xy = jnp.sum(y_centered * const(layout.x_centered), axis=1)
+    log_qweight = jnp.where(mask, const(np.where(layout.seg_mask, layout.log_qweight, 0.0)), 0.0)
+    log_q_terms = jnp.where(mask, _LN10 * (seg + log_qweight), -jnp.inf)
+    log_q = jnp.maximum(logsumexp(log_q_terms, axis=1) / _LN10, _LOG_TINY)
+
+    sum_xx = const(layout.sum_xx)
+    x_mean = const(layout.x_mean)
+    stats = (
+        sum_xy,
+        log_q + _LOG_H - y_mean,
+        n,
+        x_mean,
+        const(layout.log10_xmax),
+        const(layout.ell),
+        sum_xx,
+    )
+    lum = (const(layout.lum_log10_hi), const(layout.lum_ell))
+    return stats, y_mean, log_norm, lum
+
+
 class IonizingShape(NamedTuple):
     r"""Result of :func:`fit_ionizing_shape`.
 
@@ -349,49 +397,11 @@ def fit_ionizing_shape(log_flux, layout: IonizingLayout) -> IonizingShape:
     .. [1] Y. Li et al., ApJ, 986, 9 (2025). arXiv:2405.04598.
        https://doi.org/10.3847/1538-4357/adcab4
     """
-    log_flux = jnp.asarray(log_flux)
-    if not jnp.issubdtype(log_flux.dtype, jnp.floating):
-        log_flux = log_flux.astype(jnp.result_type(float))
-    dtype = log_flux.dtype
-
-    def const(a):
-        # Layout constants follow the input precision, so a float32 spectrum is
-        # fitted in float32 even in a float64 process.
-        return jnp.asarray(a, dtype=dtype)
-
-    # Floored before the log-sum, so two empty edge pixels give a finite gradient.
-    pair = jnp.maximum(log_flux[layout.ref_pair], _LOG_TINY)
-    log_ref = jnp.maximum(logsumexp(_LN10 * pair) / _LN10 - _LOG10_2, _LOG_TINY)
-    log_norm = _LOG_NORM_TARGET - log_ref
-    lnorm = jnp.maximum(log_flux, _LOG_CLIP_FLOOR) + log_norm
-
-    seg = lnorm[layout.seg_index]  # (4, n_max)
-    mask = jnp.asarray(layout.seg_mask)
-    n = const(layout.n_pix)
-    y = jnp.where(mask, jnp.maximum(seg, _LOG_TINY), 0.0)
-    y_mean = jnp.sum(y, axis=1) / n
-    y_centered = jnp.where(mask, y - y_mean[:, None], 0.0)
-    sum_xy = jnp.sum(y_centered * const(layout.x_centered), axis=1)
-    log_qweight = jnp.where(mask, const(np.where(layout.seg_mask, layout.log_qweight, 0.0)), 0.0)
-    log_q_terms = jnp.where(mask, _LN10 * (seg + log_qweight), -jnp.inf)
-    log_q = jnp.maximum(logsumexp(log_q_terms, axis=1) / _LN10, _LOG_TINY)
-
-    sum_xx = const(layout.sum_xx)
-    x_mean = const(layout.x_mean)
-    stats = (
-        sum_xy,
-        log_q + _LOG_H - y_mean,
-        n,
-        x_mean,
-        const(layout.log10_xmax),
-        const(layout.ell),
-        sum_xx,
-    )
+    stats, y_mean, log_norm, layout_consts = _segment_stats(log_flux, layout)
+    sum_xy, sum_xx, x_mean = stats[0], stats[6], stats[3]
     slopes = jax.vmap(_solve_slope)(stats, sum_xy / sum_xx)
     delta = jax.vmap(_delta)(slopes, stats)
     log_amp = y_mean + delta - slopes * x_mean - log_norm
-    log_seglum = log_amp + _log10_power_integral(
-        slopes - 1.0, const(layout.lum_log10_hi), const(layout.lum_ell)
-    )
+    log_seglum = log_amp + _log10_power_integral(slopes - 1.0, *layout_consts)
     i7 = jnp.concatenate([slopes, jnp.diff(log_seglum)])
     return IonizingShape(i7=i7, slopes=slopes, log_amp=log_amp, log_seglum=log_seglum)
