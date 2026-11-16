@@ -146,7 +146,9 @@ def test_float32_value_and_gradient_are_finite_and_agree_with_float64(channel, l
     assert abs(float(value) - reference) < 1e-3 * abs(reference)
     g32, g64 = np.asarray(grad32.spec_fnu), np.asarray(grad64.spec_fnu)
     assert np.all(np.isfinite(g32))
-    np.testing.assert_allclose(g32, g64, rtol=2e-2, atol=2e-2 * np.max(np.abs(g64)))
+    # Measured: the largest float32 error is 9e-7 of the largest float64 gradient entry and 7e-6
+    # of any entry.
+    np.testing.assert_allclose(g32, g64, rtol=1e-4, atol=1e-5 * np.max(np.abs(g64)))
 
 
 def _primitive_inputs(n_data=30, n_col=3, seed=0):
