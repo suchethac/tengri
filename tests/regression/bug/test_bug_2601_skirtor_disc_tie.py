@@ -716,24 +716,28 @@ def test_written_out_discs_agree_with_cigale_output(disk_type, delta):
 # Re-pinned 2026-11-15 after #3434 (in #3462): an undeclared metallicity scatter is now a node-
 # exact cubic-Hermite read of the SSP. The sum moves +3.9e-4 to +4.6e-4 and the other elements by
 # up to -1.6e-3; 8aff37cb3 reproduces the previous values to 5.6e-9 (largest element).
+#: Re-pinned after #3528 (monotone PCHIP read of the SSP table in log Z): this PARSEC grid's
+#: solar node (Z = 0.0152) sits 0.03 dex from the default metallicity, so the stellar part of
+#: the SED moved; old -> new, relative, max over (sum, first, middle, last): 1.48e-03 (6),
+#: 1.47e-03 (8), 1.48e-03 (10), largest in the last bin.
 _DISC_TIMES_ETA_T_REFERENCE = {
     6.0: (
-        1.559409976871857e32,
-        85389391208234.4,
-        2.8855429418458107e28,
-        8.778586637207044e21,
+        1.5593326420603484e32,
+        85394909374405.42,
+        2.88601404085053e28,
+        8.765596894150294e21,
     ),
     8.0: (
-        1.6539648153426048e32,
-        2.419949129928412e16,
-        3.099429361197953e28,
-        8.830677640210973e21,
+        1.6538935910010686e32,
+        2.4201055156484108e16,
+        3.099914282303837e28,
+        8.817691263460114e21,
     ),
     10.0: (
-        1.782007651815151e32,
+        1.781930149298449e32,
         6.035185906510221e17,
-        3.336309004385196e28,
-        8.778105440222744e21,
+        3.3367798043788174e28,
+        8.765115666069333e21,
     ),
 }
 #: Re-captured for #3015. (1) The disc ends at R_out = r_sg (Kubota & Done 2018; RELAGN), with no
