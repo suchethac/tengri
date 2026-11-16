@@ -6,7 +6,9 @@ A pixel then depends on its neighbors and on the pixel grid, and model features 
 than a pixel alias. Measured on the fixture below (R = 2000, sigma_v 0-300 km/s) the old
 order was 2e-3 to 8e-3 of peak from the analytic value.
 
-Point mode with a resolution now reads each pixel as
+Point mode with a resolution now broadens the model before it is sampled: on the uniform
+:math:`\ln\lambda` lattice for a kernel wider than 40 km/s, in closed form for one narrower
+than 20 km/s, blended in between. The target of both is
 
 .. math::
 
@@ -15,10 +17,10 @@ Point mode with a resolution now reads each pixel as
 
 the Gaussian in :math:`\ln\lambda` of width :math:`\sigma_c` applied to the model's own
 piecewise-linear interpolant :math:`L_\nu` and evaluated at the pixel center
-:math:`\lambda_c`, in closed form.
+:math:`\lambda_c`.
 
 The reference is ``tests/_lsf_reference.convolve_piecewise_linear``, which integrates the
-same interpolant segment by segment and shares no code with the projection. The fixture is
+same interpolant segment by segment and shares no code with the lattice. The fixture is
 a continuum with six absorption lines on a rest grid that is dense (0.9 A) across the
 optical and sparse outside, as an SSP grid is.
 """
@@ -36,6 +38,7 @@ from tengri.observation.spectrum import (
     broaden_velocity_only,
     compute_spectrum,
     compute_spectrum_conserving,
+    lattice_span,
     project_spectrum,
 )
 from tengri.units import lnu_to_fnu
@@ -113,8 +116,8 @@ def _max_rel(a, b) -> float:
 )
 def test_point_mode_matches_the_analytic_value(resolution, sigma_v_kms):
     reference = _reference(resolution, sigma_v_kms)
-    # Measured: 9.2e-10 to 9.6e-10 of peak, the Gaussian mass beyond the six-sigma window.
-    assert _max_rel(_project(resolution, sigma_v_kms), reference) < 5e-9
+    # Measured: 1.9e-5, 9.9e-6, 9.0e-7, 4.1e-7 and 9.8e-7 of peak, the lattice's accuracy.
+    assert _max_rel(_project(resolution, sigma_v_kms), reference) < 5e-5
 
 
 @pytest.mark.parametrize(("resolution", "sigma_v_kms"), [(2000.0, 0.0), (2000.0, 300.0)])
@@ -134,35 +137,56 @@ def test_result_does_not_depend_on_how_the_model_grid_is_refined():
     refined = np.sort(np.concatenate([_WAVE_REST, midpoints]))
     refined_sed = np.interp(refined, _WAVE_REST, _SED)
     base = _project(2000.0, 200.0)
-    # Measured: 6.2e-10 of peak; the six-sigma window ends on a different node of each grid.
-    assert _max_rel(_project(2000.0, 200.0, wave_rest=refined, sed=refined_sed), base) < 5e-9
+    # Measured: 1.5e-13 of peak.
+    assert _max_rel(_project(2000.0, 200.0, wave_rest=refined, sed=refined_sed), base) < 1e-10
 
 
 def test_a_pixel_does_not_depend_on_the_other_pixels():
     every_third = _WAVE_OBS[::3]
     full = np.asarray(_project(2000.0, 200.0))
     subset = np.asarray(_project(2000.0, 200.0, wave_obs=every_third))
-    np.testing.assert_allclose(subset, full[::3], rtol=1e-12)
+    # Measured: 3.1e-13 of peak; the two calls build lattices that end on different cells.
+    np.testing.assert_allclose(subset, full[::3], rtol=1e-10)
 
 
-def test_pad_and_segment_count_do_not_enter():
+def test_pad_and_segment_count_do_not_enter_for_a_constant_resolution():
     base = np.asarray(_project(2000.0, 200.0))
     other = np.asarray(_project(2000.0, 200.0, n_bins=3, lsf_pad_pixels=8))
     np.testing.assert_array_equal(other, base)
 
 
-def test_a_kernel_wider_than_2000_kms_is_not_truncated():
-    """R = 30 has sigma_inst = 4244 km/s; the window follows the concrete width."""
-    reference = _reference(30.0, 0.0)
-    # Measured: 1.1e-9 of peak. A window sized for 2000 km/s reaches 2.8 sigma: 2.7e-3.
-    assert _max_rel(_project(30.0, 0.0), reference) < 5e-9
+@pytest.mark.parametrize("resolution", [100.0, 30.0])
+def test_a_low_resolution_kernel_matches_the_analytic_value(resolution):
+    """sigma_inst is 1273 km/s at R = 100 and 4244 km/s at R = 30."""
+    # Measured: 2.3e-8 and 2.2e-5 of peak.
+    assert _max_rel(_project(resolution, 0.0), _reference(resolution, 0.0)) < 1e-4
+
+
+@pytest.mark.parametrize(("resolution", "sigma_v_kms"), [(10000.0, 0.0), (5000.0, 0.0)])
+def test_a_kernel_narrower_than_the_lattice_is_read_in_closed_form(resolution, sigma_v_kms):
+    """12.7 km/s is below the lattice spacing of 15 km/s; the lattice alone is 3.5e-4 off."""
+    reference = _reference(resolution, sigma_v_kms)
+    # Measured: 2.1e-13 at 12.7 km/s (closed form) and 2.0e-5 at 25.5 km/s (blended).
+    bound = 1e-10 if resolution == 10000.0 else 1e-4
+    assert _max_rel(_project(resolution, sigma_v_kms), reference) < bound
+
+
+@pytest.mark.parametrize("sigma_v_kms", [5.0, 20.0, 25.0, 30.0, 35.0, 40.0, 60.0, 150.0])
+def test_unresolved_instrument_follows_sigma_v_at_every_width(sigma_v_kms):
+    """Library coarser than the instrument: the kernel is sigma_v alone, through the blend."""
+    reference = _reference(1.0e9, sigma_v_kms)
+    out = _project(2000.0, sigma_v_kms, sigma_lib_kms=500.0)
+    # Measured: 1.6e-12 and 7.0e-13 below 20 km/s, at most 5.9e-5 from 25 to 150 km/s.
+    assert _max_rel(out, reference) < 2e-4
 
 
 def test_per_pixel_resolution_matches_the_analytic_value():
     resolution = np.linspace(1500.0, 4000.0, _WAVE_OBS.size)
     reference = _reference(resolution, 100.0)
-    # Measured: 8.2e-10 of peak.
-    assert _max_rel(_project(jnp.asarray(resolution), 100.0), reference) < 5e-9
+    # Measured: 5.8e-4 of peak with the default 16 segments, 1.6e-4 with 64. The segments
+    # share one width each, which is the approximation.
+    assert _max_rel(_project(jnp.asarray(resolution), 100.0), reference) < 2e-3
+    assert _max_rel(_project(jnp.asarray(resolution), 100.0, n_bins=64), reference) < 5e-4
 
 
 def test_zero_width_pixels_take_the_point_sample():
@@ -183,16 +207,15 @@ def test_sigma_v_gradient_matches_a_finite_difference():
     reference = float((loss(sigma_v + step) - loss(sigma_v - step)) / (2.0 * step))
     assert np.isfinite(grad), "a positive kernel width has a finite derivative"
     assert grad != 0.0, "150 km/s broadens every absorption line of the fixture"
-    # Measured: 5.7e-6 relative at this step (2.8e-5 at 1e-2, 7.2e-6 at 1), set by the
-    # round-off of the finite difference.
-    np.testing.assert_allclose(grad, reference, rtol=1e-4)
+    # Measured: 1.7e-7 relative.
+    np.testing.assert_allclose(grad, reference, rtol=1e-5)
 
 
 def test_traced_sigma_v_agrees_with_the_concrete_call():
-    """Under jit the window is sized for 2000 km/s; the value is the same to the tail mass."""
-    traced = jax.jit(lambda sigma_v: _project(2000.0, sigma_v))(200.0)
-    # Measured: 9.6e-10 of peak, the mass between the two windows' reaches.
-    assert _max_rel(traced, _project(2000.0, 200.0)) < 5e-9
+    """Under jit the lattice is passed in, as the model does; the value is the same."""
+    span = lattice_span(_WAVE_OBS, _Z, _Z)
+    traced = jax.jit(lambda sigma_v: _project(2000.0, sigma_v, lattice_window=span))(200.0)
+    assert _max_rel(traced, _project(2000.0, 200.0)) < 1e-10
 
 
 def test_conserving_matrix_branch_is_the_same_composition_as_before():

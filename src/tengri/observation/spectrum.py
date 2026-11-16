@@ -2079,11 +2079,20 @@ def compute_spectrum_point_lsf(
     lam_c = jnp.exp(
         origin + _LATTICE_DLNLAMBDA * (jnp.arange(n_cells, dtype=jnp.result_type(float)) + 0.5)
     )
-    on_lattice = _lattice_cell_means(wave_rest, sed_rest * scale_in, origin, n_cells, edge_aa)
+    sed_in = sed_rest * scale_in
+    if igm_rest is not None and _is_concrete_nonpositive(sigma_v_kms):
+        # No dispersion: the IGM multiplies the model at its own nodes.
+        sed_in, igm_rest = sed_in * igm_rest, None
+    on_lattice = _lattice_cell_means(wave_rest, sed_in, origin, n_cells, edge_aa)
     if igm_rest is not None:
-        # sigma_v, then the IGM, then the instrument (#2589).
+        # sigma_v, then the IGM, then the instrument (#2589). The transmission enters as
+        # its exact cell mean, so an edge inside a cell is weighted by where it falls.
         on_lattice = broaden_velocity_only(on_lattice, lam_c, sigma_v_kms, 1, pad_pixels=pad)
-        on_lattice = on_lattice * jnp.interp(lam_c, wave_rest, igm_rest)
+        nodes = jnp.exp(
+            origin + _LATTICE_DLNLAMBDA * jnp.arange(n_cells + 1, dtype=jnp.result_type(float))
+        )
+        igm_cum = _cumulative_flux(wave_rest, igm_rest, nodes)
+        on_lattice = on_lattice * (igm_cum[1:] - igm_cum[:-1]) / (nodes[1:] - nodes[:-1])
         sigma_v_kms = 0.0
     resolution = jnp.asarray(resolution)
     sigma_lib_kms = jnp.asarray(sigma_lib_kms)
@@ -2108,7 +2117,7 @@ def compute_spectrum_point_lsf(
     if igm_rest is None:
         pixel_sed = _blend_narrow_kernel(
             pixel_sed,
-            sed_rest * scale_in,
+            sed_in,
             wave_rest,
             wave_obs,
             redshift,

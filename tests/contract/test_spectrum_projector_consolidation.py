@@ -26,6 +26,7 @@ from tengri.observation.photometry import FilterCurve
 from tengri.observation.spectrum import (
     compute_spectrum,
     compute_spectrum_point_lsf,
+    lattice_span,
     project_spectrum,
 )
 
@@ -96,6 +97,9 @@ class TestProjectSpectrumDecomposition:
             spectrum_inputs["z"],
             spectrum_inputs["dl_cm"],
             resolution=resolution,
+            span=lattice_span(
+                spectrum_inputs["wave_obs"], spectrum_inputs["z"], spectrum_inputs["z"]
+            ),
             sigma_lib_kms=sigma_lib_kms,
         )
 
@@ -124,6 +128,9 @@ class TestProjectSpectrumDecomposition:
             spectrum_inputs["z"],
             spectrum_inputs["dl_cm"],
             resolution=resolution,
+            span=lattice_span(
+                spectrum_inputs["wave_obs"], spectrum_inputs["z"], spectrum_inputs["z"]
+            ),
             sigma_lib_kms=70.0,
         )
 
@@ -152,6 +159,9 @@ class TestProjectSpectrumDecomposition:
             spectrum_inputs["z"],
             spectrum_inputs["dl_cm"],
             resolution=resolution,
+            span=lattice_span(
+                spectrum_inputs["wave_obs"], spectrum_inputs["z"], spectrum_inputs["z"]
+            ),
             sigma_lib_kms=0.0,
             sigma_v_kms=sigma_v_kms,
         )

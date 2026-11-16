@@ -375,7 +375,11 @@ def test_cropped_rest_grid_pass_equals_full_grid_on_observed_grid():
 
 
 def test_observation_branch_uses_cropped_pass_for_concrete_redshift(monkeypatch):
-    """The IGM branch hands the rest-grid pass to the window helper when z is concrete."""
+    """The IGM branch hands the rest-grid pass to the window helper when z is concrete.
+
+    Conserving mode: point mode with an instrument runs on the ln-lambda lattice, which
+    covers only the observed window by construction (#3500).
+    """
     from tengri.observation import observation as obs_mod
 
     calls = []
@@ -406,6 +410,7 @@ def test_observation_branch_uses_cropped_pass_for_concrete_redshift(monkeypatch)
         sigma_lib_kms=0.0,
         sigma_v_kms=150.0,
         window_z=1.0,
+        conserving=True,
     )
     assert calls == [window]
 
@@ -500,6 +505,7 @@ def _kernel_split(sed, wave_rest, wave_obs, z, **kwargs):
             resolution=_R_SCALAR,
             sigma_lib_kms=0.0,
             sigma_v_kms=150.0,
+            conserving=True,
             **kwargs,
         )
     )
@@ -548,7 +554,9 @@ def test_window_z_observation_predict_on_fixed_z_igm_model(synthetic_ssp_wide, m
 
     z = 1.0
     wave_obs = jnp.linspace(2000.0, 3200.0, 300)
-    spec = Spectroscopy(wave_obs=wave_obs, resolution=3000.0, sigma_lib_kms=70.0)
+    spec = Spectroscopy(
+        wave_obs=wave_obs, resolution=3000.0, sigma_lib_kms=70.0, resample="conserving"
+    )
     obs = Observation(spectroscopy=spec)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -600,7 +608,9 @@ def _igm_model_for_public_path(ssp, wave_obs, redshift):
     """A photometry-and-spectroscopy IGM model with the given redshift spec."""
     import warnings
 
-    spec = Spectroscopy(wave_obs=wave_obs, resolution=3000.0, sigma_lib_kms=70.0)
+    spec = Spectroscopy(
+        wave_obs=wave_obs, resolution=3000.0, sigma_lib_kms=70.0, resample="conserving"
+    )
     obs = Observation(spectroscopy=spec)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -847,18 +857,41 @@ def test_pad_pixels_override_is_taken_literally():
 
 
 def test_project_spectrum_threads_lsf_pad_pixels():
+    """The resolution-matrix branch pads its sigma_v convolution with ``lsf_pad_pixels``."""
+    from tengri.observation.banded import gaussian_resolution_bands
+
+    wave, spec = _log_grid_and_spectrum()
+    obs = jnp.asarray(wave)
+    rest = jnp.asarray(wave)
+    matrix = gaussian_resolution_bands(obs, 300.0)
+
+    def project(**kwargs):
+        return project_spectrum(
+            jnp.asarray(spec),
+            rest,
+            obs,
+            0.0,
+            1.0,
+            resolution_matrix=matrix,
+            sigma_v_kms=1000.0,
+            **kwargs,
+        )
+
+    default = np.asarray(project())
+    assert _rel_err(project(lsf_pad_pixels=wave.size - 1), default) <= 1e-12
+    assert _rel_err(project(lsf_pad_pixels=8), default) > 1e-5
+
+
+def test_point_mode_with_a_constant_resolution_has_no_padding_to_thread():
+    """Point mode pads on the lattice, so the pixel pad and the segment count are unused."""
     wave, spec = _log_grid_and_spectrum()
     obs = jnp.asarray(wave)
     rest = jnp.asarray(wave)
     default = project_spectrum(jnp.asarray(spec), rest, obs, 0.0, 1.0, resolution=300.0)
-    same = project_spectrum(
-        jnp.asarray(spec), rest, obs, 0.0, 1.0, resolution=300.0, lsf_pad_pixels=wave.size - 1
+    other = project_spectrum(
+        jnp.asarray(spec), rest, obs, 0.0, 1.0, resolution=300.0, lsf_pad_pixels=8, n_bins=3
     )
-    assert _rel_err(same, np.asarray(default)) <= 1e-12
-    narrow = project_spectrum(
-        jnp.asarray(spec), rest, obs, 0.0, 1.0, resolution=300.0, lsf_pad_pixels=8
-    )
-    assert _rel_err(narrow, np.asarray(default)) > 1e-5
+    np.testing.assert_array_equal(np.asarray(other), np.asarray(default))
 
 
 def test_near_duplicate_pixel_keeps_padding_and_result():
