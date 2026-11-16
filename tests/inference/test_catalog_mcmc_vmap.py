@@ -547,10 +547,10 @@ def test_chees_dense_mass_matrix_runs_quietly_and_agrees_with_diagonal(
 def test_per_galaxy_redshift_without_a_declared_range_runs_batched(
     synthetic_ssp, simple_observation
 ):
-    """Per-galaxy z with no ``catalog_z_range`` derives one and runs batched.
+    """Per-galaxy z with no ``catalog_z_range`` runs batched on one promoted model.
 
-    The range comes from the catalog's own redshifts, so the batched program serves every
-    galaxy. The user's model is left as it was.
+    The table span comes from the catalog's own redshifts, so one batched program
+    serves every galaxy. The user's model is left as it was.
     """
     from tengri import CatalogFitter
 
@@ -563,7 +563,8 @@ def test_per_galaxy_redshift_without_a_declared_range_runs_batched(
         galaxy["redshift"] = jnp.array(z)
 
     cat = CatalogFitter(model, galaxies, data_type="photometry")
-    run_kwargs = dict(
+    cp = cat.run(
+        "mcmc_nuts",
         key=jax.random.PRNGKey(1),
         forward_chunk_size=3,
         n_warmup=15,
@@ -571,12 +572,26 @@ def test_per_galaxy_redshift_without_a_declared_range_runs_batched(
         n_samples=15,
         verbose=False,
     )
-    cp = cat.run("mcmc_nuts", **run_kwargs)
 
     assert cp.n_galaxies == len(galaxies)
-    lo, hi = cat._catalog_z_range()
-    assert lo <= min(redshifts) and hi >= max(redshifts)
     assert model._catalog_z_range is None, "the caller's model was mutated"
     for i in range(len(galaxies)):
         for name in model.spec.free_params:
             assert np.all(np.isfinite(np.asarray(cp[i].samples[name])))
+
+
+@pytest.mark.parametrize("method", ["mcmc_nuts", "map"])
+def test_a_catalog_where_only_some_galaxies_have_a_redshift_is_refused(
+    synthetic_ssp, simple_observation, method
+):
+    """Batched and sequential paths refuse a mixed catalog, naming the rows without z."""
+    from tengri import CatalogFitter
+
+    model = _build_model(synthetic_ssp, simple_observation)
+    galaxies = _catalog_from_truths(model, _DISTINCT_TRUTHS, jax.random.PRNGKey(0))
+    galaxies[0]["redshift"] = jnp.array(0.05)
+    galaxies[2]["redshift"] = jnp.array(0.1)
+    with pytest.raises(ValueError, match=r"row\(s\) \[1\]"):
+        CatalogFitter(model, galaxies, data_type="photometry").run(
+            method, key=jax.random.PRNGKey(1), verbose=False
+        )

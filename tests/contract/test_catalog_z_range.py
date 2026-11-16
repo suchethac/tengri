@@ -154,99 +154,109 @@ def test_catalog_range_shared_signature_across_fixed_z_values():
     )
 
 
-def test_derived_range_covers_every_redshift_with_a_stated_margin():
-    """A catalog with per-galaxy z and no declared range gets one derived from the table.
+def test_catalog_span_covers_every_redshift_and_is_quantized_outward():
+    """The span is [min z, max z] padded by max(1% of span, 1e-3), clipped at 0, on a 0.05 grid."""
+    from tengri.inference.fitter import catalog_redshift_span
 
-    The margin is 1% of the span, at least 1e-3, and the lower edge is clipped at z=0.
-    """
-    from tengri.inference.fitter import derived_catalog_z_range
-
-    lo, hi = derived_catalog_z_range([0.1, 0.5, 0.3])
-    assert lo == pytest.approx(0.1 - 0.004)
-    assert hi == pytest.approx(0.5 + 0.004)
-
-    # A tiny span is padded by the 1e-3 floor, not by 1% of nothing.
-    lo, hi = derived_catalog_z_range([0.2, 0.2001])
-    assert lo == pytest.approx(0.2 - 1e-3)
-    assert hi == pytest.approx(0.2001 + 1e-3)
-
+    lo, hi = catalog_redshift_span([0.12, 0.31, 0.58])
+    assert (lo, hi) == pytest.approx((0.10, 0.60))
+    # A tiny span is padded by the floor, then rounded outward.
+    lo, hi = catalog_redshift_span([0.2, 0.2001])
+    assert (lo, hi) == pytest.approx((0.15, 0.25))
     # The lower edge never goes below zero.
-    lo, _ = derived_catalog_z_range([0.0005, 0.001])
-    assert lo == 0.0
-
-
-def test_derived_range_is_applied_to_a_copy_and_the_user_model_is_untouched(
-    synthetic_ssp, simple_observation
-):
-    from tengri import Fixed, Parameters, SEDModel
-    from tengri.inference.fitter import derived_catalog_z_range, with_derived_catalog_z_range
-
-    spec = Parameters(
-        sfh_dpl_log_total_mass=Fixed(9.0),
-        sfh_dpl_alpha=Fixed(2.0),
-        sfh_dpl_age_gyr=Fixed(5.0),
-        sfh_dpl_beta=Fixed(2.0),
-        sfh_dpl_tau_gyr=Fixed(3.0),
-        met_logzsol=Fixed(0.0),
-        dust_tau_bc=Fixed(0.3),
-        dust_tau_diff=Fixed(0.2),
-        redshift=Fixed(0.1),
-        mean_sfh_type="dpl",
-    )
-    user = SEDModel(spec, synthetic_ssp, observation=simple_observation)
-    assert user._catalog_z_range is None
-    redshifts = [0.05, 0.2, 0.4]
-
-    configured = with_derived_catalog_z_range(user, redshifts)
-
-    assert configured is not user
-    assert user._catalog_z_range is None, "the caller's model was mutated"
-    assert configured._catalog_z_range == pytest.approx(derived_catalog_z_range(redshifts))
-    lo, hi = configured._catalog_z_range
-    assert lo <= min(redshifts) and max(redshifts) <= hi
-    # A model that already declares its range is returned as it is.
-    assert with_derived_catalog_z_range(configured, redshifts) is configured
-    # The derived clone has the compile key of a model that declares the same range, so
-    # it shares the one compiled program the declared-range path already uses.
-    declared = user.with_approx((WavePrecomp(catalog_z_range=configured._catalog_z_range),))
-    assert configured.compile_signature() == declared.compile_signature()
-
-
-def test_exact_model_given_the_tabulated_path_logs_a_warning(
-    synthetic_ssp, simple_observation, caplog
-):
-    """approx=None is exact, so turning it into a LUT must be logged, never silent.
-
-    The exact path cannot take a per-galaxy redshift (its fixed-z tables are built at the
-    spec's z), so the tabulated path is used for this model; the WARNING says so.
-    """
-    import logging
-
-    from tengri import Fixed, Parameters, SEDModel
-    from tengri.inference.fitter import with_derived_catalog_z_range
-
-    spec = Parameters(
-        sfh_dpl_log_total_mass=Fixed(9.0),
-        sfh_dpl_alpha=Fixed(2.0),
-        sfh_dpl_age_gyr=Fixed(5.0),
-        sfh_dpl_beta=Fixed(2.0),
-        sfh_dpl_tau_gyr=Fixed(3.0),
-        met_logzsol=Fixed(0.0),
-        dust_tau_bc=Fixed(0.3),
-        dust_tau_diff=Fixed(0.2),
-        redshift=Fixed(0.1),
-        mean_sfh_type="dpl",
-    )
-    exact = SEDModel(spec, synthetic_ssp, observation=simple_observation)
-    assert exact.approx_configs == ()
-    with caplog.at_level(logging.WARNING, logger="tengri.inference.fitter"):
-        with_derived_catalog_z_range(exact, [0.05, 0.2])
-    assert any("exact model (approx=None)" in r.getMessage() for r in caplog.records)
+    assert catalog_redshift_span([0.0005, 0.001])[0] == 0.0
+    # A redshift on a grid line is still covered with a pad.
+    lo, hi = catalog_redshift_span([0.3])
+    assert lo < 0.3 < hi
+    # Similar catalogs share one span, which is what lets them share one compile.
+    assert catalog_redshift_span([0.11, 0.33, 0.57]) == catalog_redshift_span([0.12, 0.31, 0.58])
 
 
 def test_non_finite_redshift_is_refused_naming_the_rows():
-    """A NaN or inf redshift has no place in a range; the error names the rows."""
-    from tengri.inference.fitter import derived_catalog_z_range
+    """A NaN or inf redshift has no place in a table span; the error names the rows."""
+    from tengri.inference.fitter import catalog_redshift_span
 
     with pytest.raises(ValueError, match=r"row\(s\) \[1, 3\]"):
-        derived_catalog_z_range([0.1, float("nan"), 0.3, float("inf")])
+        catalog_redshift_span([0.1, float("nan"), 0.3, float("inf")])
+
+
+def test_promotion_is_cached_per_model_and_span_and_leaves_the_user_model(
+    synthetic_ssp, simple_observation
+):
+    """Similar catalogs get the same promoted object; the caller's model is not mutated."""
+    from tengri import Fixed, SEDModel
+    from tengri.inference.fitter import promote_to_runtime_redshift
+
+    user = SEDModel.build(
+        ssp_data=synthetic_ssp,
+        observation=simple_observation,
+        sfh={"type": "dpl"},
+        redshift=Fixed(0.1),
+        approx=WavePrecomp(),
+    )
+    first = promote_to_runtime_redshift(user, [0.06, 0.2, 0.41])
+    again = promote_to_runtime_redshift(user, [0.07, 0.21, 0.42])
+    assert first is again
+    assert first is not user
+    assert user._catalog_z_range is None, "the caller's model was mutated"
+    lo, hi = first._catalog_z_range
+    assert lo <= 0.06 and hi >= 0.41
+    # A declared range is used as it is.
+    assert promote_to_runtime_redshift(first, [0.06, 0.2, 0.41]) is first
+
+    exact = SEDModel.build(
+        ssp_data=synthetic_ssp,
+        observation=simple_observation,
+        sfh={"type": "dpl"},
+        redshift=Fixed(0.1),
+        approx=None,
+    )
+    promoted = promote_to_runtime_redshift(exact, [0.05, 0.2, 0.4])
+    assert promoted._catalog_z_range is None and promoted._z_runtime
+    assert not promoted._approx["wave_precomp"], "an exact model stays exact"
+
+
+def test_caches_do_not_keep_the_model_alive(synthetic_ssp, simple_observation, monkeypatch):
+    """The promotion caches and fit_batch's forward-model cache are freed with their model.
+
+    The engine's own kernel caches (outside this change) keep a *fitted* model, so the fit
+    itself is stubbed out: what is measured is what promotion and ``fit_batch`` cache.
+    """
+    import gc
+    import weakref
+
+    from tengri import Fixed, SEDModel
+    from tengri.forward import convenience
+    from tengri.forward.forward_model import ForwardModel
+    from tengri.inference.fitter import promote_to_runtime_redshift
+
+    def build():
+        return SEDModel.build(
+            ssp_data=synthetic_ssp,
+            observation=simple_observation,
+            sfh={"type": "dpl"},
+            redshift=Fixed(0.1),
+            approx=WavePrecomp(),
+        )
+
+    model = build()
+    forward = ForwardModel.build(sed=build())
+    promoted = promote_to_runtime_redshift(model, [0.05, 0.2])
+    promoted_forward = promote_to_runtime_redshift(forward, [0.05, 0.2])
+    names = [f"flux_{i}" for i in range(3)]
+    errs = [f"err_{i}" for i in range(3)]
+    rows = [{"z": 0.05, **{n: 1.0 for n in names}, **{e: 0.1 for e in errs}}]
+    from tengri.inference.catalog import Catalog
+
+    class _Stub:
+        posteriors = ()
+
+    monkeypatch.setattr(Catalog, "fit", lambda self, *a, **k: _Stub())
+    convenience.fit_batch(
+        model, rows, flux_cols=names, err_cols=errs, redshift_col="z", method="map",
+        n_steps=1, verbose=False,
+    )  # fmt: skip
+    refs = [weakref.ref(x) for x in (model, forward, promoted, promoted_forward)]
+    del model, forward, promoted, promoted_forward
+    gc.collect()
+    assert [r() is None for r in refs] == [True] * 4, "a cache holds a model strongly"
