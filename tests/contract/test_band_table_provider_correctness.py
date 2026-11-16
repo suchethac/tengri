@@ -349,17 +349,6 @@ def test_the_table_carries_the_right_convention(name, convention):
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason=(
-        "the dust emission's total power is the absorbed stellar energy, which the "
-        "energy-balance table reads from integrated tables by monotone PCHIP over "
-        "metallicity while the exact path reads the spectra and then integrates; the two "
-        "do not commute, so the table path differs from the exact path by 9.3e-5; #3541 "
-        "stores the PCHIP slopes beside every lookup table, which makes that read exact"
-    ),
-)
 @pytest.mark.parametrize("convention", CONVENTIONS, ids=lambda c: c.value)
 def test_dust_emission_absolute_agreement(convention):
     """The absolute dust-emission contribution of the table equals the exact path (1e-7)."""
