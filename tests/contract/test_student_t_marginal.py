@@ -116,7 +116,9 @@ def test_one_pixel_moved_by_fifty_sigma_costs_the_heavy_tailed_marginal_a_bounde
 def test_gradients_match_finite_differences_in_the_model_the_floor_and_the_design(channel, label):
     preds, data, _noise, heavy = _gaussian_and_heavy(channel, label, DOF)
     grads = check_gradients(preds, data, heavy)
-    assert np.all(np.isfinite(np.asarray(grads["spec_fnu"])))
+    spec_grad = np.asarray(grads["spec_fnu"])
+    assert np.all(np.isfinite(spec_grad)), "the heavy-tailed gradient has a non-finite entry"
+    assert np.any(spec_grad != 0.0), "the heavy-tailed gradient is identically zero"
 
 
 def _float32(tree):
@@ -145,7 +147,8 @@ def test_float32_value_and_gradient_are_finite_and_agree_with_float64(channel, l
     assert np.isfinite(float(value))
     assert abs(float(value) - reference) < 1e-3 * abs(reference)
     g32, g64 = np.asarray(grad32.spec_fnu), np.asarray(grad64.spec_fnu)
-    assert np.all(np.isfinite(g32))
+    assert np.all(np.isfinite(g32)), "the float32 gradient has a non-finite entry"
+    assert np.any(g32 != 0.0), "the float32 gradient is identically zero"
     # Measured: the largest float32 error is 9e-7 of the largest float64 gradient entry and 7e-6
     # of any entry.
     np.testing.assert_allclose(g32, g64, rtol=1e-4, atol=1e-5 * np.max(np.abs(g64)))
@@ -182,6 +185,7 @@ def test_weights_and_their_derivatives_stay_finite_in_float32(dof):
         grads = jax.grad(value, argnums=(0, 1, 2, 3))(*args)
     assert np.isfinite(float(result))
     assert all(np.all(np.isfinite(np.asarray(g))) for g in grads)
+    assert all(np.any(np.asarray(g) != 0.0) for g in grads)
 
 
 def test_the_convergence_diagnostic_is_small_at_the_chosen_step_count_and_large_for_too_few():

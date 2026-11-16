@@ -759,7 +759,7 @@ def dense_to_banded(
     rows = jnp.arange(n)[None, :]
     cols = rows + offs[:, None]
     inside = (cols >= 0) & (cols < n)
-    data = jnp.where(inside, a[rows, jnp.clip(cols, 0, n - 1)], 0.0)
+    data = jnp.where(inside, a.at[rows, cols].get(mode="clip"), 0.0)
     return BandedMatrix(offsets=offs, data=data)
 
 
