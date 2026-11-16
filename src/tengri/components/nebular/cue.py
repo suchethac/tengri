@@ -150,7 +150,7 @@ from tengri.utils.physics_constants import (
     C_CGS as _C_CGS,
     L_SUN_CUE as _LSUN_ERG,  # 3.839e33: Cue training convention, NOT IAU 2015
 )
-from tengri.utils.scale import LN10, pow10, representable_exponent
+from tengri.utils.scale import LN10, representable_exponent
 
 # 0-d host tables, not Python floats: the pre-#2271 constants were 0-d jnp arrays,
 # strongly typed, and a float32 intermediate meeting one was promoted to the
@@ -1298,7 +1298,10 @@ class CueBackend(NebularBackendDefaults):
 
         The population is SSP-derived when upstream publishes ``age_weights`` and
         ``ssp_ages_yr``, so the ionizing-spectrum shape and Q_H both follow the
-        stellar population (the legacy ``predict_line_fluxes`` parity). Otherwise
+        stellar population (the legacy ``predict_line_fluxes`` parity). The shape is
+        fitted to the age sum of the stellar component's per-age ionizing spectrum
+        ``lnu_age_ion`` when it is published, so the stellar metallicity treatment
+        (tabulated, evolving, [alpha/Fe]) carries into the shape. Otherwise
         it falls back to the ``gas_logqion`` shortcut, or to Cue's own defaults
         when neither is published. ``ionspec_*`` and ``gas_*`` values in ``params``
         are forwarded. ``common`` is never mutated.
@@ -1326,6 +1329,9 @@ class CueBackend(NebularBackendDefaults):
         elif age_weights is not None and ssp_ages_yr is not None:
             population["ssp_weights"] = jnp.asarray(age_weights)
             population["ssp_log_ages_yr"] = jnp.log10(jnp.asarray(ssp_ages_yr))
+            lnu_age_ion = state.derived.get("lnu_age_ion")
+            if lnu_age_ion is not None:
+                population["ssp_lnu_ion"] = jnp.asarray(lnu_age_ion)
         else:
             log_nion = state.derived.get("log_nion")
             if log_nion is not None:
@@ -1337,6 +1343,7 @@ class CueBackend(NebularBackendDefaults):
         # Cue's low-level path defaults; ``mix_dig_emission`` names them explicitly.
         call.setdefault("ssp_weights", None)
         call.setdefault("ssp_log_ages_yr", None)
+        call.setdefault("ssp_lnu_ion", None)
         call.update(population)
         call.update(overrides)
         return call
@@ -1446,9 +1453,11 @@ class CueBackend(NebularBackendDefaults):
         # ionspec_logLratio1..3 as free params in Parameters.
         self._ionspec_table = None
         self._logqion_table = None
-        self._seglum_table = None
         self._ssp_lgmet = None
         self._ssp_log_age_yr = None
+        self._ssp_wave_host = None
+        self._ssp_flux_ion = None
+        self._ion_layouts: dict[int, object] = {}
         if ssp_data is not None:
             self._precompute_ionizing_params(ssp_data)
 
@@ -1519,9 +1528,16 @@ class CueBackend(NebularBackendDefaults):
         )
         self._ionspec_table = jnp.array(result["ionspec_table"])
         self._logqion_table = jnp.array(result["logqion_table"])
-        self._seglum_table = jnp.array(result["seglum_table"])
         self._ssp_lgmet = jnp.array(ssp_data.ssp_lgmet)
         self._ssp_log_age_yr = jnp.array(ssp_data.ssp_lg_age_gyr) + 9.0
+        # The ionizing slice of the grid (the prefix the stellar component publishes as
+        # ``lnu_age_ion``): its wavelengths set the static fit layout, and its flux serves
+        # callers that pass age weights without the stellar component's per-age cube.
+        from tengri.components.lyc import LYMAN_LIMIT_AA
+
+        self._ssp_wave_host = np.asarray(ssp_data.ssp_wave, dtype=np.float64)
+        n_ion = int(np.count_nonzero(self._ssp_wave_host < 2.0 * LYMAN_LIMIT_AA))
+        self._ssp_flux_ion = jnp.asarray(ssp_flux_np[..., :n_ion])
 
         self._warn_if_shape_outside_trained_box(result)
 
@@ -1700,6 +1716,7 @@ class CueBackend(NebularBackendDefaults):
     def _resolve_cue_params(
         self,
         ssp_weights=None,
+        ssp_lnu_ion=None,
         ssp_log_ages_yr=None,
         log_z=None,
         neb_logU=DEFAULT_NEB_LOGU,
@@ -1741,6 +1758,7 @@ class CueBackend(NebularBackendDefaults):
                 gas_logn=gas_logn,
                 gas_logno=gas_logno,
                 gas_logco=gas_logco,
+                ssp_lnu_ion=ssp_lnu_ion,
             )
         else:
             derived = {}
@@ -2021,6 +2039,7 @@ class CueBackend(NebularBackendDefaults):
         gas_logn: float = DEFAULT_GAS_LOGN,
         gas_logno: float = DEFAULT_GAS_LOGNO,
         gas_logco: float = DEFAULT_GAS_LOGCO,
+        ssp_lnu_ion: jnp.ndarray | None = None,
     ) -> dict:
         """Derive Cue parameters from SSP weights, shape clamped to the trained box.
 
@@ -2036,7 +2055,7 @@ class CueBackend(NebularBackendDefaults):
         quantities and the other parameters are those of :meth:`_weighted_cue_params_raw`.
         """
         out = self._weighted_cue_params_raw(
-            ssp_weights, ssp_log_ages_yr, log_z, neb_logZ_gas=neb_logZ_gas
+            ssp_weights, ssp_log_ages_yr, log_z, neb_logZ_gas=neb_logZ_gas, ssp_lnu_ion=ssp_lnu_ion
         )
         gas = dict(gas_logu=neb_logU, gas_logn=gas_logn, gas_logno=gas_logno, gas_logco=gas_logco)
         i7 = clamp_ionspec_straight_through(jnp.stack([out[k] for k in IONSPEC_NAMES]))
@@ -2048,12 +2067,14 @@ class CueBackend(NebularBackendDefaults):
         ssp_log_ages_yr: jnp.ndarray,
         log_z: float,
         neb_logZ_gas: float | None = None,
+        ssp_lnu_ion: jnp.ndarray | None = None,
     ) -> dict:
         """Derive Cue parameters from SSP weights.
 
         Computes total Q_H by summing mass-weighted per-Msun Q_H over every
         SSP age bin (or those up to ``lyc_max_age_yr``), and the ionizing-spectrum
-        shape as the luminosity-weighted combination of the same bins.
+        shape as the four-segment fit of the same bins' summed spectrum
+        (:meth:`_composite_ionizing_shape`).
 
         Parameters
         ----------
@@ -2065,6 +2086,10 @@ class CueBackend(NebularBackendDefaults):
             Stellar metallicity log10(Z) (absolute).
         neb_logZ_gas : float or None
             Gas metallicity log10(Z) (absolute). None = tie to stellar.
+        ssp_lnu_ion : array, shape (n_age, n_ion), optional
+            The stellar component's per-age ionizing spectrum (``lnu_age_ion``):
+            age-weighted, per unit stellar mass, on the SSP grid's ionizing prefix.
+            When absent it is formed from ``ssp_weights`` at ``log_z``.
 
         Returns
         -------
@@ -2090,10 +2115,7 @@ class CueBackend(NebularBackendDefaults):
         # Vectorize interpolate_ionizing_params over all ages at once.
         # ionspec_table is (n_met, n_age, 7), logqion_table is (n_met, n_age).
         # We need logqion at each age bin for the given metallicity.
-        from tengri.components.nebular.ionizing_spectrum import (
-            interpolate_ionizing_params,
-            interpolate_ionizing_seglum,
-        )
+        from tengri.components.nebular.ionizing_spectrum import interpolate_ionizing_params
 
         # Vectorize over age axis: get (ionspec_7, logqion) for each age
         # ionspec_all: (n_age, 7), logqion_all: (n_age,)
@@ -2123,71 +2145,22 @@ class CueBackend(NebularBackendDefaults):
         any_valid = jnp.any(valid)
         total_logqion = jnp.where(any_valid, lse / LN10, -99.0)
 
-        # ── Effective ionizing-spectrum shape via per-segment max-offset (#1018) ──
-        # Cue is trained on the *time-averaged* ionizing spectrum of the whole
-        # population (see the module header), so the shape must combine every
-        # ionizing age bin: not the single argmax-dominant one. The old
-        # ``i7 = ionspec_all[jnp.argmax(weighted_qh)]`` made the forward
-        # DISCONTINUOUS in metallicity and SFH (the dominant bin flips → [OIII]
-        # steps ~33 %) and, because ``argmax`` has no gradient and ``ionspec_all``
-        # does not depend on ``ssp_weights``, it forced d(shape)/d(SFH) ≡ 0:
-        # silently starving gradient-based inference.
-        #
-        # Combine the way the physics does, now in log-domain for float32 safety.
-        # The 7 params describe a 4-segment broken power law: 4 slopes + 3 log-
-        # ratios of the INTEGRATED segment luminosities. Across populations:
-        #   * segment luminosities ADD linearly     → L_k = Σ_a w_a L_k,a
-        #   * the slope of a sum of power laws is the per-segment luminosity-
-        #     weighted mean          → α_k = Σ_a (w_a L_k,a / L_k) · α_k,a
-        #   * the log-ratios follow as diff(log10 L_k)
-        # Averaging the log-ratios directly (a geometric mean where an arithmetic
-        # one is required) biases [OIII] by ~12 %: worse than the argmax it would
-        # replace. This rule is smooth and differentiable but approximates
-        # re-fitting the composite spectrum: for a delayed-tau (300 Myr) population
-        # at 100 Myr, Z = 0.02, indices 1-4 differ from a refit by 1-2 units and
-        # [O III]/H-beta by 10-15 %.
-        log_seglum_all = jax.vmap(
-            lambda log_age_yr: interpolate_ionizing_seglum(
-                self._seglum_table,
-                self._ssp_lgmet,
-                self._ssp_log_age_yr,
-                log_z,
-                log_age_yr,
-            )
-        )(ssp_log_ages_yr)  # (n_age, 4)
-
-        # Per-segment max-offset scaling for log-domain arithmetic (#1206).
-        # For segment k: seg_w[a,k] = w_a * 10**log_seglum[a,k]. Factor out
-        # the per-segment peak m_k so 10**(log_seg_w - m_k) stays O(<=1);
-        # alpha (a ratio) is m_k-invariant, and log10(seg_tot_k) = m_k +
-        # log10(sum 10**(log_seg_w - m_k)).
-        w_pos = ssp_weights > 0  # (n_age,)
-        log_w = jnp.where(w_pos, jnp.log10(jnp.where(w_pos, ssp_weights, 1.0)), -jnp.inf)
-        finite_seg = jnp.isfinite(log_seglum_all)  # (n_age,4)
-        seg_valid = counted_mask[:, None] & w_pos[:, None] & finite_seg
-        log_seg_w = jnp.where(
-            seg_valid, log_w[:, None] + jnp.where(finite_seg, log_seglum_all, 0.0), -jnp.inf
-        )  # (n_age,4)
-        m = jnp.max(log_seg_w, axis=0)  # (4,); -inf if a segment is fully invalid
-        m_safe = jnp.where(jnp.isfinite(m), m, 0.0)
-        seg_w_scaled = pow10(log_seg_w - m_safe[None, :])  # (n_age,4); pow10(-inf)=0
-        seg_tot_scaled = jnp.sum(seg_w_scaled, axis=0)  # (4,)
-        seg_pos = seg_tot_scaled > 0
-        alpha_eff = jnp.sum(seg_w_scaled * ionspec_all[:, :4], axis=0) / jnp.where(
-            seg_pos, seg_tot_scaled, 1.0
-        )  # (4,): m_k cancels in the ratio
-        log_seg_tot = jnp.where(
-            seg_pos, m_safe + jnp.log10(jnp.where(seg_pos, seg_tot_scaled, 1.0)), -jnp.inf
-        )  # (4,)
-        logLratio_eff = jnp.diff(log_seg_tot)  # (3,)
-        i7_weighted = jnp.concatenate([alpha_eff, logLratio_eff])
+        # ── Ionizing-spectrum shape: the four-segment fit of the composite ──
+        # Cue takes the shape of the population's TOTAL ionizing spectrum (Li et al.
+        # 2025, Sec. VI.4: the emulator prediction "based on the integrated ionizing
+        # spectrum"), so the counted age bins are summed pixel by pixel and the sum is
+        # fitted once, by the same solver that builds the per-SSP table.
+        i7_composite = self._composite_ionizing_shape(
+            ssp_weights, log_z, counted_mask, ssp_lnu_ion=ssp_lnu_ion
+        )
 
         # Empty population (no counted bin with weight and a finite Q_H): dominant-bin
         # fallback, picked in LOG space so the index selection never materializes
-        # 10**logqion.
-        # total_logqion == -99 already zeros emission.
+        # 10**logqion. total_logqion == -99 already zeros emission.
+        w_pos = ssp_weights > 0
+        log_w = jnp.where(w_pos, jnp.log10(jnp.where(w_pos, ssp_weights, 1.0)), -jnp.inf)
         log_terms = jnp.where(valid, logq_safe + log_w, -jnp.inf)  # (n_age,)
-        i7 = jnp.where(any_valid, i7_weighted, ionspec_all[jnp.argmax(log_terms)])
+        i7 = jnp.where(any_valid, i7_composite, ionspec_all[jnp.argmax(log_terms)])
 
         # Gas metallicity: convert absolute → Z/Zsun for Cue
         gas_logz = neb_logZ_gas if neb_logZ_gas is not None else log_z
@@ -2205,9 +2178,68 @@ class CueBackend(NebularBackendDefaults):
             ionspec_logLratio3=i7[6],
         )
 
+    def _composite_ionizing_shape(self, ssp_weights, log_z, counted_mask, *, ssp_lnu_ion=None):
+        """Four-segment fit of the counted age bins' summed ionizing spectrum.
+
+        Parameters
+        ----------
+        ssp_weights : array, shape (n_age,)
+            CSP mass weights per SSP age bin [Msun]; used only when
+            ``ssp_lnu_ion`` is absent.
+        log_z : float
+            Stellar metallicity, absolute ``log10(Z)``; used only when
+            ``ssp_lnu_ion`` is absent.
+        counted_mask : array of bool, shape (n_age,)
+            Age bins that ionize the gas (all, or those up to ``lyc_max_age_yr``).
+        ssp_lnu_ion : array, shape (n_age, n_ion), optional
+            Per-age, age-weighted ionizing spectrum from the stellar component
+            (``lnu_age_ion``) [erg/s/Hz/Msun, up to a constant].
+
+        Returns
+        -------
+        jnp.ndarray, shape (7,)
+            Cue's shape parameters, unclamped.
+
+        Notes
+        -----
+        Without ``ssp_lnu_ion`` the per-age spectrum is the SSP ionizing slice read
+        at ``log_z`` by the stellar component's metallicity read
+        (:func:`~tengri.components.stellar.sps.met_pchip.read_met`), times the
+        weights. The log of the sum follows :func:`~tengri.utils.scale.log10_magnitude`:
+        a pixel with no flux is ``-inf`` and is floored by the fit as the reference
+        floors it. JIT/grad/vmap-safe.
+        """
+        from tengri.components.nebular.ionizing_fit import fit_ionizing_shape, ionizing_layout
+        from tengri.components.nebular.ionizing_spectrum import SEGMENT_EDGES
+        from tengri.utils.scale import log10_magnitude
+
+        if ssp_lnu_ion is None:
+            from tengri.components.stellar.sps.met_pchip import read_met
+
+            n_age = self._ssp_flux_ion.shape[-2]
+            if jnp.shape(ssp_weights)[0] != n_age:
+                raise ValueError(
+                    f"Cue's ionizing shape is fitted to the population's summed spectrum, "
+                    f"so ssp_weights must lie on the SSP age grid ({n_age} bins); got "
+                    f"{jnp.shape(ssp_weights)[0]}. Pass the stellar component's "
+                    f"'lnu_age_ion' as ssp_lnu_ion, or weights on the SSP ages."
+                )
+            flux_at_z = read_met(self._ssp_flux_ion, self._ssp_lgmet, log_z)  # (n_age, n_ion)
+            cube = jnp.asarray(ssp_weights)[:, None] * flux_at_z
+        else:
+            cube = jnp.asarray(ssp_lnu_ion)
+        total = jnp.sum(jnp.where(counted_mask[:, None], cube, 0.0), axis=0)
+        n_ion = cube.shape[-1]
+        layout = self._ion_layouts.get(n_ion)
+        if layout is None:
+            layout = ionizing_layout(self._ssp_wave_host[:n_ion], np.asarray(SEGMENT_EDGES))
+            self._ion_layouts[n_ion] = layout
+        return fit_ionizing_shape(log10_magnitude(total), layout).i7
+
     def predict_nebular_line_luminosities(
         self,
         ssp_weights: jnp.ndarray | None = None,
+        ssp_lnu_ion: jnp.ndarray | None = None,
         ssp_log_ages_yr: jnp.ndarray | None = None,
         log_z: float | None = None,
         neb_logU: float = DEFAULT_NEB_LOGU,
@@ -2247,6 +2279,10 @@ class CueBackend(NebularBackendDefaults):
         ----------
         ssp_weights : array or None
             CSP mass weights.  If provided, activates high-level mode.
+        ssp_lnu_ion : array, shape (n_age, n_ion), or None
+            The stellar component's per-age ionizing spectrum (``lnu_age_ion``);
+            its age sum is the spectrum whose four-segment fit sets the shape.
+            When None, it is formed from ``ssp_weights`` at ``log_z``.
         ssp_log_ages_yr : array or None
             log10(age/yr) of SSP age bins.
         log_z : float or None
@@ -2316,6 +2352,7 @@ class CueBackend(NebularBackendDefaults):
         """
         p = self._resolve_cue_params(
             ssp_weights=ssp_weights,
+            ssp_lnu_ion=ssp_lnu_ion,
             ssp_log_ages_yr=ssp_log_ages_yr,
             log_z=log_z,
             neb_logU=neb_logU,
@@ -2347,6 +2384,7 @@ class CueBackend(NebularBackendDefaults):
     def predict_nebular_continuum(
         self,
         ssp_weights: jnp.ndarray | None = None,
+        ssp_lnu_ion: jnp.ndarray | None = None,
         ssp_log_ages_yr: jnp.ndarray | None = None,
         log_z: float | None = None,
         neb_logU: float = DEFAULT_NEB_LOGU,
@@ -2381,6 +2419,10 @@ class CueBackend(NebularBackendDefaults):
         ----------
         ssp_weights : array or None
             CSP mass weights. If provided, activates high-level mode.
+        ssp_lnu_ion : array, shape (n_age, n_ion), or None
+            The stellar component's per-age ionizing spectrum (``lnu_age_ion``);
+            its age sum is the spectrum whose four-segment fit sets the shape.
+            When None, it is formed from ``ssp_weights`` at ``log_z``.
         ssp_log_ages_yr : array or None
             log10(age/yr) of SSP age bins.
         log_z : float or None
@@ -2428,6 +2470,7 @@ class CueBackend(NebularBackendDefaults):
         """
         p = self._resolve_cue_params(
             ssp_weights=ssp_weights,
+            ssp_lnu_ion=ssp_lnu_ion,
             ssp_log_ages_yr=ssp_log_ages_yr,
             log_z=log_z,
             neb_logU=neb_logU,
@@ -2459,6 +2502,7 @@ class CueBackend(NebularBackendDefaults):
         self,
         ssp_wave: jnp.ndarray | None = None,
         ssp_weights: jnp.ndarray | None = None,
+        ssp_lnu_ion: jnp.ndarray | None = None,
         ssp_log_ages_yr: jnp.ndarray | None = None,
         log_z: float | None = None,
         neb_logU: float = DEFAULT_NEB_LOGU,
@@ -2483,6 +2527,10 @@ class CueBackend(NebularBackendDefaults):
             Output wavelength grid in Angstrom.
         ssp_weights : array or None
             CSP mass weights.  Activates high-level mode.
+        ssp_lnu_ion : array, shape (n_age, n_ion), or None
+            The stellar component's per-age ionizing spectrum (``lnu_age_ion``);
+            its age sum is the spectrum whose four-segment fit sets the shape.
+            When None, it is formed from ``ssp_weights`` at ``log_z``.
         ssp_log_ages_yr : array or None
             log10(age/yr) of SSP age bins.
         log_z : float or None
@@ -2544,6 +2592,7 @@ class CueBackend(NebularBackendDefaults):
         cont_lsun, line_wav, line_lum = self.predict_nebular_split(
             ssp_wave=ssp_wave,
             ssp_weights=ssp_weights,
+            ssp_lnu_ion=ssp_lnu_ion,
             ssp_log_ages_yr=ssp_log_ages_yr,
             log_z=log_z,
             neb_logU=neb_logU,
@@ -2569,6 +2618,7 @@ class CueBackend(NebularBackendDefaults):
         self,
         ssp_wave: jnp.ndarray | None = None,
         ssp_weights: jnp.ndarray | None = None,
+        ssp_lnu_ion: jnp.ndarray | None = None,
         ssp_log_ages_yr: jnp.ndarray | None = None,
         log_z: float | None = None,
         neb_logU: float = DEFAULT_NEB_LOGU,
@@ -2632,6 +2682,7 @@ class CueBackend(NebularBackendDefaults):
         # Resolve params once (avoids double computation for lines + continuum)
         p = self._resolve_cue_params(
             ssp_weights=ssp_weights,
+            ssp_lnu_ion=ssp_lnu_ion,
             ssp_log_ages_yr=ssp_log_ages_yr,
             log_z=log_z,
             neb_logU=neb_logU,
@@ -2702,10 +2753,6 @@ _CUE_BACKEND_CACHE_KEY_POLICY: KeyPolicy = {
         "deterministic function of an already-keyed input"
     ),
     "_logqion_table": exclude(
-        "precomputed from ssp_data (content-keyed at the model level); "
-        "deterministic function of an already-keyed input"
-    ),
-    "_seglum_table": exclude(
         "precomputed from ssp_data (content-keyed at the model level); "
         "deterministic function of an already-keyed input"
     ),

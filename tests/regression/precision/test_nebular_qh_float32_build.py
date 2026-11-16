@@ -382,13 +382,18 @@ _OFF_PLATFORM_RTOL = 1e-10
 
 
 def test_float64_tables_bit_identical_to_reference(tmp_path):
-    """With x64 on, the Cue ionizing tables are bit-identical to the pre-#2849 build.
+    """With x64 on, the Cue ionizing tables are bit-identical to their reference build.
 
     The reference is ``fixtures/nebular_qh_float64_unfixed.json``, written by
-    ``_BITWISE_CHILD`` on the pre-#2849 tree. Exact float64 agreement holds
-    because the power-of-two scale is exact and the log is taken in NumPy, as
-    before. Only the three tables this change touches are pinned, so unrelated
-    changes to the model's spectrum do not move the reference.
+    ``_BITWISE_CHILD``. ``ion_logqion_table`` is the pre-#2849 build: exact
+    float64 agreement holds because the power-of-two scale is exact and the log
+    is taken in NumPy, as before. ``ion_ionspec_table`` and ``ion_seglum_table``
+    come from the shape fit and were re-pinned when the fit moved from SLSQP to
+    the exact stationary point (ionspec cache version 5): clamped shapes moved by
+    up to 0.17, unclamped segment luminosities by up to 4.9 dex in HeII segments
+    with almost no flux, while the Q_H table stayed bit-identical. Only these
+    three tables are pinned, so unrelated changes to the model's spectrum do not
+    move the reference.
 
     Exactness is asserted on the platform that wrote the reference (its
     ``_platform`` entry). Elsewhere ``log10`` and the LAPACK least-squares

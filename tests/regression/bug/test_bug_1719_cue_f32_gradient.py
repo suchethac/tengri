@@ -53,10 +53,10 @@ def test_f32_gradient_finite_on_degenerate_input():
 
     # Compute reference f64 first (outside f32 context)
     be64 = CueBackend(_CUE_WEIGHTS, ssp_data=ssp)
-    n_age = 20
+    n_age = len(np.asarray(be64._ssp_log_age_yr))
     # Degenerate: all weights are ZERO, so all log terms become -inf
     ssp_weights_f64 = jnp.zeros(n_age)
-    ssp_log_ages = np.log10(np.linspace(1e6, 1.3e10, n_age))
+    ssp_log_ages = np.asarray(be64._ssp_log_age_yr)
     log_z = -2.0
 
     result_f64 = be64._compute_weighted_cue_params(ssp_weights_f64, ssp_log_ages, log_z)
@@ -104,9 +104,9 @@ def test_f64_guarded_expression_matches_unguarded_on_finite():
     ssp = _load_ssp()
     be64 = CueBackend(_CUE_WEIGHTS, ssp_data=ssp)
 
-    n_age = 20
+    n_age = len(np.asarray(be64._ssp_log_age_yr))
     ssp_weights = jnp.ones(n_age) / n_age
-    ssp_log_ages = np.log10(np.linspace(1e6, 1.3e10, n_age))
+    ssp_log_ages = np.asarray(be64._ssp_log_age_yr)
     log_z = -2.0
 
     # Compute a result to verify gradient
