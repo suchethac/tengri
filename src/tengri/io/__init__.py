@@ -12,7 +12,7 @@ missing dependency produces a clear ImportError with install guidance.
 from __future__ import annotations
 
 from tengri.io.arrays import SpectrumTuple
-from tengri.io.catalog import load_catalog
+from tengri.io.catalog import CANDELS_TO_TENGRI, CIGALE_TO_TENGRI, load_catalog
 from tengri.io.desi import (
     DesiCamera,
     desi_resolution_matrix,
@@ -25,6 +25,8 @@ from tengri.io.sdss import read_sdss
 from tengri.io.specutils_bridge import from_spectrum1d
 
 __all__ = [
+    "CANDELS_TO_TENGRI",
+    "CIGALE_TO_TENGRI",
     "DesiCamera",
     "SpectrumTuple",
     "desi_resolution_matrix",

@@ -42,7 +42,6 @@ pyright	src/tengri/inference/posterior.py	69
 pyright	src/tengri/observation/banded.py	2
 pyright	src/tengri/observation/batched.py	2
 pyright	src/tengri/observation/calibration.py	12
-pyright	src/tengri/observation/catalog.py	1
 pyright	src/tengri/observation/eline_marginalization.py	8
 pyright	src/tengri/observation/fiber_aperture.py	1
 pyright	src/tengri/observation/fiber_spectroscopy.py	1
