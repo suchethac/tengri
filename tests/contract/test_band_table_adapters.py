@@ -140,7 +140,9 @@ def test_cloudy_declines_while_the_diffuse_gas_may_be_active():
 
 def test_cloudy_declines_on_a_free_redshift():
     ctx = _context(_cloudy_spec(redshift=Uniform(0.0, 1.0)), chain=[_nebular(_cloudy_backend())])
-    assert _cloudy_decline(ctx) == ("redshift is free (the band table is built at one redshift)")
+    assert _cloudy_decline(ctx) == (
+        "redshift is a runtime input (the band table is built at one redshift)"
+    )
 
 
 def test_cloudy_declines_on_a_free_line_width():
