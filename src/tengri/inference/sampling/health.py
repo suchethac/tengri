@@ -16,7 +16,7 @@ import jax
 import numpy as np
 
 from tengri.analysis.diagnostics.autocorrelation import effective_sample_size, split_rhat
-from tengri.inference.sampler_health import ESS_FRACTION_WARN, RHAT_WARN
+from tengri.inference.sampler_health import ess_problem, rhat_problem
 
 #: Fraction of divergent steps above which a chain is dead rather than merely inexact: it
 #: reports divergence on most of its steps and goes nowhere.
@@ -143,8 +143,8 @@ def chain_diagnostics(
             worst = (float(value), names[j])
     if worst is not None:
         record["rhat_max"], record["rhat_max_param"] = worst
-        if worst[0] > RHAT_WARN:
-            problems.append(f"R-hat {worst[0]:.3f} for '{worst[1]}' (above {RHAT_WARN})")
+        if problem := rhat_problem(*worst):
+            problems.append(problem)
 
     if not exchangeable:
         low = None
@@ -159,12 +159,8 @@ def chain_diagnostics(
                 low = (total, names[j])
         if low is not None:
             record["ess_bulk_min"], record["ess_bulk_min_param"] = low
-            total_draws = n_chains * n
-            if low[0] < ESS_FRACTION_WARN * total_draws:
-                problems.append(
-                    f"ESS {low[0]:.1f} for '{low[1]}' of {total_draws} draws "
-                    f"(below {ESS_FRACTION_WARN:.0%})"
-                )
+            if problem := ess_problem(*low, n_chains * n):
+                problems.append(problem)
     return record, problems
 
 

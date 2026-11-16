@@ -341,6 +341,7 @@ def _judged(
     moved; variational ones the ELBO trace's relative change; a low-rank metric its rank
     against D. The estimators and thresholds are the repo's (see :mod:`.health`).
     """
+    from tengri.inference.sampler_health import smc_ess_problem
     from tengri.inference.sampling import health
 
     record: dict = {}
@@ -358,9 +359,8 @@ def _judged(
         if step is not None and not (np.isfinite(step) and step > 1e-8):
             problems.append(f"the adapted step size collapsed to {step:.3g}")
         if sampler.name == "smc":
-            ancestor, count = diag.get("min_ancestor_ess"), diag.get("n_particles")
-            if ancestor is not None and count and ancestor < health.ESS_FRACTION_WARN * count:
-                problems.append(f"particle ESS {ancestor:.1f} of {count} particles")
+            if problem := smc_ess_problem(diag):
+                problems.append(problem)
         if "lowrank_rank" in diag:
             extra, more = health.lowrank_diagnostics(
                 diag["lowrank_rank"], diag["lowrank_weakest_log_lambda"], diag["lowrank_dim"]

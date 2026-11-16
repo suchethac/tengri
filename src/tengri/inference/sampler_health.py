@@ -76,7 +76,21 @@ def _worst_ess(columns: dict[str, np.ndarray]) -> tuple[float, str, int] | None:
     return worst
 
 
-def _smc_ess_problem(diagnostics: dict) -> str | None:
+def rhat_problem(value: float, name: str) -> str | None:
+    """Describe a split R-hat above :data:`RHAT_WARN`, or None when it is within it."""
+    if value > RHAT_WARN:
+        return f"R-hat {value:.3f} for '{name}' (above {RHAT_WARN})"
+    return None
+
+
+def ess_problem(value: float, name: str, n_draws: int) -> str | None:
+    """Describe a bulk ESS below :data:`ESS_FRACTION_WARN` of ``n_draws``, or None."""
+    if value < ESS_FRACTION_WARN * n_draws:
+        return f"ESS {value:.1f} for '{name}' of {n_draws} draws (below {ESS_FRACTION_WARN:.0%})"
+    return None
+
+
+def smc_ess_problem(diagnostics: dict) -> str | None:
     """Describe the SMC particle-ESS failure, or None when the population is healthy."""
     ancestor = diagnostics.get("min_ancestor_ess")
     n_particles = diagnostics.get("n_particles")
@@ -99,20 +113,17 @@ def _problems(posterior, backend: str) -> list[str]:
 
     if columns:
         worst_rhat = _worst_rhat(columns, n_chains)
-        if worst_rhat is not None and worst_rhat[0] > RHAT_WARN:
-            found.append(f"R-hat {worst_rhat[0]:.3f} for '{worst_rhat[1]}' (above {RHAT_WARN})")
+        if worst_rhat is not None and (problem := rhat_problem(*worst_rhat)):
+            found.append(problem)
 
     if backend == _SMC_BACKEND:
-        smc_problem = _smc_ess_problem(diagnostics)
+        smc_problem = smc_ess_problem(diagnostics)
         if smc_problem is not None:
             found.append(smc_problem)
     elif columns:
         worst_ess = _worst_ess(columns)
-        if worst_ess is not None and worst_ess[0] < ESS_FRACTION_WARN * worst_ess[2]:
-            found.append(
-                f"ESS {worst_ess[0]:.1f} for '{worst_ess[1]}' of {worst_ess[2]} draws "
-                f"(below {ESS_FRACTION_WARN:.0%})"
-            )
+        if worst_ess is not None and (problem := ess_problem(*worst_ess)):
+            found.append(problem)
     return found
 
 
