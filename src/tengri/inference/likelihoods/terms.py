@@ -269,7 +269,8 @@ def calibration_marginal_term(
     nuisance terms (``m0``), not by the calibrated or line-added spectrum: the noise is
     ``N = diag(err^2 + (f_cal * m0)^2)``, or ``C + diag((f_cal * m0)^2)`` for a pixel
     covariance. ``N`` is fixed at ``m0`` and the nuisance coefficients are integrated out
-    exactly, so ``ln det N`` is part of the value and of its gradient (see
+    (exactly for Gaussian noise, approximately with ``dof``), so ``ln det N`` is part of
+    the value and of its gradient (see
     :func:`floored_noise`).
 
     With ``dof`` (Student-t noise) the marginal over the nuisance coefficients has no closed
@@ -277,11 +278,17 @@ def calibration_marginal_term(
     iteratively reweighted least squares (the Gaussian scale-mixture form of the Student-t),
     fully normalized, and equal to the Gaussian value above as ``dof`` tends to infinity. It
     is an approximation: the Laplace integral uses the expected (Fisher) information at the
-    mode. Against numerical quadrature with one or two nuisance coefficients, 20 or 200 data
-    and one outlier of 50 sigma, its error is at most 0.46 nat (``dof = 3``, two coefficients,
-    20 data) and at most 0.04 nat with 200 data, and it falls as the number of data and
-    ``dof`` grow (``tests/contract/test_student_t_marginal_quadrature.py``); it is not
-    measured for more coefficients, where it is expected to grow. The information is positive
+    mode for independent data and the mixing-weight curvature for a pixel covariance. Against
+    numerical quadrature the error with independent noise is at most 0.46 nat (one
+    or two nuisance coefficients, 20 or 200 data, ``dof`` 3 to 30, one outlier of 50 sigma; worst
+    at ``dof = 3``, two coefficients, 20 data), at most 0.04 nat with 200 data, and falls as the
+    number of data and ``dof`` grow (``tests/contract/test_student_t_marginal_quadrature.py``).
+    With a pixel covariance (one multivariate Student-t, one coefficient, 30 or 200 data,
+    ``dof`` 3 to 10, outliers of 10 and 200 sigma) it is at most 0.023 nat
+    (``tests/contract/test_student_t_marginal_covariance_quadrature.py``). More than two
+    coefficients are not measured there, and the reliability of the mode itself is described in
+    :func:`~tengri.observation.linear_marginal.marginalize_linear_nuisance`. The information is
+    positive
     definite by construction. A pixel covariance makes the noise one multivariate Student-t (see
     :func:`~tengri.observation.linear_marginal.marginalize_linear_nuisance`).
 
@@ -343,8 +350,9 @@ def eline_flat_marginal_term(
 ):
     """Normalized marginal log-likelihood under a zero-mean Gaussian line prior.
 
-    The amplitudes ``a`` are integrated out of ``obs = model + G a + noise`` with
-    ``a ~ N(0, Lambda)``. The "flat" prior is this exact finite-width marginal with
+    With Gaussian noise the amplitudes ``a`` are integrated out of
+    ``obs = model + G a + noise`` with ``a ~ N(0, Lambda)``. The "flat" prior is this exact
+    finite-width marginal with
     ``Lambda = prior_variance``, not the improper-prior limit: every line costs
     ``-1/2 ln Lambda`` nats of evidence when the data constrain it, so evidences of models
     with different numbers of marginalized lines depend on the prior width. The Fitter's
@@ -355,7 +363,8 @@ def eline_flat_marginal_term(
     nuisance terms (``m0``), not by the calibrated or line-added spectrum: the noise is
     ``N = diag(err^2 + (f_cal * m0)^2)``, or ``C + diag((f_cal * m0)^2)`` for a pixel
     covariance. ``N`` is fixed at ``m0`` and the nuisance coefficients are integrated out
-    exactly, so ``ln det N`` is part of the value and of its gradient (see
+    (exactly for Gaussian noise, approximately with ``dof``), so ``ln det N`` is part of
+    the value and of its gradient (see
     :func:`floored_noise`).
 
     With ``dof`` (Student-t noise) the value is the Laplace approximation described in
@@ -401,7 +410,8 @@ def eline_cloudy_marginal_term(
     nuisance terms (``m0``), not by the calibrated or line-added spectrum: the noise is
     ``N = diag(err^2 + (f_cal * m0)^2)``, or ``C + diag((f_cal * m0)^2)`` for a pixel
     covariance. ``N`` is fixed at ``m0`` and the nuisance coefficients are integrated out
-    exactly, so ``ln det N`` is part of the value and of its gradient (see
+    (exactly for Gaussian noise, approximately with ``dof``), so ``ln det N`` is part of
+    the value and of its gradient (see
     :func:`floored_noise`).
 
     With ``dof`` (Student-t noise) the value is the Laplace approximation described in
@@ -453,7 +463,8 @@ def eline_model_marginal_term(
     nuisance terms (``m0``), not by the calibrated or line-added spectrum: the noise is
     ``N = diag(err^2 + (f_cal * m0)^2)``, or ``C + diag((f_cal * m0)^2)`` for a pixel
     covariance. ``N`` is fixed at ``m0`` and the nuisance coefficients are integrated out
-    exactly, so ``ln det N`` is part of the value and of its gradient (see
+    (exactly for Gaussian noise, approximately with ``dof``), so ``ln det N`` is part of
+    the value and of its gradient (see
     :func:`floored_noise`).
 
     With ``dof`` (Student-t noise) the value is the Laplace approximation described in
@@ -570,7 +581,8 @@ def calibration_eline_marginal_term(
     nuisance terms (``m0``), not by the calibrated or line-added spectrum: the noise is
     ``N = diag(err^2 + (f_cal * m0)^2)``, or ``C + diag((f_cal * m0)^2)`` for a pixel
     covariance. ``N`` is fixed at ``m0`` and the nuisance coefficients are integrated out
-    exactly, so ``ln det N`` is part of the value and of its gradient (see
+    (exactly for Gaussian noise, approximately with ``dof``), so ``ln det N`` is part of
+    the value and of its gradient (see
     :func:`floored_noise`).
 
     With ``dof`` (Student-t noise) the value is the Laplace approximation described in

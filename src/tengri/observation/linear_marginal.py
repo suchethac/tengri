@@ -293,9 +293,12 @@ def marginalize_linear_nuisance(
     Gaussian about its mode, and :math:`H` is the expected rather than the observed curvature
     at the mode; it is positive definite by construction, which the observed curvature
     :math:`(\nu+1)(\nu-z_i^2)/(\nu+z_i^2)^2` is not for :math:`|z_i| > \sqrt\nu`. Against
-    quadrature the error is below 0.2 nat for :math:`\nu \ge 3` with one or two coefficients
-    and falls as :math:`\nu` and the number of data grow (``tests/contract``); it is exact as
-    :math:`\nu\to\infty`. The mode is differentiated by the implicit function theorem
+    quadrature the error with independent data is at most 0.46 nat for :math:`\nu` from 3 to 30
+    with one or two coefficients (worst: :math:`\nu = 3`, two coefficients, 20 data), at most
+    0.04 nat with 200 data, and falls as :math:`\nu` and the number of data grow. With
+    ``chol_lower`` and one coefficient (30 or 200 data, :math:`\nu` from 3 to 10, no outlier and
+    outliers of 10 and 200 sigma) it is at most 0.023 nat (``tests/contract``). The marginal is
+    exact as :math:`\nu\to\infty`. The mode is differentiated by the implicit function theorem
     (:func:`jax.lax.custom_root`), so reverse mode stores one weighted solve however many
     steps run, and second derivatives are supported. ``weight_change`` of the result is the
     largest change of a weight under one more step.

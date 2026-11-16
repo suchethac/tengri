@@ -42,14 +42,15 @@ The floor is scaled by the model before any nuisance term: the noise covariance 
 pixel covariance ``C``), where ``m0`` is the model that the calibration polynomial multiplies
 or the line amplitudes are added to, not the calibrated or line-added spectrum. With
 ``calibration_marginalize`` or marginalized emission lines the nuisance coefficients are then
-integrated out exactly given ``N``; ``ln det N`` depends on the model and enters the value
-and the gradient. The batched catalog path does not take a floor.
+integrated out exactly given ``N`` for Gaussian noise; ``ln det N`` depends on the model and
+enters the value and the gradient. The batched catalog path does not take a floor.
 
 A Student-t ``noise_dof`` with ``calibration_marginalize`` or marginalized emission lines
 has no closed-form marginal. The marginal is then a Laplace approximation of the integral over
 the coefficients at the mode found by iteratively reweighted least squares (the Gaussian
-scale-mixture form of the Student-t), with the expected information as its curvature; it
-equals the Gaussian marginal as ``noise_dof`` tends to infinity. See
+scale-mixture form of the Student-t), with the expected information as its curvature (the
+mixing-weight curvature with a pixel covariance); it equals the Gaussian marginal as
+``noise_dof`` tends to infinity. See
 :func:`~tengri.observation.linear_marginal.marginalize_linear_nuisance`.
 
 Example::
