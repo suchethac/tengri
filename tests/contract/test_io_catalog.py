@@ -39,7 +39,7 @@ def small_csv(tmp_path: Path) -> Path:
 
 
 def test_csv_round_trip(small_csv: Path) -> None:
-    cat = load_catalog(small_csv)
+    cat = load_catalog(small_csv, flux_unit="mJy")
     assert len(cat["redshift"]) == 3
     np.testing.assert_allclose(cat["redshift"], [0.10, 0.55, 1.20])
     assert sorted(_bands(cat)) == ["sdss_g", "sdss_r"]
@@ -51,7 +51,7 @@ def test_alternate_err_convention(tmp_path: Path) -> None:
     """Recognize band-suffixed error columns: <band>_err."""
     p = tmp_path / "alt.csv"
     p.write_text("id,z,flux_jwst_f200w,jwst_f200w_err\n1,3.5,12.3,0.6\n2,4.0,9.1,0.5\n")
-    cat = load_catalog(p)
+    cat = load_catalog(p, flux_unit="mJy")
     assert "jwst_f200w" in _bands(cat)
     np.testing.assert_allclose(cat["jwst_f200w_err"], [0.6, 0.5])
 
@@ -61,7 +61,7 @@ def test_missing_err_columns_are_dropped_on_opt_in(tmp_path: Path) -> None:
     p = tmp_path / "partial.csv"
     p.write_text("z,flux_a,flux_err_a,flux_b\n0.1,1.0,0.1,2.0\n0.2,0.9,0.1,1.8\n")
     with pytest.warns(UserWarning, match="'b'"):
-        cat = load_catalog(p, allow_unpaired_bands=True)
+        cat = load_catalog(p, flux_unit="mJy", allow_unpaired_bands=True)
     assert "a" in _bands(cat)
     assert "b" not in _bands(cat)
 
@@ -70,7 +70,7 @@ def test_no_flux_columns_raises(tmp_path: Path) -> None:
     p = tmp_path / "bad.csv"
     p.write_text("id,redshift\n1,0.1\n2,0.2\n")
     with pytest.raises(ValueError, match="No flux"):
-        load_catalog(p)
+        load_catalog(p, flux_unit="mJy")
 
 
 def test_explicit_redshift_col(tmp_path: Path) -> None:
@@ -78,7 +78,7 @@ def test_explicit_redshift_col(tmp_path: Path) -> None:
     p.write_text(
         "obj_id,redshift_used,z_phot,flux_x,flux_err_x\nA,0.30,0.31,1.0,0.1\nB,0.50,0.49,2.0,0.2\n"
     )
-    cat = load_catalog(p, redshift_col="redshift_used")
+    cat = load_catalog(p, flux_unit="mJy", redshift_col="redshift_used")
     np.testing.assert_allclose(cat["redshift"], [0.30, 0.50])
 
 
@@ -86,16 +86,16 @@ def test_explicit_redshift_col_missing(tmp_path: Path) -> None:
     p = tmp_path / "z_named.csv"
     p.write_text("z,flux_x,flux_err_x\n0.1,1.0,0.1\n")
     with pytest.raises(KeyError, match="not in"):
-        load_catalog(p, redshift_col="not_a_col")
+        load_catalog(p, flux_unit="mJy", redshift_col="not_a_col")
 
 
 def test_unsupported_format(tmp_path: Path) -> None:
     p = tmp_path / "wat.parquet"
     p.write_text("z,flux_x\n0.1,1.0\n")
     with pytest.raises(ValueError, match="Unsupported"):
-        load_catalog(p)
+        load_catalog(p, flux_unit="mJy")
 
 
 def test_missing_file() -> None:
     with pytest.raises(FileNotFoundError):
-        load_catalog("/nonexistent/path/galaxies.csv")
+        load_catalog("/nonexistent/path/galaxies.csv", flux_unit="mJy")

@@ -60,7 +60,7 @@ def test_nodata_cell_is_absent_not_a_limit(tmp_path):
     p = _write(
         tmp_path, "id,redshift,flux_sdss_g,flux_err_sdss_g\na,0.1,1.0,0.1\nb,0.2,-9999,0.2\n"
     )
-    cat = load_catalog(p, sentinels={SENTINEL: "nodata"})
+    cat = load_catalog(p, flux_unit="mJy", sentinels={SENTINEL: "nodata"})
     assert np.isnan(cat["sdss_g"][1])
     assert np.isnan(cat["sdss_g_err"][1])
     ca = _ingest(cat)
@@ -72,7 +72,7 @@ def test_upper_limit_at_three_sigma_is_a_censored_limit(tmp_path):
     p = _write(
         tmp_path, "id,redshift,flux_sdss_g,flux_err_sdss_g\na,0.1,1.0,0.1\nb,0.2,-9999,0.2\n"
     )
-    cat = load_catalog(p, sentinels={SENTINEL: ("upper_limit", 3.0)})
+    cat = load_catalog(p, flux_unit="mJy", sentinels={SENTINEL: ("upper_limit", 3.0)})
     ca = _ingest(cat)
     # limit flux = 3 * err, sigma = err, censor = +1 (upper limit)
     assert ca.presence[1, 0]
@@ -87,7 +87,7 @@ def test_upper_limit_at_three_sigma_is_a_censored_limit(tmp_path):
 
 def test_lower_limit_is_censored_minus_one(tmp_path):
     p = _write(tmp_path, "id,redshift,flux_sdss_g,flux_err_sdss_g\na,0.1,-9999,0.2\n")
-    cat = load_catalog(p, sentinels={SENTINEL: ("lower_limit", 2.0)})
+    cat = load_catalog(p, flux_unit="mJy", sentinels={SENTINEL: ("lower_limit", 2.0)})
     ca = _ingest(cat)
     assert ca.censor[0, 0] == -1
     np.testing.assert_allclose(ca.flux[0, 0], 2.0 * 0.2)
@@ -97,38 +97,38 @@ def test_lower_limit_is_censored_minus_one(tmp_path):
 def test_bare_limit_status_without_depth_is_refused(tmp_path):
     p = _write(tmp_path, "id,redshift,flux_sdss_g,flux_err_sdss_g\na,0.1,-9999,0.2\n")
     with pytest.raises(ValueError, match="upper_limit"):
-        load_catalog(p, sentinels={SENTINEL: "upper_limit"})
+        load_catalog(p, flux_unit="mJy", sentinels={SENTINEL: "upper_limit"})
     with pytest.raises(ValueError, match="lower_limit"):
-        load_catalog(p, sentinels={SENTINEL: "lower_limit"})
+        load_catalog(p, flux_unit="mJy", sentinels={SENTINEL: "lower_limit"})
 
 
 def test_unknown_status_is_refused_listing_the_allowed_ones(tmp_path):
     p = _write(tmp_path, "id,redshift,flux_sdss_g,flux_err_sdss_g\na,0.1,-9999,0.2\n")
     with pytest.raises(ValueError, match="allowed"):
-        load_catalog(p, sentinels={SENTINEL: "maybe"})
+        load_catalog(p, flux_unit="mJy", sentinels={SENTINEL: "maybe"})
 
 
 def test_sentinel_in_the_error_column_is_refused(tmp_path):
     p = _write(tmp_path, "id,redshift,flux_sdss_g,flux_err_sdss_g\na,0.1,1.0,-9999\n")
     with pytest.raises(ValueError, match="error column"):
-        load_catalog(p, sentinels={SENTINEL: "nodata"})
+        load_catalog(p, flux_unit="mJy", sentinels={SENTINEL: "nodata"})
 
 
 def test_limit_row_with_non_positive_error_is_refused(tmp_path):
     p = _write(tmp_path, "id,redshift,flux_sdss_g,flux_err_sdss_g\na,0.1,-9999,0.0\n")
     with pytest.raises(ValueError, match="non-positive"):
-        load_catalog(p, sentinels={SENTINEL: ("upper_limit", 3.0)})
+        load_catalog(p, flux_unit="mJy", sentinels={SENTINEL: ("upper_limit", 3.0)})
 
 
 def test_match_is_exact_not_within_a_tolerance(tmp_path):
     p = _write(tmp_path, "id,redshift,flux_sdss_g,flux_err_sdss_g\na,0.1,-9998.9999,0.2\n")
-    cat = load_catalog(p, sentinels={SENTINEL: "nodata"})
+    cat = load_catalog(p, flux_unit="mJy", sentinels={SENTINEL: "nodata"})
     assert cat["sdss_g"][0] == -9998.9999
 
 
 def test_undeclared_sentinel_is_still_refused_at_ingest(tmp_path):
     p = _write(tmp_path, "id,redshift,flux_sdss_g,flux_err_sdss_g\na,0.1,-9999,0.2\n")
-    cat = load_catalog(p)
+    cat = load_catalog(p, flux_unit="mJy")
     with pytest.raises(ValueError, match="sentinels=") as exc:
         _ingest(cat, missing="error")
     assert 'lim_flag="full"' in str(exc.value)

@@ -61,6 +61,7 @@ def _load(path):
 
     return load_catalog(
         path,
+        flux_unit="mJy",
         filter_mapping={b: b for b in BANDS},
         sentinels={NODATA: "nodata", UPPER: ("upper_limit", 3.0)},
     )

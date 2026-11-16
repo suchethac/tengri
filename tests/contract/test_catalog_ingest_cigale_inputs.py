@@ -240,9 +240,11 @@ def test_load_catalog_refuses_a_band_without_errors_unless_dropped_by_name(tmp_p
 
     path = _write_csv(tmp_path / "c.csv", _CSV_ROWS)
     with pytest.raises(ValueError, match="sdss_i"):
-        load_catalog(path, filter_mapping=_FILTER_MAP)
+        load_catalog(path, flux_unit="mJy", filter_mapping=_FILTER_MAP)
     with pytest.warns(UserWarning, match=r"sdss_i"):
-        cat = load_catalog(path, filter_mapping=_FILTER_MAP, allow_unpaired_bands=True)
+        cat = load_catalog(
+            path, flux_unit="mJy", filter_mapping=_FILTER_MAP, allow_unpaired_bands=True
+        )
     assert tuple(_bands(cat)) == ("sdss_g", "sdss_r")
     assert "sdss_i" not in cat
 
@@ -318,7 +320,7 @@ def test_load_catalog_ignores_a_column_that_is_not_mapped(tmp_path):
     path.write_text(
         "id,redshift,sdss_g,sdss_g_err,unknown_filter\na,0.1,1.0,0.1,5.0\nb,0.2,2.0,0.2,6.0\n"
     )
-    cat = load_catalog(path, filter_mapping={"sdss_g": "sdss_g"})
+    cat = load_catalog(path, flux_unit="mJy", filter_mapping={"sdss_g": "sdss_g"})
     assert tuple(_bands(cat)) == ("sdss_g",)
 
 
@@ -328,7 +330,9 @@ def test_load_catalog_warns_when_a_mapped_band_is_dropped(tmp_path):
 
     path = _write_csv(tmp_path / "c.csv", _CSV_ROWS)
     with pytest.warns(UserWarning, match=r"sdss_i"):
-        cat = load_catalog(path, filter_mapping=_FILTER_MAP, allow_unpaired_bands=True)
+        cat = load_catalog(
+            path, flux_unit="mJy", filter_mapping=_FILTER_MAP, allow_unpaired_bands=True
+        )
     assert "sdss_i" not in cat
 
 
@@ -340,5 +344,5 @@ def test_load_catalog_does_not_warn_for_a_non_mapped_column(tmp_path):
     path.write_text("id,redshift,sdss_g,sdss_g_err,comment\na,0.1,1.0,0.1,ok\n")
     with warnings.catch_warnings():
         warnings.simplefilter("error")
-        cat = load_catalog(path, filter_mapping={"sdss_g": "sdss_g"})
+        cat = load_catalog(path, flux_unit="mJy", filter_mapping={"sdss_g": "sdss_g"})
     assert tuple(_bands(cat)) == ("sdss_g",)

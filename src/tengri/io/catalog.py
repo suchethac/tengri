@@ -16,7 +16,7 @@ the dict.
 Examples
 --------
 >>> from tengri.io import load_catalog
->>> table = load_catalog("3dhst_photoz.csv")
+>>> table = load_catalog("3dhst_photoz.csv", flux_unit="mJy")
 >>> table["redshift"].shape
 (1234,)
 >>> sorted(k for k in table if not k.endswith("_err"))
@@ -34,6 +34,8 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+
+from tengri.utils.catalog_status import FLUX_UNITS, assign_cell_status
 
 __all__ = ["CANDELS_TO_TENGRI", "CIGALE_TO_TENGRI", "load_catalog"]
 
@@ -224,77 +226,11 @@ def _read_table(path: Path, delimiter: str | None) -> tuple[list[str], list[Any]
     )
 
 
-_LIMIT_STATUSES = ("upper_limit", "lower_limit")
-
-
-def _parse_sentinel_status(key, status) -> tuple[str, float | None]:
-    """Validate one declared sentinel status; return ``(kind, n_sigma)``.
-
-    ``kind`` is ``"nodata"``, ``"upper_limit"`` or ``"lower_limit"``; ``n_sigma`` is
-    ``None`` for ``"nodata"``. A bare limit name without a depth is refused.
-    """
-    allowed = "'nodata', ('upper_limit', n_sigma), ('lower_limit', n_sigma)"
-    if isinstance(status, str):
-        if status == "nodata":
-            return "nodata", None
-        if status in _LIMIT_STATUSES:
-            raise ValueError(
-                f"sentinels[{key!r}] = {status!r} gives no depth. Declare it as "
-                f"({status!r}, n_sigma), e.g. ({status!r}, 3.0): the limit flux is "
-                f"n_sigma times the error."
-            )
-        raise ValueError(f"sentinels[{key!r}] = {status!r} is not a status; allowed: {allowed}.")
-    if isinstance(status, tuple | list) and len(status) == 2 and status[0] in _LIMIT_STATUSES:
-        n_sigma = float(status[1])
-        if not (np.isfinite(n_sigma) and n_sigma > 0.0):
-            raise ValueError(
-                f"sentinels[{key!r}] = {tuple(status)!r}: n_sigma must be finite and > 0; "
-                f"got {status[1]!r}."
-            )
-        return str(status[0]), n_sigma
-    raise ValueError(f"sentinels[{key!r}] = {status!r} is not a status; allowed: {allowed}.")
-
-
-def _apply_sentinels(band, flux, err, sentinels):
-    """Replace declared sentinel flux cells by absent cells or censored limits (#3547 D4).
-
-    Returns new ``(flux, err, censor)`` arrays; the inputs are not modified. Every
-    status is validated before any cell is read, so a bad declaration fails on a
-    table that does not contain its sentinel.
-    """
-    flux = flux.copy()
-    err = err.copy()
-    censor = np.zeros(flux.shape, dtype=int)
-    for key, status in sentinels.items():
-        value = float(key)
-        kind, n_sigma = _parse_sentinel_status(key, status)
-        if np.any(err == value):
-            raise ValueError(
-                f"band {band!r}: declared sentinel {key!r} appears in the error column. "
-                f"A sentinel marks a flux cell; an error cannot be a sentinel."
-            )
-        hit = flux == value
-        if not hit.any():
-            continue
-        if kind == "nodata":
-            flux[hit] = np.nan
-            err[hit] = np.nan
-            continue
-        if np.any(err[hit] <= 0.0) or np.any(~np.isfinite(err[hit])):
-            rows = np.flatnonzero(hit & ~((err > 0.0) & np.isfinite(err))).tolist()
-            raise ValueError(
-                f"band {band!r}: {kind} sentinel {key!r} at row(s) {rows} has a "
-                f"non-positive or non-finite error; a limit needs a positive error as its sigma."
-            )
-        flux[hit] = n_sigma * err[hit]
-        censor[hit] = 1 if kind == "upper_limit" else -1
-    return flux, err, censor
-
-
 def load_catalog(
     path: str | Path,
     redshift_col: str | None = None,
     *,
+    flux_unit: str,
     allow_unpaired_bands: bool = False,
     filter_mapping: dict[str, str] | None = None,
     id_col: str | None = None,
@@ -314,6 +250,11 @@ def load_catalog(
         Name of the redshift column. If ``None`` (default), tries the
         common names: ``redshift``, ``z``, ``z_phot``, ``z_spec``,
         ``z_best``, ``zphot``, ``zspec``, ``z_peak``.
+    flux_unit : str
+        Unit of the flux and error columns, required (keyword-only): one of
+        ``"cgs_fnu"``, ``"mJy"``, ``"uJy"``, ``"maggies"``, ``"ab_mag"``. A limit
+        declared by ``sentinels`` is computed in flux space for the linear units, and
+        ``"ab_mag"`` limits are not supported yet (nodata cells are).
     allow_unpaired_bands : bool, optional
         If ``False`` (default), a ``flux_<band>`` column with no error
         column raises ``ValueError``. If ``True``, such bands are dropped
@@ -371,7 +312,7 @@ def load_catalog(
 
         .. code-block:: python
 
-            table = load_catalog("survey.csv", filter_mapping=mapping)
+            table = load_catalog("survey.csv", flux_unit="mJy", filter_mapping=mapping)
             cat = Catalog(fwd, table, flux_unit="mJy", redshift_col="redshift")
 
         ``flux_cols`` and ``err_cols`` need no argument: ``Catalog`` already reads
@@ -416,7 +357,7 @@ def load_catalog(
     Examples
     --------
     >>> from tengri.io import load_catalog
-    >>> table = load_catalog("3dhst_v4.1.5_photometry.csv")
+    >>> table = load_catalog("3dhst_v4.1.5_photometry.csv", flux_unit="mJy")
     >>> table["redshift"].shape
     (50000,)
     >>> table["wfc3_f160w"].shape, table["wfc3_f160w_err"].shape
@@ -427,11 +368,14 @@ def load_catalog(
 
     >>> table = load_catalog(
     ...     "survey.csv",
+    ...     flux_unit="mJy",
     ...     sentinels={-99.0: ("upper_limit", 3.0)},  # flux -99 -> 3 sigma upper limit
     ... )  # doctest: +SKIP
     >>> table["sdss_g_censor"]  # doctest: +SKIP
     array([0, 1, 0])
     """
+    if flux_unit not in FLUX_UNITS:
+        raise ValueError(f"flux_unit={flux_unit!r} not in {list(FLUX_UNITS)}.")
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(path)
@@ -499,14 +443,18 @@ def load_catalog(
     for band, cols in band_cols.items():
         flux = np.array(by_name[cols["flux"]], dtype=float)
         err = np.array(by_name[cols["err"]], dtype=float)
-        if sentinels is None:
-            _put_column(out, band, flux)
-            _put_column(out, f"{band}_err", err)
-        else:
-            flux, err, censor = _apply_sentinels(band, flux, err, sentinels)
-            _put_column(out, band, flux)
-            _put_column(out, f"{band}_err", err)
-            _put_column(out, f"{band}_censor", censor)
+        status = assign_cell_status(
+            flux[:, None],
+            err[:, None],
+            names=(band,),
+            err_names=(f"{band}_err",),
+            flux_unit=flux_unit,
+            sentinels=sentinels,
+        )
+        _put_column(out, band, status.flux[:, 0])
+        _put_column(out, f"{band}_err", status.err[:, 0])
+        if sentinels is not None:
+            _put_column(out, f"{band}_censor", status.censor[:, 0])
     return out
 
 
