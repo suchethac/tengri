@@ -60,4 +60,4 @@ pyright	src/tengri/observation/photometry_model.py	1
 pyright	src/tengri/observation/redshift_kernel.py	1
 pyright	src/tengri/observation/spectral_indices.py	7
 pyright	src/tengri/observation/spectroscopy.py	24
-pyright	src/tengri/observation/spectrum.py	9
+pyright	src/tengri/observation/spectrum.py	7

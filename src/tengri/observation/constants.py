@@ -34,6 +34,14 @@ from __future__ import annotations
 #: - ``"fitted"``: Line amplitudes as free MCMC parameters.
 ELINE_MODES = ("off", "marginalized", "fitted")
 
+#: Message of the retired ``eline_broad`` flag (#3332).
+ELINE_BROAD_RETIRED = (
+    "eline_broad=True is retired: it registered a width parameter that no likelihood "
+    "read. Write a broad component as a kinematic group, "
+    "eline_kinematics={'broad': {'lines': ['Halpha'], 'add': True}}, and give "
+    "eline_sigma_kms_broad a prior."
+)
+
 from tengri.observation.eline_catalog import (
     CLOUDY_LINE_NAMES,
     CLOUDY_LINE_WAVELENGTHS,

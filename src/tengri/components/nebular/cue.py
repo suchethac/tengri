@@ -1556,7 +1556,7 @@ class CueBackend(NebularBackendDefaults):
                     "     use Cue (star_forming_photometry, quiescent_z0,\n"
                     "     stochastic_sfh_jwst, agn_panchromatic) need a\n"
                     "     file like fsps_prsc_miles_chabrier.h5. Download with:\n"
-                    "         from tengri.data import download_ssp\n"
+                    "         from tengri import download_ssp\n"
                     "         path = download_ssp('fsps_prsc_miles_chabrier.h5')\n"
                     "     then  load_ssp_data(str(path)). See\n"
                     "     tengri.data.list_remote_ssps() for the full catalog.\n"

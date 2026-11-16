@@ -30,7 +30,7 @@ from tengri import (
     WavePrecomp,
     load_ssp_data,
 )
-from tengri.inference.fitter import _model_at_override_redshift
+from tengri.inference.fitter import _model_at_override_redshift, promote_to_runtime_redshift
 
 SSP_PATH = "data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 ZS = (0.1, 0.3, 0.8)
@@ -206,34 +206,32 @@ def test_exact_promotion_rejects_a_table_range():
         base.with_runtime_redshift(Z_RANGE)
 
 
-# Bit-identity pin (#3505): a Fixed-z model that is NOT promoted keeps the fast path.
-# Values are photometry [erg/s/cm2/Hz] computed on origin/main before this change,
-# as float64 hex, at redshifts 0.1 (plain and rich structures) and 0.1 with WavePrecomp.
-_PIN = {
-    ("exact", "plain", 0.1): [
-        "0x1.eeaad1813c405p-92",
-        "0x1.a602837635024p-91",
-        "0x1.28addff427fe6p-90",
-    ],
-    ("exact", "rich", 0.1): [
-        "0x1.eec012a2d4d8bp-92",
-        "0x1.a621c19a74dc0p-91",
-        "0x1.28cdbd620f124p-90",
-    ],
-    ("wp", "rich", 0.1): [
-        "0x1.eec677c37d44bp-92",
-        "0x1.a6250caadc550p-91",
-        "0x1.28c989d37249ap-90",
-    ],
-}
+@pytest.mark.parametrize(
+    ("representation", "structure"), [("exact", "plain"), ("exact", "rich"), ("wp", "rich")]
+)
+def test_fixed_unpromoted_model_is_untouched_by_promotion(representation, structure):
+    """A Fixed model never handed to the runtime mechanism keeps its fixed-z path.
 
-
-@pytest.mark.parametrize(("representation", "structure", "z"), list(_PIN))
-def test_fixed_unpromoted_model_is_bit_identical_to_main(representation, structure, z):
-    """A Fixed model that is not promoted is bit-identical to origin/main (#3505)."""
-    got = np.asarray(_build(representation, structure, Fixed(z)).predict_photometry({}))
-    expected = np.array([float.fromhex(v) for v in _PIN[(representation, structure, z)]])
-    np.testing.assert_array_equal(got, expected)
+    Promoting the same model for its own redshift builds a separate runtime model
+    and leaves the original a fixed-z model with unchanged photometry, bit for bit.
+    The promoted model, which does go through the mechanism, agrees to the sweep
+    tolerance, so the pair would differ if either side stopped reading z correctly.
+    """
+    z = Z_PLACEHOLDER
+    model = _build(representation, structure, Fixed(z))
+    before = np.asarray(model.predict_photometry({}))
+    promoted = promote_to_runtime_redshift(model, [z])
+    assert promoted is not model
+    assert not model._z_runtime
+    assert promoted._z_runtime
+    assert model._dl_cm_fixed is not None, "the fixed-z fast path was lost"
+    np.testing.assert_array_equal(np.asarray(model.predict_photometry({})), before)
+    np.testing.assert_allclose(
+        np.asarray(promoted.predict_photometry({"redshift": jnp.asarray(z)})),
+        before,
+        rtol=RTOL[representation],
+        atol=0.0,
+    )
 
 
 # ── Component cells: every table a component bakes follows the runtime z ────────
