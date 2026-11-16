@@ -24,7 +24,10 @@ import numpy as np
 
 from tengri.components.lyc import LYMAN_LIMIT_AA, edge_interp, ionizing_mask
 from tengri.units import lnu_to_fnu
-from tengri.utils.gaussian_segments import gaussian_exp_moments
+from tengri.utils.gaussian_segments import (
+    gaussian_exp_moments,
+    gaussian_exp_moments_between_edges,
+)
 
 # ── SSP library spectral resolutions (velocity dispersion in km/s) ──
 # Flat fallback used only when the loaded SSP grid has no per-wavelength
@@ -1276,25 +1279,24 @@ def _interp_cells(wave_rest, sed_rest, has_lyc_edge):
     """Per-cell nodes, value and slope of the lambda-linear SED interpolant (#3512).
 
     Cell ``i`` is ``F = y_i + q_i (lambda - w_i)`` on ``[w_i, w_{i+1}]``. With a Lyman step the
-    bracket cell ends at the edge and is constant ``y_a`` (``q = 0``); the part above the edge is
-    returned as ``(edge, w_hi, y_b)``.
+    bracket cell is constant ``y_a`` (``q = 0``) over its whole width, and the part above the
+    edge is returned as ``(edge, w_hi, y_b - y_a)``, the jump to add there.
     """
     w, y = wave_rest, sed_rest
-    w_lo, w_hi = w[:-1], w[1:]
+    w_lo = w[:-1]
     q = (y[1:] - y[:-1]) / (w[1:] - w[:-1])
     y_lo = y[:-1]
     if not has_lyc_edge:
-        return w_lo, w_hi, y_lo, q, None
+        return w_lo, y_lo, q, None
     n = w.shape[0]
     n_ion = jnp.sum(ionizing_mask(w, LYMAN_LIMIT_AA).astype(jnp.int32))
     has_bracket = (n_ion > 0) & (n_ion < n)
     ia = jnp.clip(n_ion - 1, 0, n - 2)
     # With a bracket, n_ion - 1 is already in [0, n - 2]; without one the mask is False.
     is_bracket = (jnp.arange(n - 1) == n_ion - 1) & has_bracket
-    w_hi = jnp.where(is_bracket, LYMAN_LIMIT_AA, w_hi)
     q = jnp.where(is_bracket, 0.0, q)
     upper = jnp.where(has_bracket, w[ia + 1], LYMAN_LIMIT_AA)
-    return w_lo, w_hi, y_lo, q, (LYMAN_LIMIT_AA, upper, y[ia + 1])
+    return w_lo, y_lo, q, (LYMAN_LIMIT_AA, upper, y[ia + 1] - y[ia])
 
 
 def _cell_window_width(wave_rest, reach_ln: float = _POINT_REACH_LN) -> int:
@@ -1373,25 +1375,28 @@ def point_readout_gaussian_ln(
     wq = jnp.asarray(wave_obs) / (1.0 + redshift)
     sig = jnp.broadcast_to(jnp.asarray(sigma_ln), wq.shape)
     sig = jnp.where(sig > 0.0, sig, 1.0)
-    w_lo, w_hi, y_lo, q, step = _interp_cells(wave_rest, sed_rest, has_lyc_edge)
+    w_lo, y_lo, q, step = _interp_cells(wave_rest, sed_rest, has_lyc_edge)
     n_cells = w_lo.shape[0]
     reach = _POINT_REACH_LN if reach_ln is None else float(reach_ln)
     width = _cell_window_width(wave_rest, reach)
     j0 = jnp.searchsorted(jnp.log(wave_rest[1:]), jnp.log(wq) - reach, side="left")
-    idx = j0[:, None] + jnp.arange(width)[None, :]
+    # The window's cells are consecutive, so each node is an edge shared by two cells.
+    edge_idx = j0[:, None] + jnp.arange(width + 1)[None, :]
+    idx = edge_idx[:, :-1]
     valid = idx < n_cells
     idx = jnp.minimum(idx, n_cells - 1)
     wq_col, sig_col = wq[:, None], sig[:, None]
-    m1, m2 = gaussian_exp_moments(
-        _log_offset(w_lo[idx], wq_col), _log_offset(w_hi[idx], wq_col), sig_col
-    )
+    node_offsets = _log_offset(wave_rest[jnp.minimum(edge_idx, n_cells)], wq_col)
+    m1, m2 = gaussian_exp_moments_between_edges(node_offsets, sig_col)
     # e^s F with F = y_a + q (lambda - w_a) and lambda = wq e^s: y_a M1 + q (wq M2 - w_a M1).
     terms = y_lo[idx] * m1 + q[idx] * (wq_col * m2 - w_lo[idx] * m1)
     total = jnp.sum(jnp.where(valid, terms, 0.0), axis=1)
     if step is not None:
-        edge, upper, y_b = step
+        # The bracketing cell entered above as y_a over its whole width; above the edge
+        # the value is y_b.
+        edge, upper, jump = step
         m1_step, _ = gaussian_exp_moments(_log_offset(edge, wq), _log_offset(upper, wq), sig)
-        total = total + y_b * m1_step
+        total = total + jump * m1_step
     return total
 
 

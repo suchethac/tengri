@@ -12,7 +12,9 @@ velocity-broadened lines both compose them, rather than each forming its own.
 from __future__ import annotations
 
 import jax.numpy as jnp
-from jax.scipy.special import ndtr
+from jax.scipy.special import erfc, ndtr
+
+_INV_SQRT2 = 0.7071067811865476
 
 
 def ndtr_diff(upper, lower):
@@ -70,7 +72,55 @@ def gaussian_exp_moments(s_lo, s_hi, sigma):
     **JIT-compatible**: yes. **Gradient-safe**: yes for ``sigma > 0``; the caller gates the
     zero-width case.
     """
+    s_lo, s_hi, sigma = jnp.broadcast_arrays(
+        jnp.asarray(s_lo), jnp.asarray(s_hi), jnp.asarray(sigma)
+    )
+    m1, m2 = gaussian_exp_moments_between_edges(jnp.stack([s_lo, s_hi], axis=-1), sigma[..., None])
+    return m1[..., 0], m2[..., 0]
+
+
+def gaussian_exp_moments_between_edges(s_edges, sigma):
+    r"""Moments :math:`M_1, M_2` of :math:`e^{ks}` over consecutive segments of a centered Gaussian.
+
+    The segments are the intervals between neighboring entries of ``s_edges`` along its
+    last axis, with :math:`M_k` as in :func:`gaussian_exp_moments`. Each normal CDF is
+    evaluated once per edge and shared by the two segments that meet there:
+
+    .. math::
+
+        M_k^{(i)} = e^{k^2\sigma^2/2}\,\bigl[\Phi(x_{i+1}) - \Phi(x_i)\bigr],
+        \qquad x_i = (s_i - k\sigma^2)/\sigma ,
+
+    where :math:`s_i` are the edges, :math:`\sigma` the kernel width and :math:`\Phi` the
+    normal CDF. In the upper tail the difference is taken as
+    :math:`\Phi(-x_i) - \Phi(-x_{i+1})`, so it never cancels two values near one.
+
+    Parameters
+    ----------
+    s_edges : array_like, shape (..., n + 1)
+        Segment edges, non-decreasing along the last axis [same units as ``sigma``].
+    sigma : array_like, broadcastable to shape (..., 1)
+        Kernel width, positive [same units as the edges].
+
+    Returns
+    -------
+    m1, m2 : ndarray, shape (..., n)
+        :math:`M_1` and :math:`M_2` of each segment [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes. **Gradient-safe**: yes for ``sigma > 0``; the caller gates the
+    zero-width case.
+    """
     s2 = sigma * sigma
-    m1 = jnp.exp(0.5 * s2) * ndtr_diff((s_hi - s2) / sigma, (s_lo - s2) / sigma)
-    m2 = jnp.exp(2.0 * s2) * ndtr_diff((s_hi - 2.0 * s2) / sigma, (s_lo - 2.0 * s2) / sigma)
-    return m1, m2
+
+    def moment(k):
+        x = (s_edges - k * s2) / sigma
+        lower = 0.5 * erfc(-x * _INV_SQRT2)
+        upper = 0.5 * erfc(x * _INV_SQRT2)
+        direct = lower[..., 1:] - lower[..., :-1]
+        mirrored = upper[..., :-1] - upper[..., 1:]
+        in_upper_tail = x[..., 1:] + x[..., :-1] > 0.0
+        return jnp.exp(0.5 * k * k * s2) * jnp.where(in_upper_tail, mirrored, direct)
+
+    return moment(1.0), moment(2.0)
