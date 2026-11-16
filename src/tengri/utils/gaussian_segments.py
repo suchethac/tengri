@@ -116,8 +116,12 @@ def gaussian_exp_moments_between_edges(s_edges, sigma):
 
     def moment(k):
         x = (s_edges - k * s2) / sigma
-        lower = 0.5 * erfc(-x * _INV_SQRT2)
-        upper = 0.5 * erfc(x * _INV_SQRT2)
+        # One evaluation per edge: the tail on the edge's own side of the center. The other
+        # tail is its complement, which is exact to round-off there because it is near one.
+        tail = 0.5 * erfc(jnp.abs(x) * _INV_SQRT2)
+        below = x < 0.0
+        lower = jnp.where(below, tail, 1.0 - tail)
+        upper = jnp.where(below, 1.0 - tail, tail)
         direct = lower[..., 1:] - lower[..., :-1]
         mirrored = upper[..., :-1] - upper[..., 1:]
         in_upper_tail = x[..., 1:] + x[..., :-1] > 0.0
