@@ -56,14 +56,17 @@ BASE = {
 # Re-pinned 2026-11-15 after #3434 (in #3462): an undeclared metallicity scatter is now a node-
 # exact cubic-Hermite read of the SSP; log F_r moves by +0.0042 to +0.0052 (0.43 to 0.52 % in
 # flux). 8aff37cb3 reproduces the previous values exactly.
+#: Re-pinned after #3528 (the SSP table is read in log Z by monotone PCHIP, not linearly):
+#: the default metallicity sits 3e-4 dex off the MIST grid's solar node, so the exact
+#: photometry moved by up to 9.0e-6 (tflex_frac) and 1.0e-5 (tlast_frac) relative.
 LOG_FR_AWAY = {
     "tflex_frac": (
         (1.5, 1.77, 2.2),
-        (-59.863622400839155, -59.87025197724868, -59.881193155604585),
+        (-59.86308195942698, -59.86971319927951, -59.88065690604535),
     ),
     "tlast_frac": (
         (0.33, 0.57, 0.81),
-        (-59.7575751450012, -59.92157078070381, -60.06157907064469),
+        (-59.75696305861235, -59.92105549466291, -60.061116133926426),
     ),
 }
 #: Swept edge range [Gyr], keyed by the timing parameter it sweeps.

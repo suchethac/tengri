@@ -640,11 +640,18 @@ def _build_eline_G_eff(params, fixed_values, model, eline_wavelengths, constrain
     from tengri.observation.eline_marginalization import (
         apply_doublet_constraints,
         build_eline_design_matrix,
+        line_kinematics,
     )
 
     z = params.get("redshift", fixed_values.get("redshift", 0.0))
-    sigma_kms = params.get("eline_sigma_kms", 0.0)
-    delta_v = params.get("eline_delta_v_kms", 0.0)
+    spec_cfg = getattr(getattr(model, "observation", None), "spectroscopy", None)
+    catalog = getattr(spec_cfg, "effective_catalog", None)
+    if catalog is not None and catalog.kinematic_groups != ("",):
+        # Named kinematic groups: each line reads its group's width and offset.
+        sigma_kms, delta_v = line_kinematics(params, fixed_values, catalog)
+    else:
+        sigma_kms = params.get("eline_sigma_kms", 0.0)
+        delta_v = params.get("eline_delta_v_kms", 0.0)
     resolution = _eline_scalar_resolution(model)
     G = build_eline_design_matrix(
         model.wave_obs,

@@ -177,14 +177,19 @@ def test_eline_legacy_bucket_matches_canonical_tuple() -> None:
     _assert_bucket_matches_canonical(bucket, canonical)
 
 
-def test_eline_broad_legacy_bucket_matches_canonical_tuple() -> None:
-    from tengri.components.nebular._params import ELINE_BROAD_PARAMS as canonical
-    from tengri.parameters._builders import _resolve_lazy_bucket
+def test_eline_group_declarations_reach_the_registry() -> None:
+    """A named kinematic group registers its width and offset declarations (#3332)."""
+    from tengri.components.nebular._params import eline_group_params
+    from tengri.parameters._builders import _bucket_from_declarations, _build_param_registry
 
-    bucket = _resolve_lazy_bucket("_ELINE_BROAD_PARAMS")
+    canonical = eline_group_params("broad")
+    assert [d.name for d in canonical] == ["eline_sigma_kms_broad", "eline_delta_v_kms_broad"]
+    _assert_bucket_matches_canonical(_bucket_from_declarations(canonical), canonical)
 
-    assert set(bucket) == {d.name for d in canonical}
-    _assert_bucket_matches_canonical(bucket, canonical)
+    registry, _ = _build_param_registry("dpl", eline_mode="marginalized", eline_groups=("broad",))
+    assert {d.name for d in canonical} <= set(registry)
+    off, _ = _build_param_registry("dpl", eline_mode="off", eline_groups=("broad",))
+    assert not {d.name for d in canonical} & set(off)
 
 
 def test_cue_ionspec_legacy_bucket_matches_canonical_tuple() -> None:

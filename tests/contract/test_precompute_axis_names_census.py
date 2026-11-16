@@ -108,7 +108,7 @@ def _declarable_names() -> frozenset[str]:
                 "shock": True,
                 "evolving_metallicity": True,
                 "eline_mode": "on",
-                "eline_broad": True,
+                "eline_groups": ("broad",),
                 "igm_patchy": True,
                 "dla": True,
                 "dust_emission": "dale2014",
