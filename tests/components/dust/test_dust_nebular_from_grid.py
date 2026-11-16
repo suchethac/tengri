@@ -32,6 +32,7 @@ from tengri.components.dust.energy_balance_precompute import (
     lut_l_absorbed_stellar_log10,
 )
 from tengri.components.dust.two_component import DustSEDComponent, DustSEDComponentConfig
+from tengri.components.stellar.sps.met_pchip import pchip_node_slopes
 from tengri.forward.energy_balance import bolometric_absorbed_log10
 from tengri.protocols.component import ForwardState
 from tengri.utils.physics_constants import C_AA
@@ -111,6 +112,19 @@ def _component(kind: str, *, flagged: bool):
         return dataclasses.replace(comp, nebular_from_grid=False)
 
 
+def _with_native_slopes(lut: EnergyBalanceLUT) -> EnergyBalanceLUT:
+    """The native-slope sibling (#3541) of a hand-made table.
+
+    ``build_energy_balance_lut_with_slopes`` builds the sibling by running the same linear
+    builder on the SSP's native PCHIP slopes. These tables are hand-made with no SSP, so the
+    sibling is the PCHIP slopes of each metallicity-leading family, from the same node values.
+    """
+    slope_lut = lut._replace(
+        B=pchip_node_slopes(lut.B, _LGMET), G=pchip_node_slopes(lut.G, _LGMET)
+    )
+    return lut._replace(slopes=slope_lut)
+
+
 def _lut(kind: str) -> EnergyBalanceLUT:
     rng = np.random.default_rng(5)
     tau_a = _TAU_A_GRID if kind == _TWO else np.zeros(1)
@@ -121,11 +135,13 @@ def _lut(kind: str) -> EnergyBalanceLUT:
     orientation = _orientation(_WAVE)
     b = b * orientation
     g = g * orientation
-    return EnergyBalanceLUT(
-        B=jnp.asarray(b),
-        G=jnp.asarray(g),
-        tau_bc_grid=jnp.asarray(tau_a),
-        tau_diff_grid=jnp.asarray(_TAU_B_GRID),
+    return _with_native_slopes(
+        EnergyBalanceLUT(
+            B=jnp.asarray(b),
+            G=jnp.asarray(g),
+            tau_bc_grid=jnp.asarray(tau_a),
+            tau_diff_grid=jnp.asarray(_TAU_B_GRID),
+        )
     )
 
 

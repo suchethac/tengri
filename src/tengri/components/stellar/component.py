@@ -149,7 +149,12 @@ from tengri.components.stellar.sps.dsps_wrapper import (
     enforce_increasing_cosmic_time,
     has_alpha_grid,
 )
-from tengri.components.stellar.sps.met_pchip import met_collapsed, met_weights
+from tengri.components.stellar.sps.met_pchip import (
+    met_collapsed,
+    met_collapsed_hermite,
+    met_weights,
+    native_slope_flux,
+)
 from tengri.parameters.translate import LOG10_ZSUN
 from tengri.protocols.component import declared_default
 from tengri.utils.scale import _not_computable, log10_magnitude, pow10, representable_denominator
@@ -1399,9 +1404,62 @@ def _delta_met_weights(log_z, lgmet_scatter, ssp_lgmet, *, declared):
     return met_weights(log_z, ssp_lgmet)
 
 
+def _native_met_slopes(ssp_data):
+    """Native PCHIP tangents of the SSP flux across metallicity (#3541).
+
+    Computed once per grid inside a :func:`native_slope_scope` (the model build opens one);
+    every table's slope sibling is the same linear build applied to these slopes, so the
+    table reads by Hermite of (values, slopes).
+    """
+    return native_slope_flux(ssp_data.ssp_flux, ssp_data.ssp_lgmet)
+
+
+def _lut_array_fields(lut) -> dict:
+    """The array fields of a stellar LUT, with its native-slope sibling nested (#2812, #3541).
+
+    The sibling is itself a LUT of the same type, so its arrays are collected the same way
+    and nested under ``"slopes"``. Python scalars and ``None`` fields stay on the closure.
+    """
+    fields = lut._asdict()
+    arrays = {
+        name: value
+        for name, value in fields.items()
+        if name != "slopes" and isinstance(value, (np.ndarray, jax.Array))
+    }
+    if fields.get("slopes") is not None:
+        arrays["slopes"] = _lut_array_fields(fields["slopes"])
+    return arrays
+
+
+def _lut_with_array_fields(lut, threaded: dict):
+    """``lut`` with its array fields, and its slope sibling's, taken from ``threaded``."""
+    updates = {name: value for name, value in threaded.items() if name != "slopes"}
+    new = lut._replace(**updates)
+    sibling = threaded.get("slopes")
+    if sibling is not None and new.slopes is not None:
+        new = new._replace(slopes=_lut_with_array_fields(new.slopes, sibling))
+    return new
+
+
+def _read_pair(table, slope):
+    """``(values, native slopes)`` for a Hermite metallicity read (#3541).
+
+    A table without its slope sibling is refused: a silent array read would fall back
+    to PCHIP of the table's own resampled values, which is the bug.
+    """
+    if slope is None:
+        raise ValueError(
+            "a precomputed table reached the metallicity read without its native-slope "
+            "sibling (#3541); rebuild it with the slope build."
+        )
+    return (table, slope)
+
+
 def _keep_table(table, age_axis=1):
     """Identity collapse: the declared (lognormal) path keeps each table as stored."""
     del age_axis
+    if isinstance(table, tuple):
+        return table[0]
     return table
 
 
@@ -1439,6 +1497,9 @@ def _met_read_ops(joint_weights, *, declared, ssp_lgmet, met_z):
     joint_age = joint_weights.sum(axis=0, keepdims=True)
 
     def collapse(table, age_axis=1):
+        if isinstance(table, tuple):
+            values, slopes = table
+            return met_collapsed_hermite(values, slopes, ssp_lgmet, met_z, age_axis=age_axis)
         return met_collapsed(table, ssp_lgmet, met_z, age_axis=age_axis)
 
     return joint_age, collapse
@@ -2547,6 +2608,10 @@ class StellarSEDComponentState(SEDComponentState):
     #: nothing modifies per draw (no 4-D alpha collapse, no free AGB weight). The velocity
     #: kernel is frame-invariant, so one cube serves every redshift.
     spec_ssp_broadened: Any | None = None
+    #: The same broadening applied to the native PCHIP slopes across metallicity (#3541),
+    #: ``(n_met, ..., n_wave)`` like ``spec_ssp_broadened``; the cube is read by Hermite of
+    #: (values, slopes). ``None`` whenever ``spec_ssp_broadened`` is.
+    spec_ssp_broadened_slope: Any | None = None
     # Zero-padded observed-frame filter curves (n_filters, max_len), carried so
     # ``apply`` can publish them to ``state.derived`` for the additive-emitter
     # exact-projection path (dust IR / radio / X-ray / AGN). Static; the same
@@ -2620,28 +2685,6 @@ class _CompositePopulation(NamedTuple):
 
 
 # Free-z table fields, shaped (n_z, n_met, n_alpha, n_age, ...): the alpha axis is at 2.
-_FREE_Z_TABLE_ALPHA_FIELDS = (
-    "ssp_phot_table",
-    "ssp_phot_moment_table",
-    "ssp_subband_phot_table",
-    "subband_waves_rest_table",
-    "ssp_subband_phot_igm_table",
-    "subband_waves_rest_igm_table",
-    "ssp_phot_lyc_table",
-    "ssp_phot_nolyc_table",
-)
-
-
-#: Sub-band wavelength field -> the sub-band flux field it is the flux-weighted mean of.
-_FLUX_WEIGHTED_WAVE_FIELDS = {
-    "ssp_subband_waves_rest": "ssp_subband_phot",
-    "ssp_subband_waves_rest_igm": "ssp_subband_phot_igm",
-    "subband_waves_rest_table": "ssp_subband_phot_table",
-    "subband_waves_rest_igm_table": "ssp_subband_phot_igm_table",
-    "ssp_restband_subband_waves": "ssp_restband_subband_phot",
-}
-
-
 #: Log the pre-broadened SSP cube's size at build above this many megabytes.
 _BROADENED_CUBE_LOG_MB = 300.0
 
@@ -2682,48 +2725,13 @@ def _collapse_met_then_alpha(table, collapse, alpha_bracket):
     ``alpha_bracket`` None (no alpha axis), or a table below 4-D, returns ``collapse(table)``.
     The table is ``(n_met, n_alpha, n_age, ...)``.
     """
-    if alpha_bracket is None or table.ndim < 4:
+    ndim = table[0].ndim if isinstance(table, tuple) else table.ndim
+    if alpha_bracket is None or ndim < 4:
         return collapse(table)
     from tengri.components.stellar.sps.dsps_wrapper import collapse_alpha_axis
 
     ia, fa = alpha_bracket
     return collapse_alpha_axis(collapse(table, age_axis=2), ia, fa, axis=1)
-
-
-def _collapse_alpha_fields(tables, names, alpha_bracket, axis: int):
-    """Collapse the named [alpha/Fe] array fields of a LUT at the model's bracket.
-
-    Fluxes are linear in the spectrum, so they are interpolated directly. A sub-band
-    wavelength is the flux-weighted mean wavelength of its sub-band, so the quantity
-    that is linear is ``wavelength * flux``: it is interpolated and divided by the
-    interpolated flux, which is the sub-band wavelength of the interpolated spectrum.
-    Where the interpolated flux is zero the wavelength is interpolated directly.
-    Fields that are None are left alone. ``alpha_bracket`` is the ``(ia, fa)`` pair from
-    :func:`~tengri.components.stellar.sps.dsps_wrapper.alpha_bracket`.
-    """
-    from tengri.components.stellar.sps.dsps_wrapper import collapse_alpha_axis
-
-    ia, fa = alpha_bracket
-
-    def collapse(x):
-        return collapse_alpha_axis(x, ia, fa, axis=axis)
-
-    collapsed = {}
-    for name in names:
-        value = getattr(tables, name)
-        if value is None:
-            continue
-        flux_name = _FLUX_WEIGHTED_WAVE_FIELDS.get(name)
-        flux = getattr(tables, flux_name, None) if flux_name is not None else None
-        if flux is None:
-            collapsed[name] = collapse(value)
-            continue
-        den = collapse(flux)
-        nonzero = den != 0.0
-        collapsed[name] = jnp.where(
-            nonzero, collapse(value * flux) / jnp.where(nonzero, den, 1.0), collapse(value)
-        )
-    return tables._replace(**collapsed)
 
 
 def evaluate_sfh(
@@ -3241,6 +3249,7 @@ class StellarSEDComponent:
                 spec_lsf_n_bins=spec_state.spec_lsf_n_bins,
                 spec_rest_window=spec_state.spec_rest_window,
                 spec_ssp_broadened=spec_state.spec_ssp_broadened,
+                spec_ssp_broadened_slope=spec_state.spec_ssp_broadened_slope,
             )
 
         # WavePrecomp: photometry SSP×filter LUT. Requires filters + SSP grid.
@@ -3266,8 +3275,7 @@ class StellarSEDComponent:
                 from tengri.components.stellar.sps.precompute import precompute_photometry
 
                 z_source = redshift_spec.get("value", 0.0) if redshift_spec else 0.0
-                lut = precompute_photometry(
-                    ssp_data=self.ssp_data,
+                phot_kwargs = dict(
                     filter_waves=filter_list,
                     filter_trans=filter_trans_list,
                     redshift=z_source,
@@ -3279,6 +3287,14 @@ class StellarSEDComponent:
                     n_subbands=int(approx.get("n_subbands", 0)),
                     lyc_gate=lyc_gate,
                 )
+                lut = precompute_photometry(ssp_data=self.ssp_data, **phot_kwargs)
+                # The same build on the native PCHIP slopes (#3541): the LUT is then
+                # read by Hermite of (values, slopes) at undeclared scatter.
+                slope_lut = precompute_photometry(
+                    ssp_data=self.ssp_data._replace(ssp_flux=_native_met_slopes(self.ssp_data)),
+                    **phot_kwargs,
+                )
+                lut = lut._replace(slopes=slope_lut)
                 state = _replace_state(state, ssp_phot_lut=lut)
             else:  # mode == "free"
                 # Free-z path: build ztable for redshift interpolation.
@@ -3286,8 +3302,7 @@ class StellarSEDComponent:
                     precompute_photometry_ztable,
                 )
 
-                ztable = precompute_photometry_ztable(
-                    ssp_data=self.ssp_data,
+                ztable_kwargs = dict(
                     filter_waves=filter_list,
                     filter_trans=filter_trans_list,
                     z_min=redshift_spec.get("z_min", 0.001),
@@ -3301,6 +3316,13 @@ class StellarSEDComponent:
                     n_subbands=int(approx.get("n_subbands", 0)),
                     lyc_gate=lyc_gate,
                 )
+                ztable = precompute_photometry_ztable(ssp_data=self.ssp_data, **ztable_kwargs)
+                # The same z-table build on the native PCHIP slopes (#3541).
+                slope_ztable = precompute_photometry_ztable(
+                    ssp_data=self.ssp_data._replace(ssp_flux=_native_met_slopes(self.ssp_data)),
+                    **ztable_kwargs,
+                )
+                ztable = ztable._replace(slopes=slope_ztable)
                 state = _replace_state(state, ssp_phot_ztable=ztable)
 
             # The REST-frame band (#1148), built ONCE for both dispatches above.
@@ -3317,14 +3339,21 @@ class StellarSEDComponent:
                 precompute_restband_photometry,
             )
 
+            rb_kwargs = dict(
+                filter_waves=filter_list,
+                filter_trans=filter_trans_list,
+                n_subbands=int(approx.get("n_subbands", 0)),
+            )
+            # The same build on the native PCHIP slopes across Z (#3541), the sibling the
+            # metallicity read needs.
+            rb_lut = precompute_restband_photometry(ssp_data=self.ssp_data, **rb_kwargs)
+            rb_slopes = precompute_restband_photometry(
+                ssp_data=self.ssp_data._replace(ssp_flux=_native_met_slopes(self.ssp_data)),
+                **rb_kwargs,
+            )
             state = _replace_state(
                 state,
-                restband_lut=precompute_restband_photometry(
-                    ssp_data=self.ssp_data,
-                    filter_waves=filter_list,
-                    filter_trans=filter_trans_list,
-                    n_subbands=int(approx.get("n_subbands", 0)),
-                ),
+                restband_lut=rb_lut._replace(slopes=rb_slopes),
             )
 
         return state
@@ -3363,14 +3392,21 @@ class StellarSEDComponent:
             from tengri.components.stellar.sps.precompute import precompute_spectroscopy
 
             z_source = redshift_spec.get("value", 0.0) if redshift_spec else 0.0
-            lut = precompute_spectroscopy(
-                ssp_data=self.ssp_data,
+            lut_kwargs = dict(
                 wave_obs_pixels=spec_wave_obs,
                 redshift=z_source,
                 dl_cm=1.0,  # placeholder; cosmology applied at projection time
                 sigma_v_kms=spec_sigma_v_fixed,
                 n_bins=spec_lsf_n_bins,
             )
+            lut = precompute_spectroscopy(ssp_data=self.ssp_data, **lut_kwargs)
+            # The same linear build on the native PCHIP slopes (#3541, owner ruling
+            # 2026-11-15, "Exact: native slopes"): the table is then read by Hermite.
+            slope_lut = precompute_spectroscopy(
+                ssp_data=self.ssp_data._replace(ssp_flux=_native_met_slopes(self.ssp_data)),
+                **lut_kwargs,
+            )
+            lut = lut._replace(ssp_on_pixels_slope=slope_lut.ssp_on_pixels)
             import numpy as np
 
             from tengri.observation.spectrum import rest_grid_observed_window
@@ -3396,6 +3432,7 @@ class StellarSEDComponent:
             n_z=redshift_spec.get("n_z", 100),
         )
         broadened = None
+        broadened_slope = None
         if (
             spec_sigma_v_fixed is not None
             and spec_sigma_v_fixed > 0.0
@@ -3414,12 +3451,21 @@ class StellarSEDComponent:
             broadened = broaden_template_cube(
                 self.ssp_data.ssp_flux, self.ssp_data.ssp_wave, spec_sigma_v_fixed, spec_lsf_n_bins
             )
+            # The same linear broadening of the native PCHIP slopes (#3541): the cube is then
+            # read across Z by the cubic Hermite of (values, slopes).
+            broadened_slope = broaden_template_cube(
+                _native_met_slopes(self.ssp_data),
+                self.ssp_data.ssp_wave,
+                spec_sigma_v_fixed,
+                spec_lsf_n_bins,
+            )
         return StellarSEDComponentState(
             name=self.name,
             ssp_spec_ztable=ztable,
             spec_sigma_v_fixed=spec_sigma_v_fixed,
             spec_lsf_n_bins=spec_lsf_n_bins,
             spec_ssp_broadened=broadened,
+            spec_ssp_broadened_slope=broadened_slope,
         )
 
     def fixed_z_luts_for_threading(self) -> dict | None:
@@ -3440,12 +3486,7 @@ class StellarSEDComponent:
             lut = getattr(self._state, name)
             if lut is None:
                 continue
-            arrays = {
-                field_name: value
-                for field_name, value in lut._asdict().items()
-                if isinstance(value, (np.ndarray, jax.Array))
-            }
-            out[name] = arrays
+            out[name] = _lut_array_fields(lut)
         return out or None
 
     def _threaded_lut(self, template_data, name: str):
@@ -3453,13 +3494,16 @@ class StellarSEDComponent:
 
         ``template_data["stellar"][name]`` (#2812) overrides the closure's array
         fields via ``_replace``; with no threaded entry the closure LUT is
-        returned unchanged.
+        returned unchanged. The native-slope sibling (#3541) is threaded the same
+        way, nested under ``"slopes"``: a sibling left on the closure would come
+        from whichever model compiled the shared kernel, and with a different
+        sub-band count it fails to broadcast against the threaded values.
         """
         lut = getattr(self._state, name)
         if isinstance(template_data, dict):
             stellar = template_data.get("stellar")
             if isinstance(stellar, dict) and name in stellar:
-                return lut._replace(**stellar[name])
+                return _lut_with_array_fields(lut, stellar[name])
         return lut
 
     def apply(
@@ -3655,6 +3699,12 @@ class StellarSEDComponent:
         # compute stellar_phot_lnu_precomp and publish it to derived.
         if self._state is not None and self._state.ssp_phot_lut is not None:
             phot_lut = self._threaded_lut(template_data, "ssp_phot_lut")
+            if phot_lut.slopes is None:
+                raise ValueError(
+                    "the photometry LUT reached the metallicity read without its native-slope "
+                    "sibling (#3541); rebuild it with the slope build."
+                )
+            sl = phot_lut.slopes
             # 4D grid: the LUT keeps its [alpha/Fe] axis (position 1), and every contraction
             # below reads it per SSP, metallicity by PCHIP and then the alpha bracket (#3434).
             if alpha_bracket is not None:
@@ -3670,7 +3720,8 @@ class StellarSEDComponent:
             # age axes weighted by joint distribution × total mass.
             # Convert to erg/s/Hz to match sed_intrinsic units.
             stellar_phot_lnu_precomp_rest = _mass_scale_lnu(
-                jnp.einsum("ma,maf->f", joint_x, read(ssp_phot)), total_mass
+                jnp.einsum("ma,maf->f", joint_x, read(_read_pair(ssp_phot, sl.ssp_phot))),
+                total_mass,
             )
             derived_overrides["stellar_phot_lnu_precomp"] = stellar_phot_lnu_precomp_rest
             # Lyman continuum photometry: rest λ < 912 Å. Used by the nebular
@@ -3678,14 +3729,21 @@ class StellarSEDComponent:
             ssp_phot_lyc = phot_lut.ssp_phot_lyc
             if ssp_phot_lyc is not None:
                 stellar_phot_lnu_precomp_lyc = _mass_scale_lnu(
-                    jnp.einsum("ma,maf->f", joint_x, read(ssp_phot_lyc)), total_mass
+                    jnp.einsum(
+                        "ma,maf->f", joint_x, read(_read_pair(ssp_phot_lyc, sl.ssp_phot_lyc))
+                    ),
+                    total_mass,
                 )
                 derived_overrides["stellar_phot_lnu_precomp_lyc"] = stellar_phot_lnu_precomp_lyc
                 # The other half of the split, built from the same cumulative
                 # integral: the escape-fraction mask adds to it rather than
                 # subtracting from the whole (see ``PhotometricPrecomputation``).
                 derived_overrides["stellar_phot_lnu_precomp_nolyc"] = _mass_scale_lnu(
-                    jnp.einsum("ma,maf->f", joint_x, read(phot_lut.ssp_phot_nolyc)),
+                    jnp.einsum(
+                        "ma,maf->f",
+                        joint_x,
+                        read(_read_pair(phot_lut.ssp_phot_nolyc, sl.ssp_phot_nolyc)),
+                    ),
                     total_mass,
                 )
             # Age-resolved per-filter LUT for two-component
@@ -3693,7 +3751,8 @@ class StellarSEDComponent:
             # the age axis. Shape (n_age, n_filter). Sum over age == the
             # marginalized stellar_phot_lnu_precomp above.
             stellar_phot_lnu_per_age = _mass_scale_lnu(
-                jnp.einsum("ma,maf->af", joint_x, read(ssp_phot)), total_mass
+                jnp.einsum("ma,maf->af", joint_x, read(_read_pair(ssp_phot, sl.ssp_phot))),
+                total_mass,
             )
             derived_overrides["stellar_phot_lnu_per_age_precomp"] = stellar_phot_lnu_per_age
             # Per-age twin of stellar_phot_lnu_precomp_lyc above (R3d, #2439,
@@ -3707,24 +3766,39 @@ class StellarSEDComponent:
             # per-age) silently disagree with the marginalized one.
             if ssp_phot_lyc is not None:
                 stellar_phot_lnu_per_age_lyc = _mass_scale_lnu(
-                    jnp.einsum("ma,maf->af", joint_x, read(ssp_phot_lyc)), total_mass
+                    jnp.einsum(
+                        "ma,maf->af", joint_x, read(_read_pair(ssp_phot_lyc, sl.ssp_phot_lyc))
+                    ),
+                    total_mass,
                 )
                 derived_overrides["stellar_phot_lnu_per_age_precomp_lyc"] = (
                     stellar_phot_lnu_per_age_lyc
                 )
                 derived_overrides["stellar_phot_lnu_per_age_precomp_nolyc"] = _mass_scale_lnu(
-                    jnp.einsum("ma,maf->af", joint_x, read(phot_lut.ssp_phot_nolyc)),
+                    jnp.einsum(
+                        "ma,maf->af",
+                        joint_x,
+                        read(_read_pair(phot_lut.ssp_phot_nolyc, sl.ssp_phot_nolyc)),
+                    ),
                     total_mass,
                 )
             # Taylor moment Ψ: same einsum, units erg/s/Hz × Å.
             ssp_phot_moment = phot_lut.ssp_phot_moment
             if ssp_phot_moment is not None:
                 stellar_phot_moment_precomp = _mass_scale_lnu(
-                    jnp.einsum("ma,maf->f", joint_x, read(ssp_phot_moment)), total_mass
+                    jnp.einsum(
+                        "ma,maf->f", joint_x, read(_read_pair(ssp_phot_moment, sl.ssp_phot_moment))
+                    ),
+                    total_mass,
                 )
                 derived_overrides["stellar_phot_moment_precomp"] = stellar_phot_moment_precomp
                 stellar_phot_moment_per_age = _mass_scale_lnu(
-                    jnp.einsum("ma,maf->af", joint_x, read(ssp_phot_moment)), total_mass
+                    jnp.einsum(
+                        "ma,maf->af",
+                        joint_x,
+                        read(_read_pair(ssp_phot_moment, sl.ssp_phot_moment)),
+                    ),
+                    total_mass,
                 )
                 derived_overrides["stellar_phot_moment_per_age_precomp"] = (
                     stellar_phot_moment_per_age
@@ -3735,8 +3809,19 @@ class StellarSEDComponent:
             ssp_sub_phot = phot_lut.ssp_subband_phot
             if ssp_sub_phot is not None:
                 ssp_sub_waves = phot_lut.ssp_subband_waves_rest
-                sub_phi = jnp.einsum("ma,mafk->afk", joint_x, read(ssp_sub_phot))
-                sub_num = jnp.einsum("ma,mafk->afk", joint_x, read(ssp_sub_waves * ssp_sub_phot))
+                sub_phi = jnp.einsum(
+                    "ma,mafk->afk", joint_x, read(_read_pair(ssp_sub_phot, sl.ssp_subband_phot))
+                )
+                sub_num = jnp.einsum(
+                    "ma,mafk->afk",
+                    joint_x,
+                    read(
+                        _read_pair(
+                            ssp_sub_waves * ssp_sub_phot,
+                            sl.ssp_subband_waves_rest * sl.ssp_subband_phot,
+                        )
+                    ),
+                )
                 derived_overrides["stellar_phot_lnu_per_age_subband_precomp"] = _mass_scale_lnu(
                     sub_phi, total_mass
                 )
@@ -3758,22 +3843,34 @@ class StellarSEDComponent:
                 # z=0 and carries no IGM.
                 ssp_sub_phot_igm = phot_lut.ssp_subband_phot_igm
                 if ssp_sub_phot_igm is not None:
-                    derived_overrides["stellar_phot_lnu_per_age_subband_igm_precomp"] = (
-                        _mass_scale_lnu(
-                            jnp.einsum("ma,mafk->afk", joint_x, read(ssp_sub_phot_igm)),
-                            total_mass,
+                    # The exact fold's folded integral and its numerator are linear, so each
+                    # is read by Hermite with its native-slope sibling (#3541); the node is
+                    # their ratio after the read. The node fold is linear in F too (its
+                    # transmission is flux-free), so it has a sibling and is read the same way,
+                    # with no numerator.
+                    num_igm = phot_lut.ssp_subband_num_igm
+                    if num_igm is None:
+                        phi_igm_at = jnp.einsum(
+                            "ma,mafk->afk",
+                            joint_x,
+                            read(_read_pair(ssp_sub_phot_igm, sl.ssp_subband_phot_igm)),
                         )
+                        num_igm_at = None
+                    else:
+                        phi_igm_at = jnp.einsum(
+                            "ma,mafk->afk",
+                            joint_x,
+                            read(_read_pair(ssp_sub_phot_igm, sl.ssp_subband_phot_igm)),
+                        )
+                        num_igm_at = jnp.einsum(
+                            "ma,mafk->afk",
+                            joint_x,
+                            read(_read_pair(num_igm, sl.ssp_subband_num_igm)),
+                        )
+                    derived_overrides["stellar_phot_lnu_per_age_subband_igm_precomp"] = (
+                        _mass_scale_lnu(phi_igm_at, total_mass)
                     )
-                    waves_igm = phot_lut.ssp_subband_waves_rest_igm
-                    _publish_igm_nodes(
-                        derived_overrides,
-                        jnp.einsum("ma,mafk->afk", joint_x, read(ssp_sub_phot_igm)),
-                        None
-                        if waves_igm is None
-                        else jnp.einsum(
-                            "ma,mafk->afk", joint_x, read(waves_igm * ssp_sub_phot_igm)
-                        ),
-                    )
+                    _publish_igm_nodes(derived_overrides, phi_igm_at, num_igm_at)
             # Publish filter pivot wavelengths so the dust LUT
             # (and future per-filter consumers like AGN and IGM) can use them.
             derived_overrides["filter_eff_waves"] = jnp.asarray(
@@ -3805,11 +3902,15 @@ class StellarSEDComponent:
             # Use ztable_data if threaded as JIT input, otherwise fall
             # back to the closure (for non-JIT paths).
             ztable = ztable_data if ztable_data is not None else self._state.ssp_phot_ztable
-            if alpha_bracket is not None:
-                # 4D grid: collapse the [alpha/Fe] axis (position 2 after z and metallicity)
-                # before the z read, so the reads below see the 3D layout.
-                ztable = _collapse_alpha_fields(
-                    ztable, _FREE_Z_TABLE_ALPHA_FIELDS, alpha_bracket, axis=2
+            # Metallicity is read per SSP before the [alpha/Fe] bracket is mixed (#3537), as
+            # on the fixed-z route: the alpha axis stays in the z-table until the met read. Each
+            # met read is the Hermite of (values, native slopes) (#3541), so the z-table carries
+            # its slope sibling.
+            zs = ztable.slopes
+            if zs is None:
+                raise ValueError(
+                    "the free-z photometry table reached the metallicity read without its "
+                    "native-slope sibling (#3541); rebuild it with the slope build."
                 )
             z = jnp.asarray(require_redshift(params, "components.stellar.component.apply"))
             z_grid = ztable.z_grid
@@ -3821,29 +3922,56 @@ class StellarSEDComponent:
                 # is consumed rather than on every (n_met, n_age, ...) entry.
                 return pchip_interp_local(z_grid, table, z, reduce=reduce, extrapolate=True)
 
-            def per_age_rows(rows):
-                # rows: (4, n_met, n_age, ...) z-bracket rows. Read the met axis at the
-                # galaxy's met_z in each z row (PCHIP each SSP), then contract over age.
-                return jnp.einsum("ma,zma...->za...", joint_x, jax.vmap(collapse)(rows))
+            def _zt(name):
+                """A z-table field as (values, native slopes) for the Hermite met read."""
+                return _read_pair(getattr(ztable, name), getattr(zs, name))
 
-            def _interp_phi_num(phot, waves):
-                # (Σ_m w φ, Σ_m w λ φ) per (age, filter, sub-band), read at z.
-                def rows(p_rows, w_rows):
-                    return jnp.stack(
-                        [
-                            jnp.einsum("ma,zmafk->zafk", joint_x, jax.vmap(collapse)(p_rows)),
-                            jnp.einsum(
-                                "ma,zmafk->zafk", joint_x, jax.vmap(collapse)(w_rows * p_rows)
-                            ),
-                        ],
-                        axis=1,
+            def _met_alpha_row(parts):
+                # One z row of a table: (n_met, [n_alpha,] n_age, ...), or its (values, slopes).
+                table = parts if len(parts) == 2 else parts[0]
+                return _collapse_met_then_alpha(table, collapse, alpha_bracket)
+
+            def per_age_rows(*rows):
+                # rows: the (4, n_met, ...) z-bracket rows of each part of the table. Read the
+                # met axis per SSP at the galaxy's met_z, then the alpha bracket, then contract
+                # over age.
+                per_row = jax.vmap(lambda *parts: _met_alpha_row(parts))(*rows)
+                return jnp.einsum("ma,zma...->za...", joint_x, per_row)
+
+            def _phi_num(phot, other, *, product):
+                # (Σ_m w φ, Σ_m n) per (age, filter, sub-band), read at z by the Hermite of
+                # (values, slopes) pairs (#3541). ``other`` is the numerator table itself
+                # (``product=False``, the IGM tables: linear in the flux, so its own sibling
+                # is the same quadrature on S), or the node table whose product with φ is
+                # formed per bracket row (``product=True``, the bare route, where the
+                # product of the two read siblings is the numerator sibling).
+                p_parts = phot if isinstance(phot, tuple) else (phot,)
+                o_parts = other if isinstance(other, tuple) else (other,)
+                k = len(p_parts)
+
+                def rows(*r):
+                    p_rows, o_rows = r[:k], r[k:]
+                    if product:
+                        o_rows = tuple(w * p for w, p in zip(o_rows, p_rows, strict=True))
+                    phi = jnp.einsum(
+                        "ma,zmafk->zafk",
+                        joint_x,
+                        jax.vmap(lambda *parts: _met_alpha_row(parts))(*p_rows),
                     )
+                    num = jnp.einsum(
+                        "ma,zmafk->zafk",
+                        joint_x,
+                        jax.vmap(lambda *parts: _met_alpha_row(parts))(*o_rows),
+                    )
+                    return jnp.stack([phi, num], axis=1)
 
-                both = pchip_interp_local(z_grid, (phot, waves), z, reduce=rows, extrapolate=True)
+                both = pchip_interp_local(
+                    z_grid, p_parts + o_parts, z, reduce=rows, extrapolate=True
+                )
                 return both[0], both[1]
 
             # ssp_phot_table: (n_z, n_met, n_age, n_filt) -> per-age (n_age, n_filt).
-            phot_per_age = _interp(ztable.ssp_phot_table, per_age_rows)
+            phot_per_age = _interp(_zt("ssp_phot_table"), per_age_rows)
             # Marginalized + age-resolved LUTs (parity with the fixed-z path).
             stellar_phot_lnu_precomp_rest = _mass_scale_lnu(
                 jnp.sum(phot_per_age, axis=0), total_mass
@@ -3853,7 +3981,7 @@ class StellarSEDComponent:
             derived_overrides["stellar_phot_lnu_per_age_precomp"] = stellar_phot_lnu_per_age
             # Lyman continuum photometry at runtime z (#2439, #2427).
             if ztable.ssp_phot_lyc_table is not None:
-                lyc_per_age = _interp(ztable.ssp_phot_lyc_table, per_age_rows)
+                lyc_per_age = _interp(_zt("ssp_phot_lyc_table"), per_age_rows)
                 derived_overrides["stellar_phot_lnu_precomp_lyc"] = _mass_scale_lnu(
                     jnp.sum(lyc_per_age, axis=0), total_mass
                 )
@@ -3861,7 +3989,7 @@ class StellarSEDComponent:
                 derived_overrides["stellar_phot_lnu_per_age_precomp_lyc"] = _mass_scale_lnu(
                     lyc_per_age, total_mass
                 )
-                nolyc_per_age = _interp(ztable.ssp_phot_nolyc_table, per_age_rows)
+                nolyc_per_age = _interp(_zt("ssp_phot_nolyc_table"), per_age_rows)
                 derived_overrides["stellar_phot_lnu_precomp_nolyc"] = _mass_scale_lnu(
                     jnp.sum(nolyc_per_age, axis=0), total_mass
                 )
@@ -3871,7 +3999,7 @@ class StellarSEDComponent:
             # Taylor moment Ψ at runtime z. Interpolate the
             # moment table the same way and publish marginalized + per-age.
             if ztable.ssp_phot_moment_table is not None:
-                moment_per_age = _interp(ztable.ssp_phot_moment_table, per_age_rows)
+                moment_per_age = _interp(_zt("ssp_phot_moment_table"), per_age_rows)
                 derived_overrides["stellar_phot_moment_precomp"] = _mass_scale_lnu(
                     jnp.sum(moment_per_age, axis=0), total_mass
                 )
@@ -3889,8 +4017,10 @@ class StellarSEDComponent:
             # The two sums Σ w·φ and Σ w·λ·φ are the quantities read, so each is
             # contracted over the population weights and then cubic-read in z.
             if ztable.ssp_subband_phot_table is not None:
-                sub_phi, sub_num = _interp_phi_num(
-                    ztable.ssp_subband_phot_table, ztable.subband_waves_rest_table
+                sub_phi, sub_num = _phi_num(
+                    _zt("ssp_subband_phot_table"),
+                    _zt("subband_waves_rest_table"),
+                    product=True,
                 )
                 derived_overrides["stellar_phot_lnu_per_age_subband_precomp"] = _mass_scale_lnu(
                     sub_phi, total_mass
@@ -3909,13 +4039,26 @@ class StellarSEDComponent:
                 # z grid at build time, so it rides the same cubic read as the
                 # sub-band photometry it multiplies.
                 if ztable.ssp_subband_phot_igm_table is not None:
-                    if ztable.subband_waves_rest_igm_table is not None:
-                        phi_igm, num_igm = _interp_phi_num(
-                            ztable.ssp_subband_phot_igm_table,
-                            ztable.subband_waves_rest_igm_table,
+                    if ztable.subband_num_igm_table is not None:
+                        phi_igm, num_igm = _phi_num(
+                            _read_pair(
+                                ztable.ssp_subband_phot_igm_table, zs.ssp_subband_phot_igm_table
+                            ),
+                            _read_pair(ztable.subband_num_igm_table, zs.subband_num_igm_table),
+                            product=False,
                         )
                     else:
-                        phi_igm = _interp(ztable.ssp_subband_phot_igm_table, per_age_rows)
+                        # Node fold: no numerator, but a native-slope sibling (#3541), read
+                        # by the same Hermite as the fixed-z node fold.
+                        phi_igm, _ = _phi_num(
+                            _read_pair(
+                                ztable.ssp_subband_phot_igm_table, zs.ssp_subband_phot_igm_table
+                            ),
+                            _read_pair(
+                                ztable.ssp_subband_phot_igm_table, zs.ssp_subband_phot_igm_table
+                            ),
+                            product=False,
+                        )
                         num_igm = None
                     derived_overrides["stellar_phot_lnu_per_age_subband_igm_precomp"] = (
                         _mass_scale_lnu(phi_igm, total_mass)
@@ -3937,6 +4080,14 @@ class StellarSEDComponent:
         # rest band does not move with redshift, so there is nothing to interpolate.
         if self._state is not None and self._state.restband_lut is not None:
             rb = self._state.restband_lut
+            # The rest-band tables are read by Hermite of (values, native slopes) (#3541):
+            # a table without its slope sibling is refused, not read as PCHIP of its values.
+            rbs = rb.slopes
+            if rbs is None:
+                raise ValueError(
+                    "the rest-band table reached the metallicity read without its native-slope "
+                    "sibling (#3541); rebuild it with the slope build."
+                )
             # 4D grid: the restband tables keep their [alpha/Fe] axis and read per SSP (#3434).
             if alpha_bracket is not None:
 
@@ -3946,15 +4097,31 @@ class StellarSEDComponent:
             else:
                 read = collapse
             derived_overrides["stellar_restband_lnu_precomp"] = _mass_scale_lnu(
-                jnp.einsum("ma,maf->f", joint_x, read(rb.ssp_restband_phot)), total_mass
+                jnp.einsum(
+                    "ma,maf->f",
+                    joint_x,
+                    read(_read_pair(rb.ssp_restband_phot, rbs.ssp_restband_phot)),
+                ),
+                total_mass,
             )
             derived_overrides["filter_restband_eff_waves"] = jnp.asarray(rb.restband_eff_waves)
             if rb.ssp_restband_subband_phot is not None:
-                rb_phi = jnp.einsum("ma,mafk->afk", joint_x, read(rb.ssp_restband_subband_phot))
+                rb_phi = jnp.einsum(
+                    "ma,mafk->afk",
+                    joint_x,
+                    read(_read_pair(rb.ssp_restband_subband_phot, rbs.ssp_restband_subband_phot)),
+                )
+                # The numerator is waves x phi: linear in the flux with the node fixed, so its
+                # sibling is the same product on the sibling tables (node x slope-flux).
                 rb_num = jnp.einsum(
                     "ma,mafk->afk",
                     joint_x,
-                    read(rb.ssp_restband_subband_waves * rb.ssp_restband_subband_phot),
+                    read(
+                        _read_pair(
+                            rb.ssp_restband_subband_waves * rb.ssp_restband_subband_phot,
+                            rbs.ssp_restband_subband_waves * rbs.ssp_restband_subband_phot,
+                        )
+                    ),
                 )
                 derived_overrides["stellar_restband_lnu_per_age_subband_precomp"] = (
                     _mass_scale_lnu(rb_phi, total_mass)
@@ -4958,7 +5125,9 @@ class StellarSEDComponent:
                 )
             # (n_met, n_age, n_pix), broadened at build; (n_met, n_alpha, n_age, n_pix) on a
             # 4D grid: each SSP is read across Z, then the alpha bracket (#3434).
-            on_pix = _collapse_met_then_alpha(lut.ssp_on_pixels, collapse, alpha_bracket)
+            on_pix = _collapse_met_then_alpha(
+                _read_pair(lut.ssp_on_pixels, lut.ssp_on_pixels_slope), collapse, alpha_bracket
+            )
             return {
                 "stellar_spec_lnu_precomp": _mass_scale_lnu(
                     jnp.einsum("ma,map->p", joint_x, on_pix), total_mass
@@ -4987,8 +5156,13 @@ class StellarSEDComponent:
             # per-draw work is the weighted sum and the interpolation, as before sigma_v
             # was applied.
             # On a grid with an [alpha/Fe] axis the broadened cube carries it; each SSP is read
-            # across Z, then the model's alpha bracket is applied (#3434).
-            cube = _collapse_met_then_alpha(spec_state.spec_ssp_broadened, collapse, alpha_bracket)
+            # across Z, then the model's alpha bracket is applied (#3434). Its native-slope
+            # sibling makes the Z read exact (#3541).
+            cube = _collapse_met_then_alpha(
+                _read_pair(spec_state.spec_ssp_broadened, spec_state.spec_ssp_broadened_slope),
+                collapse,
+                alpha_bracket,
+            )
             tot_b = jnp.einsum("ma,maw->w", joint_x, cube)
             age_b = jnp.einsum("ma,maw->aw", joint_x, cube)
             return {
