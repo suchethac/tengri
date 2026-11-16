@@ -26,8 +26,8 @@ from tengri.inference._prediction import _build_prediction, _resolve_measured_li
 from tengri.inference.channels import (
     NoiseSpec,
     Predictions,
-    log_normalization,
     has_student_t_marginal,
+    log_normalization,
     mode_summary,
     score,
     selected_channels,

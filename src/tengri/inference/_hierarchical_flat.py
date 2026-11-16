@@ -533,7 +533,8 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
             "calibration or marginalized lines: the Student-t marginal is a Laplace "
             "approximation at a per-galaxy mode, and the hierarchical flat seam has no mode "
             "check for it. Use Gaussian noise (no student_t_dof) or fitted lines, or fit "
-            "each galaxy with Fitter.")
+            "each galaxy with Fitter."
+        )
     shared_args = {k: v for k, v in data_args0.items() if k not in per_galaxy}
     _data_args = {"per_galaxy": per_galaxy, "shared": shared_args}
 
