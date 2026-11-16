@@ -45,6 +45,12 @@ _CONCRETENESS_HELPERS = frozenset(
 #: the same justification.
 ALLOWLIST: dict[str, str] = {
     # ---- answered: an unknown takes the general path, or raises at build ----
+    # ---- build-time host predicate, never traced ----
+    "observation/batched.py::_needs_z_twin": (
+        "a host-side build-time check on the template spec (a fixed or free Distribution and "
+        "the WavePrecomp flag), never called on a tracer; a fixed-z WavePrecomp template gets "
+        "the runtime-redshift promotion, every other template passes through unchanged"
+    ),
     "utils/host_array.py::device_table": (
         "a tracer passes through as jnp.asarray(tracer) and is never cached; a numpy table is "
         "held once per table and dtype; a concrete device array is cast to the canonical dtype "
