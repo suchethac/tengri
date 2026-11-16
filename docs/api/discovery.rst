@@ -98,6 +98,16 @@ and a one-line description.
 
 .. autofunction:: tengri.list_components
 
+.. autofunction:: tengri.list_imfs
+
+.. autofunction:: tengri.list_foreground_laws
+
+.. autofunction:: tengri.list_approx_configs
+
+.. autofunction:: tengri.list_spatial_models
+
+.. autofunction:: tengri.list_presets
+
 .. autofunction:: tengri.list_plots
 
 .. autofunction:: tengri.list_properties

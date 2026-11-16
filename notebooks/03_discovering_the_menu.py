@@ -270,6 +270,31 @@ tengri.list_age_kernels()
 tengri.list_components()
 
 # %% [markdown]
+# ### Initial mass functions, foreground laws and precompute adapters
+#
+# The IMFs the stellar population model implements, the extinction laws usable for the Milky Way foreground screen, the components with a precompute adapter (selected with `approx=`), and the spatial morphology models.
+
+# %%
+tengri.list_imfs()
+
+# %%
+tengri.list_foreground_laws()
+
+# %%
+tengri.list_approx_configs()
+
+# %%
+tengri.list_spatial_models()
+
+# %% [markdown]
+# ### Presets
+#
+# Named, cited parameter bundles. `describe_preset()` gives one of them in full.
+
+# %%
+tengri.list_presets()
+
+# %% [markdown]
 # ### All instruments and filters
 #
 # Instruments group filters by survey or facility. Four hundred twenty-four filter curves span X-ray to radio, including medium-band sets (ALHAMBRA, SHARDS, ZFOURGE/FourStar, NMBS/NEWFIRM, HST) and narrow-band sets (J-PAS, J-PLUS, HST emission-line, Subaru/HSC, VISTA NB118). Bands without published response curves (ALMA, Chandra, NuSTAR, SPT-3G, ACT, TolTEC) are served as synthetic top-hat functions; see `tengri.list_synthetic_bands()` for these. Below is a sample of available surveys:
