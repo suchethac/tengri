@@ -7,7 +7,6 @@ ingestion and validation happen at construction (fail fast, before any compile).
 
 from __future__ import annotations
 
-import warnings
 import weakref
 
 import jax
@@ -301,10 +300,12 @@ class Catalog:
         is never ingested under a guessed unit. One of: ``"cgs_fnu"``
         [erg/s/cm²/Hz], ``"mJy"``, ``"uJy"``, ``"maggies"``, ``"ab_mag"``.
     redshift_col : str, optional
-        Column name for per-galaxy redshifts. If given, the model must have
-        a ``Fixed`` redshift and a ``catalog_z_range`` that covers the
-        redshift span in the table. If not given, the model must have a
-        free redshift parameter. Exactly one of the two conditions is required.
+        Column name for per-galaxy redshifts. If given, the model must have a
+        ``Fixed`` redshift; the fit promotes it once to a runtime-redshift model whose
+        table (if tabulated) spans the redshifts in the table, so the catalog is one
+        compile. A model that declares a ``catalog_z_range`` keeps it, and the table
+        must lie inside it. If not given, the model must have a free redshift
+        parameter. Exactly one of the two conditions is required.
     flux_cols : list[str], optional
         Flux column names **in your table**, they need not resemble the band
         names. If None, use ``"{name}"`` for each band in the model's
@@ -449,22 +450,15 @@ class Catalog:
                         "redshift=Fixed(...) with a catalog_z_range."
                     )
 
-                # A catalog_z_range lets per-galaxy redshift flow as a runtime
-                # input so the program compiles ONCE. Without it, each distinct
-                # redshift recompiles the fit (correct, just slow), warn loudly
-                # rather than refuse, so ``fit_batch``-style catalogs still run.
+                # Per-galaxy redshift flows as a runtime input of one promoted model, so
+                # the program compiles once (CatalogFitter promotes it from this
+                # catalog's redshifts). A model that declares a catalog_z_range keeps
+                # it, and the catalog must lie inside it.
+                from tengri.inference.fitter import catalog_redshift_span
+
+                catalog_redshift_span(ca.redshift)  # refuses non-finite rows, naming them
                 z_range = fwd.populations[0].sed._catalog_z_range
-                if z_range is None:
-                    warnings.warn(
-                        "redshift_col was provided but the model has no "
-                        "catalog_z_range, so the forward model recompiles for EVERY "
-                        "distinct redshift (one compile per galaxy). Build the model "
-                        "with approx=WavePrecomp(catalog_z_range=(zmin, zmax)) to "
-                        "compile once. See #1316.",
-                        UserWarning,
-                        stacklevel=2,
-                    )
-                else:
+                if z_range is not None:
                     z_lo, z_hi = z_range
                     z_min, z_max = ca.redshift.min(), ca.redshift.max()
                     if z_min < z_lo or z_max > z_hi:
@@ -513,6 +507,7 @@ class Catalog:
         percentiles=None,
         reducers=None,
         properties=None,
+        approx="auto",
         **kwargs,
     ) -> CatalogPosterior:
         """Fit all galaxies independently.
@@ -531,6 +526,10 @@ class Catalog:
             Pad the catalog up to this many galaxies before running. Allows
             different catalog sizes to share XLA cache entries. ``None``
             (default) pads only to the next multiple of K.
+        approx : "auto", None or precompute config, default "auto"
+            Fit-time approximation policy, as for :class:`~tengri.Fitter`: ``"auto"``
+            routes a photometry fit through the precompute LUT, ``None`` keeps the model
+            exact, a config (or tuple) overrides.
         store : {"full", "summary"} or None
             Storage mode for posterior samples. ``None`` (default) auto-selects:
             ``"full"`` if N <= 1000, else ``"summary"`` with a warning.
@@ -617,7 +616,7 @@ class Catalog:
             galaxies.append(galaxy_dict)
 
         # Delegate to the existing engine.
-        fitter = CatalogFitter(self.fwd, galaxies, data_type="photometry")
+        fitter = CatalogFitter(self.fwd, galaxies, data_type="photometry", approx=approx)
         result = fitter.run(
             method=method,
             key=key,
@@ -714,8 +713,8 @@ class Catalog:
             routinely, so this fires on real data, clip the history, load a
             wider SSP, or downgrade the policy deliberately.
         redshift : array_like, shape (N,), optional
-            Per-galaxy redshift. Needs a ``catalog_z_range`` on the model for
-            the catalog to stay one compile (#1316).
+            Per-galaxy redshift. The fit promotes the model once to read redshift at
+            call time, so the catalog stays one compile (#1316).
         params : dict, optional
             Per-galaxy scalars, ``{name: (N,)}``, every free parameter of the
             model that is not supplied by the histories.
