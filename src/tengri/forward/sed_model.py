@@ -2223,7 +2223,9 @@ def _validate_dale2014_requires_no_sf_radio(spec) -> None:
 
     measured = _dust_emission_red_end(emission)
     index = measured.index
-    ghz = 2.99792458e18 / red_edge / 1.0e9
+    from tengri.utils.physics_constants import C_AA
+
+    ghz = C_AA / red_edge / 1.0e9
     raise ConfigError(
         f"The Dale+2014-family dust emission template selected by "
         f"dust.emission={emission!r} embeds its own star-forming radio "

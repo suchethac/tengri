@@ -48,6 +48,7 @@ from tengri.utils.host_array import device_table, host_array
 from tengri.utils.physics_constants import (
     C_AA as _C_AA,
     C_KM_S as _C_LIGHT_KMS,
+    GAUSSIAN_FWHM_PER_SIGMA,
 )
 from tengri.utils.scale import representable_denominator
 
@@ -286,7 +287,7 @@ def _fe2_broadened_on_grid(fwhm_kms):
     """
     _, template, _, dln = _fe2_internal_grid()
     n_fft = _FE2_FFT_SIZE
-    sigma_samples = (fwhm_kms / 2.3548 / _C_LIGHT_KMS) / dln
+    sigma_samples = (fwhm_kms / GAUSSIAN_FWHM_PER_SIGMA / _C_LIGHT_KMS) / dln
     freq = jnp.fft.rfftfreq(n_fft)
     transfer = jnp.exp(-2.0 * (jnp.pi * sigma_samples * freq) ** 2)
     spec = jnp.fft.rfft(template, n=n_fft)
@@ -366,7 +367,9 @@ def _fe2_spectral_tables():
     """
     n_fft = _FE2_FFT_SIZE
     _, template, window, trapezoid = _fe2_lattice_host()
-    sigma_min = (_FE2_MIN_FWHM_KMS / 2.3548 / _C_LIGHT_KMS) / (_FE2_GRID_STEP_KMS / _C_LIGHT_KMS)
+    sigma_min = (_FE2_MIN_FWHM_KMS / GAUSSIAN_FWHM_PER_SIGMA / _C_LIGHT_KMS) / (
+        _FE2_GRID_STEP_KMS / _C_LIGHT_KMS
+    )
     f_cut = np.sqrt(-0.5 * np.log(_FE2_TRUNCATION)) / (np.pi * sigma_min)
     n_keep = int(np.ceil(f_cut * n_fft)) + 1
     spec = np.fft.rfft(template, n=n_fft)[:n_keep]
@@ -398,7 +401,9 @@ def _fe2_transfer(fwhm_kms, n_keep):
     ``exp(-2 pi^2 sigma_s^2 f^2)`` with ``sigma_s`` in lattice samples, ``f = k / N`` in
     cycles/sample, as in :func:`_fe2_broadened_on_grid` (unit DC gain).
     """
-    sigma_samples = (fwhm_kms / 2.3548 / _C_LIGHT_KMS) / (_FE2_GRID_STEP_KMS / _C_LIGHT_KMS)
+    sigma_samples = (fwhm_kms / GAUSSIAN_FWHM_PER_SIGMA / _C_LIGHT_KMS) / (
+        _FE2_GRID_STEP_KMS / _C_LIGHT_KMS
+    )
     freq = jnp.arange(n_keep) / _FE2_FFT_SIZE
     return jnp.exp(-2.0 * (jnp.pi * sigma_samples * freq) ** 2)
 

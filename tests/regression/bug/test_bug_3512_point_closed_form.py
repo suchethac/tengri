@@ -15,7 +15,6 @@ against a unit Gaussian in ln lambda, not a lattice sample. Two independent refe
 
 from __future__ import annotations
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -24,8 +23,6 @@ from tengri.components.lyc import LYMAN_LIMIT_AA, edge_interp
 from tengri.observation.spectrum import broaden_velocity_only, point_readout_gaussian_ln
 from tengri.utils.physics_constants import C_KM_S
 from tests._lsf_reference import convolve_piecewise_linear
-
-jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.regression_bug
 
