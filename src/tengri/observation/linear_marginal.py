@@ -150,7 +150,8 @@ def marginalize_linear_nuisance(
     Returns
     -------
     MarginalResult
-        Named tuple ``(log_like, coef_hat, coef_cov, log_det_cov, weight_change, start_gap, n_data)``.
+        Named tuple ``(log_like, coef_hat, coef_cov, log_det_cov, weight_change, start_gap,
+        n_data)``.
         ``log_like`` has shape ``()``, ``coef_hat`` shape ``(k,)``, ``coef_cov`` shape
         ``(k, k)``. The last three are the Student-t diagnostics, scalars with shape ``()``,
         and ``None`` for Gaussian noise (see :class:`MarginalResult`).
