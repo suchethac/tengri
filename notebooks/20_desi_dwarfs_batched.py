@@ -211,8 +211,9 @@ def make_record(lo, hi, z, edges, mask, flux, ivar, phot, perr, ebmv, covariance
 # model's own prediction for each line (`eline_prior_type="model"`, width at its default), so the
 # Balmer decrement constrains the dust as the model predicts it.
 #
-# The redshift is free in the template. A batch carries each galaxy's redshift, so `Fixed(z)` is
-# refused here. The template is built with `WavePrecomp(catalog_z_range=Z_RANGE)`: the stellar
+# The redshift is free in the template. A batch carries each galaxy's redshift, and every galaxy is
+# evaluated at its own redshift; a template built at a fixed redshift is accepted too and is
+# evaluated the same way. The template is built with `WavePrecomp(catalog_z_range=Z_RANGE)`: the stellar
 # photometry is a lookup table over the redshift window of the catalog, and each galaxy's photometry
 # reads the table at its own redshift. The band integrals are computed once at build, not per fit.
 
