@@ -6,18 +6,15 @@
 with them but because the only flat-vector formulation lived *inside*
 ``_run_raytrace`` as a set of closures, reachable by exactly one sampler.
 
-This seam drives the NUTS / HMC / dynamic-HMC / GHMC / elliptical-slice /
-MCLMC / adjusted-MCLMC / MAP / Laplace / pathfinder / nested-slice family.
-Every other registered name is either driven by ``PopulationFitter``'s
-own runners or refused with a stated reason, see :data:`FLAT_UNSUPPORTED`. A
-name is driven here only when the driver runs the algorithm the name promises;
-a stand-in (the first draft ran plain HMC under five distinct-algorithm names)
-is silent substitution, not support. ``nss`` was the founding entry of the
-refused set, the prior transform it needs is exact and was provided here from
-the start; what was missing was a real nested sampler on top of it, and a
-blind rejection stand-in returns biased samples rather than an approximation.
-The in-tree Nested Slice Sampler now fills that gap (#1429), and the refused
-set is empty.
+This seam drives every sampler of the shared driver (:mod:`tengri.inference.sampling`)
+on the flat problem built here: the chain families, ChEES, tempered SMC, low-rank HMC,
+elliptical slice, MCLMC, importance-sampled HMC, nested slice sampling, MAP, Laplace and
+the Gaussian variational families. The method set, ``method_map()`` of the driver, is read
+from the backend registry, and there is no refusal table: a cost concern is a warning with the
+computed footprint. A name is driven only when its sampler runs the algorithm the name
+promises; a stand-in (the first draft ran plain HMC under five distinct-algorithm names)
+is silent substitution, not support. Names not in the set (the NIFTy VI methods, ray
+tracing) are driven by ``PopulationFitter``'s own runners.
 
 This module lifts that formulation out. Once the problem is
 ``(init_flat, log_likelihood, log_prior, prior_transform)`` on an unconstrained
@@ -58,189 +55,26 @@ inside the likelihood, via ``to_bounded``.
 from __future__ import annotations
 
 import contextlib
-import functools
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 import jax
 import jax.numpy as jnp
-from jax.flatten_util import ravel_pytree
 
-from tengri.inference.backends.evidence import _require_converged_evidence
 from tengri.inference.likelihoods.gaussian import inv_noise_std
-from tengri.inference.newton import newton_polish
+from tengri.inference.sampling.driver import method_map, run_sampler
+from tengri.inference.sampling.guards import (  # noqa: F401  (re-exported guard names)
+    _require_converged_mode,
+    _require_finite_tuning,
+    _require_moving_chain,
+    _require_nondegenerate_live_set,
+    _require_psd_curvature,
+)
+from tengri.inference.sampling.target import FlatTarget, LatentLayout
 from tengri.utils.transforms import to_bounded, to_unbounded
 
-__all__ = ["FLAT_SAMPLERS", "FlatProblem", "build_flat_problem", "run_flat_sampler"]
-
-#: Registry methods reachable through the flat seam, and how each is driven.
-#:
-#: Derived membership, never a hand-written prose list: ``PopulationFitter``
-#: builds its supported-method set from this mapping, so wiring a sampler here
-#: is the single edit that makes it available hierarchically. The literal that
-#: preceded this named two backends and went stale the moment a third gained the
-#: same capability (#1394).
-#:
-#: A name may appear here only when its driver runs the algorithm the name
-#: promises. The first draft mapped five distinct-algorithm names (ESS, dynamic
-#: HMC, GHMC, MCLMC, adjusted MCLMC) onto the plain static-leapfrog ``"hmc"``
-#: driver and ``laplace`` onto the bare ``"map"`` point estimate, the result's
-#: diagnostics recorded the requested name while a different algorithm ran.
-#: Dynamic HMC, GHMC and elliptical slice have since gained their real
-#: ``_shared.py`` full-scan drivers and rejoined; the MCLMC pair followed with
-#: their blackjax ``(adjusted_)mclmc_find_L_and_step_size`` tuning. The rest
-#: live in :data:`FLAT_UNSUPPORTED` until their real drivers are wired.
-FLAT_SAMPLERS: dict[str, str] = {
-    "mcmc_nuts": "nuts",
-    "mcmc_hmc": "hmc",
-    "mcmc_dynamic_hmc": "dynamic_hmc",
-    "mcmc_ghmc": "ghmc",
-    # The flat prior is exactly the iid N(0,1) the ESS ellipse assumes, so
-    # the sampler's one structural requirement holds by construction here.
-    "mcmc_ess": "ess",
-    "mcmc_mclmc": "mclmc",
-    "mcmc_adjusted_mclmc": "adjusted_mclmc",
-    # Pinned to NUTS, unlike the single-galaxy auto-pick (NUTS for low-D,
-    # raytrace above D~20): hierarchical D grows with the catalog, and at that
-    # D raytrace degenerates and raises DegenerateChainError by design
-    # (#1530). Auto-picking it would make the generic name a guaranteed
-    # failure.
-    "mcmc": "nuts",
-    "map": "map",
-    "laplace": "laplace",
-    "pathfinder": "nuts_pathfinder",
-    # The founding refusal, resolved by wiring rather than by lowering the
-    # bar: the in-tree Nested Slice Sampler (Yallup+2026, constrained HRSS
-    # exploration WITHIN the likelihood contour, the same implementation the
-    # single-galaxy backend runs) on the standardized problem, with live
-    # points drawn from the exact iid N(0,1) prior. The blind-rejection
-    # stand-in this replaces exhausted its attempt budget at iteration
-    # 147/200 on a 2-galaxy D=18 problem and returned silently truncated,
-    # therefore biased, samples (#1429).
-    "nss": "nss",
-}
-
-#: Registered backends that this seam deliberately does NOT drive, and why.
-#: Listed so ``PopulationFitter`` can raise a specific error instead of a generic
-#: "unknown method", and so the reason survives longer than a commit message.
-FLAT_UNSUPPORTED: dict[str, str] = {
-    "mcmc_nuts_fast": (
-        "The single-galaxy photometry recipe (four chains x 150 warmup + 300 "
-        "draws on the mass-profiled posterior with a dense metric, "
-        "bench/reports/2026-09-11_profile_mass_20s.md). Neither leg exists here: "
-        "mass profiling is single-galaxy only, and the dense metric stops at "
-        "D <= 12 while hierarchical D grows with the catalog. Run mcmc_nuts for "
-        "the hierarchical posterior; the fast defaults would only pretend."
-    ),
-    "mcmc_chees": (
-        "ChEES adapts one trajectory length from an ensemble of chains held in "
-        "memory at once, and hierarchical D grows with the catalog -- a 32-chain "
-        "ensemble is 32 simultaneous copies of a problem whose single-chain NUTS "
-        "warmup already peaks in the gigabytes. The single-galaxy backend is "
-        "measured (bench/reports/2026-08-30_chees_hmc.md); nothing here has "
-        "measured the ensemble's memory at hierarchical width, and a driver "
-        "wired on the strength of the single-galaxy rows would be exactly the "
-        "extrapolation this seam's docstring refuses. Run mcmc_nuts or mcmc_hmc "
-        "for the hierarchical posterior."
-    ),
-    "mcmc_smc": (
-        "tempered SMC carries n_particles simultaneous copies of the whole "
-        "parameter vector -- 512 by default, each with its own HMC integrator "
-        "state -- at every rung, and hierarchical D grows with the catalog. "
-        "That is the ChEES entry's problem an order of magnitude worse: 512 "
-        "copies rather than 32. Worse, the width is the point: "
-        "bench/reports/2026-08-31_smc_evaluation.md Finding 3 measures the "
-        "particle axis as genuine accelerator width (CPU throughput flat across "
-        "a 64x particle sweep while the GPU rises 6.6x), which is exactly why "
-        "it cannot also be spent on a galaxy axis -- the accelerator has one "
-        "width. Nothing has measured the memory product of the particle axis "
-        "nested under the hierarchical one, and wiring a driver on the strength "
-        "of the single-galaxy rows would be the extrapolation this seam's "
-        "docstring refuses. Run mcmc_nuts or mcmc_hmc for the hierarchical "
-        "posterior."
-    ),
-    "hmc_is": (
-        "importance-sampled evidence needs a proposal that covers the posterior; "
-        "hierarchical D grows with the catalog, and a single Student-t fitted to "
-        "the flat chain misses mass long before that (ESS collapses). Run "
-        "mcmc_hmc for the hierarchical posterior and per-galaxy hmc_is/nss for "
-        "evidences."
-    ),
-    "vi_fullrank": (
-        "a full-rank Gaussian carries a dense Cholesky factor, D(D+1)/2 free "
-        "parameters, and hierarchical D grows with the catalog -- on this seam's "
-        "own D=516 two-galaxy fixture that is already 133,386 variational "
-        "parameters for two galaxies, and it grows quadratically from there. The "
-        "single-galaxy backend is measured at D=8 "
-        "(bench/reports/2026-08-31_vi_speed_evaluation.md) and nothing has "
-        "measured the factor's memory at hierarchical width; wiring a driver on "
-        "the strength of D=8 rows is the extrapolation this module's docstring "
-        "refuses. The measurement also argues against it on quality: at D=8 the "
-        "fit needs ~3000 ELBO steps before its draws explain the data at all, "
-        "and unpreconditioned it put a stellar mass 1.6 dex out with an error "
-        "bar 45x too wide. Run mcmc_nuts or mcmc_hmc for the hierarchical "
-        "posterior."
-    ),
-    "vi_meanfield": (
-        "a diagonal Gaussian cannot represent a tilt, and a hierarchical "
-        "posterior is defined by one: every galaxy's latents correlate with the "
-        "population hyperparameters, which is the structure the fit exists to "
-        "estimate. Measured at single-galaxy D=8, mean-field already reports "
-        "marginal widths 0.07-0.62x a converged NUTS reference's because it "
-        "returns conditional rather than marginal widths "
-        "(bench/reports/2026-08-31_vi_speed_evaluation.md); the hierarchical "
-        "correlations it would have to drop are stronger, not weaker. Refused on "
-        "the structure rather than pending a measurement. Run mcmc_nuts or "
-        "mcmc_hmc for the hierarchical posterior."
-    ),
-    "mcmc_barker": (
-        "a first-order proposal's optimal step size scales as D^(-1/3) against "
-        "HMC's D^(-1/4), so the gap widens with dimension -- and hierarchical D "
-        "grows with the catalog (this seam's own two-galaxy fixture is D=516). "
-        "The one measurement that exists runs the wrong way already: at "
-        "single-galaxy D=8 on 05_fitting_photometry, Barker spent 52,466 "
-        "gradients per effective sample against NUTS's 21,604 on the same mock "
-        "and seed, 2.4x worse, at split R-hat 2.96 and a distinct-draw fraction "
-        "of 0.544 -- 46% of its draws were repeats "
-        "(bench/reports/2026-08-31_blackjax_sampler_survey.md, Finding 2). "
-        "Nothing has measured it at hierarchical width, and wiring a driver on "
-        "the strength of a single unfavorable D=8 row is exactly the "
-        "extrapolation this module's docstring refuses. Run mcmc_nuts or "
-        "mcmc_hmc for the hierarchical posterior."
-    ),
-    "mcmc_mala": (
-        "the same D^(-1/3) scaling as mcmc_barker, and worse: MALA's Gaussian "
-        "proposal must shrink to the STIFFEST direction, where Barker's "
-        "skew-symmetric one need not. Measured on one D=8 posterior at an equal "
-        "0.574 acceptance target, MALA's adapted step size was 4.6e-05 against "
-        "Barker's 1.27e-02, a factor of 275 "
-        "(bench/reports/2026-08-31_blackjax_sampler_survey.md). A hierarchical "
-        "posterior is defined by a tilt across galaxy latents and population "
-        "hyperparameters, i.e. by exactly the heterogeneous scales that "
-        "penalty measures. It also exists as mcmc_barker's CONTROL, so driving "
-        "it hierarchically while its subject is refused would invert the "
-        "comparison it was built for. Run mcmc_nuts or mcmc_hmc for the "
-        "hierarchical posterior."
-    ),
-    "mcmc_hmc_lowrank": (
-        "the mass matrix is a rank-k correction to a diagonal with k fixed at "
-        "max_rank (default 10), and the rank the geometry actually needs grows "
-        "with the catalog. Measured on the D=74 stoch-field fixture, ONE "
-        "galaxy's likelihood puts 7 of 74 metric eigenvalues above twice the "
-        "median, with lambda_20/lambda_min = 1.005 -- a diagonal floor plus "
-        "about seven stiff directions "
-        "(bench/reports/2026-08-31_blackjax_sampler_survey.md, Finding 5). N "
-        "galaxies contribute their own such directions, so a two-galaxy fit "
-        "already wants ~14 and rank 10 is short before the catalog is "
-        "interesting. The failure is silent rather than loud: an "
-        "under-ranked correction is still a valid positive-definite mass "
-        "matrix, it is merely the wrong one, so the fit returns draws and no "
-        "diagnostic reports the truncation. Choosing max_rank at hierarchical "
-        "width is unmeasured. Run mcmc_nuts or mcmc_hmc for the hierarchical "
-        "posterior."
-    ),
-}
+__all__ = ["FlatProblem", "build_flat_problem", "run_flat_sampler"]
 
 
 @dataclass(frozen=True)
@@ -300,6 +134,9 @@ class FlatProblem:
     #: GP-field latents carry a partially centered prior that ``prior_transform``
     #: and the nested sampler's live points do not realize (#3161).
     field_centering: float = 1.0
+    #: How ``init_flat`` is assembled from the population-shared, per-galaxy and
+    #: stochastic-SFH latent blocks.
+    layout: LatentLayout | None = None
 
 
 #: Optional per-band record keys and the value an absent key takes. An absent key means every
@@ -452,6 +289,13 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
     if verbose:
         print("  MAP initialization complete")
 
+    layout = LatentLayout.hierarchical(
+        tuple(free_names),
+        n_gal,
+        n_grid if stochastic else 0,
+        sigma_bounds=(sigma_lo, sigma_hi),
+        tau_bounds=(tau_lo, tau_hi),
+    )
     init = {
         "psd_sigma_u": to_unbounded(jnp.array(sigma_mid), sigma_lo, sigma_hi),
         "psd_tau_u": to_unbounded(jnp.array(tau_mid), tau_lo, tau_hi),
@@ -460,7 +304,8 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
     if stochastic:
         init["gal_xi"] = all_init_unbounded.get("psd_xi", jnp.zeros((n_gal, n_grid)))
 
-    init_flat, unravel_fn = ravel_pytree(init)
+    init_flat = layout.ravel(init)
+    unravel_fn = layout.unravel
     n_dim = int(init_flat.shape[0])
 
     all_data_arr = jnp.concatenate([jnp.asarray(g["flux_obs"]) for g in fitter.galaxies])
@@ -653,6 +498,7 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
         log_prob_with_data=log_prob_with_data,
         log_likelihood_with_data=log_likelihood_with_data,
         field_centering=field_centering,
+        layout=layout,
     )
 
 
@@ -705,277 +551,6 @@ def _physical_map(spec, free_names):
     return physical
 
 
-def _require_moving_chain(chain, method):
-    """Refuse a retained chain whose draws are all identical.
-
-    #1530's lesson generalized past its raytrace origin: MAP-echo draws look
-    like a plausible answer. ``_require_finite_tuning`` catches the MCLMC
-    starved-tuner *cause*; this is the effect-side net for every MCMC driver
-    whatever produced it, a chain that never moved is not a posterior.
-    """
-    import numpy as np
-
-    if not bool(np.all(np.asarray(chain[1:]) == np.asarray(chain[0]))):
-        return
-    from tengri.inference.hierarchical import DegenerateChainError
-
-    raise DegenerateChainError(
-        f"{method}: every retained draw is identical to the first, the "
-        f"chain never moved, so this is the initialization echoed "
-        f"{int(chain.shape[0])} times, not a posterior. Check the sampler's "
-        f"tuning diagnostics (step size, acceptance, warmup length) rather "
-        f"than using these draws."
-    )
-
-
-def _adam_map_ascent(prob, map_steps, map_learning_rate):
-    """Adam gradient ascent on ``prob.log_prob``, shared by map and laplace.
-
-    One implementation so the two drivers cannot drift: laplace IS this
-    ascent plus a verified-mode covariance.
-    """
-    import optax
-
-    opt = optax.adam(map_learning_rate)
-    state = opt.init(prob.init_flat)
-
-    def _step(carry, _):
-        pos, st = carry
-        g = jax.grad(prob.log_prob)(pos)
-        updates, st = opt.update(jax.tree.map(lambda x: -x, g), st, pos)
-        return (optax.apply_updates(pos, updates), st), None
-
-    (best, _), _ = jax.lax.scan(_step, (prob.init_flat, state), None, length=map_steps)
-    return best
-
-
-def _newton_polish(prob, mode, *, tol, max_iters=12):
-    """Damped-Newton ascent to a Laplace-grade mode, from Adam's endpoint.
-
-    First-order alone cannot deliver a mode at hierarchical D: measured on
-    the D=516 reference fixture, Adam's ``max |grad log_prob|`` was 1.13e3
-    after 300 steps and still 84.6 after 8000. The polish is the shared
-    damped saddle-free Newton of :mod:`tengri.inference.newton`, the same one
-    the Laplace backend uses, so there is one Newton implementation.
-
-    Returns the polished mode. A point no step can improve is returned as is,
-    and the downstream guards then refuse an unconverged point rather than
-    silently sampling it.
-    """
-    position, _, _, _ = newton_polish(
-        mode,
-        lambda x, _data: prob.log_prob(x),
-        None,
-        max_steps=max_iters,
-        tol=tol,
-    )
-    return position
-
-
-def _require_converged_mode(grad_at_mode, method, map_steps, *, tol):
-    """Refuse a Laplace expansion about a point that is not a mode (#1537).
-
-    The single-galaxy laplace expanded about non-modes with no grad=0 check
-    and returned plausible wrong answers, curvature measured off a mode is
-    a covariance for the wrong distribution. The gradient's infinity norm at
-    the reached point must be small; otherwise raise naming the knob.
-    """
-    import numpy as np
-
-    gmax = float(np.max(np.abs(np.asarray(grad_at_mode))))
-    if gmax <= tol:
-        return
-    raise RuntimeError(
-        f"{method}: the point reached after map_steps={map_steps} is not a "
-        f"mode, max |grad log_prob| = {gmax:.3g} exceeds tol={tol:.3g}, and "
-        f"a Laplace covariance measured off a mode is a plausible wrong "
-        f"answer (#1537). Raise map_steps (or adjust map_learning_rate) "
-        f"until the ascent converges, or loosen laplace_grad_tol if this "
-        f"tolerance is genuinely too strict for your problem's scale."
-    )
-
-
-def _require_psd_curvature(chol, method):
-    """Refuse a non-negative-definite curvature at the expansion point.
-
-    ``jnp.linalg.cholesky`` returns NaNs, not an exception, when the negative
-    Hessian is not positive definite, which means the reached point is a
-    saddle or worse, not a maximum. Sampling from those NaNs would return a
-    posterior of NaNs (or garbage that passes a finite-check downstream);
-    refuse by name instead.
-    """
-    import numpy as np
-
-    if bool(np.all(np.isfinite(np.asarray(chol)))):
-        return
-    raise RuntimeError(
-        f"{method}: the negative Hessian at the reached point is not "
-        f"positive definite (its Cholesky factor carries non-finite "
-        f"entries), so the point is a saddle rather than a mode and no "
-        f"Gaussian covariance exists there. Raise map_steps so the ascent "
-        f"reaches an actual maximum (#1537)."
-    )
-
-
-def _require_finite_tuning(L, step_size, method, n_warmup):
-    """Refuse a non-finite (L, step size) tuning instead of sampling with it.
-
-    A starved MCLMC tuner produces NaN parameters, and the chain then never
-    moves, measured on the 2-galaxy D=516 fixture at ``n_warmup=60``:
-    ``L=nan``, ``step_size=nan``, 60 post-tuning draws all equal to the init
-    point. That output LOOKS like a plausible populated posterior, which is
-    the #1530 failure mode; #1569 made raytrace's version of it a loud
-    ``DegenerateChainError``, and this is the MCLMC family's version. The
-    fraction-based tuning phases starve below a few hundred steps; the same
-    fixture tunes finite at ``n_warmup=500``.
-    """
-    import numpy as np
-
-    if np.isfinite(float(L)) and np.isfinite(float(step_size)):
-        return
-    from tengri.inference.hierarchical import DegenerateChainError
-
-    raise DegenerateChainError(
-        f"{method}: the (L, step size) tuner returned non-finite values "
-        f"(L={float(L)!r}, step_size={float(step_size)!r}) after "
-        f"n_warmup={n_warmup} tuning steps, and a chain run with them never "
-        f"moves, every draw would be a copy of the initialization, which "
-        f"looks like a posterior and is not one. The fraction-based tuning "
-        f"phases starve at short warmup; raise n_warmup to a few hundred "
-        f"(the single-galaxy default is 500; n_warmup=500 tunes this family "
-        f"finite on the reference 2-galaxy problem)."
-    )
-
-
-def _require_nondegenerate_live_set(n_live, n_dim, method):
-    """Refuse an NSS live set that cannot span the parameter space.
-
-    HRSS draws its slice directions from the live points' empirical
-    covariance, and ``n_live`` points give that matrix rank at most
-    ``n_live - 1``. With ``n_live <= D`` every direction lies in a proper
-    subspace and the orthogonal complement is NEVER explored, the returned
-    samples are confined to a hyperplane while passing every finite-check
-    downstream. That is silent bias, not slowness, so it is refused by name
-    rather than priced as a warning.
-    """
-    if n_live > n_dim:
-        return
-    raise ValueError(
-        f"{method}: nss_n_live={n_live} live points cannot span a D={n_dim} "
-        f"parameter space, the HRSS direction covariance has rank at most "
-        f"n_live-1, so slice directions never leave a proper subspace and "
-        f"the samples are silently biased. Raise nss_n_live above D (cost "
-        f"grows with both), or use mcmc_nuts / mcmc_hmc, which need no live "
-        f"set. Stochastic-field hierarchies put every field latent into D "
-        f"(n_grid per galaxy); a coarser n_grid at build time shrinks D."
-    )
-
-
-#: Registry entry that owns each chain driver's program and adaptation. Pathfinder is the
-#: NUTS family with the Pathfinder warmup, so it resolves to the ``mcmc_nuts`` entry.
-_CHAIN_ENTRY_OF_DRIVER: dict[str, str] = {
-    "nuts": "mcmc_nuts",
-    "nuts_pathfinder": "mcmc_nuts",
-    "hmc": "mcmc_hmc",
-    "dynamic_hmc": "mcmc_dynamic_hmc",
-    "ghmc": "mcmc_ghmc",
-}
-
-
-@functools.cache
-def flat_chain_drivers() -> frozenset[str]:
-    """Return the flat drivers that run one chain through ``chain_program.run_chain``.
-
-    A driver qualifies when its registry entry declares both a chain program and a
-    compile plan. Drivers without a chain entry (the VI and nested families) fall out.
-    """
-    from tengri.inference._backend_registry import all_backends
-
-    ready = {
-        entry.name
-        for entry in all_backends()
-        if entry.chain_program is not None and entry.compile_plan is not None
-    }
-    return frozenset(
-        driver
-        for driver, entry_name in _CHAIN_ENTRY_OF_DRIVER.items()
-        if entry_name in ready and driver in FLAT_SAMPLERS.values()
-    )
-
-
-def _flat_chain_statics(
-    driver: str,
-    *,
-    n_leapfrog,
-    max_num_doublings,
-    dense_mass_matrix,
-    target_accept_rate,
-    ghmc_alpha,
-    ghmc_delta,
-):
-    """Return the chain program, window adaptation and statics for one flat driver.
-
-    The statics come from the caller's kwargs as the flat seam always read them: a
-    user's ``n_leapfrog`` or GHMC ``alpha`` is the value that runs, not the registry's
-    compile-plan default, and ``dense_mass_matrix`` goes through as a plain flag with no
-    auto policy. The program and the adaptation come from the registry entry that owns
-    the driver, on its compile-path rule.
-    """
-    from tengri.inference._backend_registry import get_backend
-    from tengri.inference.backends.mcmc.chain_program import (
-        DYNAMIC_HMC,
-        DYNAMIC_HMC_TUNING_LEAPFROG_STEPS,
-        GHMC,
-        HMC,
-        NUTS,
-        GHMCConfig,
-        HMCConfig,
-        NUTSConfig,
-    )
-
-    use_dense = bool(dense_mass_matrix)
-    if driver in ("nuts", "nuts_pathfinder"):
-        program = NUTS
-        cfg = NUTSConfig(
-            max_doublings=max_num_doublings,
-            use_dense=use_dense,
-            target_accept_rate=target_accept_rate,
-        )
-    elif driver == "hmc":
-        program = HMC
-        cfg = HMCConfig(
-            n_leapfrog=n_leapfrog, use_dense=use_dense, target_accept_rate=target_accept_rate
-        )
-    elif driver == "dynamic_hmc":
-        program = DYNAMIC_HMC
-        cfg = HMCConfig(
-            n_leapfrog=DYNAMIC_HMC_TUNING_LEAPFROG_STEPS,
-            use_dense=use_dense,
-            target_accept_rate=target_accept_rate,
-        )
-    elif driver == "ghmc":
-        program = GHMC
-        cfg = GHMCConfig(alpha=ghmc_alpha, delta=ghmc_delta, target_accept_rate=target_accept_rate)
-    else:
-        raise ValueError(
-            f"flat driver {driver!r} has no chain statics; the chain drivers are "
-            f"{sorted(flat_chain_drivers())}."
-        )
-    entry_name = _CHAIN_ENTRY_OF_DRIVER[driver]
-    entry = get_backend(entry_name)
-    kwargs = {
-        "dense_mass_matrix": use_dense,
-        "n_leapfrog_steps": n_leapfrog,
-        "pathfinder_warmstart": driver == "nuts_pathfinder",
-    }
-    adaptation = entry.adaptation_for(kwargs, path="compile")
-    if adaptation is None:
-        raise ValueError(
-            f"flat driver {driver!r}: registry entry {entry_name!r} has no compile adaptation rule"
-        )
-    return program, adaptation, cfg
-
-
 def run_flat_sampler(
     fitter,
     method,
@@ -987,7 +562,7 @@ def run_flat_sampler(
     n_leapfrog=10,
     max_num_doublings=5,
     dense_mass_matrix=False,
-    target_accept_rate=0.8,
+    target_accept_rate=None,
     memory_mode="low",
     map_steps=300,
     map_learning_rate=0.05,
@@ -1000,6 +575,8 @@ def run_flat_sampler(
     nss_num_inner_steps=None,
     nss_log_evidence_tol=-3.0,
     nss_max_iterations=10000,
+    n_chains=1,
+    metric="diag",
     allow_unvalidated=False,
     verbose=True,
     **unknown,
@@ -1011,7 +588,8 @@ def run_flat_sampler(
     fitter : PopulationFitter
         The hierarchical problem.
     method : str
-        Canonical registry name; must be a key of :data:`FLAT_SAMPLERS`.
+        Canonical registry name; must be a key of ``method_map()`` of
+        :mod:`tengri.inference.sampling.driver`, which the backend registry defines.
     key : PRNGKey
     n_warmup, n_burnin, n_samples : int
         Window adaptation / discarded / retained chain lengths (MCMC drivers).
@@ -1094,6 +672,19 @@ def run_flat_sampler(
         resampling then is the silently-truncated bias of #1429.
     nss_max_iterations : int
         Safety cap on NS iterations (``nss`` driver).
+    n_chains : int
+        Chains. Chain families adapt once and vmap overdispersed chains; every other sampler
+        runs independent chains from overdispersed starts. The draws of all chains are
+        pooled in the posterior.
+    metric : {"diag", "dense"}
+        ``"dense"`` uses the family's own dense adaptation where it has one and a pilot
+        covariance whitening otherwise (see :func:`tengri.inference.sampling.run_sampler`).
+        A sampler that carries no metric records that the request was not applied in
+        ``diagnostics["metric_applied"]``.
+    **unknown
+        Further settings of the shared driver (``n_ensemble``, ``max_rank``, ``smc_*``,
+        ``vi_*``, ``is_*``, ``memory_budget_gb``, ``chain_jitter``; see
+        :data:`tengri.inference.sampling.driver.DEFAULTS`). Anything else raises.
     allow_unvalidated : bool
         Opt in to ``tier="broken"`` backends, exactly as ``Fitter.run`` does.
         Required for ``pathfinder`` and ``mcmc_ghmc``, the tier="broken" names
@@ -1121,31 +712,40 @@ def run_flat_sampler(
     from tengri.inference._backend_registry import check_usable, get_backend
     from tengri.inference._dimension_guard import warn_if_nuts_high_dim
     from tengri.inference.hierarchical import PopulationPosterior
+    from tengri.inference.sampling.driver import DEFAULTS
 
-    if unknown:
-        # The previous spelling was ``**_ignored``, a silent kwarg sink. A
-        # typo'd fit option (or ``init_from``, which the hierarchical surface
-        # documents as unsupported) vanished while the fit ran with defaults
-        # and the caller believed otherwise (#1378's bug class).
+    unrecognized = sorted(set(unknown) - set(DEFAULTS))
+    if unrecognized:
+        # The previous spelling was ``**_ignored``, a silent kwarg sink. A typo'd fit
+        # option (or ``init_from``, which the hierarchical surface documents as
+        # unsupported) vanished while the fit ran with defaults and the caller believed
+        # otherwise (#1378's bug class).
         accepted = sorted(
-            p
-            for p in inspect.signature(run_flat_sampler).parameters
-            if p not in ("fitter", "method", "unknown")
+            {
+                p
+                for p in inspect.signature(run_flat_sampler).parameters
+                if p not in ("fitter", "method", "unknown")
+            }
+            | set(DEFAULTS)
         )
         raise TypeError(
             f"run_flat_sampler() got unexpected keyword argument(s) "
-            f"{sorted(unknown)}. Accepted fit options for the hierarchical "
+            f"{unrecognized}. Accepted fit options for the hierarchical "
             f"flat seam: {accepted}. Note that some options are per-family "
             f"(the ess driver ignores warmup knobs; the MCLMC family ignores "
             f"n_burnin) and init_from is not supported hierarchically, "
             f"per-galaxy initialization is automatic via MAP."
         )
 
-    driver = FLAT_SAMPLERS.get(method)
-    if driver is None:
+    # Reachable methods are read from the backend registry: every backend that carries a
+    # sampler. Registering one is the single edit that makes it available hierarchically; a
+    # cost concern (memory of a dense metric, an ensemble, a full-rank factor) is a warning
+    # with the computed footprint, not a refusal.
+    reachable = method_map()
+    if method not in reachable:
         raise ValueError(
             f"method={method!r} is not reachable through the hierarchical flat "
-            f"seam. Reachable: {', '.join(sorted(FLAT_SAMPLERS))}."
+            f"seam. Reachable: {', '.join(sorted(reachable))}."
         )
 
     # Reachable is not the same as unguarded. The single-galaxy path refuses
@@ -1155,7 +755,7 @@ def run_flat_sampler(
     # (SIGKILL, exit 137), which is precisely what its tier records. So the same
     # gate applies here, the method stays available, the caller just has to say
     # out loud that they accept it.
-    with contextlib.suppress(KeyError):  # a FLAT_SAMPLERS key with no registry entry
+    with contextlib.suppress(KeyError):  # a reachable name with no registry entry
         check_usable(get_backend(method), allow_unvalidated=allow_unvalidated)
 
     prob = build_flat_problem(fitter, key=key, memory_mode=memory_mode, verbose=verbose)
@@ -1169,288 +769,52 @@ def run_flat_sampler(
             f"Hierarchical {method}: {fitter.n_galaxies} galaxies, {prob.n_dim} total parameters"
         )
 
-    key_run = jax.random.fold_in(key, 1)
+    # The sampler receives the log density as a module-level function plus the data as a
+    # TRACED argument. Both halves are required for compile reuse: a fresh closure per call
+    # is a new static compile key, and capturing the data bakes it in as a constant.
+    target = FlatTarget(
+        logdensity=prob.log_prob_with_data,
+        layout=prob.layout if prob.layout is not None else LatentLayout.vector(prob.n_dim),
+        init=prob.init_flat,
+        item_args=prob.data_args,
+        log_likelihood=prob.log_likelihood_with_data,
+        prior_is_standard=float(prob.field_centering) == 1.0,
+    )
+    settings = {
+        "n_warmup": n_warmup,
+        "n_burnin": n_burnin,
+        "n_samples": n_samples,
+        "n_leapfrog": n_leapfrog,
+        "max_num_doublings": max_num_doublings,
+        "dense_mass_matrix": dense_mass_matrix,
+        "target_accept_rate": target_accept_rate,
+        "map_steps": map_steps,
+        "map_learning_rate": map_learning_rate,
+        "ghmc_alpha": ghmc_alpha,
+        "ghmc_delta": ghmc_delta,
+        "mclmc_target_accept_rate": mclmc_target_accept_rate,
+        "laplace_grad_tol": laplace_grad_tol,
+        "nss_n_live": nss_n_live,
+        "nss_num_delete": nss_num_delete,
+        "nss_num_inner_steps": nss_num_inner_steps,
+        "nss_log_evidence_tol": nss_log_evidence_tol,
+        "nss_max_iterations": nss_max_iterations,
+        "verbose": verbose,
+        **unknown,
+    }
     t0 = time.time()
+    result = run_sampler(
+        method,
+        target,
+        key=jax.random.fold_in(key, 1),
+        n_chains=n_chains,
+        metric=metric,
+        **settings,
+    )
+    chain = result.draws.reshape(-1, prob.n_dim)
+    extra = result.diagnostics
 
-    # The sampler receives `_ld2` (module-level, stable identity) plus the data
-    # as a TRACED argument. Both halves are required for compile reuse, and the
-    # obvious spelling defeats it twice over. Measured with jax.log_compiles:
-    #
-    #   fresh `lambda p,_: prob.log_prob(p)`, data in closure   1 compile EVERY fit
-    #   stable module fn + data through data_args               0 compiles after the first
-    #
-    # `logdensity_fn_2arg` is a STATIC argument, so a new lambda object per call
-    # is a new compile key even when the code is identical; and capturing the
-    # data bakes it in as a constant, making each catalog its own program.
-    # `data_args` must hold ARRAYS ONLY; it is traced. The callable goes in the
-    # static slot, and is built once per problem rather than once per call.
-    ld2 = prob.log_prob_with_data
-    data_args = prob.data_args
-
-    if driver in flat_chain_drivers():
-        import numpy as np
-
-        from tengri.inference.backends.mcmc.chain_program import divergence_record, run_chain
-
-        program, adaptation, cfg = _flat_chain_statics(
-            driver,
-            n_leapfrog=n_leapfrog,
-            max_num_doublings=max_num_doublings,
-            dense_mass_matrix=dense_mass_matrix,
-            target_accept_rate=target_accept_rate,
-            ghmc_alpha=ghmc_alpha,
-            ghmc_delta=ghmc_delta,
-        )
-        n_chain = n_burnin + n_samples
-        wkey, ckey = jax.random.split(key_run)
-        chain_keys = jax.random.split(ckey, n_chain)
-        # Families that start from a fresh state read the init key; the others
-        # continue from the warmup state and take none.
-        init_key = None if program.starts_from_warmup else jax.random.fold_in(wkey, 1)
-        draws, (step_size, _inverse_scale) = run_chain(
-            program,
-            adaptation,
-            prob.init_flat,
-            wkey,
-            init_key,
-            chain_keys,
-            ld2,
-            data_args,
-            n_warmup,
-            cfg,
-        )
-        chain = draws.position[n_burnin:]
-        record = divergence_record(draws.divergent[n_burnin:])
-        extra = {
-            "step_size": float(step_size),
-            "divergent": int(record["n_divergent"]),
-            "divergent_mask": np.asarray(record["divergent_mask"]),
-            "n_warmup": n_warmup,
-        }
-
-    elif driver == "ess":
-        from tengri.inference.backends.mcmc._shared import _ess_full_scan
-
-        n_chain = n_burnin + n_samples
-        chain_keys = jax.random.split(key_run, n_chain)
-        positions, subiters = _ess_full_scan(
-            prob.init_flat,
-            chain_keys,
-            prob.log_likelihood_with_data,
-            data_args,
-        )
-        chain = positions[n_burnin:]
-        # No step size, no divergences: the exact-prior ellipse accepts by
-        # construction. Subiterations are ESS's only knob-free diagnostic.
-        extra = {
-            "mean_subiter": float(jnp.mean(subiters[n_burnin:])),
-            "n_burnin": n_burnin,
-        }
-
-    elif driver in ("mclmc", "adjusted_mclmc"):
-        from tengri.inference.backends.mcmc._shared import (
-            _adjusted_mclmc_sample_scan,
-            _check_blackjax_floor,
-            _mclmc_sample_scan,
-        )
-
-        _check_blackjax_floor()
-        import blackjax
-
-        # blackjax's (adjusted_)mclmc_find_L_and_step_size takes a ONE-argument
-        # logdensity, so the data must close over here, one compile per
-        # catalog for this family, exactly as the single-galaxy backends
-        # behave. The (ld2, data_args) reuse contract is not reachable through
-        # the tuner API without reimplementing the tuner.
-        def _ld_1arg(pos):
-            return ld2(pos, data_args)
-
-        # No burn-in phase: the (L, step size) tuning consumes the transient,
-        # so the chain is n_samples long and n_burnin is ignored.
-        tune_key, init_key, ckey = jax.random.split(key_run, 3)
-        chain_keys = jax.random.split(ckey, n_samples)
-        if driver == "mclmc":
-            kernel = blackjax.mcmc.mclmc.build_kernel(
-                integrator=blackjax.mcmc.integrators.isokinetic_mclachlan,
-            )
-            state = blackjax.mcmc.mclmc.init(prob.init_flat, _ld_1arg, init_key)
-            state, params, _ = blackjax.mclmc_find_L_and_step_size(
-                mclmc_kernel=kernel,
-                logdensity_fn=_ld_1arg,
-                num_steps=n_warmup,
-                state=state,
-                rng_key=tune_key,
-                diagonal_preconditioning=True,
-            )
-            _require_finite_tuning(params.L, params.step_size, method, n_warmup)
-            _, chain = _mclmc_sample_scan(
-                state,
-                chain_keys,
-                kernel,
-                params.L,
-                params.step_size,
-                _ld_1arg,
-                params.inverse_mass_matrix,
-            )
-            extra = {
-                "L": float(params.L),
-                "step_size": float(params.step_size),
-                "n_warmup": n_warmup,
-            }
-        else:
-            kernel = blackjax.mcmc.adjusted_mclmc.build_kernel(
-                integrator=blackjax.mcmc.integrators.isokinetic_mclachlan,
-            )
-            state = blackjax.mcmc.adjusted_mclmc.init(prob.init_flat, _ld_1arg)
-            state, params, _ = blackjax.adjusted_mclmc_find_L_and_step_size(
-                mclmc_kernel=kernel,
-                logdensity_fn=_ld_1arg,
-                num_steps=n_warmup,
-                state=state,
-                rng_key=tune_key,
-                target=mclmc_target_accept_rate,
-                diagonal_preconditioning=True,
-            )
-            _require_finite_tuning(params.L, params.step_size, method, n_warmup)
-            n_integration_steps = jnp.ceil(params.L / params.step_size).astype(int)
-            _, (chain, divergent) = _adjusted_mclmc_sample_scan(
-                state,
-                chain_keys,
-                kernel,
-                params.step_size,
-                n_integration_steps,
-                _ld_1arg,
-                params.inverse_mass_matrix,
-            )
-            extra = {
-                "L": float(params.L),
-                "step_size": float(params.step_size),
-                "n_integration_steps": int(n_integration_steps),
-                "divergent": int(jnp.sum(divergent)),
-                "n_warmup": n_warmup,
-            }
-
-    elif driver == "nss":
-        if float(getattr(prob, "field_centering", 1.0)) != 1.0:
-            raise ValueError(
-                f"{method}: the nested sampler on the hierarchical flat seam draws its live "
-                "points from the iid N(0,1) prior, which is not the partially centered GP-field "
-                "prior at sfh={'field_centering': a < 1}. Use mcmc_nuts, mcmc_hmc or map there, "
-                "or set field_centering=1."
-            )
-        # The real Nested Slice Sampler (Yallup+2026) on the standardized
-        # problem, the sampler whose absence kept this name refused (#1429).
-        # The prior needs no machinery at all here: live points are DRAWN
-        # from the exact iid N(0,1) prior, and the HRSS walk explores within
-        # the rising likelihood contour, so the sampler receives the
-        # LIKELIHOOD alone (handing it log_prob would double-count the prior,
-        # exactly as for ESS). Same loop shape as the single-galaxy
-        # ``run_nss``; same memory-motivated max_shrinkage=20 (100 compiled a
-        # 20+ GB vmap(while_loop) graph there).
-        from tengri.inference.backends.nested.nss import as_top_level_api
-        from tengri.inference.backends.nested.utils import (
-            ess as ns_ess,
-            finalize as ns_finalize,
-            sample as ns_sample,
-        )
-
-        _require_nondegenerate_live_set(nss_n_live, prob.n_dim, method)
-        num_inner = prob.n_dim if nss_num_inner_steps is None else nss_num_inner_steps
-
-        # NSS's native compile-once mode: a 2-arg likelihood plus data_args
-        # carried in the sampler state, so the data stays a traced value,
-        # the seam's (ld2, data_args) contract through the sampler's own
-        # mechanism rather than a closure.
-        algo = as_top_level_api(
-            prob.log_prior,
-            prob.log_likelihood_with_data,
-            num_inner,
-            num_delete=nss_num_delete,
-            max_steps=10,
-            max_shrinkage=20,
-            data_args=data_args,
-        )
-        init_key, loop_key = jax.random.split(key_run)
-        live = algo.init(
-            jax.random.normal(init_key, (nss_n_live, prob.n_dim)), data_args=data_args
-        )
-        step = jax.jit(algo.step)
-
-        dead = []
-        n_iter = 0
-        while True:
-            loop_key, sk = jax.random.split(loop_key)
-            live, dead_info = step(sk, live)
-            # Keep the dead particles, drop update_info immediately; it is
-            # the replacement step's MCMC internals, 3-4x larger than the
-            # particles and unused by sample/ess (same choice as run_nss).
-            dead.append(dead_info._replace(update_info=None))
-            n_iter += 1
-            remaining = float(live.integrator.logZ_live - live.integrator.logZ)
-            if verbose and n_iter % 10 == 0:
-                log_z_est = float(jnp.logaddexp(live.integrator.logZ, live.integrator.logZ_live))
-                print(f"  NSS iter {n_iter}: log Z = {log_z_est:.2f}, remaining = {remaining:.2f}")
-            if remaining < nss_log_evidence_tol or n_iter >= nss_max_iterations:
-                break
-
-        _require_converged_evidence(
-            n_iter, nss_max_iterations, remaining, nss_log_evidence_tol, method
-        )
-        log_z = float(jnp.logaddexp(live.integrator.logZ, live.integrator.logZ_live))
-        ns_run = ns_finalize(live, dead, update_info=False)
-        sample_key, ess_key = jax.random.split(jax.random.fold_in(key_run, 2))
-        chain = ns_sample(sample_key, ns_run, n_samples).position
-        extra = {
-            "log_evidence": log_z,
-            "ess": float(ns_ess(ess_key, ns_run)),
-            "n_live": nss_n_live,
-            "num_delete": nss_num_delete,
-            "num_inner_steps": num_inner,
-            "n_iterations": n_iter,
-            "n_dead": n_iter * nss_num_delete,
-        }
-
-    elif driver == "map":
-        best = _adam_map_ascent(prob, map_steps, map_learning_rate)
-        # A point estimate is a length-1 "chain", so downstream extraction is shared.
-        chain = best[None, :]
-        extra = {"n_steps": map_steps, "log_prob": float(prob.log_prob(best))}
-
-    elif driver == "laplace":
-        # MAP + a Gaussian covariance from the curvature AT A VERIFIED MODE,
-        # the two things whose absence kept this name refused: returning the
-        # bare point estimate under 'laplace' silently dropped the error bars
-        # (the map driver exists for that), and curvature off a mode is a
-        # plausible wrong answer (#1537: the single-galaxy laplace expanded
-        # about non-modes with no grad=0 check).
-        mode = _adam_map_ascent(prob, map_steps, map_learning_rate)
-        # Adam alone plateaus at hierarchical D (measured: |grad| 84.6 after
-        # 8000 steps on the D=516 fixture); the Newton polish reaches the
-        # actual mode with the same Hessian machinery the covariance needs.
-        mode = _newton_polish(prob, mode, tol=laplace_grad_tol, max_iters=40)
-        grad_at_mode = jax.grad(prob.log_prob)(mode)
-        _require_converged_mode(grad_at_mode, method, map_steps, tol=laplace_grad_tol)
-
-        # Dense negative Hessian: D forward-over-reverse passes; at the
-        # reference D=516 this is ~D gradient-equivalents, comparable to one
-        # more MAP ascent. cov = (-H)^{-1} sampled via -H = L L^T,
-        # draw = mode + solve(L^T, eps) so cov(draw) = (L L^T)^{-1} exactly.
-        neg_hess = -jax.hessian(prob.log_prob)(mode)
-        chol = jnp.linalg.cholesky(neg_hess)
-        _require_psd_curvature(chol, method)
-        eps = jax.random.normal(key_run, (n_samples, prob.n_dim))
-        chain = mode[None, :] + jax.scipy.linalg.solve_triangular(chol.T, eps.T, lower=False).T
-        extra = {
-            "n_steps": map_steps,
-            "log_prob": float(prob.log_prob(mode)),
-            "grad_inf_norm": float(jnp.max(jnp.abs(grad_at_mode))),
-            "n_samples": n_samples,
-        }
-
-    else:  # pragma: no cover - FLAT_SAMPLERS admits no other driver
-        raise ValueError(f"no driver for {method!r}")
-
-    if driver != "map":
+    if method != "map":
         # Effect-side net for every MCMC driver: whatever produced it, a chain
         # that never moved is the initialization echoed n_samples times, not a
         # posterior (#1530's failure mode, generalized past raytrace).
@@ -1478,6 +842,7 @@ def run_flat_sampler(
             "n_samples": int(chain.shape[0]),
             "D_total": prob.n_dim,
             "method": method,
+            "n_chains": int(result.draws.shape[0]),
             **extra,
         },
     )

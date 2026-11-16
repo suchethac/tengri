@@ -33,6 +33,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.observation.photometry import lnu_filter_integral_batch
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid_interp import interp_nd_pchip
 
 #: Key under which an additive emitter's namespace carries its shape-only term tables.
@@ -66,6 +67,8 @@ def build_term_shape_table(
     filter_waves_padded: Any,
     filter_trans_padded: Any,
     redshift: Any,
+    *,
+    convention: FilterConvention,
 ) -> dict:
     """Tabulate one term's shape-only band flux over its shape axes.
 
@@ -115,7 +118,12 @@ def build_term_shape_table(
                 "the normalized table cannot represent it"
             )
         row = lnu_filter_integral_batch(
-            s, wave, filter_waves_padded, filter_trans_padded, redshift
+            s,
+            wave,
+            filter_waves_padded,
+            filter_trans_padded,
+            redshift,
+            convention=convention,
         )
         band[idx] = np.asarray(row, dtype=np.float64) / ref
 

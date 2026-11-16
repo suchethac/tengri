@@ -165,7 +165,9 @@ def test_lyc_augmented_fold_unbracketed_edge_falls_back(ssp_like):
     wave, tmpl = ssp_like["wave_src"], ssp_like["templates"]
     fw, ft = ssp_like["filter_wave"], ssp_like["filter_trans"]
     edge = float(wave[-1] * 2.0)  # beyond the source: no bracket cell
-    grid_f, fold_f, _ = lyc_augment_fold(grid, tw, wave, tmpl, fw, ft, edge)
+    grid_f, fold_f, _ = lyc_augment_fold(
+        grid, tw, wave, tmpl, fw, ft, edge, convention=FilterConvention.BESSELL
+    )
     np.testing.assert_array_equal(grid_f, grid)
     _assert_match(fold_f.trapezoid(), _np_trapezoid(_materialized(grid, tw, wave, tmpl), grid, -1))
 
@@ -207,9 +209,19 @@ def test_lyc_augmented_fold_T_matches_fold(ssp_like):
     wave, tmpl = ssp_like["wave_src"], ssp_like["templates"]
     fw, ft = ssp_like["filter_wave"], ssp_like["filter_trans"]
     edge = float(wave[60] * 1.0000007 + 0.25)
-    grid_a, fold_a, tw_a = lyc_augment_fold(grid, tw, wave, tmpl, fw, ft, edge)
+    grid_a, fold_a, tw_a = lyc_augment_fold(
+        grid, tw, wave, tmpl, fw, ft, edge, convention=FilterConvention.BESSELL
+    )
     grid_t, fold_t, tw_t = lyc_augment_fold_T(
-        grid, tw, wave, transpose_templates(tmpl), tmpl.shape[:-1], fw, ft, edge
+        grid,
+        tw,
+        wave,
+        transpose_templates(tmpl),
+        tmpl.shape[:-1],
+        fw,
+        ft,
+        edge,
+        convention=FilterConvention.BESSELL,
     )
     np.testing.assert_array_equal(grid_t, grid_a)
     np.testing.assert_array_equal(tw_t, tw_a)
@@ -227,7 +239,14 @@ def test_preintegrate_transposed_matches_preintegrate_grid(ssp_like, lyc_gate):
         (ssp_like["filter_wave"], ssp_like["filter_trans"]),
         (np.linspace(3000.0, 9000.0, 60), np.linspace(0.2, 0.9, 60)),
     ]
-    kwargs = dict(redshift=0.7, dl_cm=1.0, taylor=True, n_subbands=N_SUB, lyc_gate=lyc_gate)
+    kwargs = dict(
+        redshift=0.7,
+        dl_cm=1.0,
+        taylor=True,
+        n_subbands=N_SUB,
+        lyc_gate=lyc_gate,
+        convention=FilterConvention.BESSELL,
+    )
     ref = preintegrate_grid(tmpl, wave, [f[0] for f in filters], [f[1] for f in filters], **kwargs)
     got = preintegrate_transposed(
         transpose_templates(tmpl),

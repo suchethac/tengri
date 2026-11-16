@@ -468,6 +468,8 @@ def test_kinematic_group_loglik_and_gradient_match_eline_fitted_likelihood(synth
     got = jax.grad(lambda p: loglik(p, obs))(params)
     want = jax.grad(reference)(params)
     for key in params:
+        # grad-assert: finite-only — a single amplitude's gradient may be zero; the value is
+        # pinned to the per-galaxy reference at atol 0 on the next line.
         assert np.isfinite(float(got[key])), key
         np.testing.assert_allclose(float(got[key]), float(want[key]), rtol=1e-10, atol=0.0)
 
@@ -600,7 +602,8 @@ def test_sampled_group_width_two_galaxies_match_per_galaxy(synthetic_ssp):
         want = jax.grad(ref_loglik)(params)
         for key in params:
             np.testing.assert_allclose(float(got[key]), float(want[key]), rtol=1e-10, atol=0.0)
-        assert float(want["eline_sigma_kms_broad"]) != 0.0
+        w = float(want["eline_sigma_kms_broad"])
+        assert np.isfinite(w) and w != 0.0
         design = batched_eline_design(line_set, obs, {**fixed, **params})
         np.testing.assert_allclose(design, ref_design(params), rtol=1e-10, atol=1e-30)
 

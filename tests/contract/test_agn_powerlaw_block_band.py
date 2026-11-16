@@ -35,6 +35,7 @@ from tengri.components.agn.blocks import _protocol, resolve_agn_block
 from tengri.components.agn.blocks.runner import composable_agn_l_nu
 from tengri.components.agn.disc import _PL_BAND_HI_AA, _PL_BAND_LO_AA, powerlaw_disc
 from tengri.components.agn.powerlaw_disc_model import PowerLawDisc
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.physics_constants import C_AA, L_SUN
 
 pytestmark = [
@@ -221,6 +222,7 @@ def test_lookup_table_matches_the_band_limited_sed(z):
         parameters=None,
         model="powerlaw_disc",
         alpha_grid=alpha_grid,
+        convention=FilterConvention.BESSELL,
     )
     lookup = disc_precompute.build_lookup(table, model="powerlaw_disc")
     for alpha in (-1.5, -1.0, -0.25):  # on the table's alpha nodes

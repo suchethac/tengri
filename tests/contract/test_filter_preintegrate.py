@@ -4,6 +4,8 @@ from __future__ import annotations
 import chex
 import pytest
 
+from tengri.utils.filter_convention import FilterConvention
+
 """Smoke + correctness tests for ``preintegrate_ssp_filter_grid``.
 
 The pre-integrated photometric SSP grid is the architectural ingredient
@@ -43,13 +45,17 @@ def _toy_box_filter(center: float, width: float, n: int = 41):
 
 def test_preintegrate_shape(ssp):
     fws, fts = zip(*[_toy_box_filter(c, 500.0) for c in (3500.0, 5000.0, 7500.0)])
-    out = preintegrate_ssp_filter_grid(ssp, list(fws), list(fts), redshift=0.0)
+    out = preintegrate_ssp_filter_grid(
+        ssp, list(fws), list(fts), redshift=0.0, convention=FilterConvention.BESSELL
+    )
     chex.assert_shape(out, (ssp.ssp_flux.shape[0], ssp.ssp_flux.shape[1], 3))
 
 
 def test_preintegrate_finite_and_positive(ssp):
     fw, ft = _toy_box_filter(5000.0, 500.0)
-    out = preintegrate_ssp_filter_grid(ssp, [fw], [ft], redshift=0.0)
+    out = preintegrate_ssp_filter_grid(
+        ssp, [fw], [ft], redshift=0.0, convention=FilterConvention.BESSELL
+    )
     chex.assert_tree_all_finite(out)
     assert jnp.all(out > 0.0)
 
@@ -59,8 +65,12 @@ def test_preintegrate_redshift_shifts_filter_alignment(ssp):
     move when the SSP wave grid is redshifted: the integrated value
     at z=0 differs from z=1 for the same filter."""
     fw, ft = _toy_box_filter(5000.0, 200.0)
-    z0 = preintegrate_ssp_filter_grid(ssp, [fw], [ft], redshift=0.0)
-    z1 = preintegrate_ssp_filter_grid(ssp, [fw], [ft], redshift=1.0)
+    z0 = preintegrate_ssp_filter_grid(
+        ssp, [fw], [ft], redshift=0.0, convention=FilterConvention.BESSELL
+    )
+    z1 = preintegrate_ssp_filter_grid(
+        ssp, [fw], [ft], redshift=1.0, convention=FilterConvention.BESSELL
+    )
     # Pick a young SSP where rest-frame 5000 A vs 2500 A differ a lot.
     # Old SSPs: V-band (rest 5000 A) much brighter than UV (rest 2500 A
     # at z=1 observed 5000 A) — large ratio expected.
@@ -79,7 +89,9 @@ def test_preintegrate_compression_factor(ssp):
     grid, n_wave=5994, gives ≥1000×)."""
     fws_fts = [_toy_box_filter(c, 500.0) for c in (3500, 4500, 5500, 6500, 7500)]
     fws, fts = zip(*fws_fts)
-    out = preintegrate_ssp_filter_grid(ssp, list(fws), list(fts), redshift=0.0)
+    out = preintegrate_ssp_filter_grid(
+        ssp, list(fws), list(fts), redshift=0.0, convention=FilterConvention.BESSELL
+    )
     compression = ssp.ssp_flux.size / out.size
     # = n_wave / n_filters exactly; assert it's large (grid-size-agnostic).
     assert compression > 100.0, f"Got {compression:.0f}× — expected substantial (>100×)"

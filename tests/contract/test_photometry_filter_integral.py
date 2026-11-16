@@ -18,6 +18,7 @@ import pytest
 
 from tengri.observation.photometry import compute_flux_density, lnu_filter_integral
 from tengri.units import lnu_to_fnu
+from tengri.utils.filter_convention import FilterConvention
 
 pytestmark = pytest.mark.contract
 
@@ -40,8 +41,12 @@ def test_compute_flux_density_equals_composition(fiducial):
     z = 0.5
     dl_cm = 1.0e26  # arbitrary scalar
 
-    flux_via_fn = float(compute_flux_density(L_nu, wave_rest, fw, ft, z, dl_cm))
-    L_filter = lnu_filter_integral(L_nu, wave_rest, fw, ft, z)
+    flux_via_fn = float(
+        compute_flux_density(
+            L_nu, wave_rest, fw, ft, z, dl_cm, convention=FilterConvention.BESSELL
+        )
+    )
+    L_filter = lnu_filter_integral(L_nu, wave_rest, fw, ft, z, convention=FilterConvention.BESSELL)
     flux_via_composition = float(lnu_to_fnu(L_filter, dl_cm, z))
 
     rel_err = abs(flux_via_fn - flux_via_composition) / abs(flux_via_composition)
@@ -107,7 +112,7 @@ def test_lnu_filter_integral_returns_lnu_units(fiducial):
     wave_rest, L_nu, fw, ft = fiducial
     z = jnp.asarray(0.5)
 
-    L = float(lnu_filter_integral(L_nu, wave_rest, fw, ft, z))
+    L = float(lnu_filter_integral(L_nu, wave_rest, fw, ft, z, convention=FilterConvention.BESSELL))
     # Sanity: should be on the same order as the input L_ν.
     L_input_peak = float(L_nu.max())
     # Top-hat filter at 5000-7000 Å picks up ~the SED at λ ~ 6000/(1+z=0.5) = 4000 Å rest.
@@ -142,9 +147,16 @@ def test_lnu_filter_integral_batch_matches_singles_under_padding(fiducial):
         (jnp.linspace(6000.0, 9000.0, 80), jnp.sin(jnp.linspace(0.0, jnp.pi, 80))),
         (jnp.linspace(11000.0, 13000.0, 55), jnp.sin(jnp.linspace(0.0, jnp.pi, 55))),
     ]
-    singles = jnp.array([lnu_filter_integral(L_nu, wave_rest, fw, ft, z) for fw, ft in filters])
+    singles = jnp.array(
+        [
+            lnu_filter_integral(L_nu, wave_rest, fw, ft, z, convention=FilterConvention.BESSELL)
+            for fw, ft in filters
+        ]
+    )
     fw_pad, ft_pad, _ = pad_filters([f[0] for f in filters], [f[1] for f in filters])
-    batch = lnu_filter_integral_batch(L_nu, wave_rest, fw_pad, ft_pad, z)
+    batch = lnu_filter_integral_batch(
+        L_nu, wave_rest, fw_pad, ft_pad, z, convention=FilterConvention.BESSELL
+    )
     assert jnp.all(singles > 0), "degenerate fixture: single-filter integrals must be > 0"
     assert jnp.allclose(batch, singles, rtol=1e-12), (
         f"padded batch diverges from unpadded singles: {batch} vs {singles}"

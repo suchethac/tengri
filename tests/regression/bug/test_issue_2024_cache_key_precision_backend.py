@@ -18,6 +18,7 @@ import pytest
 
 from tengri.components.igm import _subband_cache as sc
 from tengri.components.stellar.sps import precompute as pc
+from tests._band_keys import band_key, ztable_key
 
 pytestmark = pytest.mark.regression_bug
 
@@ -52,7 +53,7 @@ def test_ztable_cache_key_changes_with_x64():
     original_x64 = jax.config.jax_enable_x64
     try:
         jax.config.update("jax_enable_x64", True)
-        key_with_x64_true = pc._ztable_cache_key(
+        key_with_x64_true = ztable_key(
             ssp_data,
             filter_waves,
             filter_trans,
@@ -64,7 +65,7 @@ def test_ztable_cache_key_changes_with_x64():
         )
 
         jax.config.update("jax_enable_x64", False)
-        key_with_x64_false = pc._ztable_cache_key(
+        key_with_x64_false = ztable_key(
             ssp_data,
             filter_waves,
             filter_trans,
@@ -128,10 +129,10 @@ def test_band_factor_key_changes_with_x64():
     original_x64 = jax.config.jax_enable_x64
     try:
         jax.config.update("jax_enable_x64", True)
-        key_with_x64_true = sc.band_factor_key(**base)
+        key_with_x64_true = band_key(**base)
 
         jax.config.update("jax_enable_x64", False)
-        key_with_x64_false = sc.band_factor_key(**base)
+        key_with_x64_false = band_key(**base)
     finally:
         jax.config.update("jax_enable_x64", original_x64)
 
@@ -166,7 +167,7 @@ def test_ztable_cache_key_changes_with_backend(monkeypatch):
     n_subbands = 0
 
     # Key with real backend
-    key_real = pc._ztable_cache_key(
+    key_real = ztable_key(
         ssp_data,
         filter_waves,
         filter_trans,
@@ -179,7 +180,7 @@ def test_ztable_cache_key_changes_with_backend(monkeypatch):
 
     # Key with fake backend (monkeypatched)
     monkeypatch.setattr(jax, "default_backend", lambda: "faketpu")
-    key_fake = pc._ztable_cache_key(
+    key_fake = ztable_key(
         ssp_data,
         filter_waves,
         filter_trans,
@@ -229,10 +230,10 @@ def test_band_factor_key_changes_with_backend(monkeypatch):
         "convention": "bessell",
     }
 
-    key_real = sc.band_factor_key(**base)
+    key_real = band_key(**base)
 
     monkeypatch.setattr(jax, "default_backend", lambda: "faketpu")
-    key_fake = sc.band_factor_key(**base)
+    key_fake = band_key(**base)
 
     assert key_real != key_fake, "Keys must differ when backend changes; fix may be reverted"
 
@@ -255,12 +256,13 @@ def test_schema_version_bumps_prevent_collisions():
     payload (the above-edge half of the Lyman-limit split, built from the same
     cumulative integral); 7→8 when the sub-band integrals moved off differences
     of that running total onto node weights (#2769); 8→9 when the fold moved to
-    the transposed, row-sliced template layout (#2769, reordering-level drift).
+    the transposed, row-sliced template layout (#2769, reordering-level drift); 9→10 and 4→5
+    when the band requests moved onto ``BandSpec.key()`` (#3505).
     """
-    assert pc._ZTABLE_CACHE_VERSION == 9, (
+    assert pc._ZTABLE_CACHE_VERSION == 10, (
         "ztable version moved; bump it only with a schema change and update this pin"
     )
-    assert sc._CACHE_VERSION == 4, (
+    assert sc._CACHE_VERSION == 5, (
         "subband version moved; bump it only with a schema change and update this pin"
     )
 

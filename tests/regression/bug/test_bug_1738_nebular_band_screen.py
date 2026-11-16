@@ -75,6 +75,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.utils.filter_convention import FilterConvention
+
 pytestmark = pytest.mark.regression_bug
 
 #: The published reddened term is a band integral of an array the pipeline already
@@ -205,7 +207,12 @@ def test_published_reddened_nebular_term_is_the_exact_band_integral(
         [
             float(
                 lnu_filter_integral(
-                    state.derived["sed_nebular"], state.wave, f.wave, f.trans, redshift=z
+                    state.derived["sed_nebular"],
+                    state.wave,
+                    f.wave,
+                    f.trans,
+                    redshift=z,
+                    convention=FilterConvention.BESSELL,
                 )
             )
             for f in model.observation.photometry.filters

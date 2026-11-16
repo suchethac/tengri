@@ -69,6 +69,7 @@ import numpy as np
 import pytest
 
 from tengri import DEFAULT, Fixed
+from tengri.utils.filter_convention import FilterConvention
 
 pytestmark = pytest.mark.contract
 
@@ -393,6 +394,7 @@ class TestComposablePrecomputeChoosesACoveringGrid:
                 None,
                 recipe=self._recipe(),
                 axis_grids={"agn_log_lbol": np.linspace(11.0, 13.0, 2)},
+                convention=FilterConvention.BESSELL,
             )
         grid = seen["wave_rest"]
         assert grid.min() <= 10.0 and grid.max() >= 1.0e8, (
@@ -417,6 +419,7 @@ class TestComposablePrecomputeChoosesACoveringGrid:
                 recipe=self._recipe(),
                 axis_grids={"agn_log_lbol": np.linspace(11.0, 13.0, 2)},
                 wave_rest=np.logspace(2.0, 6.0, 1500),
+                convention=FilterConvention.BESSELL,
             )
         msg = str(exc.value)
         for token in ("10 A to 1e+08 A", "polar_dust", "cigale_joint", "+8.44%"):
@@ -437,6 +440,7 @@ class TestComposablePrecomputeChoosesACoveringGrid:
             recipe=self._recipe(),
             axis_grids={"agn_log_lbol": np.linspace(11.0, 13.0, 2)},
             wave_rest=np.geomspace(8.0, 1.0e8, 600),
+            convention=FilterConvention.BESSELL,
         )
         assert "grid_phot" in out and out["grid_phot"].shape[0] == 2
 

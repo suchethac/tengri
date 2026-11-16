@@ -1733,6 +1733,7 @@ def _smc_scan(
     target_accept_rate,
     max_temperatures,
     fixed_ladder,
+    prior_shift=None,
 ):
     """Outer JIT: ``n_runs`` independent tempered-SMC populations, one program.
 
@@ -1810,6 +1811,8 @@ def _smc_scan(
         Acceptance the controller drives toward [dimensionless].
     max_temperatures : int (static)
         Rung cap; see :data:`_SMC_MAX_TEMPERATURES`.
+    prior_shift : ndarray, shape (D,) or None (traced)
+        Added to every initial particle: the prior mean when the prior is not centered at zero.
     fixed_ladder : int or None (static)
         ``None`` runs the adaptive schedule (a ``while_loop``). An int runs a
         uniform ``lambda_k = k / K`` ladder of exactly that many rungs as a
@@ -1920,6 +1923,8 @@ def _smc_scan(
         # zeta = A^-1 xi, row-wise. The prior is N(0, I) in xi by construction of
         # the standardized latent space, so this draw is EXACT -- no sampler.
         particles = xi @ prior_draw_matrix.T
+        if prior_shift is not None:
+            particles = particles + prior_shift
         # Built explicitly rather than via ``tempered.init`` so every carry leaf
         # has a concrete dtype: a Python 0.0 for the tempering parameter is a
         # weak-typed float and a ``while_loop`` carry that changes weak type
@@ -2106,6 +2111,8 @@ def _ess_full_scan(
     chain_keys,
     loglikelihood_fn_2arg,
     data_args,
+    prior_mean=None,
+    prior_cov=None,
 ):
     """Outer JIT: BlackJAX elliptical slice init + sampling chain.
 
@@ -2130,6 +2137,9 @@ def _ess_full_scan(
         program serving every catalog, same as the other scans here.
     data_args : pytree (traced)
         Observed data tensors; changing these does NOT trigger recompilation.
+    prior_mean, prior_cov : ndarray or None
+        Mean and covariance of the Gaussian prior the ellipses are drawn from; ``None`` is the
+        standard ``N(0, I)``. A reparametrized target carries its own.
 
     Returns
     -------
@@ -2151,7 +2161,9 @@ def _ess_full_scan(
         return loglikelihood_fn_2arg(pos, data_args)
 
     n_dim = init_flat.shape[0]
-    ess = blackjax.elliptical_slice(ll, mean=jnp.zeros(n_dim), cov=jnp.eye(n_dim))
+    mean = jnp.zeros(n_dim) if prior_mean is None else prior_mean
+    cov = jnp.eye(n_dim) if prior_cov is None else prior_cov
+    ess = blackjax.elliptical_slice(ll, mean=mean, cov=cov)
     state = ess.init(init_flat)
 
     def _step(s, k):

@@ -18,6 +18,7 @@ import numpy as np
 import numpy.testing as npt
 import pytest
 
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid_interp import (
     interp_nd_triweight,
     preintegrate_grid,
@@ -88,7 +89,13 @@ class TestPreintegrateGridBasic:
         n_filters = len(filter_waves)
 
         result = preintegrate_grid(
-            template, wave, filter_waves, filter_trans, redshift=0.0, dl_cm=1e28
+            template,
+            wave,
+            filter_waves,
+            filter_trans,
+            redshift=0.0,
+            dl_cm=1e28,
+            convention=FilterConvention.BESSELL,
         )
 
         chex.assert_shape(result.phot, (3, 5, n_filters))
@@ -112,7 +119,13 @@ class TestPreintegrateGridBasic:
         age_factor = np.linspace(0.5, 2.0, template.shape[1])
 
         result = preintegrate_grid(
-            template, wave, filter_waves, filter_trans, redshift=0.0, dl_cm=1e28
+            template,
+            wave,
+            filter_waves,
+            filter_trans,
+            redshift=0.0,
+            dl_cm=1e28,
+            convention=FilterConvention.BESSELL,
         )
 
         phot = np.asarray(result.phot)
@@ -134,7 +147,13 @@ class TestPreintegrateGridBasic:
         filter_waves, filter_trans = tophat_filters
 
         result = preintegrate_grid(
-            template, wave, filter_waves, filter_trans, redshift=0.0, dl_cm=1e28
+            template,
+            wave,
+            filter_waves,
+            filter_trans,
+            redshift=0.0,
+            dl_cm=1e28,
+            convention=FilterConvention.BESSELL,
         )
 
         for i, fw in enumerate(filter_waves):
@@ -166,7 +185,13 @@ class TestPreintegrateGridEnergyNormalization:
         filter_waves, filter_trans = tophat_filters
 
         raw = preintegrate_grid(
-            template, wave, filter_waves, filter_trans, redshift=0.0, dl_cm=1e28
+            template,
+            wave,
+            filter_waves,
+            filter_trans,
+            redshift=0.0,
+            dl_cm=1e28,
+            convention=FilterConvention.BESSELL,
         )
         norm = preintegrate_grid(
             template,
@@ -176,6 +201,7 @@ class TestPreintegrateGridEnergyNormalization:
             redshift=0.0,
             dl_cm=1e28,
             energy_normalize=True,
+            convention=FilterConvention.BESSELL,
         )
 
         chex.assert_equal_shape([norm.phot, raw.phot])
@@ -211,7 +237,14 @@ class TestPreintegrateGridTaylorMoment:
         filter_trans = [jnp.ones(30), jnp.ones(30)]
 
         result = preintegrate_grid(
-            template, wave, filter_waves, filter_trans, redshift=0.0, dl_cm=1e28, taylor=True
+            template,
+            wave,
+            filter_waves,
+            filter_trans,
+            redshift=0.0,
+            dl_cm=1e28,
+            taylor=True,
+            convention=FilterConvention.BESSELL,
         )
 
         assert result.moment is not None
@@ -237,7 +270,9 @@ class TestPreintegrateLines:
         filter_waves, filter_trans = tophat_filters
         lines = line_wavelengths
 
-        result = preintegrate_lines(lines, filter_waves, filter_trans, redshift=0.0)
+        result = preintegrate_lines(
+            lines, filter_waves, filter_trans, redshift=0.0, convention=FilterConvention.BESSELL
+        )
 
         chex.assert_shape(result.line_filter_weights, (len(lines), len(filter_waves)))
         chex.assert_tree_all_finite(result.line_filter_weights)
@@ -253,7 +288,9 @@ class TestPreintegrateLines:
         # Line far below minimum filter wavelength
         lines = jnp.array([100.0])  # < min of all filters
 
-        result = preintegrate_lines(lines, filter_waves, filter_trans, redshift=0.0)
+        result = preintegrate_lines(
+            lines, filter_waves, filter_trans, redshift=0.0, convention=FilterConvention.BESSELL
+        )
 
         # Weights should be very small
         assert jnp.all(result.line_filter_weights < 1e-3)
@@ -265,7 +302,9 @@ class TestPreintegrateLines:
         filter_trans = [jnp.ones(50)]
         lines = jnp.array([4500.0])
 
-        result = preintegrate_lines(lines, filter_waves, filter_trans, redshift=0.0)
+        result = preintegrate_lines(
+            lines, filter_waves, filter_trans, redshift=0.0, convention=FilterConvention.BESSELL
+        )
 
         assert float(result.line_filter_weights[0, 0]) > 0.0
 
@@ -286,8 +325,20 @@ class TestPreintegrateLines:
         # Line at the edge where transmission is lower (4300 Angstrom)
         lines_edge = jnp.array([4300.0])
 
-        result_peak = preintegrate_lines(lines_peak, filter_waves, filter_trans, redshift=0.0)
-        result_edge = preintegrate_lines(lines_edge, filter_waves, filter_trans, redshift=0.0)
+        result_peak = preintegrate_lines(
+            lines_peak,
+            filter_waves,
+            filter_trans,
+            redshift=0.0,
+            convention=FilterConvention.BESSELL,
+        )
+        result_edge = preintegrate_lines(
+            lines_edge,
+            filter_waves,
+            filter_trans,
+            redshift=0.0,
+            convention=FilterConvention.BESSELL,
+        )
 
         # Weight at peak should be higher than at edge
         assert float(result_peak.line_filter_weights[0, 0]) > float(
@@ -485,7 +536,13 @@ class TestEdgeCasesAndStability:
         filter_waves, filter_trans = tophat_filters
 
         unit = preintegrate_grid(
-            jnp.ones((2, 3, 100)), wave, filter_waves, filter_trans, redshift=0.0, dl_cm=1e28
+            jnp.ones((2, 3, 100)),
+            wave,
+            filter_waves,
+            filter_trans,
+            redshift=0.0,
+            dl_cm=1e28,
+            convention=FilterConvention.BESSELL,
         )
         scaled = preintegrate_grid(
             jnp.ones((2, 3, 100)) * scale,
@@ -494,6 +551,7 @@ class TestEdgeCasesAndStability:
             filter_trans,
             redshift=0.0,
             dl_cm=1e28,
+            convention=FilterConvention.BESSELL,
         )
 
         npt.assert_allclose(np.asarray(scaled.phot), np.asarray(unit.phot) * scale, rtol=1e-10)
@@ -511,7 +569,13 @@ class TestEdgeCasesAndStability:
         filter_trans = [jnp.ones(20)]
 
         result = preintegrate_grid(
-            template, wave, filter_waves, filter_trans, redshift=0.0, dl_cm=1e28
+            template,
+            wave,
+            filter_waves,
+            filter_trans,
+            redshift=0.0,
+            dl_cm=1e28,
+            convention=FilterConvention.BESSELL,
         )
 
         # Should handle narrow bandwidth
@@ -531,7 +595,13 @@ class TestEdgeCasesAndStability:
         filter_trans = [jnp.array([1.0])]
 
         result = preintegrate_grid(
-            template, wave, filter_waves, filter_trans, redshift=0.0, dl_cm=1e28
+            template,
+            wave,
+            filter_waves,
+            filter_trans,
+            redshift=0.0,
+            dl_cm=1e28,
+            convention=FilterConvention.BESSELL,
         )
 
         chex.assert_tree_all_finite(result.phot)
@@ -578,6 +648,7 @@ class TestSliceFixedAxes:
             redshift=0.0,
             dl_cm=1e28,
             axes=(np.linspace(-2, 0, n_met), np.linspace(6, 10, n_age)),
+            convention=FilterConvention.BESSELL,
         )
         assert result.phot.shape == (n_met, n_age, len(filter_waves))
         assert len(result.axes) == 2
@@ -606,6 +677,7 @@ class TestSliceFixedAxes:
             redshift=0.0,
             dl_cm=1e28,
             axes=(met_grid, np.linspace(6, 10, n_age)),
+            convention=FilterConvention.BESSELL,
         )
 
         # Slice at the middle grid node
@@ -637,6 +709,7 @@ class TestSliceFixedAxes:
             redshift=0.0,
             dl_cm=1e28,
             axes=(ax_a, ax_b, ax_c),
+            convention=FilterConvention.BESSELL,
         )
         assert result.phot.shape == (n_a, n_b, n_c, len(filter_waves))
 
@@ -663,6 +736,7 @@ class TestSliceFixedAxes:
             redshift=0.0,
             dl_cm=1e28,
             axes=(np.linspace(-2, 0, template.shape[0]),),
+            convention=FilterConvention.BESSELL,
         )
         sliced = slice_fixed_axes(result, {})
         assert sliced is result

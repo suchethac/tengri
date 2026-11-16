@@ -24,6 +24,7 @@ from scipy.interpolate import RegularGridInterpolator
 
 from tengri.components.nebular import mappings_photo as mp, mappings_photo_precompute as mpp
 from tengri.components.nebular._constants import _LOG10_ZSUN, _LSUN_ERG
+from tengri.utils.filter_convention import FilterConvention
 
 pytestmark = pytest.mark.regression_bug
 
@@ -68,7 +69,14 @@ def test_precompute_on_the_real_grid_matches_exact_lines():
     axes = (zo, ages, us, ns)
     point = _finite_cell_midpoint(axes, hb_table, ratio_table)
 
-    preint = mpp.precompute(_FILTER_WAVES, _FILTER_TRANS, 0.0, None, grid_path=_REAL_GRID)
+    preint = mpp.precompute(
+        _FILTER_WAVES,
+        _FILTER_TRANS,
+        0.0,
+        None,
+        grid_path=_REAL_GRID,
+        convention=FilterConvention.BESSELL,
+    )
     lookup = mpp.build_lookup(preint)
     log_qh = 50.0
     log_z_abs = np.log10(point[0]) + _LOG10_ZSUN
@@ -130,7 +138,14 @@ def test_precompute_on_a_synthetic_grid_matches_exact_lines(tmp_path):
     """The precompute runs on a small grid, and the lookup reproduces the linear tables exactly."""
     path = tmp_path / "linear.h5"
     _write_linear_stellar_grid(path)
-    preint = mpp.precompute(_FILTER_WAVES, _FILTER_TRANS, 0.0, None, grid_path=path)
+    preint = mpp.precompute(
+        _FILTER_WAVES,
+        _FILTER_TRANS,
+        0.0,
+        None,
+        grid_path=path,
+        convention=FilterConvention.BESSELL,
+    )
     lookup = mpp.build_lookup(preint)
 
     zo_val, age, logu, logn = 0.7, 6.5, -3.4, 2.6

@@ -27,6 +27,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.utils.filter_convention import FilterConvention
+
 pytestmark = pytest.mark.bounds
 
 from tengri.components.dust.dust_emission_precompute import (
@@ -119,7 +121,9 @@ class TestAstrodustHybridVsExact:
         fw = [jnp.asarray(w) for w in fw_list]
         ft = [jnp.asarray(t) for t in ft_list]
         templates = load_astrodust_templates(str(_ASTRODUST_FILE))
-        precomp = precompute_astrodust_photometry(templates, fw, ft, redshift=0.0)
+        precomp = precompute_astrodust_photometry(
+            templates, fw, ft, redshift=0.0, convention=FilterConvention.BESSELL
+        )
         lookup = build_astrodust_photometry_lookup(precomp)
         exact_fn = create_astrodust_from_grid(templates)
         return templates, fw, ft, lookup, exact_fn
@@ -178,7 +182,9 @@ class TestTHEMISHybridVsExact:
         fw = [jnp.asarray(w) for w in fw_list]
         ft = [jnp.asarray(t) for t in ft_list]
         templates = load_themis_templates(str(_THEMIS_FILE))
-        precomp = precompute_themis_photometry(templates, fw, ft, redshift=0.0)
+        precomp = precompute_themis_photometry(
+            templates, fw, ft, redshift=0.0, convention=FilterConvention.BESSELL
+        )
         lookup = build_themis_photometry_lookup(precomp)
         exact_fn = create_themis_from_grid(templates)
         return templates, fw, ft, lookup, exact_fn
@@ -228,7 +234,9 @@ class TestDL14HybridVsExact:
         fw = [jnp.asarray(w) for w in fw_list]
         ft = [jnp.asarray(t) for t in ft_list]
         templates = load_dl14_templates(str(_DL14_FILE))
-        precomp = precompute_dl14_photometry(templates, fw, ft, redshift=0.0)
+        precomp = precompute_dl14_photometry(
+            templates, fw, ft, redshift=0.0, convention=FilterConvention.BESSELL
+        )
         lookup = build_dl14_photometry_lookup(precomp)
         exact_fn = create_dl14_from_grid(str(_DL14_FILE))
         return templates, fw, ft, lookup, exact_fn
@@ -279,7 +287,9 @@ class TestBOSAHybridVsExact:
         fw = [jnp.asarray(w) for w in fw_list]
         ft = [jnp.asarray(t) for t in ft_list]
         templates = load_bosa_templates(str(_BOSA_FILE))
-        precomp = precompute_bosa_photometry(templates, fw, ft, redshift=0.0)
+        precomp = precompute_bosa_photometry(
+            templates, fw, ft, redshift=0.0, convention=FilterConvention.BESSELL
+        )
         lookup = build_bosa_photometry_lookup(precomp)
         exact_fn = create_bosa_from_grid(templates)
         return templates, fw, ft, lookup, exact_fn
@@ -330,7 +340,9 @@ class TestDale2014HybridVsExact:
         fw = [jnp.asarray(w) for w in fw_list]
         ft = [jnp.asarray(t) for t in ft_list]
         templates = load_dale2014_templates(str(_DALE_FILE))
-        preint = precompute_dale2014_photometry(templates, fw, ft, redshift=0.0)
+        preint = precompute_dale2014_photometry(
+            templates, fw, ft, redshift=0.0, convention=FilterConvention.BESSELL
+        )
         lookup = build_dale2014_photometry_lookup(preint)
         exact_fn = create_dale2014_from_grid(str(_DALE_FILE))
         return templates, fw, ft, lookup, exact_fn

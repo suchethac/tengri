@@ -262,7 +262,9 @@ from collections.abc import Sequence
 #: ``phi`` (``np.maximum(denom, representable_denominator(1e-30))``). Same kind as the existing
 #: ``phi`` site: ``denom`` is the filter's own integrated transmission, a scale floor that is zero
 #: only for an empty filter. Both divisions are written inline so this inventory sees them.
-EXPECTED_SITES = 75
+#: 75 -> 74 with one band projection: emitters that normalized a band integral themselves now
+#: call it, so their clamped divisions are gone.
+EXPECTED_SITES = 74
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 

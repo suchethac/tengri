@@ -45,6 +45,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.utils.filter_convention import FilterConvention
+
 jax.config.update("jax_enable_x64", True)
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -273,7 +275,9 @@ def run_timing(
 
     timings = {}
     for nq in n_quad_vals:
-        pc = precompute_photometry(ssp, fw_list, ft_list, z, dl, n_quad=nq)
+        pc = precompute_photometry(
+            ssp, fw_list, ft_list, z, dl, n_quad=nq, convention=FilterConvention.BESSELL
+        )
 
         n_dust_pts = pc.n_filters * pc.n_quad
         dust_bc = jnp.ones(n_dust_pts)

@@ -215,9 +215,7 @@ def main() -> None:
     )
     fn2 = build_lookup(pre2)
     t_build2 = time.time() - t_build2
-    t_pre2_first, t_pre2_med = _time(
-        lambda: fn2(jnp.array(1.0), jnp.array(44.0), jnp.array(-1.7))
-    )
+    t_pre2_first, t_pre2_med = _time(lambda: fn2(jnp.array(1.0), jnp.array(44.0), jnp.array(-1.7)))
 
     print("multi-axis (2D: l5100 × plslope, 5×5 grid)")
     print("─" * 67)

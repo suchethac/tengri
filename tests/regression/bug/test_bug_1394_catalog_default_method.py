@@ -22,7 +22,7 @@ The two fixes differ, deliberately — and the reason has since changed, which i
 worth recording rather than quietly overwriting. At the time, ``mcmc_nuts`` was
 absent from the hierarchical ``_method_map`` entirely, so giving
 ``PopulationFitter`` the catalog's fix would have made every hierarchical fit
-raise. NUTS is now reachable there (via ``FLAT_SAMPLERS``), so the defaults stay
+raise. NUTS is now reachable there (via ``method_map()``), so the defaults stay
 different for a *measured* reason instead: on a 2-galaxy D=18 problem, peak RSS
 was 5.21 GB for NUTS against 1.47-1.51 GB for ``map``/``mcmc_raytrace``.
 
@@ -40,8 +40,9 @@ import inspect
 import pytest
 
 from tengri.inference._backend_registry import _BACKENDS
-from tengri.inference.catalog_fitter import _CatalogFitterOriginal
+from tengri.inference.catalog_fitter import _CatalogFitterOriginal, _vmapped_mcmc_tags
 from tengri.inference.hierarchical import PopulationFitter
+from tengri.inference.sampling.driver import method_map
 
 pytestmark = pytest.mark.regression_bug
 
@@ -107,7 +108,7 @@ def test_population_advice_cannot_disagree_with_its_signature():
     That third one is why this asserts against the *produced message* rather
     than grepping ``run`` for a derivation expression. An earlier version of
     this test pinned the source text ``sorted(set(_method_map) |
-    set(FLAT_SAMPLERS)``, which pinned the shape of one fix instead of the
+    set(method_map())``, which pinned the shape of one fix instead of the
     property that matters — it went red the moment the derivation was moved
     into a helper, while the behavior it claimed to protect was intact.
     """
@@ -132,16 +133,15 @@ def test_population_advice_cannot_disagree_with_its_signature():
     # ...and it must cover the flat seam, not just the NIFTy table.
     #
     # This is the assertion that keeps the widening honest, and it is not a
-    # tautology: ``runnable_flat`` is built from ``FLAT_SAMPLERS`` directly,
+    # tautology: ``runnable_flat`` is built from ``method_map()`` directly,
     # so if the helper ever derives from ``method_map`` alone again — which
     # was correct right up until the flat seam landed — the two assertions
     # above stay green and this one goes red. Mutation-checked by dropping
-    # ``set(FLAT_SAMPLERS)`` from the helper's ``reachable``.
+    # ``set(method_map())`` from the helper's ``reachable``.
     from tengri.inference._backend_registry import lookup_backend
-    from tengri.inference._hierarchical_flat import FLAT_SAMPLERS
 
     runnable_flat = {
-        m for m in FLAT_SAMPLERS if (entry := lookup_backend(m)) is None or entry.tier != "broken"
+        m for m in method_map() if (entry := lookup_backend(m)) is None or entry.tier != "broken"
     }
     missing = sorted(m for m in runnable_flat if repr(m) not in message)
     assert not missing, (
@@ -155,7 +155,7 @@ def test_population_default_is_not_nuts_even_though_nuts_now_runs():
     History, because the reason changed underneath this test. Originally NUTS
     was absent from the hierarchical ``_method_map`` entirely, so defaulting to
     it would have raised on every call. That is no longer true: NUTS runs
-    hierarchically through the flat seam (``FLAT_SAMPLERS``).
+    hierarchically through the flat seam (``method_map()``).
 
     The conclusion survives on different evidence. Measured on a 2-galaxy, D=18
     problem, peak RSS was 5.21 GB for ``mcmc_nuts`` against 1.51 GB for
@@ -166,9 +166,8 @@ def test_population_default_is_not_nuts_even_though_nuts_now_runs():
     Kept as a distinct test rather than folded into the pinning test above
     because it encodes a reason, not just a value.
     """
-    from tengri.inference._hierarchical_flat import FLAT_SAMPLERS
 
-    assert "mcmc_nuts" in FLAT_SAMPLERS, "NUTS should be reachable hierarchically"
+    assert "mcmc_nuts" in method_map(), "NUTS should be reachable hierarchically"
     assert _default_of(PopulationFitter.run) != "mcmc_nuts"
 
 
@@ -180,10 +179,10 @@ def test_the_default_supports_the_features_the_native_path_rejects():
     sequential path and warn on every one of those kwargs.
     """
     default = inspect.signature(_CatalogFitterOriginal.run).parameters["method"].default
-    chunkable = _CatalogFitterOriginal._MCMC_VMAPPABLE | _CatalogFitterOriginal._NATIVE_VMAPPABLE
+    chunkable = set(_vmapped_mcmc_tags()) | _CatalogFitterOriginal._NATIVE_VMAPPABLE
     assert default in chunkable
     # devices= is honored for the MCMC set only.
-    assert default in _CatalogFitterOriginal._MCMC_VMAPPABLE
+    assert default in _vmapped_mcmc_tags()
 
 
 def test_no_docstring_in_the_module_teaches_a_broken_backend_as_a_call():
@@ -212,12 +211,12 @@ def test_chunk_size_warning_names_every_chunkable_method():
     """The advice string is derived, not hand-written (#1394 secondary).
 
     The literal it replaced said "only native_vi_linear and native_vi_nonlinear"
-    long after ``_MCMC_VMAPPABLE`` gave NUTS/HMC the same capability, steering
+    long after the vmapped set gave NUTS/HMC the same capability, steering
     callers off the working path onto the broken one.
 
     Asserted on the EMITTED MESSAGE, not on the source text. An earlier version
     of this test required the exact expression
-    ``"_MCMC_VMAPPABLE | self._NATIVE_VMAPPABLE"`` to appear in ``run``'s
+    ``"_vmapped_mcmc_tags() | self._NATIVE_VMAPPABLE"`` to appear in ``run``'s
     source, which pins one spelling of the derivation rather than the property
     the test is named for — it reddened on a correct refactor that names the two
     sets separately (a unioned list is misleading, since half of it cannot be
@@ -228,7 +227,7 @@ def test_chunk_size_warning_names_every_chunkable_method():
 
     from tengri.inference.catalog_fitter import CatalogFitter
 
-    chunkable = _CatalogFitterOriginal._MCMC_VMAPPABLE | _CatalogFitterOriginal._NATIVE_VMAPPABLE
+    chunkable = set(_vmapped_mcmc_tags()) | _CatalogFitterOriginal._NATIVE_VMAPPABLE
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")

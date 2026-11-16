@@ -34,6 +34,7 @@ from tengri.components.agn._template_power_table import (
 )
 from tengri.components.agn.silva04 import _load_silva04_arrays
 from tengri.forward.precompute.templates import collapse_fixed_axes
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
     interp_nd_pchip,
@@ -48,6 +49,8 @@ def precompute_silva04_photometry(
     filter_waves: list[jnp.ndarray],
     filter_trans: list[jnp.ndarray],
     redshift: float = 0.0,
+    *,
+    convention: FilterConvention,
 ) -> dict:
     """Pre-integrate Silva+04 torus templates through filter curves.
 
@@ -117,6 +120,7 @@ def precompute_silva04_photometry(
         filter_trans,
         redshift,
         axes=(log_nh_axis,),
+        convention=convention,
     )
 
     axes_jax = (jnp.asarray(log_nh_axis),)
@@ -202,6 +206,7 @@ def precompute(
     parameters: Any,
     *,
     grid_path: str,
+    convention: FilterConvention,
 ) -> dict:
     """Build preintegrated Silva+04 grid, recording Fixed axes.
 
@@ -236,7 +241,11 @@ def precompute(
     **JIT-compatible**: no, this is a build-time function using NumPy.
     """
     result = precompute_silva04_photometry(
-        grid_path, filter_waves, filter_trans, redshift=redshift
+        grid_path,
+        filter_waves,
+        filter_trans,
+        redshift=redshift,
+        convention=convention,
     )
     preint: PreintegratedGrid = result["_preint"]
     _, _, fixed = collapse_fixed_axes(preint, AXIS_PARAMS, parameters, origin="silva04_precompute")

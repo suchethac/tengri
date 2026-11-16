@@ -56,6 +56,7 @@ from tengri.components.stellar.component import (
 from tengri.cosmology import age_at_z, luminosity_distance
 from tengri.inference.history_ingest import _check_ssp_grid, _mass_weights
 from tengri.parameters.translate import LOG10_ZSUN
+from tengri.utils.filter_convention import FilterConvention
 
 # ── Constants ─────────────────────────────────────────────────────
 
@@ -366,7 +367,11 @@ def photometry_from_sfh(
 
     fluxes = []
     for fw, ft in zip(filter_waves, filter_trans):
-        f = compute_flux_density(sed, wave, fw, ft, redshift, dl_cm)
+        # Standalone helper: no observation carries a convention here, so the survey
+        # standard (photon-counting) is stated explicitly.
+        f = compute_flux_density(
+            sed, wave, fw, ft, redshift, dl_cm, convention=FilterConvention.BESSELL
+        )
         fluxes.append(f)
 
     result["flux"] = jnp.array(fluxes)

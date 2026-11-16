@@ -10,6 +10,8 @@ the exact path with ``approx=None``.
 
 from __future__ import annotations
 
+import functools
+import os
 import tempfile
 from pathlib import Path
 
@@ -24,6 +26,9 @@ SSP_NAME = "fsps_prsc_miles_chabrier.h5"
 FILTERS = ("sdss_g", "sdss_r", "galex_fuv", "2mass_ks")
 
 #: Top-hat bands for the AGN case, optical to far-IR.
+#: Filter convention every case observes through; the sweep sets it, the goldens use the default.
+CONVENTION = "bessell"
+
 AGN_BANDS_AA = (3000.0, 5500.0, 2.2e4, 1.2e5, 2.5e5, 8.0e5)
 
 
@@ -73,7 +78,9 @@ def _dpl_sfh():
 def _dust_case(*, approx):
     return SEDModel.build(
         ssp_data=_bare_ssp(),
-        observation=Observation(photometry=Photometry.from_names(list(FILTERS))),
+        observation=Observation(
+            photometry=Photometry.from_names(list(FILTERS), convention=CONVENTION)
+        ),
         approx=approx,
         redshift=Fixed(0.1),
         sfh=_dpl_sfh(),
@@ -96,7 +103,9 @@ def build_free_z_radio_xray():
     """Free redshift with the radio and X-ray additive terms, under WavePrecomp."""
     return SEDModel.build(
         ssp_data=_bare_ssp(),
-        observation=Observation(photometry=Photometry.from_names(list(FILTERS))),
+        observation=Observation(
+            photometry=Photometry.from_names(list(FILTERS), convention=CONVENTION)
+        ),
         approx=WavePrecomp(),
         redshift=Uniform(0.05, 0.3),
         sfh=_dpl_sfh(),
@@ -118,7 +127,7 @@ def build_composable_agn():
     bands = tuple(_tophat(c) for c in AGN_BANDS_AA)
     return SEDModel.build(
         ssp_data=_synthetic_agn_ssp(),
-        observation=Observation(photometry=Photometry(filters=bands)),
+        observation=Observation(photometry=Photometry(filters=bands, convention=CONVENTION)),
         approx=WavePrecomp(),
         redshift=Fixed(0.1),
         sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
@@ -138,17 +147,26 @@ def build_composable_agn():
     )
 
 
+@functools.cache
 def _synthetic_cloudy_grid() -> str:
-    """Write the deterministic synthetic CLOUDY grid once and return its path.
+    """Write the deterministic synthetic CLOUDY grid once per process and return its path.
 
     The tracked tree carries no CLOUDY grid (the converted ones are untracked), so the case
-    uses the same synthetic grid and ionizing SSP as the CLOUDY accuracy test.
+    uses the same synthetic grid and ionizing SSP as the CLOUDY accuracy test. The path is the
+    same in every process because it enters ``compile_signature()``. Test modules call this at
+    import and every xdist worker imports every module, so each process writes a file of its
+    own and renames it onto the shared path: two workers creating one HDF5 path fail on its
+    file lock, and a rename is atomic.
     """
     from tests._cloudy_grid import write_synthetic_cloudy_grid
 
     directory = Path(tempfile.gettempdir()) / "tengri_band_table_parity"
     directory.mkdir(parents=True, exist_ok=True)
-    return str(write_synthetic_cloudy_grid(directory / "cloudy_grid.h5"))
+    target = directory / "cloudy_grid.h5"
+    handle, scratch = tempfile.mkstemp(dir=directory, suffix=".h5")
+    os.close(handle)
+    os.replace(write_synthetic_cloudy_grid(scratch), target)
+    return str(target)
 
 
 def build_cloudy_nebular():
@@ -157,7 +175,9 @@ def build_cloudy_nebular():
 
     return SEDModel.build(
         ssp_data=synthetic_ionizing_ssp(),
-        observation=Observation(photometry=Photometry.from_names(list(FILTERS))),
+        observation=Observation(
+            photometry=Photometry.from_names(list(FILTERS), convention=CONVENTION)
+        ),
         approx=WavePrecomp(),
         redshift=Fixed(0.1),
         sfh=_dpl_sfh(),
@@ -174,7 +194,9 @@ def build_shock():
     """MAPPINGS shock with its H-alpha luminosity set absolutely, under WavePrecomp."""
     return SEDModel.build(
         ssp_data=_bare_ssp(),
-        observation=Observation(photometry=Photometry.from_names(list(FILTERS))),
+        observation=Observation(
+            photometry=Photometry.from_names(list(FILTERS), convention=CONVENTION)
+        ),
         approx=WavePrecomp(),
         redshift=Fixed(0.1),
         sfh=_dpl_sfh(),

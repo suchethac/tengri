@@ -23,6 +23,7 @@ __all__ = [
     "filter_weight",
     "filter_weight_np",
     "list_filter_conventions",
+    "photon_relative_weight",
 ]
 
 
@@ -151,3 +152,28 @@ def filter_weight_np(fw: np.ndarray, convention: FilterConvention) -> np.ndarray
     pos = fw > 0
     inv = np.where(pos, 1.0 / np.where(pos, fw, 1.0), 0.0)
     return inv * inv if convention == FilterConvention.ENERGY else inv
+
+
+def photon_relative_weight(wave: jnp.ndarray, convention: FilterConvention) -> jnp.ndarray:
+    r"""The bandpass weight in units of the photon-counting weight, :math:`w(\lambda)\,\lambda`.
+
+    A delta-function line through a band picks up the weight at its observed wavelength
+    times :math:`\lambda_{\rm obs}^2/(c\,(1+z))`; written against the photon weight
+    :math:`1/\lambda`, the line response carries this factor, which is exactly 1 for
+    ``BESSELL`` and :math:`1/\lambda` for ``ENERGY``.
+
+    Parameters
+    ----------
+    wave : ndarray, shape (n,)
+        Observed-frame wavelengths [Angstrom].
+    convention : FilterConvention
+        Selects the weight (a static Python value, not a traced array).
+
+    Returns
+    -------
+    ndarray, shape (n,)
+        :math:`w(\lambda)\,\lambda` [dimensionless for ``BESSELL``, 1/Angstrom for ``ENERGY``].
+    """
+    if convention == FilterConvention.ENERGY:
+        return 1.0 / wave
+    return jnp.ones_like(wave)

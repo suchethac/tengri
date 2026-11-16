@@ -83,6 +83,7 @@ from tengri.components.nebular._shared import (
 from tengri.components.nebular.ionizing_spectrum import require_ionizing_coverage
 from tengri.config.exceptions import TengriIOError
 from tengri.protocols.component import declared_default
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
     PreintegratedLines,
@@ -838,6 +839,7 @@ class MappingsPhotoStellarBackend(NebularBackendDefaults):
         fixed: dict[int, float] | None = None,
         *,
         neb_logn: float = 2.0,
+        convention: FilterConvention,
     ) -> None:
         """Preintegrate MAPPINGS V lines through filters; expose CLOUDY-shaped surface.
 
@@ -947,6 +949,7 @@ class MappingsPhotoStellarBackend(NebularBackendDefaults):
             filter_trans,
             redshift,
             axes=surface_axes,
+            convention=convention,
         )
 
         # 5. Compute line luminosity grid: L_line/Q_H = ratio × 10^logHB_per_logq

@@ -34,6 +34,7 @@ from tengri.components.agn._template_power_table import (
 )
 from tengri.components.agn.cat3d_wind import _load_cat3d_arrays
 from tengri.forward.precompute.templates import collapse_fixed_axes
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
     interp_nd_pchip,
@@ -53,6 +54,8 @@ def precompute_cat3d_photometry(
     filter_waves: list[jnp.ndarray],
     filter_trans: list[jnp.ndarray],
     redshift: float = 0.0,
+    *,
+    convention: FilterConvention,
 ) -> dict:
     """Pre-integrate CAT3D-Wind torus templates through filter curves.
 
@@ -137,6 +140,7 @@ def precompute_cat3d_photometry(
         filter_trans,
         redshift,
         axes=(cos_inc_axis, a_axis, fwd_axis),
+        convention=convention,
     )
 
     axes_jax = (
@@ -228,6 +232,7 @@ def precompute(
     parameters: Any,
     *,
     grid_path: str,
+    convention: FilterConvention,
 ) -> dict:
     """Build preintegrated CAT3D grid, recording Fixed axes.
 
@@ -261,7 +266,9 @@ def precompute(
     -----
     **JIT-compatible**: no, this is a build-time function using NumPy.
     """
-    result = precompute_cat3d_photometry(grid_path, filter_waves, filter_trans, redshift=redshift)
+    result = precompute_cat3d_photometry(
+        grid_path, filter_waves, filter_trans, redshift=redshift, convention=convention
+    )
 
     preint: PreintegratedGrid = result["_preint"]
     _, _, fixed = collapse_fixed_axes(preint, AXIS_PARAMS, parameters, origin="cat3d_precompute")

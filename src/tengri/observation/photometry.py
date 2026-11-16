@@ -211,7 +211,7 @@ def filter_coverage_fraction(
     filter_waves,
     filter_trans,
     wave_obs,
-    convention: FilterConvention = FilterConvention.BESSELL,
+    convention: FilterConvention,
 ) -> np.ndarray:
     r"""Fraction of each band's weighted transmission outside the model's observed axis.
 
@@ -331,7 +331,7 @@ def lnu_filter_integral(
     filter_wave: jnp.ndarray,
     filter_trans: jnp.ndarray,
     redshift: float,
-    convention: FilterConvention = FilterConvention.BESSELL,
+    convention: FilterConvention,
     has_lyc_edge: bool = False,
 ) -> jnp.ndarray:
     r"""Filter-weighted rest-frame L_ν on the observed-frame filter grid.
@@ -407,7 +407,12 @@ def lnu_filter_integral(
     wave_obs = wave_rest * (1.0 + redshift)
     lyman_edge_obs_aa = LYMAN_LIMIT_AA * (1.0 + redshift) if has_lyc_edge else None
     return _filter_integral_union(
-        L_nu_rest, wave_obs, filter_wave, filter_trans, convention, lyman_edge_obs_aa
+        L_nu_rest,
+        wave_obs,
+        filter_wave,
+        filter_trans,
+        convention,
+        lyman_edge_obs_aa,
     )
 
 
@@ -417,7 +422,7 @@ def lnu_filter_integral_batch(
     fw_padded: jnp.ndarray,
     ft_padded: jnp.ndarray,
     redshift,
-    convention: FilterConvention = FilterConvention.BESSELL,
+    convention: FilterConvention,
 ) -> jnp.ndarray:
     r"""Exact rest-frame filter-weighted L_ν of one SED through many filters.
 
@@ -485,7 +490,7 @@ def compute_flux_density(
     filter_trans: jnp.ndarray,
     redshift: float,
     dl_cm: float,
-    convention: FilterConvention = FilterConvention.BESSELL,
+    convention: FilterConvention,
 ) -> float:
     r"""Compute observed flux density through a single photometric filter.
 
@@ -599,9 +604,25 @@ def pad_filters(filter_waves: list, filter_trans: list):
     Not JIT-compatible (uses Python list operations and loops).
 
     """
-    # Assemble in numpy and convert once: the per-filter scatter used to compile
-    # one XLA kernel per distinct filter length. The arrays keep the dtypes the
-    # old jnp path produced (canonical float and int for the active x64 mode).
+    fw_padded, ft_padded, n_valid = pad_filters_host(filter_waves, filter_trans)
+    return jnp.asarray(fw_padded), jnp.asarray(ft_padded), jnp.asarray(n_valid)
+
+
+def pad_filters_host(filter_waves: list, filter_trans: list):
+    """:func:`pad_filters` as host (NumPy) arrays, safe to cache across jit traces.
+
+    Assembled in numpy: the per-filter scatter used to compile one XLA kernel per distinct
+    filter length. The arrays keep the dtypes the old jnp path produced (canonical float and
+    int for the active x64 mode). A host array is never a tracer, so a
+    :class:`~tengri.utils.band_projection.BandSpec` can hold it.
+
+    Returns
+    -------
+    fw_padded, ft_padded : ndarray, shape (n_filters, max_len)
+        Zero-padded wavelengths [Angstrom] and transmission (dimensionless).
+    n_valid : ndarray, shape (n_filters,), dtype int
+        Number of valid points per filter.
+    """
     float_dtype = jax.dtypes.canonicalize_dtype(np.float64)
     int_dtype = jax.dtypes.canonicalize_dtype(np.int64)
     max_len = max(len(fw) for fw in filter_waves)
@@ -612,7 +633,7 @@ def pad_filters(filter_waves: list, filter_trans: list):
         fw_padded[i, :n] = np.asarray(fw)
         ft_padded[i, :n] = np.asarray(ft)
     n_valid = np.asarray([len(fw) for fw in filter_waves], dtype=int_dtype)
-    return jnp.asarray(fw_padded), jnp.asarray(ft_padded), jnp.asarray(n_valid)
+    return fw_padded, ft_padded, n_valid
 
 
 FILTER_COUNT_BUCKETS: tuple[int, ...] = (4, 6, 8, 10, 12, 16, 20)
@@ -683,7 +704,7 @@ def _compute_flux_density_padded(
     filter_trans_padded,
     redshift,
     dl_cm,
-    convention: FilterConvention = FilterConvention.BESSELL,
+    convention: FilterConvention,
     has_lyc_edge: bool = False,
 ):
     """Compute flux density for a single padded filter.
@@ -726,7 +747,12 @@ def _compute_flux_density_padded(
     fw_safe, ft_safe = _ascending_padded_filter(filter_wave_padded, filter_trans_padded)
     lyman_edge_obs_aa = LYMAN_LIMIT_AA * (1.0 + redshift) if has_lyc_edge else None
     mean_lnu = _filter_integral_union(
-        sed_rest, wave_obs, fw_safe, ft_safe, convention, lyman_edge_obs_aa
+        sed_rest,
+        wave_obs,
+        fw_safe,
+        ft_safe,
+        convention,
+        lyman_edge_obs_aa,
     )
     # Apply the (1+z)/(4π d_L²) dimming to the filter-integrated L_ν directly.
     # Extracting it as a standalone ``flux_scale = lnu_to_fnu(1.0, ...)`` is
@@ -745,7 +771,7 @@ def compute_flux_density_batch(
     ft_padded,
     redshift,
     dl_cm,
-    convention: FilterConvention = FilterConvention.BESSELL,
+    convention: FilterConvention,
     has_lyc_edge: bool = False,
 ):
     """Compute flux densities through all filters at once via vmap.
@@ -911,7 +937,7 @@ def compute_photometry(
     filters: list,
     redshift: float,
     dl_cm: float,
-    convention: FilterConvention = FilterConvention.BESSELL,
+    convention: FilterConvention,
 ) -> jnp.ndarray:
     """Compute photometry through multiple filters.
 

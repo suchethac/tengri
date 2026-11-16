@@ -15,6 +15,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.utils.filter_convention import FilterConvention
+
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "pahspec_smoke.h5"
 
 
@@ -51,6 +53,7 @@ def precomp(filter_curves):
         ionization="st",
         size_distribution="std",
         slab=False,
+        convention=FilterConvention.BESSELL,
     )
 
 

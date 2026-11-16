@@ -35,6 +35,7 @@ import pytest
 from tengri.components.agn.blocks.composable_precompute import _AGN_TABLE_RTOL, UNWIRED_BLOCKS
 from tengri.config.exceptions import TengriIOError
 from tengri.forward.precompute.band_table import Decline
+from tengri.utils.filter_convention import FilterConvention
 
 pytestmark = pytest.mark.contract
 
@@ -532,7 +533,14 @@ def _exact_agn_band(model, params) -> np.ndarray:
     sed = state.derived["sed_agn"]
     return np.asarray(
         [
-            lnu_filter_integral(sed, state.wave, f.wave, f.trans, redshift=jnp.asarray(0.1))
+            lnu_filter_integral(
+                sed,
+                state.wave,
+                f.wave,
+                f.trans,
+                redshift=jnp.asarray(0.1),
+                convention=FilterConvention.BESSELL,
+            )
             for f in (_tophat(c) for c in _BANDS_AA)
         ]
     )

@@ -491,6 +491,59 @@ def test_profile_mass_reinserts_each_galaxys_own_mass(synthetic_ssp, simple_obse
         )
 
 
+def _batch_se(draws, n_batches=20):
+    """Batch-means standard error of a chain: robust to the autocorrelation of the draws."""
+    n = (len(draws) // n_batches) * n_batches
+    means = np.asarray(draws[:n]).reshape(n_batches, -1).mean(axis=1)
+    return float(means.std(ddof=1) / np.sqrt(n_batches))
+
+
+def test_chees_dense_mass_matrix_runs_quietly_and_agrees_with_diagonal(
+    synthetic_ssp, simple_observation
+):
+    """ChEES with ``dense_mass_matrix=True`` runs, without the trajectory-floor warning.
+
+    The dense metric is estimated per galaxy from a pilot ChEES run and applied as a
+    linear change of variables, so BlackJAX's mass-matrix path (and its floor warning)
+    is never entered. Both samplers target the same posterior, so the posterior means
+    must agree to within three combined batch-means standard errors.
+    """
+    from tengri import CatalogFitter
+
+    model = _build_model_multi_d(synthetic_ssp, simple_observation)
+    galaxies = _catalog_from_truths(model, _MULTI_D_TRUTHS, jax.random.PRNGKey(0))
+    run_kwargs = dict(
+        key=jax.random.PRNGKey(1),
+        forward_chunk_size=2,
+        n_chains=4,
+        n_warmup=80,
+        n_burnin=20,
+        n_samples=120,
+        n_ensemble=4,
+        max_leapfrog_steps=32,
+        verbose=False,
+    )
+    diagonal = CatalogFitter(model, galaxies, data_type="photometry").run(
+        "mcmc_chees", **run_kwargs
+    )
+    with warnings.catch_warnings():
+        warnings.filterwarnings("error", message=".*trajectory-length floor.*")
+        dense = CatalogFitter(model, galaxies, data_type="photometry").run(
+            "mcmc_chees", dense_mass_matrix=True, **run_kwargs
+        )
+
+    for i in range(len(galaxies)):
+        for name in model.spec.free_params:
+            a = np.asarray(diagonal[i].samples[name])
+            b = np.asarray(dense[i].samples[name])
+            assert np.all(np.isfinite(b)), f"galaxy {i}, {name}: non-finite dense draws"
+            combined = np.hypot(_batch_se(a), _batch_se(b))
+            assert abs(a.mean() - b.mean()) <= 3.0 * combined, (
+                f"galaxy {i}, {name}: dense {b.mean():.4f} vs diagonal {a.mean():.4f}, "
+                f"3 combined SE = {3.0 * combined:.4f}"
+            )
+
+
 def test_per_galaxy_redshift_without_a_declared_range_runs_batched(
     synthetic_ssp, simple_observation
 ):

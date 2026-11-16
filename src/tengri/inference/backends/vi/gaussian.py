@@ -40,7 +40,7 @@ from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physic
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["run_gaussian_vi", "run_gaussian_vi_fitter"]
+__all__ = ["fit_gaussian_vi", "run_gaussian_vi", "run_gaussian_vi_fitter"]
 
 #: Adam step size for the ELBO optimizer. BlackJAX's own VI notebooks use 1e-2 and
 #: so does Stan's ADVI; tengri's latents are standardized, so the natural scale of a
@@ -62,6 +62,113 @@ def _family(name: str):
         return {"meanfield": blackjax.meanfield_vi, "fullrank": blackjax.fullrank_vi}[name]
     except KeyError:
         raise ValueError(f"family must be 'meanfield' or 'fullrank', got {name!r}") from None
+
+
+def fit_gaussian_vi(
+    key,
+    logdensity,
+    init_flat,
+    *,
+    family="fullrank",
+    n_steps=2000,
+    n_samples=2000,
+    n_mc_samples=DEFAULT_MC_SAMPLES,
+    learning_rate=DEFAULT_LEARNING_RATE,
+):
+    """Fit one Gaussian to ``logdensity`` by SGD on the ELBO and draw from it.
+
+    The engine-independent core of :func:`run_gaussian_vi`; the shared sampler driver calls
+    it on a flat target.
+
+    Parameters
+    ----------
+    key : PRNGKey
+        Random key.
+    logdensity : callable
+        ``log_p(x) -> scalar`` on the flat latent vector, data bound.
+    init_flat : ndarray, shape (D,)
+        Starting variational mean.
+    family : {'fullrank', 'meanfield'}
+        Covariance family.
+    n_steps, n_samples, n_mc_samples : int
+        ELBO steps, draws kept, Monte-Carlo draws per ELBO gradient.
+    learning_rate : float
+        Adam step size.
+
+    Returns
+    -------
+    samples : ndarray, shape (n_samples, D)
+        Draws from the fitted Gaussian.
+    info : dict
+        ``elbo_history``, ``elbo_final``, ``n_nonfinite_elbo``, ``optimizer_seconds``,
+        ``n_logdensity_evals`` and the fit settings.
+    """
+    from tengri.inference.backends.mcmc._shared import _check_blackjax_floor
+
+    _check_blackjax_floor()
+    try:
+        import optax
+    except ImportError:
+        raise ImportError("optax required for Gaussian VI: pip install optax") from None
+
+    algorithm = _family(family)
+    t0 = time.time()
+    init_flat = jnp.asarray(init_flat)
+    n_dim = int(init_flat.shape[0])
+    optimizer = optax.adam(learning_rate)
+    state = algorithm.init(init_flat, optimizer)
+
+    def _one_step(carry, step_key):
+        new_state, info = algorithm.step(
+            step_key, carry, logdensity, optimizer, num_samples=n_mc_samples
+        )
+        return new_state, info.elbo
+
+    key, scan_key, sample_key = jax.random.split(key, 3)
+
+    # One fixed-length scan. The whole reason this backend exists: the graph does
+    # not depend on the posterior, so its compile cost is a property of the model
+    # rather than of the geometry -- unlike a tree-doubling `while` loop.
+    @jax.jit
+    def _optimize(initial_state, run_key):
+        return jax.lax.scan(_one_step, initial_state, jax.random.split(run_key, n_steps))
+
+    final_state, elbo_history = _optimize(state, scan_key)
+    jax.block_until_ready(elbo_history)
+    t_fit = time.time() - t0
+    elbo_final = float(jnp.mean(elbo_history[-max(n_steps // 20, 1) :]))
+    n_nonfinite_elbo = int(jnp.sum(~jnp.isfinite(elbo_history)))
+    if n_nonfinite_elbo:
+        warn_measured(
+            f"Gaussian VI ({family}): {n_nonfinite_elbo} of {n_steps} ELBO steps were "
+            "non-finite. The optimizer walked through a NaN, so the returned Gaussian "
+            "may be wrong.",
+            UserWarning,
+            stacklevel=2,
+            n_nonfinite_elbo=n_nonfinite_elbo,
+            n_steps=n_steps,
+        )
+    samples = jnp.reshape(
+        jnp.asarray(algorithm.sample(sample_key, final_state, n_samples)), (n_samples, n_dim)
+    )
+    info = {
+        "family": family,
+        "n_dim": n_dim,
+        "n_steps": n_steps,
+        "n_samples": n_samples,
+        "n_mc_samples": n_mc_samples,
+        "learning_rate": learning_rate,
+        # Forward-model evaluations the fit actually spent. The draws are free, so
+        # this is the whole cost and it is known before the fit starts.
+        "n_logdensity_evals": int(n_steps) * int(n_mc_samples),
+        "elbo_final": elbo_final,
+        "elbo_history": elbo_history,
+        "optimizer_seconds": t_fit,
+        # An Adam run that walked through a NaN keeps walking and returns a finite,
+        # wrong Gaussian, so the count is not optional.
+        "n_nonfinite_elbo": n_nonfinite_elbo,
+    }
+    return samples, info
 
 
 def run_gaussian_vi(
@@ -146,17 +253,7 @@ def run_gaussian_vi(
        Lower-Variance Gradient Estimators for Variational Inference," NeurIPS
        (2017). arXiv:1703.09194.
     """
-    from tengri.inference.backends.mcmc._shared import _check_blackjax_floor
-
-    _check_blackjax_floor()
-    try:
-        import optax
-    except ImportError:
-        raise ImportError("optax required for Gaussian VI: pip install optax") from None
-
     from tengri.inference.posterior import Posterior
-
-    algorithm = _family(family)
 
     t0 = time.time()
     init_flat = jnp.asarray(init_flat)
@@ -170,50 +267,21 @@ def run_gaussian_vi(
             n_mc_samples,
             learning_rate,
         )
-
-    optimizer = optax.adam(learning_rate)
-    state = algorithm.init(init_flat, optimizer)
-
-    def _one_step(carry, step_key):
-        new_state, info = algorithm.step(
-            step_key,
-            carry,
-            log_posterior_flat,
-            optimizer,
-            num_samples=n_mc_samples,
-        )
-        return new_state, info.elbo
-
-    key, scan_key, sample_key = jax.random.split(key, 3)
-
-    # One fixed-length scan. The whole reason this backend exists: the graph does
-    # not depend on the posterior, so its compile cost is a property of the model
-    # rather than of the geometry -- unlike a tree-doubling `while` loop.
-    @jax.jit
-    def _optimize(initial_state, run_key):
-        return jax.lax.scan(_one_step, initial_state, jax.random.split(run_key, n_steps))
-
-    final_state, elbo_history = _optimize(state, scan_key)
-    jax.block_until_ready(elbo_history)
-
-    t_fit = time.time() - t0
-    elbo_final = float(jnp.mean(elbo_history[-max(n_steps // 20, 1) :]))
-    n_nonfinite_elbo = int(jnp.sum(~jnp.isfinite(elbo_history)))
-    if n_nonfinite_elbo:
-        warn_measured(
-            f"Gaussian VI ({family}): {n_nonfinite_elbo} of {n_steps} ELBO steps were "
-            "non-finite. The optimizer walked through a NaN, so the returned Gaussian "
-            "may be wrong.",
-            UserWarning,
-            stacklevel=2,
-            n_nonfinite_elbo=n_nonfinite_elbo,
-            n_steps=n_steps,
-        )
+    samples_flat, fit = fit_gaussian_vi(
+        key,
+        log_posterior_flat,
+        init_flat,
+        family=family,
+        n_steps=n_steps,
+        n_samples=n_samples,
+        n_mc_samples=n_mc_samples,
+        learning_rate=learning_rate,
+    )
+    elbo_history = fit["elbo_history"]
+    elbo_final = fit["elbo_final"]
+    t_fit = fit["optimizer_seconds"]
     if verbose:
         logger.info("  ELBO optimization complete (%.1fs), final ELBO %.2f", t_fit, elbo_final)
-
-    samples_flat = algorithm.sample(sample_key, final_state, n_samples)
-    samples_flat = jnp.reshape(jnp.asarray(samples_flat), (n_samples, n_dim))
 
     if restore_fn is not None:
         samples_flat = restore_fn(samples_flat)
@@ -225,25 +293,7 @@ def run_gaussian_vi(
     if verbose:
         logger.info("  Gaussian VI (%s) complete in %.1fs", family, wall_time)
 
-    diagnostics = {
-        "family": family,
-        "n_dim": n_dim,
-        "n_steps": n_steps,
-        "n_samples": n_samples,
-        "n_mc_samples": n_mc_samples,
-        "learning_rate": learning_rate,
-        # Forward-model evaluations the fit actually spent. The draws are free, so
-        # this is the whole cost and it is known before the fit starts -- which is
-        # the difference from every sampler in this package.
-        "n_logdensity_evals": int(n_steps) * int(n_mc_samples),
-        "elbo_final": elbo_final,
-        "elbo_history": elbo_history,
-        "optimizer_seconds": t_fit,
-        # Non-finite ELBO steps. An Adam run that walked through a NaN keeps
-        # walking and returns a finite, wrong Gaussian, so the count is not
-        # optional and there is no acceptance test that would have caught it.
-        "n_nonfinite_elbo": n_nonfinite_elbo,
-    }
+    diagnostics = dict(fit)
     if precondition_diagnostics:
         diagnostics.update(precondition_diagnostics)
 

@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import pytest
 
+from tengri.utils.filter_convention import FilterConvention
+
 pytestmark = pytest.mark.regression_paper
 import jax
 import jax.numpy as jnp
@@ -65,7 +67,9 @@ def test_filter_with_zero_transmission_is_finite_and_zero():
     filter_wave = jnp.linspace(5000.0, 6000.0, 50)
     filter_trans = jnp.zeros_like(filter_wave)  # all zeros
 
-    f_nu = compute_flux_density(sed, wave_rest, filter_wave, filter_trans, z, dl_cm)
+    f_nu = compute_flux_density(
+        sed, wave_rest, filter_wave, filter_trans, z, dl_cm, convention=FilterConvention.BESSELL
+    )
     # The convolution divides by ∫ T λ dλ — for all-zero T the formula is
     # 0/0. We assert the implementation has handled this gracefully (NaN is
     # the JAX default for 0/0; tengri may special-case to 0). Either is OK
@@ -99,7 +103,9 @@ def test_filter_outside_sed_range_does_not_nan():
     filter_wave = jnp.linspace(30000.0, 31000.0, 30)
     filter_trans = jnp.exp(-(((filter_wave - 30500.0) / 200.0) ** 2))
 
-    f_nu = compute_flux_density(sed, wave_rest, filter_wave, filter_trans, z, dl_cm)
+    f_nu = compute_flux_density(
+        sed, wave_rest, filter_wave, filter_trans, z, dl_cm, convention=FilterConvention.BESSELL
+    )
     val = float(f_nu)
     assert jnp.isfinite(jnp.asarray(val)), (
         f"Out-of-range filter produced non-finite flux={val} — "
@@ -131,9 +137,20 @@ def test_compute_flux_density_unit_consistency_across_filters():
         ft = jnp.exp(-(((fw - center) / sigma) ** 2))
         return fw, ft
 
-    f_uv = compute_flux_density(sed, wave_rest, *gauss_filter(2000.0, 400.0), z, dl_cm)
-    f_optical = compute_flux_density(sed, wave_rest, *gauss_filter(5000.0, 500.0), z, dl_cm)
-    f_nir = compute_flux_density(sed, wave_rest, *gauss_filter(20000.0, 1000.0), z, dl_cm)
+    f_uv = compute_flux_density(
+        sed, wave_rest, *gauss_filter(2000.0, 400.0), z, dl_cm, convention=FilterConvention.BESSELL
+    )
+    f_optical = compute_flux_density(
+        sed, wave_rest, *gauss_filter(5000.0, 500.0), z, dl_cm, convention=FilterConvention.BESSELL
+    )
+    f_nir = compute_flux_density(
+        sed,
+        wave_rest,
+        *gauss_filter(20000.0, 1000.0),
+        z,
+        dl_cm,
+        convention=FilterConvention.BESSELL,
+    )
 
     fluxes = jnp.array([f_uv, f_optical, f_nir])
     assert bool(jnp.all(jnp.isfinite(fluxes))), "non-finite flux across canonical filters"
@@ -164,11 +181,16 @@ def test_filter_jit_and_grad_compatible():
 
     @jax.jit
     def jitted(sed_in):
-        return compute_flux_density(sed_in, wave_rest, fw, ft, z, dl_cm)
+        return compute_flux_density(
+            sed_in, wave_rest, fw, ft, z, dl_cm, convention=FilterConvention.BESSELL
+        )
 
     val = float(jitted(sed))
     grad = assert_grad_matches_fd(
-        lambda s: compute_flux_density(s, wave_rest, fw, ft, z, dl_cm).sum(), sed
+        lambda s: compute_flux_density(
+            s, wave_rest, fw, ft, z, dl_cm, convention=FilterConvention.BESSELL
+        ).sum(),
+        sed,
     )
     assert jnp.isfinite(val) and val > 0
     assert bool(jnp.all(jnp.isfinite(grad))), "non-finite gradient through filter convolution"

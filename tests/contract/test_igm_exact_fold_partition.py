@@ -26,6 +26,7 @@ import pytest
 
 from tengri import Photometry
 from tengri.components.igm import _subband_cache, exact_fold
+from tengri.utils.band_projection import BandSpec
 from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid_interp import preintegrate_grid
 
@@ -69,20 +70,24 @@ def _quadrature(ssp, filters, z, templates, *, lyc_gate, n_subbands=K):
             taylor=False,
             n_subbands=n_subbands,
             lyc_gate=lyc_gate,
+            convention=FilterConvention.BESSELL,
         ).subband_phot,
         dtype=np.float64,
     )
 
 
-def _ratio(ssp, filters, z, *, lyc_gate, n_subbands=K):
-    return exact_fold.subband_fold(
-        ssp,
-        filters,
-        z,
-        igm_model=IGM_MODEL,
+def _bands(filters, *, lyc_gate, n_subbands=K):
+    return BandSpec(
+        filters=([fw for fw, _ in filters], [ft for _, ft in filters]),
+        convention=FilterConvention.BESSELL,
         n_subbands=n_subbands,
         lyc_gate=lyc_gate,
-        convention=FilterConvention.BESSELL,
+    )
+
+
+def _ratio(ssp, filters, z, *, lyc_gate, n_subbands=K):
+    return exact_fold.subband_fold(
+        ssp, _bands(filters, lyc_gate=lyc_gate, n_subbands=n_subbands), z, igm_model=IGM_MODEL
     ).ratio
 
 
@@ -163,13 +168,7 @@ def cache_on(tmp_path, monkeypatch):
 
 def _table(ssp, filters, z_grid, *, lyc_gate):
     return exact_fold.subband_fold_table(
-        ssp,
-        filters,
-        z_grid,
-        igm_model=IGM_MODEL,
-        n_subbands=K,
-        lyc_gate=lyc_gate,
-        convention=FilterConvention.BESSELL,
+        ssp, _bands(filters, lyc_gate=lyc_gate), z_grid, igm_model=IGM_MODEL
     )
 
 
@@ -284,13 +283,7 @@ def test_the_sliced_fold_is_bit_identical_to_the_full_grid_fold(ssp, slice_filte
     nodes the quadrature never reads.
     """
     fold = exact_fold.subband_fold(
-        ssp,
-        slice_filters,
-        z,
-        igm_model=IGM_MODEL,
-        n_subbands=K,
-        lyc_gate=lyc_gate,
-        convention=FilterConvention.BESSELL,
+        ssp, _bands(slice_filters, lyc_gate=lyc_gate), z, igm_model=IGM_MODEL
     )
     ratio_full, nodes_full = _full_grid_fold(ssp, slice_filters, z, lyc_gate=lyc_gate)
     assert np.array_equal(fold.ratio, ratio_full)
