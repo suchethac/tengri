@@ -585,17 +585,59 @@ def catalog_redshift_span(redshifts) -> tuple[float, float]:
     z = np.asarray(redshifts, dtype=float).ravel()
     if z.size == 0:
         raise ValueError("cannot derive a redshift span from an empty redshift list")
+    _refuse_non_finite(z)
+    lo, hi = float(z.min()), float(z.max())
+    pad = max(_SPAN_PAD_FRAC * (hi - lo), _SPAN_MIN_PAD)
+    q_lo = np.floor(max(0.0, lo - pad) / _SPAN_STEP + 1e-9) * _SPAN_STEP
+    q_hi = np.ceil((hi + pad) / _SPAN_STEP - 1e-9) * _SPAN_STEP
+    return (round(float(q_lo), 10), round(float(q_hi), 10))
+
+
+def _refuse_non_finite(z) -> None:
+    """Raise ``ValueError`` naming the rows of ``z`` that are NaN or infinite."""
     bad = np.flatnonzero(~np.isfinite(z))
     if bad.size:
         raise ValueError(
             f"redshift is not finite (NaN or inf) for row(s) {bad.tolist()}; a redshift "
             "table cannot cover it. Fix or drop those rows before fitting."
         )
-    lo, hi = float(z.min()), float(z.max())
-    pad = max(_SPAN_PAD_FRAC * (hi - lo), _SPAN_MIN_PAD)
-    q_lo = np.floor(max(0.0, lo - pad) / _SPAN_STEP + 1e-9) * _SPAN_STEP
-    q_hi = np.ceil((hi + pad) / _SPAN_STEP - 1e-9) * _SPAN_STEP
-    return (round(float(q_lo), 10), round(float(q_hi), 10))
+
+
+def require_redshifts_in_range(redshifts, z_range) -> None:
+    """Refuse redshifts that a ``catalog_z_range`` table cannot cover, naming their rows.
+
+    The one range rule of the runtime-redshift path. The catalog fit and the batched
+    build both call it, so a galaxy outside the model's range is refused with the same
+    message and the same two remedies.
+
+    Parameters
+    ----------
+    redshifts : array_like, shape (n,)
+        Redshifts [dimensionless] of the catalog or of the galaxies.
+    z_range : tuple of float
+        ``(z_lo, z_hi)`` [dimensionless] of the model's ``catalog_z_range``.
+
+    Raises
+    ------
+    ValueError
+        If a redshift is NaN or infinite (the message names its rows, as
+        :func:`catalog_redshift_span` does), or lies outside ``[z_lo, z_hi]`` (the
+        message names the rows, their redshifts and the range).
+
+    Notes
+    -----
+    Build-time NumPy check, not JIT-compatible.
+    """
+    z = np.asarray(redshifts, dtype=float).ravel()
+    _refuse_non_finite(z)
+    z_lo, z_hi = float(z_range[0]), float(z_range[1])
+    outside = np.flatnonzero((z < z_lo) | (z > z_hi))
+    if outside.size:
+        raise ValueError(
+            f"redshift outside the model's catalog_z_range=[{z_lo:.3f}, {z_hi:.3f}] for "
+            f"row(s) {outside.tolist()} (z={np.round(z[outside], 6).tolist()}). "
+            "Widen catalog_z_range at model build time or filter the table."
+        )
 
 
 def _is_runtime_redshift(model) -> bool:
@@ -639,7 +681,9 @@ def promote_to_runtime_redshift(model, redshifts):
     span = catalog_redshift_span(redshifts)
     if _is_runtime_redshift(model):
         return model
-    promote = getattr(model, "with_runtime_redshift", None)
+    promote: Callable[[tuple[float, float] | None], Any] | None = getattr(
+        model, "with_runtime_redshift", None
+    )
     spec = getattr(model, "spec", None)
     if not callable(promote) or spec is None or not spec.is_fixed("redshift"):
         return model
