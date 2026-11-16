@@ -3,8 +3,7 @@
   "sfh_dpl_log_total_mass": 8.444870947551594
  },
  "platform": "darwin-arm64",
- "repin_note": "Re-pinned 2026-11-15: monotone PCHIP metallicity read (#3434, owner ruling 'True PCHIP on the spectra'). Against real main: the PCHIP move is up to 4.1e-4 relative (dust_fixed_z, exact, shock) and 3.3e-5 (free_z_radio_xray); the re-pinned arrays also carry 1-6 ulp (max 1.3e-15 relative) from the restructured contraction order, measured on a Hermite control.",
- "signature_sha256": "5ff8c67ed4c7596fb8705990f8f357dbc68be2f2dd5915bc320c3b00690fe3c5",
+ "signature_sha256": "c3d1e86a06529cb1a037cc9fa7bca1e42339fcbc8fc0d39aa7caf38302df1b26",
  "summary": "Precompute Engagement Summary\n===========================\n\n\u2022 Energy-balance LUT: ENGAGED\n\u2022 Dust band response: ENGAGED\n\n\u2022 Observed facts:\n  components: stellar, nebular, dust, dust_emission\n  dust_emission_configured: True\n  free_params: sfh_dpl_log_total_mass\n  igm_fold: declared=auto, resolved=None\n  redshift_fixed: 0.1\n  wave_precomp_enabled: True\n  ztable_enabled: False",
  "tree": [
   {
