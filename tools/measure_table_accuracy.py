@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Report the nebular feature table's accuracy against the exact path.
 
-Measuring tool, not a CI gate (the build-time gate is the shared cell-centre check).
+Measuring tool, not a CI gate (the build-time gate is the shared cell-center check).
 Builds one model per configuration, and for every star-formation history listed
 below reports the worst relative error of the grid-served lines and bands against
-the exact path, at grid nodes and at cell centres, with where it occurred. The
+the exact path, at grid nodes and at cell centers, with where it occurred. The
 numbers are compared with the declared bounds (1e-4 for line tables, 1e-3 for band
 tables; #3505 owner ruling 2026-11-16, item 5).
 

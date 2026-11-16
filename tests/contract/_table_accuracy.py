@@ -3,11 +3,11 @@
 
 One measuring tool for every nebular backend, used by the contract tests and by
 ``tools/measure_table_accuracy.py``. It is not a gate: the build-time gate is the
-shared cell-centre check (``_agn_table_cell_center_error`` in
+shared cell-center check (``_agn_table_cell_center_error`` in
 ``components/agn/blocks/composable_precompute.py``), and this module uses that
 check's definitions so the two never disagree:
 
-* a **cell centre** is the midpoint of adjacent nodes on every gridded axis, taken
+* a **cell center** is the midpoint of adjacent nodes on every gridded axis, taken
   as a full tensor product;
 * the **error** of a channel is ``|got / want - 1|``, the worst over the channels
   that carry flux (above a floor), never a mean.
@@ -16,12 +16,12 @@ Two measurements:
 
 ``measure_table_vs_exact``
     The ``(WavePrecomp, FeaturePrecomp)`` model against the same model with
-    ``WavePrecomp`` alone, at grid nodes and cell centres, for every star-formation
+    ``WavePrecomp`` alone, at grid nodes and cell centers, for every star-formation
     history given. Lines compare ``predict_line_fluxes`` (grid-served against the
     exact backend call); bands compare ``predict_photometry`` (grid-served nebular
     photometry against the full SED on the same WavePrecomp path, so the grid's
     error is isolated from WavePrecomp's own). At a node the error is the
-    dependence on the star-formation history the grid does not carry; at a centre it
+    dependence on the star-formation history the grid does not carry; at a center it
     adds the interpolation error.
 
 ``measure_qh_linearity``
@@ -61,7 +61,7 @@ class WorstError:
     draw : str
         Name of the star-formation history at the worst point.
     at : str
-        ``"nodes"`` or ``"centres"``.
+        ``"nodes"`` or ``"centers"``.
     n_compared : int
         Number of (point, channel entry) pairs compared.
     """
@@ -75,8 +75,8 @@ class WorstError:
     n_compared: int
 
 
-def _centre_params(model) -> dict[str, float]:
-    """Every free parameter at its prior centre."""
+def _center_params(model) -> dict[str, float]:
+    """Every free parameter at its prior center."""
     return {
         n: float(model.spec._distributions[n].unstandardize(jnp.asarray(0.0)))
         for n in model.spec.free_params
@@ -84,7 +84,7 @@ def _centre_params(model) -> dict[str, float]:
 
 
 def grid_points(axis_names, axes, at: str, *, max_points=None, seed=0):
-    """Tensor-product grid points at the nodes or the cell centres.
+    """Tensor-product grid points at the nodes or the cell centers.
 
     Parameters
     ----------
@@ -92,7 +92,7 @@ def grid_points(axis_names, axes, at: str, *, max_points=None, seed=0):
         Gridded parameter names.
     axes : sequence of ndarray
         Ascending node values per axis.
-    at : {"nodes", "centres"}
+    at : {"nodes", "centers"}
         Which points.
     max_points : int, optional
         Keep a seeded random subset of at most this many points.
@@ -108,10 +108,10 @@ def grid_points(axis_names, axes, at: str, *, max_points=None, seed=0):
         return [{}]
     if at == "nodes":
         values = [np.asarray(a, dtype=np.float64) for a in axes]
-    elif at == "centres":
+    elif at == "centers":
         values = [0.5 * (np.asarray(a)[1:] + np.asarray(a)[:-1]) for a in axes]
     else:
-        raise ValueError(f"at must be 'nodes' or 'centres', got {at!r}")
+        raise ValueError(f"at must be 'nodes' or 'centers', got {at!r}")
     points = [dict(zip(axis_names, map(float, combo))) for combo in itertools.product(*values)]
     if max_points is not None and len(points) > max_points:
         rng = np.random.default_rng(seed)
@@ -137,7 +137,7 @@ def measure_table_vs_exact(
     *,
     sfh_draws: Mapping[str, Mapping[str, float]],
     line_waves: Sequence[float],
-    at: Sequence[str] = ("nodes", "centres"),
+    at: Sequence[str] = ("nodes", "centers"),
     channels: Sequence[str] = ("lines", "bands"),
     max_points: int | None = None,
     floor: float = DEFAULT_FLOOR,
@@ -152,10 +152,10 @@ def measure_table_vs_exact(
     sfh_draws : mapping
         ``{name: {param: value}}`` star-formation histories (and any other
         non-gridded parameters) to evaluate; unlisted free parameters sit at their
-        prior centre.
+        prior center.
     line_waves : sequence of float
         Rest-frame vacuum line wavelengths to compare [Angstrom].
-    at : sequence of {"nodes", "centres"}
+    at : sequence of {"nodes", "centers"}
         Grid points to evaluate.
     channels : sequence of {"lines", "bands"}
         Channels to compare.
@@ -174,7 +174,7 @@ def measure_table_vs_exact(
     pair = build((WavePrecomp(), FeaturePrecomp()))
     ref = build((WavePrecomp(),))
     waves = jnp.asarray(line_waves, dtype=jnp.float64)
-    base = _centre_params(pair)
+    base = _center_params(pair)
     pair.predict_line_fluxes(base, waves)  # builds the grid
     table = pair._nebular_grid_table
     names, axes = tuple(table.axis_names), tuple(table.axes)
@@ -240,7 +240,7 @@ def measure_qh_linearity(
     if len(mass) != 1:
         raise ValueError(f"need exactly one free *log_total_mass parameter, found {mass}")
     waves = jnp.asarray(line_waves, dtype=jnp.float64)
-    base = _centre_params(model)
+    base = _center_params(model)
     best = WorstError("qh_linearity", 0.0, "", {}, "", "nodes", 0)
     count = 0
     for draw_name, draw in sfh_draws.items():

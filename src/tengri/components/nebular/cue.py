@@ -185,6 +185,17 @@ from tengri.components.nebular.ionizing_spectrum import (
 # SSP fingerprints whose young-composite shape has been checked against Cue's range.
 _SHAPE_CHECKED: dict[int, dict] = {}
 
+#: Raised when the shape must be derived but no per-age ionizing spectrum was given.
+_NEEDS_LNU_AGE_ION = (
+    "Cue's ionizing shape is the fit of the population's summed ionizing spectrum, "
+    "which the stellar component publishes as 'lnu_age_ion'; pass it as ssp_lnu_ion "
+    "(shape (n_age, n_ion)), or give the shape directly with all seven ionspec_* values."
+)
+
+#: Share of a constant-star-formation population's Q_H, at one metallicity, above
+#: which an SSP row whose shape was clamped to Cue's trained range is reported.
+_BOX_CHECK_MIN_QH_SHARE: float = 0.01
+
 # Flag to track whether the ionspec defaults warning has been issued (once per process)
 _IONSPEC_DEFAULT_WARNED: bool = False
 
@@ -1456,8 +1467,6 @@ class CueBackend(NebularBackendDefaults):
         self._ssp_lgmet = None
         self._ssp_log_age_yr = None
         self._ssp_wave_host = None
-        self._ssp_flux_ion = None
-        self._ion_layouts: dict[int, object] = {}
         if ssp_data is not None:
             self._precompute_ionizing_params(ssp_data)
 
@@ -1530,14 +1539,9 @@ class CueBackend(NebularBackendDefaults):
         self._logqion_table = jnp.array(result["logqion_table"])
         self._ssp_lgmet = jnp.array(ssp_data.ssp_lgmet)
         self._ssp_log_age_yr = jnp.array(ssp_data.ssp_lg_age_gyr) + 9.0
-        # The ionizing slice of the grid (the prefix the stellar component publishes as
-        # ``lnu_age_ion``): its wavelengths set the static fit layout, and its flux serves
-        # callers that pass age weights without the stellar component's per-age cube.
-        from tengri.components.lyc import LYMAN_LIMIT_AA
-
+        # The SSP wavelength grid: the stellar component's ``lnu_age_ion`` is a prefix
+        # of it, and the four-segment fit's static layout is read from it.
         self._ssp_wave_host = np.asarray(ssp_data.ssp_wave, dtype=np.float64)
-        n_ion = int(np.count_nonzero(self._ssp_wave_host < 2.0 * LYMAN_LIMIT_AA))
-        self._ssp_flux_ion = jnp.asarray(ssp_flux_np[..., :n_ion])
 
         self._warn_if_shape_outside_trained_box(result)
 
@@ -1587,57 +1591,57 @@ class CueBackend(NebularBackendDefaults):
                     raise CueWNESSPError(msg)
 
     def _warn_if_shape_outside_trained_box(self, table: dict) -> None:
-        """Warn once per SSP when its young-population shape leaves Cue's range.
+        """Warn once per SSP when a row that carries photons leaves Cue's trained range.
 
-        Builds a constant-star-formation composite over the bins that feed Cue
-        (every age, or those up to ``lyc_max_age_yr``) at each SSP metallicity (one vectorized
-        call), combines the SSP shapes exactly as the forward model does, and
-        compares the unclamped result to ``_CLIP_RANGES`` (the Cue reference
-        code's training range). Individual old or extreme nodes of a dense grid
-        saturate routinely and carry no weight, so the composite, not the node
-        table, is what is checked. The verdict is memoized per SSP (keyed on the
-        process-wide memoized ionizing table, which is one object per SSP fingerprint),
-        so a repeated build neither recomputes nor repeats the warning.
+        Reads the per-SSP shape table (each SSP row's own four-segment fit, clamped to
+        ``_CLIP_RANGES``, the Cue reference code's training range) and the per-row Q_H.
+        A row is flagged when one of its parameters sits on a bound of that range (it
+        was clamped) and it carries at
+        least :data:`_BOX_CHECK_MIN_QH_SHARE` of a constant-star-formation population's
+        Q_H at its metallicity, over the bins that feed Cue (every age, or those up to
+        ``lyc_max_age_yr``). Old or extreme rows that saturate routinely carry no
+        photons and are not flagged. The verdict is memoized per SSP (keyed on the
+        process-wide memoized ionizing table, one object per SSP fingerprint), so a
+        repeated build neither recomputes nor repeats the warning.
         """
         if id(table) in _SHAPE_CHECKED:
             return
         _SHAPE_CHECKED[id(table)] = table  # holding the table keeps its id unique
         ages = np.asarray(self._ssp_log_age_yr)
-        young = (
+        counted = (
             np.ones(ages.shape, dtype=bool)
             if self._lyc_max_log_age is None
             else ages <= self._lyc_max_log_age
         )
-        if not young.any():
+        if not counted.any():
             return
-        w = jnp.asarray(np.where(young, np.gradient(10.0**ages), 0.0))
-        lgmet = jnp.asarray(self._ssp_lgmet)
-        # One traced program (#2914): the bare vmap dispatched its ~130 primitives as
-        # separate XLA compiles, each below the persistent cache's floor.
-        composite = jax.jit(
-            jax.vmap(lambda z: self._weighted_cue_params_raw(w, jnp.asarray(ages), z))
-        )
-        raw = composite(lgmet)
-        lgmet_np = np.asarray(lgmet)
+        shape = np.asarray(table["ionspec_table"], dtype=np.float64)  # (n_met, n_age, 7)
+        logq = np.asarray(table["logqion_table"], dtype=np.float64)  # (n_met, n_age)
+        dt = np.where(counted, np.gradient(10.0**ages), 0.0)
+        q = np.where(np.isfinite(logq), 10.0 ** (logq - np.nanmax(logq)), 0.0) * dt[None, :]
+        share = q / np.maximum(q.sum(axis=1, keepdims=True), np.finfo(np.float64).tiny)
+        carries = share >= _BOX_CHECK_MIN_QH_SHARE
+        lgmet_np = np.asarray(self._ssp_lgmet)
         worst: dict[str, tuple[float, float]] = {}
-        for name in IONSPEC_NAMES:
+        for j, name in enumerate(IONSPEC_NAMES):
             lo, hi = _CLIP_RANGES[name]
-            v = np.asarray(raw[name], dtype=np.float64)
-            miss = np.where(np.isfinite(v), np.maximum(lo - v, v - hi), 0.0)
-            if (miss > 0).any():
-                i = int(np.argmax(miss))
-                worst[name] = (float(v[i]), float(lgmet_np[i]))
+            v = shape[..., j]
+            clamped = carries & ((v <= lo) | (v >= hi))
+            if clamped.any():
+                weight = np.where(clamped, share, 0.0)
+                im, ia = np.unravel_index(int(np.argmax(weight)), weight.shape)
+                worst[name] = (float(v[im, ia]), float(lgmet_np[im]))
         if not worst:
             return
         lines = "\n".join(
-            f"  {name} = {v:.3g} at log10(Z) = {z:.2f}; trained range "
+            f"  {name} clamped to {v:.3g} at log10(Z) = {z:.2f}; trained range "
             f"[{_CLIP_RANGES[name][0]:g}, {_CLIP_RANGES[name][1]:g}]"
             for name, (v, z) in worst.items()
         )
         warnings.warn(
             "The ionizing shape fitted to this SSP lies outside the range Cue was "
             "trained on (Cue reference code bounds; Li et al. 2025, "
-            "arXiv:2405.04598) for a constant-SFR young population:\n"
+            "arXiv:2405.04598) for an SSP age that carries ionizing photons:\n"
             f"{lines}\n"
             "The parameter is clamped to the nearest trained bound before the "
             "network, so the emulator is not extrapolated, but the nebular "
@@ -1748,6 +1752,20 @@ class CueBackend(NebularBackendDefaults):
 
         Returns a flat dict with all 12 Cue params + gas_logqion.
         """
+        explicit_shape = all(
+            v is not None
+            for v in (
+                ionspec_index1,
+                ionspec_index2,
+                ionspec_index3,
+                ionspec_index4,
+                ionspec_logLratio1,
+                ionspec_logLratio2,
+                ionspec_logLratio3,
+            )
+        )
+        if ssp_weights is not None and ssp_lnu_ion is None and not explicit_shape:
+            raise ValueError(_NEEDS_LNU_AGE_ION)
         if ssp_weights is not None:
             derived = self._compute_weighted_cue_params(
                 ssp_weights,
@@ -2058,6 +2076,8 @@ class CueBackend(NebularBackendDefaults):
             ssp_weights, ssp_log_ages_yr, log_z, neb_logZ_gas=neb_logZ_gas, ssp_lnu_ion=ssp_lnu_ion
         )
         gas = dict(gas_logu=neb_logU, gas_logn=gas_logn, gas_logno=gas_logno, gas_logco=gas_logco)
+        if IONSPEC_NAMES[0] not in out:
+            return {**gas, **out}
         i7 = clamp_ionspec_straight_through(jnp.stack([out[k] for k in IONSPEC_NAMES]))
         return {**gas, **out, **{k: i7[j] for j, k in enumerate(IONSPEC_NAMES)}}
 
@@ -2086,10 +2106,10 @@ class CueBackend(NebularBackendDefaults):
             Stellar metallicity log10(Z) (absolute).
         neb_logZ_gas : float or None
             Gas metallicity log10(Z) (absolute). None = tie to stellar.
-        ssp_lnu_ion : array, shape (n_age, n_ion), optional
+        ssp_lnu_ion : array, shape (n_age, n_ion)
             The stellar component's per-age ionizing spectrum (``lnu_age_ion``):
             age-weighted, per unit stellar mass, on the SSP grid's ionizing prefix.
-            When absent it is formed from ``ssp_weights`` at ``log_z``.
+            Required: the shape is the fit of its age sum.
 
         Returns
         -------
@@ -2150,9 +2170,11 @@ class CueBackend(NebularBackendDefaults):
         # 2025, Sec. VI.4: the emulator prediction "based on the integrated ionizing
         # spectrum"), so the counted age bins are summed pixel by pixel and the sum is
         # fitted once, by the same solver that builds the per-SSP table.
-        i7_composite = self._composite_ionizing_shape(
-            ssp_weights, log_z, counted_mask, ssp_lnu_ion=ssp_lnu_ion
-        )
+        if ssp_lnu_ion is None:
+            # The resolver only gets here with all seven ionspec_* given explicitly.
+            gas_logz = neb_logZ_gas if neb_logZ_gas is not None else log_z
+            return dict(gas_logz=gas_logz - _LOG10_ZSUN, gas_logqion=total_logqion)
+        i7_composite = self._composite_ionizing_shape(counted_mask, ssp_lnu_ion)
 
         # Empty population (no counted bin with weight and a finite Q_H): dominant-bin
         # fallback, picked in LOG space so the index selection never materializes
@@ -2178,62 +2200,57 @@ class CueBackend(NebularBackendDefaults):
             ionspec_logLratio3=i7[6],
         )
 
-    def _composite_ionizing_shape(self, ssp_weights, log_z, counted_mask, *, ssp_lnu_ion=None):
+    def _composite_ionizing_shape(self, counted_mask, ssp_lnu_ion):
         """Four-segment fit of the counted age bins' summed ionizing spectrum.
 
         Parameters
         ----------
-        ssp_weights : array, shape (n_age,)
-            CSP mass weights per SSP age bin [Msun]; used only when
-            ``ssp_lnu_ion`` is absent.
-        log_z : float
-            Stellar metallicity, absolute ``log10(Z)``; used only when
-            ``ssp_lnu_ion`` is absent.
         counted_mask : array of bool, shape (n_age,)
             Age bins that ionize the gas (all, or those up to ``lyc_max_age_yr``).
-        ssp_lnu_ion : array, shape (n_age, n_ion), optional
+        ssp_lnu_ion : array, shape (n_age, n_ion)
             Per-age, age-weighted ionizing spectrum from the stellar component
-            (``lnu_age_ion``) [erg/s/Hz/Msun, up to a constant].
+            (``lnu_age_ion``) on the ionizing prefix of this backend's SSP grid
+            [erg/s/Hz/Msun, up to a constant].
 
         Returns
         -------
         jnp.ndarray, shape (7,)
             Cue's shape parameters, unclamped.
 
+        Raises
+        ------
+        ValueError
+            When ``ssp_lnu_ion`` is absent, or its shape is not one row per SSP age
+            bin over the stellar ionizing prefix of this backend's SSP grid.
+
         Notes
         -----
-        Without ``ssp_lnu_ion`` the per-age spectrum is the SSP ionizing slice read
-        at ``log_z`` by the stellar component's metallicity read
-        (:func:`~tengri.components.stellar.sps.met_pchip.read_met`), times the
-        weights. The log of the sum follows :func:`~tengri.utils.scale.log10_magnitude`:
-        a pixel with no flux is ``-inf`` and is floored by the fit as the reference
+        The log of the sum follows :func:`~tengri.utils.scale.log10_magnitude`: a
+        pixel with no flux is ``-inf`` and is floored by the fit as the reference
         floors it. JIT/grad/vmap-safe.
         """
-        from tengri.components.nebular.ionizing_fit import fit_ionizing_shape, ionizing_layout
+        from tengri.components.lyc import LYMAN_LIMIT_AA
+        from tengri.components.nebular.ionizing_fit import compiled_fit, fit_ionizing_shape
         from tengri.components.nebular.ionizing_spectrum import SEGMENT_EDGES
         from tengri.utils.scale import log10_magnitude
 
         if ssp_lnu_ion is None:
-            from tengri.components.stellar.sps.met_pchip import read_met
-
-            n_age = self._ssp_flux_ion.shape[-2]
-            if jnp.shape(ssp_weights)[0] != n_age:
-                raise ValueError(
-                    f"Cue's ionizing shape is fitted to the population's summed spectrum, "
-                    f"so ssp_weights must lie on the SSP age grid ({n_age} bins); got "
-                    f"{jnp.shape(ssp_weights)[0]}. Pass the stellar component's "
-                    f"'lnu_age_ion' as ssp_lnu_ion, or weights on the SSP ages."
-                )
-            flux_at_z = read_met(self._ssp_flux_ion, self._ssp_lgmet, log_z)  # (n_age, n_ion)
-            cube = jnp.asarray(ssp_weights)[:, None] * flux_at_z
-        else:
-            cube = jnp.asarray(ssp_lnu_ion)
+            raise ValueError(_NEEDS_LNU_AGE_ION)
+        cube = jnp.asarray(ssp_lnu_ion)
+        # The stellar slice is the prefix of the SSP grid below 2 x the Lyman limit
+        # (stellar component, ``n_ion_bins``); the shapes are static, so this holds
+        # under jit and catches a cube from another grid.
+        n_ion_grid = int(np.count_nonzero(self._ssp_wave_host < 2.0 * LYMAN_LIMIT_AA))
+        n_age_grid = int(np.asarray(self._ssp_log_age_yr).shape[0])
+        if cube.ndim != 2 or cube.shape != (n_age_grid, n_ion_grid):
+            raise ValueError(
+                f"ssp_lnu_ion has shape {tuple(cube.shape)}; this backend's SSP grid "
+                f"gives ({n_age_grid}, {n_ion_grid}) (age bins, ionizing pixels). The "
+                "per-age ionizing spectrum must come from the SSP grid the backend was "
+                "built with."
+            )
         total = jnp.sum(jnp.where(counted_mask[:, None], cube, 0.0), axis=0)
-        n_ion = cube.shape[-1]
-        layout = self._ion_layouts.get(n_ion)
-        if layout is None:
-            layout = ionizing_layout(self._ssp_wave_host[:n_ion], np.asarray(SEGMENT_EDGES))
-            self._ion_layouts[n_ion] = layout
+        layout, _ = compiled_fit(self._ssp_wave_host[:n_ion_grid], np.asarray(SEGMENT_EDGES))
         return fit_ionizing_shape(log10_magnitude(total), layout).i7
 
     def predict_nebular_line_luminosities(
@@ -2282,7 +2299,7 @@ class CueBackend(NebularBackendDefaults):
         ssp_lnu_ion : array, shape (n_age, n_ion), or None
             The stellar component's per-age ionizing spectrum (``lnu_age_ion``);
             its age sum is the spectrum whose four-segment fit sets the shape.
-            When None, it is formed from ``ssp_weights`` at ``log_z``.
+            Required with ``ssp_weights`` unless the shape is given as ionspec_*.
         ssp_log_ages_yr : array or None
             log10(age/yr) of SSP age bins.
         log_z : float or None
@@ -2422,7 +2439,7 @@ class CueBackend(NebularBackendDefaults):
         ssp_lnu_ion : array, shape (n_age, n_ion), or None
             The stellar component's per-age ionizing spectrum (``lnu_age_ion``);
             its age sum is the spectrum whose four-segment fit sets the shape.
-            When None, it is formed from ``ssp_weights`` at ``log_z``.
+            Required with ``ssp_weights`` unless the shape is given as ionspec_*.
         ssp_log_ages_yr : array or None
             log10(age/yr) of SSP age bins.
         log_z : float or None
@@ -2530,7 +2547,7 @@ class CueBackend(NebularBackendDefaults):
         ssp_lnu_ion : array, shape (n_age, n_ion), or None
             The stellar component's per-age ionizing spectrum (``lnu_age_ion``);
             its age sum is the spectrum whose four-segment fit sets the shape.
-            When None, it is formed from ``ssp_weights`` at ``log_z``.
+            Required with ``ssp_weights`` unless the shape is given as ionspec_*.
         ssp_log_ages_yr : array or None
             log10(age/yr) of SSP age bins.
         log_z : float or None
@@ -2757,6 +2774,10 @@ _CUE_BACKEND_CACHE_KEY_POLICY: KeyPolicy = {
         "deterministic function of an already-keyed input"
     ),
     "_ssp_lgmet": exclude("stashed ssp_data.ssp_lgmet, already content-keyed at the model level"),
+    "_ssp_wave_host": exclude(
+        "stashed ssp_data.ssp_wave (host copy for the ionizing-fit layout), already "
+        "content-keyed at the model level"
+    ),
     "_ssp_log_age_yr": exclude(
         "stashed ssp_data age grid, already content-keyed at the model level"
     ),

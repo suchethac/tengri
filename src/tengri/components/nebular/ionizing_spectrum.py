@@ -13,20 +13,18 @@ table, and interpolate at inference time for rapid gradient evaluation.
 
 # Module-level memoization for ``precompute_ionizing_params_table``.
 #
-# Same SSP → identical ionizing-parameter table. The scipy curve-fit loop
-# costs ~6 s on a modern MILES grid (15×93 SSPs), and re-runs on every
-# ``SEDModel.build(neb={'type':'cue', ...})``. Cache keyed on a stable
+# Same SSP → identical ionizing-parameter table. The per-SSP fit loop would
+# otherwise re-run on every ``SEDModel.build(neb={'type':'cue', ...})``. Cache keyed on a stable
 # fingerprint of the SSP wavelength + metallicity grids (small, fast to
 # hash); flux identity is established by matching grids since SSP files
 # pair a unique flux cube with a unique (wave, lgmet) pair.
 #
 # The cache also persists to disk under ``<jax_cache_dir>/ionspec_tables/``,
-# keyed on a SHA-256 of the fingerprint. This matters because the scipy
-# curve-fits underlying the table aren't bit-stable across processes
-# (BLAS threading + LAPACK perturbations → coefficient differences in
-# the last few ULPs). Those coefficients then bake into the JAX trace as
-# constants, so cross-process processes produce slightly different HLO
-# modules → the persistent XLA cache misses on every Cue compile. Loading
+# keyed on a SHA-256 of the fingerprint. A table whose coefficients
+# differed in the last few ULPs between processes would bake into the JAX
+# trace as constants, so cross-process processes would produce slightly
+# different HLO modules and the persistent XLA cache would miss on every
+# Cue compile. Loading
 # a bit-identical table from disk on every process keeps the HLO stable
 # and lets the JAX persistent cache actually hit on cold-start runs.
 import hashlib as _hashlib
@@ -209,10 +207,6 @@ def _load_ionspec_disk(key: tuple) -> dict | None:
             return {
                 "ionspec_table": data["ionspec_table"],
                 "logqion_table": logqion,
-                # Pre-#1018 caches lack ``seglum_table``; the KeyError below turns
-                # them into a miss so they are refit rather than silently feeding
-                # the old argmax-shaped forward.
-                "seglum_table": data["seglum_table"],
                 "n_met": int(data["n_met"]),
                 "n_age": int(data["n_age"]),
             }
@@ -229,7 +223,6 @@ def _store_ionspec_disk(key: tuple, result: dict) -> None:
             path,
             ionspec_table=result["ionspec_table"],
             logqion_table=result["logqion_table"],
-            seglum_table=result["seglum_table"],
             n_met=np.asarray(result["n_met"]),
             n_age=np.asarray(result["n_age"]),
         )
@@ -490,24 +483,13 @@ def fit_ionizing_spectrum(
     """
     # float64 for the whole fit, whatever the SSP shipped as (#1206).
     #
-    # This routine's guard floors are written below what float32 can hold:
-    # ``np.maximum(seg_flux, 1e-99)`` in :func:`_fit_segment` and
-    # ``1e-70 * norm`` just below. float32's smallest subnormal is 1.4e-45, so
-    # on a float32 SSP BOTH become exactly 0.0: the floors evaporate, zero flux
-    # survives the clamp, and ``log10(0) = -inf`` enters the least-squares
-    # objective. The fit then returns a degenerate slope and ``log_seglum`` comes
-    # back absurd: measured on fsps_prsc_miles_chabrier, segment 0 at
-    # (met=14, age=28) gave **4.54 dex in float64 and 86.99 dex in float32**, and
-    # 198 of 5580 table entries went ``-inf``. Cue's weighted segment sum then
-    # goes non-finite and takes the whole SED with it: the pure-float32 Cue NaN
-    # that blocked #1206.
-    #
-    # Cast rather than re-floor: raising the two literals to representable values
-    # would fix these two sites and leave every other float32-sensitive
-    # intermediate in a scipy least-squares fit exposed. This is a build-time,
-    # once-per-SSP numpy routine producing a small table, so float64 costs nothing.
-    # ``Q_seg`` in ``_fit_segment`` and the Q_H integrand below are formed in
-    # float64 for the same reason.
+    # The reference fit's floors (``1e-99`` on the flux, ``1e-70 * norm`` on the
+    # normalized flux) lie below what float32 can hold; on a float32 SSP they become
+    # exactly 0.0 and ``log10(0) = -inf`` would enter the objective (#1206: 198 of
+    # 5580 table entries went ``-inf``). The fit runs in log space and in float64
+    # here, and the Q_H integrand below is formed in float64 for the same reason. This
+    # is a build-time, once-per-SSP routine producing a small table, so float64 costs
+    # nothing.
     #
     # float64 input is unaffected: ``astype`` on a float64 array is a no-op copy.
     wave = np.asarray(wave, dtype=np.float64)
@@ -515,7 +497,7 @@ def fit_ionizing_spectrum(
 
     from tengri.components.nebular.ionizing_fit import compiled_fit
 
-    # The fit only needs the pixels up to the HI edge's neighbour; a wider grid is fine.
+    # The fit reads the pixels up to the one just past the HI edge; a wider grid is fine.
     _, fit = compiled_fit(wave, edges)
     with jax.enable_x64(True):
         log_flux = np.log10(np.maximum(flux, np.finfo(np.float64).tiny))
@@ -746,8 +728,8 @@ def _share_nearest_fit(
     Parameters
     ----------
     tables : dict
-        ``ionspec_table`` (n_met, n_age, 7), ``logqion_table`` (n_met, n_age) and
-        ``seglum_table`` (n_met, n_age, 4); modified in place.
+        ``ionspec_table`` (n_met, n_age, 7) and ``logqion_table`` (n_met, n_age);
+        modified in place.
     log_age : ndarray, shape (n_age,)
         log10(age/yr) of each SSP age bin.
     fitted : ndarray of bool, shape (n_met, n_age)
@@ -761,17 +743,12 @@ def _share_nearest_fit(
 
     Notes
     -----
-    The donor is the nearest fitted old bin in log-age at the same metallicity. The
-    segment luminosities move with the bin's Q_H by one common offset, so the four
-    segment ratios and the slopes stay the donor's, and the bin's own photon rate is
+    The donor is the nearest fitted old bin in log-age at the same metallicity: the
+    slopes and segment ratios are the donor's, and the bin's own photon rate is
     exact. A bin below the Q_H floor, or one with no fitted donor at its metallicity,
     keeps the unfitted convention (zeros, -99).
     """
-    ionspec, logq, seglum = (
-        tables["ionspec_table"],
-        tables["logqion_table"],
-        tables["seglum_table"],
-    )
+    ionspec, logq = tables["ionspec_table"], tables["logqion_table"]
     for im in range(ionspec.shape[0]):
         donors = old_idx[fitted[im, old_idx]]
         pending = live[im] & ~fitted[im, old_idx]
@@ -781,7 +758,6 @@ def _share_nearest_fit(
         nearest = np.abs(log_age[todo][:, None] - log_age[donors][None, :]).argmin(axis=1)
         donor = donors[nearest]
         ionspec[im, todo] = ionspec[im, donor]
-        seglum[im, todo] = seglum[im, donor] + (exact - logq[im, donor])[:, None]
         logq[im, todo] = exact
 
 
@@ -845,8 +821,6 @@ def precompute_ionizing_params_table(
           [ionspec_index1..4, ionspec_logLratio1..3] per SSP
         - **logqion_table** (array, shape (n_met, n_age)): Q_H ionizing photon rates
           [log10(photons/s)]
-        - **seglum_table** (array, shape (n_met, n_age, 4)): integrated segment
-          luminosities [log10(erg/s)]
         - **n_met, n_age** (int): Grid dimensions
 
     Notes
@@ -884,11 +858,10 @@ def precompute_ionizing_params_table(
     #    (introduced in #418).
     # 2. On-disk ``.npz`` keyed on a SHA-256 of the SSP fingerprint, so
     #    cold processes load a bit-identical table instead of re-fitting.
-    #    Without this, scipy's curve-fits perturb the coefficients by a
-    #    few ULPs each run, and those bits bake into the JAX trace as
-    #    constants → the JAX persistent compilation cache misses on every
-    #    fresh process. The single_thread_blas wrapper below removes the
-    #    remaining BLAS-threading non-determinism inside the fits.
+    #    Coefficients that differ by a few ULPs between processes would bake
+    #    into the JAX trace as constants, and the JAX persistent compilation
+    #    cache would miss on every fresh process. The single_thread_blas
+    #    wrapper below removes BLAS-threading non-determinism from the fits.
     # The age axis and the cutoff are in the key: they decide which bins are fitted.
     key = _ssp_fingerprint(
         ssp_wave, ssp_flux, ssp_lgmet, ssp_log_age_yr=ssp_log_age_yr, max_log_age=max_log_age
@@ -903,13 +876,10 @@ def precompute_ionizing_params_table(
     n_met, n_age, _ = ssp_flux.shape
     ionspec_table = np.zeros((n_met, n_age, 7))
     logqion_table = np.full((n_met, n_age), _NO_IONIZING_LOG_Q)
-    # Absolute per-segment integrated luminosities (log10). Same -99 "empty"
-    # convention as logqion_table: 10**-99 == 0 contributes nothing to a sum.
-    seglum_table = np.full((n_met, n_age, 4), _NO_IONIZING_LOG_Q)
 
     wave_np = np.asarray(ssp_wave)
 
-    # Which bins get their own scipy fit. Without an age axis every bin does. With one,
+    # Which bins get their own fit. Without an age axis every bin does. With one,
     # bins up to 100 Myr always do; counted older bins do too, up to the thinning limit
     # per metallicity, among those with a photon rate worth counting (the rest of the
     # live ones are filled from their nearest fitted neighbor below).
@@ -957,12 +927,10 @@ def precompute_ionizing_params_table(
                     ionspec_table[im, ia, 5] = fit["ionspec_logLratio2"]
                     ionspec_table[im, ia, 6] = fit["ionspec_logLratio3"]
                     logqion_table[im, ia] = fit["gas_logqion"]
-                    seglum_table[im, ia, :] = fit["log_seglum"]
                     fitted[im, ia] = True
-                except (ValueError, IndexError, RuntimeError):
+                except (ValueError, IndexError):
                     # ValueError: invalid input data (NaN, zero flux, wrong wavelength range)
                     # IndexError: wavelength array doesn't cover ionizing regime (<912 A)
-                    # RuntimeError: scipy optimization failed to converge
                     continue
 
     if old_idx.size:
@@ -970,7 +938,6 @@ def precompute_ionizing_params_table(
             {
                 "ionspec_table": ionspec_table,
                 "logqion_table": logqion_table,
-                "seglum_table": seglum_table,
             },
             log_age,
             fitted,
@@ -982,7 +949,6 @@ def precompute_ionizing_params_table(
     result = {
         "ionspec_table": ionspec_table,
         "logqion_table": logqion_table,
-        "seglum_table": seglum_table,
         "n_met": n_met,
         "n_age": n_age,
     }

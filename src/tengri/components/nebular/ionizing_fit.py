@@ -21,7 +21,7 @@ photon rate of the normalized flux and
 :math:`\log Q_\mathrm{pred} = b - \log h + \log_{10}|(\lambda_\mathrm{max}^\alpha -
 \lambda_\mathrm{min}^\alpha)/\alpha|`.
 
-With :math:`x` and :math:`y` centred on their segment means
+With :math:`x` and :math:`y` centered on their segment means
 (:math:`\tilde x_i = x_i - \bar x`, :math:`\tilde y_i = y_i - \bar y`) and the
 intercept written :math:`b = \bar y + \delta - \alpha \bar x`, the optimum in
 :math:`\delta` is closed form and the objective in the slope alone is
@@ -50,6 +50,7 @@ References
 
 from __future__ import annotations
 
+import functools
 from typing import NamedTuple
 
 import jax
@@ -91,13 +92,13 @@ class IonizingLayout(NamedTuple):
         Pixel index of each segment slot, padded with 0.
     seg_mask : ndarray, shape (4, n_max)
         True on real pixels of the segment.
-    x_centred : ndarray, shape (4, n_max)
+    x_centered : ndarray, shape (4, n_max)
         ``log10(lambda) - mean`` per slot [dex], 0 on padding.
     log_qweight : ndarray, shape (4, n_max)
         ``log10`` of the trapezoid weight in frequency divided by ``h nu``, so the
         segment photon rate is ``sum 10**(y + log_qweight)`` [log10(Hz / (erg s))].
     n_pix, x_mean, sum_xx : ndarray, shape (4,)
-        Pixel count, mean of ``log10(lambda)`` and ``sum x_centred**2`` per segment.
+        Pixel count, mean of ``log10(lambda)`` and ``sum x_centered**2`` per segment.
     log10_xmax, ell : ndarray, shape (4,)
         ``log10`` of the last pixel wavelength and ``ln(first/last)`` (negative),
         for the photon-rate term.
@@ -108,7 +109,7 @@ class IonizingLayout(NamedTuple):
     ref_pair: np.ndarray
     seg_index: np.ndarray
     seg_mask: np.ndarray
-    x_centred: np.ndarray
+    x_centered: np.ndarray
     log_qweight: np.ndarray
     n_pix: np.ndarray
     x_mean: np.ndarray
@@ -147,7 +148,7 @@ def ionizing_layout(wave: np.ndarray, edges: np.ndarray) -> IonizingLayout:
     n_max = int(counts.max())
     seg_index = np.zeros((4, n_max), dtype=np.int32)
     seg_mask = np.zeros((4, n_max), dtype=bool)
-    x_centred = np.zeros((4, n_max))
+    x_centered = np.zeros((4, n_max))
     log_qweight = np.full((4, n_max), -np.inf)
     x_mean, sum_xx, log10_xmax, ell = (np.zeros(4) for _ in range(4))
     for k in range(4):
@@ -163,7 +164,7 @@ def ionizing_layout(wave: np.ndarray, edges: np.ndarray) -> IonizingLayout:
         seg_index[k, :n] = idx
         seg_mask[k, :n] = True
         x_mean[k] = x.mean()
-        x_centred[k, :n] = x - x_mean[k]
+        x_centered[k, :n] = x - x_mean[k]
         log_qweight[k, :n] = np.log10(trap / (_H_PLANCK * nu))
         sum_xx[k] = np.sum((x - x_mean[k]) ** 2)
         log10_xmax[k] = np.log10(seg[-1])
@@ -173,7 +174,7 @@ def ionizing_layout(wave: np.ndarray, edges: np.ndarray) -> IonizingLayout:
         ref_pair=np.array([i_hi - 1, i_hi], dtype=np.int32),
         seg_index=seg_index,
         seg_mask=seg_mask,
-        x_centred=x_centred,
+        x_centered=x_centered,
         log_qweight=log_qweight,
         n_pix=counts.astype(np.float64),
         x_mean=x_mean,
@@ -185,7 +186,17 @@ def ionizing_layout(wave: np.ndarray, edges: np.ndarray) -> IonizingLayout:
     )
 
 
-_FIT_CACHE: dict[tuple[bytes, bytes], tuple[IonizingLayout, object]] = {}
+#: Distinct wavelength grids kept compiled at once (one per SSP grid in use).
+_FIT_CACHE_SIZE: int = 16
+
+
+@functools.lru_cache(maxsize=_FIT_CACHE_SIZE)
+def _compiled_fit_for(wave_bytes: bytes, edges_bytes: bytes):
+    """The memo behind :func:`compiled_fit`, keyed on the grids' bytes."""
+    wave = np.frombuffer(wave_bytes, dtype=np.float64)
+    edges = np.frombuffer(edges_bytes, dtype=np.float64)
+    layout = ionizing_layout(wave, edges)
+    return layout, jax.jit(lambda lf: fit_ionizing_shape(lf, layout))
 
 
 def compiled_fit(wave: np.ndarray, edges: np.ndarray):
@@ -202,14 +213,15 @@ def compiled_fit(wave: np.ndarray, edges: np.ndarray):
     -------
     tuple
         ``(layout, fit)`` where ``fit(log_flux)`` returns an :class:`IonizingShape`.
+
+    Notes
+    -----
+    The one layout memo of the fit (bounded LRU, :data:`_FIT_CACHE_SIZE` grids); the
+    Cue backend and the per-SSP table both read it.
     """
     wave = np.ascontiguousarray(wave, dtype=np.float64)
     edges = np.ascontiguousarray(edges, dtype=np.float64)
-    key = (wave.tobytes(), edges.tobytes())
-    if key not in _FIT_CACHE:
-        layout = ionizing_layout(wave, edges)
-        _FIT_CACHE[key] = (layout, jax.jit(lambda lf: fit_ionizing_shape(lf, layout)))
-    return _FIT_CACHE[key]
+    return _compiled_fit_for(wave.tobytes(), edges.tobytes())
 
 
 def _log10_expm1_ratio(z):
@@ -233,14 +245,14 @@ def _log10_power_integral(alpha, log10_hi, ell):
 
 
 def _delta(alpha, stats):
-    """Closed-form optimum of the centred intercept offset at slope ``alpha``."""
+    """Closed-form optimum of the centered intercept offset at slope ``alpha``."""
     _, offset, _, x_mean, log10_xmax, ell, _ = stats
-    g_centred = _log10_power_integral(alpha, log10_xmax, ell) - alpha * x_mean
-    return 0.5 * (offset - g_centred)
+    g_centered = _log10_power_integral(alpha, log10_xmax, ell) - alpha * x_mean
+    return 0.5 * (offset - g_centered)
 
 
 def _profile(alpha, stats):
-    """Segment objective in the slope alone (centred form, constant dropped)."""
+    """Segment objective in the slope alone (centered form, constant dropped)."""
     sum_xy, _, n, _, _, _, sum_xx = stats
     d = _delta(alpha, stats)
     return -alpha * sum_xy + 0.5 * alpha * alpha * sum_xx + n * d * d
@@ -324,7 +336,7 @@ def fit_ionizing_shape(log_flux, layout: IonizingLayout) -> IonizingShape:
     (``fit_4loglinear_ionparam`` in the Cue code; tengri's
     :func:`~tengri.components.nebular.ionizing_spectrum.fit_ionizing_spectrum`),
     and the minimizer is the exact stationary point of each segment's objective
-    (see the module docstring for the centred form solved). The ratio parameters
+    (see the module docstring for the centered form solved). The ratio parameters
     use the energy-integrated segment luminosity
     :math:`\int A_k \lambda^{\alpha_k - 2} c\,d\lambda` over the segment edges, as
     the reference code does.
@@ -347,7 +359,8 @@ def fit_ionizing_shape(log_flux, layout: IonizingLayout) -> IonizingShape:
         # fitted in float32 even in a float64 process.
         return jnp.asarray(a, dtype=dtype)
 
-    pair = log_flux[layout.ref_pair]
+    # Floored before the log-sum, so two empty edge pixels give a finite gradient.
+    pair = jnp.maximum(log_flux[layout.ref_pair], _LOG_TINY)
     log_ref = jnp.maximum(logsumexp(_LN10 * pair) / _LN10 - _LOG10_2, _LOG_TINY)
     log_norm = _LOG_NORM_TARGET - log_ref
     lnorm = jnp.maximum(log_flux, _LOG_CLIP_FLOOR) + log_norm
@@ -357,8 +370,8 @@ def fit_ionizing_shape(log_flux, layout: IonizingLayout) -> IonizingShape:
     n = const(layout.n_pix)
     y = jnp.where(mask, jnp.maximum(seg, _LOG_TINY), 0.0)
     y_mean = jnp.sum(y, axis=1) / n
-    y_centred = jnp.where(mask, y - y_mean[:, None], 0.0)
-    sum_xy = jnp.sum(y_centred * const(layout.x_centred), axis=1)
+    y_centered = jnp.where(mask, y - y_mean[:, None], 0.0)
+    sum_xy = jnp.sum(y_centered * const(layout.x_centered), axis=1)
     log_qweight = jnp.where(mask, const(np.where(layout.seg_mask, layout.log_qweight, 0.0)), 0.0)
     log_q_terms = jnp.where(mask, _LN10 * (seg + log_qweight), -jnp.inf)
     log_q = jnp.maximum(logsumexp(log_q_terms, axis=1) / _LN10, _LOG_TINY)
