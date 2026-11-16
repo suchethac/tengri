@@ -80,7 +80,7 @@ def gaussian_exp_moments(s_lo, s_hi, sigma):
 
 
 def gaussian_exp_moments_between_edges(s_edges, sigma):
-    r"""Moments :math:`M_1, M_2` of :math:`e^{ks}` over consecutive segments of a centered Gaussian.
+    r"""Moments :math:`M_1, M_2` of :math:`e^{ks}` over consecutive segments of a Gaussian.
 
     The segments are the intervals between neighboring entries of ``s_edges`` along its
     last axis, with :math:`M_k` as in :func:`gaussian_exp_moments`. Each normal CDF is
