@@ -58,6 +58,7 @@ __all__ = [
     "Predictions",
     "channel_keys",
     "data_keys",
+    "has_student_t_marginal",
     "log_normalization",
     "score",
     "selected_channels",
@@ -940,6 +941,27 @@ def score(preds: Predictions, data: Mapping, noise: NoiseSpec, return_diagnostic
             value = channel.loglik(preds, data, noise)
         total = total + value
     return (total, results) if return_diagnostics else total
+
+
+def has_student_t_marginal(data: Mapping, noise: NoiseSpec) -> bool:
+    """Whether scoring ``data`` under ``noise`` integrates nuisance coefficients under Student-t.
+
+    Parameters
+    ----------
+    data : mapping
+        The data bundle; its key set selects the channels.
+    noise : NoiseSpec
+        The noise model.
+
+    Returns
+    -------
+    bool
+        ``True`` when the noise is Student-t with a degrees-of-freedom value and a selected
+        channel marginalizes calibration or line amplitudes.
+    """
+    if not noise.student_t or noise.dof is None:
+        return False
+    return any(channel.marginal for channel in selected_channels(data, noise))
 
 
 def mode_summary(results) -> dict | None:

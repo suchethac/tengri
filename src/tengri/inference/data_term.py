@@ -27,6 +27,7 @@ from tengri.inference.channels import (
     NoiseSpec,
     Predictions,
     log_normalization,
+    has_student_t_marginal,
     mode_summary,
     score,
     selected_channels,
@@ -297,7 +298,7 @@ class DataTerm:
             See :func:`~tengri.inference.channels.mode_summary`; ``None`` when the term has no
             Student-t marginal, or wraps a user likelihood.
         """
-        if self.noise is None or self.noise.dof is None or not self.noise.student_t:
+        if self.noise is None or not has_student_t_marginal(data_args, self.noise):
             return None
 
         def diagnosed(p, d):

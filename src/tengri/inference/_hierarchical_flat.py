@@ -489,6 +489,7 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
                 )
 
     from tengri.config.exceptions import ConfigError, ParameterError
+    from tengri.inference.channels import has_student_t_marginal
     from tengri.inference.data_term import DataTermOptions, build_data_args, build_data_term
     from tengri.observation.noise import has_noise_model
 
@@ -526,6 +527,13 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
         options=DataTermOptions(data_type),
         likelihood=likelihood,
     )
+    if term.noise is not None and has_student_t_marginal(data_args0, term.noise):
+        raise ParameterError(
+            "PopulationFitter cannot score a Student-t noise model with marginalized "
+            "calibration or marginalized lines: the Student-t marginal is a Laplace "
+            "approximation at a per-galaxy mode, and the hierarchical flat seam has no mode "
+            "check for it. Use Gaussian noise (no student_t_dof) or fitted lines, or fit "
+            "each galaxy with Fitter.")
     shared_args = {k: v for k, v in data_args0.items() if k not in per_galaxy}
     _data_args = {"per_galaxy": per_galaxy, "shared": shared_args}
 
