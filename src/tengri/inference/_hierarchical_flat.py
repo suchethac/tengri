@@ -9,8 +9,8 @@ with them but because the only flat-vector formulation lived *inside*
 This seam drives every sampler of the shared driver (:mod:`tengri.inference.sampling`)
 on the flat problem built here: the chain families, ChEES, tempered SMC, low-rank HMC,
 elliptical slice, MCLMC, importance-sampled HMC, nested slice sampling, MAP, Laplace and
-the Gaussian variational families. The method set, :data:`FLAT_SAMPLERS`, is derived from
-the sampler registry, and there is no refusal table: a cost concern is a warning with the
+the Gaussian variational families. The method set, ``method_map()`` of the driver, is read
+from the backend registry, and there is no refusal table: a cost concern is a warning with the
 computed footprint. A name is driven only when its sampler runs the algorithm the name
 promises; a stand-in (the first draft ran plain HMC under five distinct-algorithm names)
 is silent substitution, not support. Names not in the set (the NIFTy VI methods, ray
@@ -74,19 +74,7 @@ from tengri.inference.sampling.guards import (  # noqa: F401  (re-exported guard
 from tengri.inference.sampling.target import FlatTarget, LatentLayout
 from tengri.utils.transforms import to_bounded, to_unbounded
 
-__all__ = ["FLAT_SAMPLERS", "FlatProblem", "build_flat_problem", "run_flat_sampler"]
-
-#: Registry methods reachable through the flat seam, mapped to the shared driver's sampler.
-#:
-#: Derived from the sampler registry of :mod:`tengri.inference.sampling`, never written by
-#: hand: ``PopulationFitter`` builds its supported-method set from this mapping, so
-#: registering a sampler there is the single edit that makes it available hierarchically.
-#: A name appears only when its sampler runs the algorithm the name promises (a stand-in
-#: reported under another name is silent substitution, the seam's founding bug). Every
-#: registered backend with a driver is reachable; a cost concern (memory of a dense metric,
-#: an ensemble, a full-rank factor) is a warning with the computed footprint, not a refusal.
-FLAT_SAMPLERS: dict[str, str] = method_map()
-
+__all__ = ["FlatProblem", "build_flat_problem", "run_flat_sampler"]
 
 @dataclass(frozen=True)
 class FlatProblem:
@@ -589,8 +577,8 @@ def run_flat_sampler(
     fitter : PopulationFitter
         The hierarchical problem.
     method : str
-        Canonical registry name; must be a key of :data:`FLAT_SAMPLERS`, which the sampler
-        registry of :mod:`tengri.inference.sampling` defines.
+        Canonical registry name; must be a key of ``method_map()`` of
+        :mod:`tengri.inference.sampling.driver`, which the backend registry defines.
     key : PRNGKey
     n_warmup, n_burnin, n_samples : int
         Window adaptation / discarded / retained chain lengths (MCMC drivers).
@@ -738,11 +726,15 @@ def run_flat_sampler(
             f"per-galaxy initialization is automatic via MAP."
         )
 
-    driver = FLAT_SAMPLERS.get(method)
-    if driver is None:
+    # Reachable methods are read from the backend registry: every backend that carries a
+    # sampler. Registering one is the single edit that makes it available hierarchically; a
+    # cost concern (memory of a dense metric, an ensemble, a full-rank factor) is a warning
+    # with the computed footprint, not a refusal.
+    reachable = method_map()
+    if method not in reachable:
         raise ValueError(
             f"method={method!r} is not reachable through the hierarchical flat "
-            f"seam. Reachable: {', '.join(sorted(FLAT_SAMPLERS))}."
+            f"seam. Reachable: {', '.join(sorted(reachable))}."
         )
 
     # Reachable is not the same as unguarded. The single-galaxy path refuses
@@ -752,7 +744,7 @@ def run_flat_sampler(
     # (SIGKILL, exit 137), which is precisely what its tier records. So the same
     # gate applies here, the method stays available, the caller just has to say
     # out loud that they accept it.
-    with contextlib.suppress(KeyError):  # a FLAT_SAMPLERS key with no registry entry
+    with contextlib.suppress(KeyError):  # a reachable name with no registry entry
         check_usable(get_backend(method), allow_unvalidated=allow_unvalidated)
 
     prob = build_flat_problem(fitter, key=key, memory_mode=memory_mode, verbose=verbose)
@@ -801,7 +793,7 @@ def run_flat_sampler(
     }
     t0 = time.time()
     result = run_sampler(
-        driver,
+        method,
         target,
         key=jax.random.fold_in(key, 1),
         n_chains=n_chains,

@@ -283,9 +283,9 @@ class TestNoTierMoved:
 
     def test_the_quarantine_held(self):
         from tengri.inference._backend_registry import get_backend
-        from tengri.inference.catalog_fitter import _CatalogFitterOriginal
+        from tengri.inference.catalog_fitter import _vmapped_mcmc_tags
 
         for name in ("mcmc_ghmc", "mcmc_mclmc"):
             assert get_backend(name).tier == "broken"
         # ghmc is vmapped (derived from the sampler registry) and gated by its tier.
-        assert "mcmc_mclmc" not in _CatalogFitterOriginal._MCMC_VMAPPABLE
+        assert "mcmc_mclmc" not in _vmapped_mcmc_tags()

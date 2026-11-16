@@ -107,8 +107,6 @@ class Sampler:
         Driver name.
     kind : {"chain", "ensemble", "variational", "nested", "point"}
         What the sampler is; chain kinds wrap a ``ChainProgram`` and ``Adaptation``.
-    method : str
-        Canonical registry method name of the backend that serves it (``"mcmc_nuts"``).
     run : callable
         ``run(target, key, n_chains, metric, cfg) -> SamplerResult``.
     fidelity : {"exact", "mean_only", "point"}
@@ -120,7 +118,7 @@ class Sampler:
         all because the result is invariant under the whitening.
     pilot : str, callable or None
         What supplies the pilot draws of the dense-metric layer when this sampler does not
-        draw a posterior (a point estimate): a sampler name, or a runner with the signature
+        draw a posterior (a point estimate): a public method name, or a runner with the signature
         of :attr:`run`. ``None`` is the sampler itself.
     advisory : str or None
         A warning emitted once per :func:`run_sampler` call, however many internal passes
@@ -139,7 +137,6 @@ class Sampler:
 
     name: str
     kind: str
-    method: str
     run: Callable
     fidelity: str = "exact"
     metric_mode: str = "layer"
@@ -174,20 +171,17 @@ def _served() -> dict[str, Sampler]:
 
 
 def get_sampler(name: str) -> Sampler:
-    """Return the sampler of a driver name or a registry method name.
+    """Return the sampler the backend registry binds to the public method name ``name``.
 
     Raises
     ------
     ValueError
-        If ``name`` is neither.
+        If no backend of that name carries a sampler.
     """
     served = _served()
-    if name in served:
-        return served[name]
-    for sampler in served.values():
-        if sampler.name == name:
-            return sampler
-    raise ValueError(f"unknown sampler {name!r}; registered: {sorted(sampler_names())}")
+    if name not in served:
+        raise ValueError(f"unknown sampler {name!r}; registered: {sorted(served)}")
+    return served[name]
 
 
 def sampler_names() -> tuple[str, ...]:
@@ -244,7 +238,7 @@ def run_sampler(
     Parameters
     ----------
     name : str
-        Driver or method name of a registered sampler.
+        Public method name of a registered backend that carries a sampler (``"mcmc_nuts"``).
     target : FlatTarget
         The problem.
     key : PRNGKey

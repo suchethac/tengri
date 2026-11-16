@@ -30,10 +30,8 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.inference._batching import AUTO, resolve_forward_chunk_size
-from tengri.inference._hierarchical_flat import (
-    FLAT_SAMPLERS,
-    run_flat_sampler,
-)
+from tengri.inference._hierarchical_flat import run_flat_sampler
+from tengri.inference.sampling.driver import method_map as flat_method_map
 from tengri.inference.fitter import _resolve_batch_fit_approx, resolve_method
 from tengri.inference.likelihoods.gaussian import diag_noise_operators
 from tengri.utils.transforms import to_bounded, to_unbounded
@@ -654,7 +652,7 @@ class PopulationFitter:
         here. Deriving from ``method_map`` alone was complete when this helper
         was written and stopped being so the moment the flat seam landed: it
         would silently under-report every sampler reachable only through
-        ``tengri.inference._hierarchical_flat.FLAT_SAMPLERS`` (``map``,
+        ``tengri.inference.sampling.driver.method_map`` (``map``,
         ``mcmc_nuts``, ``mcmc_hmc``, …), the same class of omission this
         helper exists to prevent, one layer further out.
 
@@ -679,7 +677,7 @@ class PopulationFitter:
         from tengri.inference._backend_registry import lookup_backend
 
         default = inspect.signature(cls.run).parameters["method"].default
-        reachable = set(method_map) | set(FLAT_SAMPLERS) | {"evi_nifty"}
+        reachable = set(method_map) | set(flat_method_map()) | {"evi_nifty"}
         # A name absent from the registry (evi_nifty) is dispatched anyway, so
         # keep it, the same fail-open that refuse_if_broken applies.
         supported = sorted(
@@ -885,7 +883,7 @@ class PopulationFitter:
             # _hierarchical_flat), so a sampler being "hierarchical" is a
             # property of the problem, not of the sampler; there is nothing
             # left to special-case per backend.
-            if method in FLAT_SAMPLERS:
+            if method in flat_method_map():
                 return run_flat_sampler(
                     self, method, key=key, allow_unvalidated=allow_unvalidated, **kwargs
                 )

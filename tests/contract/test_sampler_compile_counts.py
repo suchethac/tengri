@@ -32,14 +32,14 @@ _A = jnp.array([[1.0, 0.5, 0.0], [0.0, 1.0, 0.5], [0.5, 0.0, 1.0], [1.0, 1.0, 1.
 
 #: Sampler -> the one program that holds its kernel.
 _KERNEL_PROGRAM = {
-    "nuts": "run_chain",
-    "hmc": "run_chain",
-    "dynamic_hmc": "run_chain",
-    "ghmc": "run_chain",
-    "barker": "run_chain",
-    "mala": "run_chain",
-    "chees": "_chees_scan",
-    "mclmc": "_mclmc_sample_scan",
+    "mcmc_nuts": "run_chain",
+    "mcmc_hmc": "run_chain",
+    "mcmc_dynamic_hmc": "run_chain",
+    "mcmc_ghmc": "run_chain",
+    "mcmc_barker": "run_chain",
+    "mcmc_mala": "run_chain",
+    "mcmc_chees": "_chees_scan",
+    "mcmc_mclmc": "_mclmc_sample_scan",
 }
 _FORBIDDEN = ("hessian", "probe", "stability")
 

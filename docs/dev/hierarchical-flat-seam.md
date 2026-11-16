@@ -62,9 +62,11 @@ Every sampler lives in the shared driver, `tengri.inference.sampling`, and every
 inference engine (single galaxy, batched catalog, hierarchical) reaches it from there:
 
 1. **Register a `Sampler`** in `sampling/samplers.py`: a name, a kind (`chain`, `ensemble`,
-   `variational`, `nested` or `point`), the registry method names that select it, and a
-   runner `run(target, key, n_chains, metric, cfg) -> SamplerResult` over a `FlatTarget`.
-   `FLAT_SAMPLERS`, the tier gate (`allow_unvalidated`), the advertised supported list and
+   `variational`, `nested` or `point`), and a
+   runner `run(target, key, n_chains, metric, cfg) -> SamplerResult` over a `FlatTarget`,
+   attached to the backend entry that serves it with `register_backend(..., sampler=...)`;
+   that entry's name is the one public method name.
+   `method_map()`, the tier gate (`allow_unvalidated`), the advertised supported list and
    `PopulationFitter.run` dispatch all derive from the registry. A chain-program family
    (NUTS, HMC, dynamic HMC, GHMC, Barker, MALA) is one entry in `sampling/families.py`
    and runs through `chain_program.run_chain`, with its program, adaptation and statics
@@ -82,7 +84,7 @@ inference engine (single galaxy, batched catalog, hierarchical) reaches it from 
 3. **The set-pin test** in
    `tests/regression/bug/test_bug_1394_hierarchical_all_methods.py`
    (`test_no_method_is_silently_substituted_for_another`) must be updated in
-   the same commit: a name may appear in `FLAT_SAMPLERS` only when its sampler runs
+   the same commit: a name may appear in `method_map()` only when its sampler runs
    the algorithm the name promises. Running a stand-in under a requested name is silent
    substitution, the seam's founding bug. `tests/contract/test_sampler_sweep.py`
    enumerates the registry, so the new sampler enters the engine x `n_chains` x `metric`

@@ -45,7 +45,7 @@ def stuck_sampler():
         base = jnp.where(jnp.arange(2) == 0, -3.0, 3.0)[:, None, None]
         return SamplerResult(base + wiggle + jnp.zeros((2, n, target.n_dim)), None, {})
 
-    sampler = Sampler("stuck", "chain", "stuck", run)
+    sampler = Sampler("stuck", "chain", run)
     register_backend("stuck", legacy_fitter=False, sampler=sampler)(run)
     yield sampler
     _BACKENDS.pop("stuck")
@@ -76,7 +76,7 @@ def test_a_healthy_chain_reports_its_diagnostics_without_a_warning():
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         result = run_sampler(
-            "nuts", _target(), key=jax.random.PRNGKey(0), n_chains=4, n_warmup=200, n_samples=500
+            "mcmc_nuts", _target(), key=jax.random.PRNGKey(0), n_chains=4, n_warmup=200, n_samples=500
         )
     assert not [w for w in caught if issubclass(w.category, RuntimeWarning)]
     assert result.diagnostics["rhat_max"] < 1.1
@@ -195,7 +195,7 @@ def test_a_few_divergences_are_not_a_dead_chain():
     assert not any("divergent" in p for p in problems), problems
 
 
-@pytest.mark.parametrize("sampler", ["nuts", "hmc"])
+@pytest.mark.parametrize("sampler", ["mcmc_nuts", "mcmc_hmc"])
 def test_the_driver_reports_a_dead_chain_of_a_real_sampler(sampler):
     """A density that is finite at the start and walled off everywhere else: no step is taken."""
     start = jnp.zeros(2)

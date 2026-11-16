@@ -15,7 +15,6 @@ import functools
 import logging
 import math
 import time
-import types
 import warnings
 from dataclasses import dataclass, field
 
@@ -771,13 +770,23 @@ def _all_absent(presence) -> bool:
 
 
 def _vmapped_mcmc_tags() -> dict[str, str]:
-    """Return ``registry method -> engine sampler tag`` for every vmappable sampler."""
+    """Return ``registry method -> engine sampler tag``, read from the backend registry now.
+
+    A method qualifies when its sampler's whole run -- adaptation included -- is a fixed-shape
+    traced program, so K galaxies fit under one ``vmap``, each adapting to its own posterior,
+    and ``forward_chunk_size`` vmaps K galaxies' chains per ``lax.map`` step. Membership is a
+    structural property, not a quality claim and not the tier: ``mcmc_chees`` qualifies and
+    stays ``tier="experimental"``, and a ``tier="broken"`` member (``mcmc_ghmc``) is refused by
+    the tier gate unless ``allow_unvalidated=True``. An auto-dispatching entry whose pinned
+    sampler is not always what its runner runs is left out.
+    """
+    from tengri.inference._backend_registry import _BACKENDS
     from tengri.inference.sampling.driver import get_sampler, method_map
 
     return {
-        method: get_sampler(driver).engine or driver
+        method: get_sampler(method).engine or driver
         for method, driver in method_map().items()
-        if get_sampler(driver).vmappable and get_sampler(driver).method == method
+        if get_sampler(method).vmappable and not _BACKENDS[method].sampler_is_pin
     }
 
 
@@ -832,23 +841,12 @@ class _CatalogFitterOriginal:
     """
 
     _NATIVE_VMAPPABLE: frozenset = frozenset({"native_vi_linear", "native_vi_nonlinear"})
-    #: ``method`` -> the ``sampler`` tag ``build_catalog_mcmc_engine`` takes, derived from the
-    #: sampler registry of :mod:`tengri.inference.sampling`: every registered sampler whose
-    #: whole run -- adaptation included -- is a fixed-shape traced program, so K galaxies fit
-    #: under one ``vmap``, each adapting to its own posterior. Membership is a structural
-    #: property, not a quality claim and not the tier: ``mcmc_chees`` qualifies and stays
-    #: ``tier="experimental"``, and a ``tier="broken"`` member (``mcmc_ghmc``) is refused by
-    #: the tier gate unless ``allow_unvalidated=True``, as on every other surface.
-    _MCMC_SAMPLER_TAG: types.MappingProxyType = types.MappingProxyType(_vmapped_mcmc_tags())
-    #: Sampling methods that honor ``forward_chunk_size`` by vmapping K galaxies' chains per
-    #: ``lax.map`` step; the keys of :attr:`_MCMC_SAMPLER_TAG`.
-    _MCMC_VMAPPABLE: frozenset = frozenset(_MCMC_SAMPLER_TAG)
 
     def _engine_kind(self, resolved: str) -> str:
         """Which of the three engines ``resolved`` dispatches to."""
         if resolved in self._NATIVE_VMAPPABLE:
             return NATIVE_VI
-        if resolved in self._MCMC_VMAPPABLE:
+        if resolved in _vmapped_mcmc_tags():
             return MCMC_VMAPPED
         return SEQUENTIAL
 
@@ -1302,7 +1300,7 @@ class _CatalogFitterOriginal:
                 properties=properties,
                 **kwargs,
             )
-        elif resolved in self._MCMC_VMAPPABLE:
+        elif resolved in _vmapped_mcmc_tags():
             return self._run_native_mcmc(
                 resolved,
                 key=key,
@@ -1318,13 +1316,13 @@ class _CatalogFitterOriginal:
         else:
             # Both lists are DERIVED from the dispatch frozensets above, never
             # written out by hand: the previous hard-coded text still named only
-            # the native pair long after `_MCMC_VMAPPABLE` was added, steering
+            # the native pair long after the vmapped set was added, steering
             # callers off the working path onto the broken one (#1394).
             if devices is not None:
                 warnings.warn(
                     f"devices={devices!r} is ignored for method={method!r}. "
                     "Multi-device sharding is currently supported for "
-                    f"{' / '.join(sorted(self._MCMC_VMAPPABLE))} only.",
+                    f"{' / '.join(sorted(_vmapped_mcmc_tags()))} only.",
                     UserWarning,
                     stacklevel=2,
                 )
@@ -1335,14 +1333,14 @@ class _CatalogFitterOriginal:
                 # Name the supported methods FROM the dispatch sets, not from a
                 # hand-written list. The literal this replaces said "only
                 # native_vi_linear and native_vi_nonlinear" long after
-                # _MCMC_VMAPPABLE gave mcmc_nuts/mcmc_hmc the same capability,
+                # the vmapped set gave mcmc_nuts/mcmc_hmc the same capability,
                 # so the advice steered callers off the working path onto a
                 # tier="broken" one.
                 #
                 # The two sets are named SEPARATELY rather than unioned: half of
                 # a combined list cannot be reached without allow_unvalidated,
                 # and a reader picking a name out of it would hit a refusal.
-                usable = " / ".join(sorted(self._MCMC_VMAPPABLE))
+                usable = " / ".join(sorted(_vmapped_mcmc_tags()))
                 gated = " / ".join(sorted(self._NATIVE_VMAPPABLE))
                 warnings.warn(
                     f"forward_chunk_size={forward_chunk_size} is ignored for "
@@ -1958,7 +1956,7 @@ class _CatalogFitterOriginal:
         from tengri.inference.preconditioning import _resolve_whitening_strength
         from tengri.inference.sampling.driver import get_sampler
 
-        sampler = self._MCMC_SAMPLER_TAG[method_tag]
+        sampler = _vmapped_mcmc_tags()[method_tag]
         if dense_mass_matrix is None and get_sampler(method_tag).dense_default:
             dense_mass_matrix = True
         is_chees = sampler == "chees"
@@ -2073,7 +2071,7 @@ class _CatalogFitterOriginal:
         )
         # A sampler with no dense adaptation of its own (ChEES, GHMC, Barker, MALA) serves a
         # dense request by the engine's pilot-whitening layer, not by use_dense.
-        layered = get_sampler(sampler).metric_mode == "layer"
+        layered = get_sampler(method_tag).metric_mode == "layer"
         pilot_dense = bool(layered and dense_mass_matrix)
         if layered:
             use_dense = False

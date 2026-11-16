@@ -23,7 +23,10 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri.inference.sampling.driver import get_sampler, sampler_names
+from tengri.inference._backend_registry import _BACKENDS
+from tengri.inference.catalog_fitter import _vmapped_mcmc_tags
+from tengri.inference.sampling.driver import get_sampler, method_map
+from tengri.inference.sampling.samplers import SAMPLERS
 from tests.contract.test_sampler_sweep import _ess, _split_rhat
 
 pytestmark = pytest.mark.contract
@@ -105,7 +108,7 @@ def _hierarchical(method, n_chains, metric, monkeypatch, **settings):
 
     post = hf.run_flat_sampler(
         _Fitter(),
-        get_sampler(method).method,
+        method,
         key=jax.random.PRNGKey(5),
         n_warmup=_N_WARMUP,
         n_burnin=_N_BURNIN,
@@ -125,20 +128,21 @@ def _ess_per_draw(chains):
     return float(_ess(chains).min() / (chains.shape[0] * chains.shape[1]))
 
 
-def _applies(name):
-    sampler = get_sampler(name)
+def _applies(sampler):
     return sampler.kind == "chain" and sampler.metric_mode in ("layer", "native", "internal")
 
 
 def _catalog_names():
-    return sorted(
-        {get_sampler(n).engine or n for n in sampler_names() if get_sampler(n).vmappable}
-    )
+    return sorted(set(_vmapped_mcmc_tags().values()))
 
 
 def _hierarchical_names():
-    skip = {"nuts_pathfinder", "ess", "nuts_fast"}
-    return sorted(n for n in sampler_names() if _applies(n) and n not in skip)
+    skip = {"pathfinder", "mcmc_ess", "mcmc_nuts_fast"}
+    return sorted(
+        m
+        for m in method_map()
+        if not _BACKENDS[m].sampler_is_pin and _applies(get_sampler(m)) and m not in skip
+    )
 
 
 def _agrees(chains):
@@ -161,7 +165,7 @@ _SATURATED = 0.5
 #: 0.210 and 0.221 ESS per draw (gain 1.05), so whitening gives it nothing it can use. The
 #: layer still runs: ``test_the_dense_layer_changes_the_catalog_ghmc_draws``. Low-rank HMC learns
 #: a metric of rank 10 on D = 2, which already spans the posterior: both arms sit at 0.225.
-_NO_HEADROOM = {("catalog", "ghmc"), ("hierarchical", "hmc_lowrank")}
+_NO_HEADROOM = {("catalog", "ghmc"), ("hierarchical", "mcmc_hmc_lowrank")}
 
 
 def _gain_ok(engine, sampler, diag, dense):
@@ -176,7 +180,7 @@ def test_dense_metric_pays_for_itself_in_the_catalog_engine(sampler):
     diag = _catalog(sampler, 1, "diag")
     dense = _catalog(sampler, 1, "dense")
     _agrees(dense)
-    if _applies(sampler):
+    if _applies(SAMPLERS[sampler]):
         ok, gain = _gain_ok("catalog", sampler, diag, dense)
         assert ok, (sampler, gain, _ess_per_draw(diag), _ess_per_draw(dense))
 

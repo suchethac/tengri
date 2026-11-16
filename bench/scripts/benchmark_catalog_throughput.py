@@ -18,7 +18,7 @@ Reports, for a mock photometric catalog:
   ``bench/reports/2026-08-17_quickstart_nuts_vs_hmc.md``.
 * a **precision axis** (``--dtype f32|f64``) and an explicit **method axis**
   (``--method mcmc_nuts mcmc_hmc``, the two entries of
-  ``CatalogFitter._MCMC_VMAPPABLE``).
+  ``_vmapped_mcmc_tags()``).
 * **device scaling** (only when more than one device is visible): single-device
   vs ``devices="all"`` throughput, i.e. how well the galaxy axis shards.
 * ``--mode grad``: the log-posterior and its gradient in isolation, batched over
@@ -137,11 +137,11 @@ import jax.numpy as jnp
 #: bar has to be the same object as the galaxy-level one or a row can pass a bar
 #: its own galaxies failed.
 from tengri.inference.catalog_convergence import CATALOG_MAX_RHAT as MAX_RHAT
-from tengri.inference.catalog_fitter import CatalogFitter
+from tengri.inference.catalog_fitter import CatalogFitter, _vmapped_mcmc_tags
 
-#: Read from the sampler registry through ``CatalogFitter._MCMC_VMAPPABLE``, so a
+#: Read from the sampler registry through ``_vmapped_mcmc_tags()``, so a
 #: sampler that reaches the batched path cannot go unmeasured here.
-METHODS = tuple(sorted(CatalogFitter._MCMC_VMAPPABLE))
+METHODS = tuple(sorted(_vmapped_mcmc_tags()))
 
 
 def set_precision(dtype: str) -> dict:
@@ -608,7 +608,7 @@ def main(argv=None):
         nargs="+",
         default=["mcmc_nuts"],
         choices=list(METHODS),
-        help="catalog-vectorized samplers to sweep (CatalogFitter._MCMC_VMAPPABLE)",
+        help="catalog-vectorized samplers to sweep (_vmapped_mcmc_tags())",
     )
     ap.add_argument(
         "--dtype",

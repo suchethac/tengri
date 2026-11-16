@@ -30,9 +30,9 @@ _IGNORED = ("ignored", "not supported", "unsupported", "not available")
 
 
 def _methods():
-    from tengri.inference.catalog_fitter import _CatalogFitterOriginal
+    from tengri.inference.catalog_fitter import _vmapped_mcmc_tags
 
-    return sorted(_CatalogFitterOriginal._MCMC_VMAPPABLE)
+    return sorted(_vmapped_mcmc_tags())
 
 
 def _model(synthetic_ssp, simple_observation):

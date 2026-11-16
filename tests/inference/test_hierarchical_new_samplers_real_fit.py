@@ -200,9 +200,9 @@ def reference(population):
 
 
 def test_the_nine_names_are_flat_samplers():
-    from tengri.inference._hierarchical_flat import FLAT_SAMPLERS
+    from tengri.inference.sampling.driver import method_map
 
-    assert set(_NEW) <= set(FLAT_SAMPLERS)
+    assert set(_NEW) <= set(method_map())
 
 
 _FITS: dict = {}

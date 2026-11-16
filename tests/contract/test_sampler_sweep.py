@@ -95,17 +95,16 @@ def _ess(chains):
 
 
 def _catalog_samplers():
-    from tengri.inference.sampling.driver import get_sampler, sampler_names
+    from tengri.inference.catalog_fitter import _vmapped_mcmc_tags
 
-    return sorted(
-        {get_sampler(n).engine or n for n in sampler_names() if get_sampler(n).vmappable}
-    )
+    return sorted(set(_vmapped_mcmc_tags().values()))
 
 
 def _driver_samplers():
-    from tengri.inference.sampling.driver import sampler_names
+    from tengri.inference._backend_registry import _BACKENDS
+    from tengri.inference.sampling.driver import method_map
 
-    return sorted(sampler_names())
+    return sorted(m for m in method_map() if not _BACKENDS[m].sampler_is_pin)
 
 
 def _run_catalog(sampler, n_chains, metric):
@@ -169,11 +168,9 @@ def _run_hierarchical(method, n_chains, metric, monkeypatch):
     class _Fitter:
         n_galaxies = 1
 
-    from tengri.inference.sampling.driver import get_sampler
-
     post = hf.run_flat_sampler(
         _Fitter(),
-        get_sampler(method).method,
+        method,
         key=jax.random.PRNGKey(5),
         n_warmup=_N_WARMUP,
         n_burnin=_N_BURNIN,
@@ -280,10 +277,9 @@ def test_the_per_engine_allow_lists_are_gone():
 
 
 def test_every_flat_method_is_derived_from_the_sampler_registry():
-    from tengri.inference._hierarchical_flat import FLAT_SAMPLERS
-    from tengri.inference.sampling.driver import sampler_names
+    from tengri.inference.sampling.driver import method_map, sampler_names
 
-    assert set(FLAT_SAMPLERS.values()) == set(sampler_names())
+    assert set(method_map().values()) == set(sampler_names())
 
 
 @pytest.mark.parametrize("engine", ["catalog", "hierarchical"])
@@ -307,7 +303,55 @@ def test_every_sampler_is_an_attribute_of_one_backend_entry():
 
     carried = {e.sampler.name for e in all_backends() if e.sampler is not None}
     assert carried == set(SAMPLERS) == set(sampler_names())
-    for entry in all_backends():
-        if entry.sampler is not None and entry.name != "mcmc":
-            assert entry.sampler.method == entry.name
     assert set(method_map()) == {e.name for e in all_backends() if e.sampler is not None}
+
+
+def test_a_backend_registered_after_import_reaches_every_derived_set():
+    """A sampler-bearing entry, and an alias of it, appear in every set read from the registry."""
+    from tengri.inference._backend_registry import _BACKENDS, register_backend
+    from tengri.inference.catalog_fitter import _vmapped_mcmc_tags
+    from tengri.inference.fitter import _many_eval_samplers
+    from tengri.inference.sampling.driver import Sampler, get_sampler, method_map, sampler_names
+
+    sampler = Sampler("late", "chain", lambda *a: None, vmappable=True)
+    register_backend(
+        "late_method", aliases=("late_alias",), legacy_fitter=False, sampler=sampler
+    )(lambda *a: None)
+    try:
+        for name in ("late_method", "late_alias"):
+            assert get_sampler(name) is sampler
+            assert method_map()[name] == "late"
+            assert name in _many_eval_samplers()
+            assert _vmapped_mcmc_tags()[name] == "late"
+        assert "late" in sampler_names()
+    finally:
+        _BACKENDS.pop("late_method")
+        _BACKENDS.pop("late_alias")
+
+
+def test_a_driver_name_is_not_a_method_name():
+    """The backend registry binds each method name once; the driver's tag selects nothing."""
+    from tengri.inference.sampling.driver import get_sampler
+
+    with pytest.raises(ValueError, match="unknown sampler 'nuts'"):
+        get_sampler("nuts")
+
+
+def test_an_auto_dispatching_entry_is_left_out_of_the_vmapped_set():
+    """``mcmc`` pins NUTS for the flat seam but its runner may run another algorithm."""
+    from tengri.inference._backend_registry import _BACKENDS, register_backend
+    from tengri.inference.catalog_fitter import _vmapped_mcmc_tags
+    from tengri.inference.sampling.driver import Sampler
+
+    assert "mcmc" not in _vmapped_mcmc_tags()
+    sampler = Sampler("pinned", "chain", lambda *a: None, vmappable=True)
+    register_backend(
+        "pinned_method", aliases=("pinned_alias",), legacy_fitter=False, sampler=sampler,
+        sampler_is_pin=True,
+    )(lambda *a: None)
+    try:
+        assert "pinned_method" not in _vmapped_mcmc_tags()
+        assert "pinned_alias" not in _vmapped_mcmc_tags()
+    finally:
+        _BACKENDS.pop("pinned_method")
+        _BACKENDS.pop("pinned_alias")

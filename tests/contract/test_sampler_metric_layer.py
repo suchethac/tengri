@@ -14,7 +14,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri.inference.sampling.driver import get_sampler, run_sampler, sampler_names
+from tengri.inference.sampling.driver import get_sampler, method_map, run_sampler
 from tengri.inference.sampling.target import FlatTarget, LatentLayout
 
 pytestmark = pytest.mark.contract
@@ -34,7 +34,7 @@ def _target():
 _FAST = {"n_warmup": 60, "n_burnin": 10, "n_samples": 60, "vi_n_steps": 200, "smc_n_particles": 64}
 
 
-@pytest.mark.parametrize("name", sorted(sampler_names()))
+@pytest.mark.parametrize("name", sorted(method_map()))
 def test_dense_metric_is_applied_or_invariant_for_every_sampler(name):
     result = run_sampler(
         name, _target(), key=jax.random.PRNGKey(0), n_chains=2, metric="dense", **_FAST
@@ -49,7 +49,7 @@ def test_dense_metric_is_applied_or_invariant_for_every_sampler(name):
 
 
 def test_the_diagonal_request_is_recorded_as_diagonal():
-    result = run_sampler("nuts", _target(), key=jax.random.PRNGKey(0), **_FAST)
+    result = run_sampler("mcmc_nuts", _target(), key=jax.random.PRNGKey(0), **_FAST)
     assert result.diagnostics["metric_applied"] == "diag"
 
 
@@ -113,9 +113,9 @@ def test_prior_aware_samplers_keep_the_posterior_when_whitened():
     """ESS, SMC and nested sampling carry the whitened Gaussian prior, not the standard one."""
     target = _target()
     reference = run_sampler(
-        "nuts", target, key=jax.random.PRNGKey(0), n_warmup=300, n_samples=2000
+        "mcmc_nuts", target, key=jax.random.PRNGKey(0), n_warmup=300, n_samples=2000
     ).draws.reshape(-1, 3)
-    for name in ("ess", "smc", "nss"):
+    for name in ("mcmc_ess", "mcmc_smc", "nss"):
         result = run_sampler(
             name,
             target,
@@ -146,7 +146,7 @@ def spy_sampler():
         calls.append(cfg["n_samples"])
         return SamplerResult(jnp.ones((n_chains, cfg["n_samples"], target.n_dim)), None, {})
 
-    register_backend("spy", legacy_fitter=False, sampler=Sampler("spy", "chain", "spy", run))(run)
+    register_backend("spy", legacy_fitter=False, sampler=Sampler("spy", "chain", run))(run)
     yield calls
     _BACKENDS.pop("spy")
 
@@ -194,7 +194,7 @@ def test_a_point_estimate_pilots_with_the_curvature_not_a_sampler(monkeypatch):
     from tengri.inference.sampling.driver import get_sampler
 
     ran = []
-    nuts = get_sampler("nuts")
+    nuts = get_sampler("mcmc_nuts")
 
     def spy(*args, **kwargs):
         ran.append("nuts")

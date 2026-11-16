@@ -103,19 +103,18 @@ from tengri.utils.atomic_io import atomic_path
 _NATIVE_MANY_EVAL = frozenset({"native_vi_linear", "native_vi_nonlinear"})
 
 
-@functools.cache
 def _many_eval_samplers() -> frozenset[str]:
     """Return the methods whose fit is thousands of forward evaluations.
 
-    Derived from the sampler registry: every chain, ensemble or nested sampler, plus the pure
-    JAX variational pair, which iterates a nonlinear map the same way.
+    Read from the backend registry when asked: every chain, ensemble or nested sampler, plus
+    the pure JAX variational pair, which iterates a nonlinear map the same way.
     """
     from tengri.inference.sampling.driver import get_sampler, method_map
 
     sampled = frozenset(
         method
-        for method, driver in method_map().items()
-        if get_sampler(driver).kind in ("chain", "ensemble", "nested")
+        for method in method_map()
+        if get_sampler(method).kind in ("chain", "ensemble", "nested")
     )
     return sampled | _NATIVE_MANY_EVAL
 

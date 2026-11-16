@@ -254,6 +254,7 @@ register_backend(
 register_backend(
     "mcmc",
     sampler=SAMPLERS["nuts"],  # the flat seam pins the generic name to NUTS, never the auto-pick
+    sampler_is_pin=True,
     tier="primary",
     short_doc="Auto MCMC: NUTS for low-D, raytrace for high-D",
     requires=("blackjax",),  # NUTS branch needs it; raytrace branch is pure JAX

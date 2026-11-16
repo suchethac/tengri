@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """The batched catalog path: which samplers reach it, and on what convention.
 
-``CatalogFitter._MCMC_VMAPPABLE`` decides whether a sampler runs K galaxies per
+``_vmapped_mcmc_tags()`` (read from the backend registry) decides whether a sampler runs K galaxies per
 ``lax.map`` step on the accelerator or falls to ``_run_sequential`` and never
 reaches the GPU at all. Three things about that set are load-bearing enough to
 pin:
@@ -58,9 +58,9 @@ def _gauss_flat(dim):
 class TestWhichSamplersReachTheBatchedPath:
     def test_chees_is_on_the_batched_path(self):
         """The Phase 3 change, stated once as a fact rather than inferred."""
-        from tengri.inference.catalog_fitter import _CatalogFitterOriginal
+        from tengri.inference.catalog_fitter import _vmapped_mcmc_tags
 
-        assert "mcmc_chees" in _CatalogFitterOriginal._MCMC_VMAPPABLE
+        assert "mcmc_chees" in _vmapped_mcmc_tags()
 
     def test_the_quarantine_is_the_tier_gate_not_set_membership(self):
         """A ``tier="broken"`` backend reports wrong answers *faster* here.
@@ -74,9 +74,9 @@ class TestWhichSamplersReachTheBatchedPath:
         import pytest
 
         from tengri.inference._backend_registry import check_usable, get_backend
-        from tengri.inference.catalog_fitter import _CatalogFitterOriginal
+        from tengri.inference.catalog_fitter import _vmapped_mcmc_tags
 
-        assert "mcmc_mclmc" not in _CatalogFitterOriginal._MCMC_VMAPPABLE
+        assert "mcmc_mclmc" not in _vmapped_mcmc_tags()
         assert get_backend("mcmc_ghmc").tier == "broken"
         with pytest.raises(Exception, match="broken"):
             check_usable(get_backend("mcmc_ghmc"))
@@ -88,22 +88,11 @@ class TestWhichSamplersReachTheBatchedPath:
 
         assert get_backend("mcmc_chees").tier == "experimental"
 
-    def test_every_vmappable_method_has_a_sampler_tag(self):
-        """A method in the set with no engine tag is a ``KeyError`` at fit time.
-
-        The dispatch used to read ``"nuts" if method == "mcmc_nuts" else "hmc"``,
-        which silently ran HMC for anything else added to the set. A table that
-        must be complete is better than a fallback that cannot be wrong.
-        """
-        from tengri.inference.catalog_fitter import _CatalogFitterOriginal as C
-
-        assert set(C._MCMC_VMAPPABLE) == set(C._MCMC_SAMPLER_TAG)
-
     def test_the_engine_agrees_about_which_samplers_exist(self):
-        from tengri.inference.catalog_fitter import _CatalogFitterOriginal as C
+        from tengri.inference.catalog_fitter import _vmapped_mcmc_tags
         from tengri.inference.sampling.driver import get_sampler
 
-        assert all(get_sampler(tag).vmappable for tag in C._MCMC_SAMPLER_TAG.values())
+        assert all(get_sampler(method).vmappable for method in _vmapped_mcmc_tags())
 
 
 # --------------------------------------------------------------------------

@@ -68,7 +68,7 @@ def test_the_chains_of_the_sweep_fixture_start_wider_than_the_posterior():
         {"y": jnp.array([0.5, 0.2, 0.4, 0.3])},
     )
     result = run_sampler(
-        "hmc",
+        "mcmc_hmc",
         target,
         key=jax.random.PRNGKey(0),
         n_chains=64,
@@ -103,7 +103,7 @@ def _run_bimodal(sampler):
     return result, [str(w.message) for w in caught if "R-hat" in str(w.message)]
 
 
-@pytest.mark.parametrize("sampler", ["nuts", "hmc"])
+@pytest.mark.parametrize("sampler", ["mcmc_nuts", "mcmc_hmc"])
 def test_rhat_detects_a_bimodal_target(sampler):
     result, warned = _run_bimodal(sampler)
     assert result.diagnostics["rhat_max"] > 1.1, result.diagnostics["rhat_max"]
@@ -117,7 +117,7 @@ def test_rhat_stays_quiet_on_the_unimodal_control():
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         result = run_sampler(
-            "nuts", target, key=jax.random.PRNGKey(2), n_chains=8, n_warmup=300, n_samples=400
+            "mcmc_nuts", target, key=jax.random.PRNGKey(2), n_chains=8, n_warmup=300, n_samples=400
         )
     assert not [w for w in caught if "R-hat" in str(w.message)]
     assert result.diagnostics["rhat_max"] < 1.1
@@ -151,7 +151,7 @@ def _standard_target(dim=3):
     )
 
 
-@pytest.mark.parametrize("sampler", ["barker", "mala"])
+@pytest.mark.parametrize("sampler", ["mcmc_barker", "mcmc_mala"])
 def test_a_family_without_an_adapted_metric_starts_at_the_unadapted_scale(sampler, monkeypatch):
     """Their adaptation returns an identity inverse mass, which is no estimate of the posterior."""
     from tengri.inference.backends.mcmc import chain_program
@@ -177,7 +177,7 @@ def test_a_family_with_an_adapted_metric_uses_it(monkeypatch):
 
     seen = _spy_starts(monkeypatch, chain_program)
     run_sampler(
-        "nuts",
+        "mcmc_nuts",
         _standard_target(),
         key=jax.random.PRNGKey(0),
         n_chains=3,
@@ -232,7 +232,7 @@ def test_low_rank_warms_up_from_the_center_and_starts_chains_by_the_same_rule(mo
         jnp.array([0.3, -0.2, 0.1]),
     )
     run_sampler(
-        "hmc_lowrank",
+        "mcmc_hmc_lowrank",
         target,
         key=jax.random.PRNGKey(0),
         n_chains=3,
