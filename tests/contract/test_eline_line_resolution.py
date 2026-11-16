@@ -30,6 +30,7 @@ from tengri.observation.line_list import LineList
 pytestmark = pytest.mark.contract
 
 _C_KMS = 299792.458
+_FWHM_PER_SIGMA = 2.0 * np.sqrt(2.0 * np.log(2.0))
 _Z = 0.1
 _WAVE = np.linspace(4000.0, 7500.0, 3000)
 # R rises by a factor of two across the grid, as on a NIRSpec grating.
@@ -42,7 +43,7 @@ _AMPS = {"Hbeta": 4.0e-16, "OIII_4959": 6.0e-16 / 2.98, "OIII_5007": 6.0e-16, "H
 
 def _gaussian(rest, sigma_kms, resolution):
     lam = rest * (1.0 + _Z)
-    width = np.hypot(lam / (2.355 * resolution), lam * sigma_kms / _C_KMS)
+    width = np.hypot(lam / (_FWHM_PER_SIGMA * resolution), lam * sigma_kms / _C_KMS)
     return np.exp(-0.5 * ((_WAVE - lam) / width) ** 2) / (np.sqrt(2.0 * np.pi) * width)
 
 
