@@ -172,12 +172,15 @@ _CUE_F64_REF_100MYR_CUT = np.array(
 # from the pre-merge main pin (-0.56 % Hbeta) is recorded above. CUE pins unchanged.
 # Re-pinned 2026-11-15 after #3434 (in #3462): no metallicity scatter at fixed Z
 # moves this by +2.265% (Hbeta), +2.329% ([O III] 5007), +1.581% (Halpha), +2.623% ([N II]).
+# Re-pinned 2026-11-16 for #3541 (native slopes): the undeclared metallicity read is now the
+# Hermite of (values, native PCHIP slopes), which moves the float64 wNE fluxes by -1.57e-4
+# (Hbeta), -6.1e-7 ([O III] 5007), -2.3e-7 (Halpha), -1.85e-4 ([N II]). Rel tol unchanged.
 _WNE_F64_REF = np.array(
     [
-        2.816484033477791e-16,
-        4.17083282763222e-16,
-        1.3656333593051479e-15,
-        -3.451857217911404e-17,
+        2.8160429190172966e-16,
+        4.1708302653739363e-16,
+        1.3656330410685278e-15,
+        -3.451217922839727e-17,
     ]
 )
 

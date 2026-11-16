@@ -199,10 +199,15 @@ class PhotometricPrecomputation(NamedTuple):
     ssp_subband_phot_igm: "jnp.ndarray | None" = None
     ssp_phot_lyc: "jnp.ndarray | None" = None
     ssp_phot_nolyc: "jnp.ndarray | None" = None
-    #: Rest-frame centroid of each chunk WITH the IGM inside [A], same shape as
-    #: ``ssp_subband_waves_rest``. Set by the exact IGM fold: the dust screen
-    #: multiplying ``ssp_subband_phot_igm`` belongs where the surviving light is.
-    ssp_subband_waves_rest_igm: "jnp.ndarray | None" = None
+    #: Rest-frame numerator of each chunk WITH the IGM inside [A], ``int lambda S T_IGM T_b w``
+    #: over the filter normalization (#3541): the linear object whose ratio to
+    #: ``ssp_subband_phot_igm`` is the with-IGM centroid, where the dust screen belongs.
+    #: Set by the exact IGM fold.
+    ssp_subband_num_igm: "jnp.ndarray | None" = None
+    #: The same build applied to the native PCHIP slopes across metallicity (#3541),
+    #: as a whole table of the same type. Its arrays are the slope siblings of the
+    #: fields above; ``None`` on a table built without them.
+    slopes: "PhotometricPrecomputation | None" = None
 
 
 class SpectroscopicPrecomputation(NamedTuple):
@@ -246,6 +251,11 @@ class SpectroscopicPrecomputation(NamedTuple):
     #: grid before sampling, or ``None`` for an un-broadened table. Stored so the table
     #: records the kernel it carries; a draw whose dispersion differs must not reuse it.
     sigma_v_kms: "float | None" = None
+    #: The same linear build applied to the native PCHIP slopes across metallicity
+    #: (#3541): ``(n_met, ..., n_pix)`` like ``ssp_on_pixels``. The table is read by the
+    #: cubic Hermite of (values, slopes), which is exact at undeclared scatter. ``None``
+    #: only on a table built without the native slopes, which the stellar read refuses.
+    ssp_on_pixels_slope: "jnp.ndarray | None" = None
 
 
 def precompute_photometry(
@@ -392,6 +402,9 @@ class RestBandPrecomputation(NamedTuple):
     ssp_restband_subband_phot: "jnp.ndarray | None"
     ssp_restband_subband_waves: "jnp.ndarray | None"
     restband_eff_waves: jnp.ndarray
+    #: The same build on the native PCHIP slopes across metallicity (#3541), as a whole table
+    #: of this type. ``None`` on a table built without them; the metallicity read refuses that.
+    slopes: "RestBandPrecomputation | None" = None
 
 
 def precompute_restband_photometry(
@@ -754,10 +767,14 @@ class PhotometricZTable(NamedTuple):
     #: half of the Lyman-limit split, exactly zero in a band wholly below the edge.
     #: Present exactly when ``ssp_phot_lyc_table`` is.
     ssp_phot_nolyc_table: jnp.ndarray | None = None
-    #: (n_z, n_met, n_age, n_filters, n_subbands) rest-frame centroid of each chunk
-    #: WITH the IGM inside [A]. Set by the exact IGM fold, like the IGM table
-    #: itself, so not part of the on-disk z-table.
-    subband_waves_rest_igm_table: jnp.ndarray | None = None
+    #: (n_z, n_met, n_age, n_filters, n_subbands) rest-frame numerator of each chunk WITH
+    #: the IGM inside [A] (#3541), the linear sibling of ``ssp_subband_phot_igm_table``.
+    #: Set by the exact IGM fold, like the IGM table itself, so not part of the on-disk
+    #: z-table.
+    subband_num_igm_table: jnp.ndarray | None = None
+    #: The same z-table build on the native PCHIP slopes across metallicity (#3541), a
+    #: whole table of this type. ``None`` on a table built without it.
+    slopes: "PhotometricZTable | None" = None
 
 
 @dataclasses.dataclass(frozen=True)

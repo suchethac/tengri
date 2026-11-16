@@ -487,32 +487,41 @@ _AGN_MBH_DUST = {
 #: At log M_BH 10, log L_bol 11 (lambda_Edd = 3.0e-4) r_sg = 21.1 R_g, the hot flow fills the disc
 #: and the corona keeps its own scale; 0.01 A is 1e-8 of the peak there.
 _REF_F64_AGN_BLACK_HOLE_MASS = {
-    # Re-pinned 2026-11-15 after #3434 (in #3462): no metallicity scatter at fixed Z
-    # moves this by +0.045% (rest_sed_sum; photometry from -0.14% to +2.3%).
+    # Re-pinned 2026-11-16 for #3541 (native slopes): the undeclared metallicity read of the
+    # SSP tables is now the Hermite of (values, native PCHIP slopes). Measured moves vs the
+    # previous pin:
+    #   rest_sed_sum -4.95e-5, rest_sed_0 +6.46e-5, rest_sed_mid +1.63e-4,
+    #   rest_sed_last -1.48e-3, photometry +1.63e-4, -1.49e-3, -1.62e-3.
     6.0: {
-        "rest_sed_sum": 1.5601101218617673e32,
-        "rest_sed_0": 108269409639268.17,
-        "rest_sed_mid": 2.8867877243280944e28,
-        "rest_sed_last": 8.778715573550576e21,
-        "photometry": (1.0980302522512905e-27, 1.5902998357982673e-27, 1.8115853932361007e-27),
+        "rest_sed_sum": 1.5600328322961183e32,
+        "rest_sed_0": 108276406393609.36,
+        "rest_sed_mid": 2.887258903775085e28,
+        "rest_sed_last": 8.76572583882615e21,
+        "photometry": (1.0982090058766199e-27, 1.5879384016070353e-27, 1.8086441533885063e-27),
     },
-    # Re-pinned 2026-11-15 after #3434 (in #3462): no metallicity scatter at fixed Z
-    # moves this by +0.046% (rest_sed_sum; photometry from -0.12% to +2.3%).
+    # Re-pinned 2026-11-16 for #3541 (native slopes): the undeclared metallicity read of the
+    # SSP tables is now the Hermite of (values, native PCHIP slopes). Measured moves vs the
+    # previous pin:
+    #   rest_sed_sum -4.14e-5, rest_sed_0 +6.46e-5, rest_sed_mid +1.55e-4,
+    #   rest_sed_last -1.47e-3, photometry +1.54e-4, -1.48e-3, -1.62e-3.
     8.0: {
-        "rest_sed_sum": 1.68011570864303e32,
-        "rest_sed_0": 3.0683725454309556e16,
-        "rest_sed_mid": 3.1582155177711467e28,
-        "rest_sed_last": 8.84476431876264e21,
-        "photometry": (1.2075776955734298e-27, 1.5924803652174903e-27, 1.812216390667034e-27),
+        "rest_sed_sum": 1.680046174265232e32,
+        "rest_sed_0": 3.0685708345783624e16,
+        "rest_sed_mid": 3.1587042378475583e28,
+        "rest_sed_last": 8.831778852343052e21,
+        "photometry": (1.2077635285441751e-27, 1.5901190719397972e-27, 1.809275191596727e-27),
     },
-    # Re-pinned 2026-11-15 after #3434 (in #3462): no metallicity scatter at fixed Z
-    # moves this by +0.038% (rest_sed_sum; photometry from -0.11% to +2.3%).
+    # Re-pinned 2026-11-16 for #3541 (native slopes): the undeclared metallicity read of the
+    # SSP tables is now the Hermite of (values, native PCHIP slopes). Measured moves vs the
+    # previous pin:
+    #   rest_sed_sum -4.21e-5, rest_sed_0 0, rest_sed_mid +1.36e-4,
+    #   rest_sed_last -1.48e-3, photometry +1.35e-4, -1.47e-3, -1.62e-3.
     10.0: {
-        "rest_sed_sum": 1.8426110302155777e32,
+        "rest_sed_sum": 1.8425335276988755e32,
         "rest_sed_0": 7.652309097363384e17,
-        "rest_sed_mid": 3.45882234945612e28,
-        "rest_sed_last": 8.778105440222744e21,
-        "photometry": (1.3248196098614281e-27, 1.6110845503703137e-27, 1.8119253799405172e-27),
+        "rest_sed_mid": 3.4592931494497416e28,
+        "rest_sed_last": 8.765115666069333e21,
+        "photometry": (1.3249982030901379e-27, 1.608723114816339e-27, 1.8089841397077586e-27),
     },
 }
 
