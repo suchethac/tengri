@@ -346,9 +346,9 @@ Each limit below names what to do instead.
   build the template without one.
 - **Student-t noise and a calibration floor.** The batched likelihood is Gaussian with no floor.
   Use Gaussian noise.
-- **The Cloudy line prior and kinematic groups.** Use `eline_prior_type="flat"` or `"model"`, or
-  `eline_mode="fitted"` or `"off"`. Fit lines in kinematic groups (`eline_kinematics`) with the
-  per-galaxy `Fitter`.
+- **The Cloudy line prior.** Use `eline_prior_type="flat"` or `"model"`, or `eline_mode="fitted"`
+  or `"off"`. Lines in kinematic groups (`eline_kinematics`) are fitted on the batch as on the
+  per-galaxy `Fitter`, each line at its group's width and offset.
 - **Spectral indices.** Use the per-galaxy `Fitter`.
 - **Gaussian-process star formation histories.** Use a parametric history with the batch, or the
   per-galaxy `Fitter` for a Gaussian-process history.
