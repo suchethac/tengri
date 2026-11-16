@@ -392,15 +392,40 @@ def _curvature_pilot(target, key, n_chains, metric, cfg):
     absolute value and floored at ``1e-6`` of the largest, so a point that is not quite a mode
     still yields a positive definite covariance. About ``map_steps + D`` gradient evaluations,
     against a NUTS pilot's warmup plus ``4 (D + 1)`` draws of tens of gradients each.
+
+    The diagnostics carry the number of negative and of floored eigenvalues and the gradient norm
+    at the point; a negative eigenvalue (a saddle, or an ascent that has not reached a maximum)
+    is also warned about, since the metric then rests on the magnitude of a curvature of the
+    wrong sign. A non-finite Hessian gives non-finite pilot rows, which the driver's usable-row
+    mask turns into the diagonal fallback and its warning.
     """
     logp = _bound(target)
     mode = guards.adam_map_ascent(logp, target.init, cfg["map_steps"], cfg["map_learning_rate"])
     values, vectors = jnp.linalg.eigh(-jax.hessian(logp)(mode))
     magnitude = jnp.abs(values)
-    magnitude = jnp.maximum(magnitude, 1e-6 * jnp.max(magnitude))
-    factor = vectors / jnp.sqrt(magnitude)
+    floor = 1e-6 * jnp.max(magnitude)
+    n_negative = int(jnp.sum(values < 0))
+    record = {
+        "pilot": "curvature",
+        "pilot_negative_eigenvalues": n_negative,
+        "pilot_floored_eigenvalues": int(jnp.sum(magnitude < floor)),
+        "pilot_grad_norm": float(jnp.linalg.norm(jax.grad(logp)(mode))),
+    }
+    if n_negative:
+        warn_measured(
+            f"the curvature pilot found {n_negative} of {target.n_dim} negative curvature "
+            f"eigenvalues at the diagonal MAP point (gradient norm "
+            f"{record['pilot_grad_norm']:.3g}): it is a saddle or an ascent that has not "
+            "reached a maximum, and the dense metric uses the eigenvalues' magnitudes.",
+            UserWarning,
+            stacklevel=2,
+            negative_eigenvalues=n_negative,
+            n_dim=int(target.n_dim),
+            grad_norm=record["pilot_grad_norm"],
+        )
+    factor = vectors / jnp.sqrt(jnp.maximum(magnitude, floor))
     eps = jax.random.normal(key, (cfg["n_samples"], target.n_dim), dtype=mode.dtype)
-    return SamplerResult((mode[None, :] + eps @ factor.T)[None], None, {"pilot": "curvature"})
+    return SamplerResult((mode[None, :] + eps @ factor.T)[None], None, record)
 
 
 def _run_map(target, key, n_chains, metric, cfg):

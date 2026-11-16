@@ -2246,13 +2246,17 @@ class _CatalogFitterOriginal:
         all_divergent = all_divergent[:n_gal]
         all_fallback = np.asarray(all_fallback[:n_gal])
         if all_fallback.any():
-            warnings.warn(
-                f"metric='dense' fell back to the diagonal metric for {int(all_fallback.sum())} "
-                f"of {n_gal} galaxies: the pilot could not define a positive definite covariance "
-                f"(it needs at least D + 1 = {d_params + 1} usable draws; raise n_samples or "
-                "n_chains). Their draws are the diagonal pass's own.",
-                UserWarning,
-                stacklevel=2,
+            from tengri.inference.sampling.driver import warn_dense_fallback
+
+            warn_dense_fallback(
+                "",
+                f"{int(all_fallback.sum())} of {n_gal} galaxies had a pilot that could not "
+                "define a covariance; their draws are the diagonal pass's own, so raise "
+                "n_samples or n_chains",
+                n_dim=d_params,
+                stacklevel=3,
+                n_fallback=int(all_fallback.sum()),
+                n_galaxies=int(n_gal),
             )
         jax.block_until_ready(all_positions)
 

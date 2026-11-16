@@ -32,6 +32,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.config.exceptions import warn_measured
 from tengri.inference.sampling.target import FlatTarget, pilot_whitening
 
 #: Settings every sampler may read; an unknown key is refused by name.
@@ -301,24 +302,68 @@ def run_sampler(
     if bool(fallback):
         # A pilot that cannot define a metric (too few usable draws, or a stuck chain) leaves
         # the diagonal run; the fallback is reported, never silent.
-        warnings.warn(
-            f"{sampler.name}: metric='dense' fell back to the diagonal metric: the pilot gave "
-            f"{int(jnp.sum(mask))} usable draws for D={target.n_dim} (it needs D + 1 = "
-            f"{target.n_dim + 1} and a positive definite covariance).",
-            UserWarning,
-            stacklevel=2,
+        warn_dense_fallback(
+            f"{sampler.name}: ",
+            f"the pilot gave {int(jnp.sum(mask))} usable draws for D={target.n_dim}",
+            n_dim=target.n_dim,
+            stacklevel=3,
+            usable_draws=int(jnp.sum(mask)),
         )
         result = sampler.run(target, final_key, n_chains, "diag", full)
-        return _judged(sampler, target, _tagged(result, metric, "none", True), full)
+        return _judged(
+            sampler, target, _tagged(result, metric, "none", True, pilot.diagnostics), full
+        )
     whitened, back = target.whiten(mu, factor)
     result = sampler.run(whitened, final_key, n_chains, "diag", full)
     result = dataclasses.replace(result, draws=back(result.draws))
-    return _judged(sampler, target, _tagged(result, metric, "pilot", False), full)
+    return _judged(
+        sampler, target, _tagged(result, metric, "pilot", False, pilot.diagnostics), full
+    )
 
 
-def _tagged(result: SamplerResult, requested: str, applied: str, fallback: bool) -> SamplerResult:
-    """Return ``result`` with the metric record added to its diagnostics."""
+def warn_dense_fallback(
+    prefix: str, found: str, *, n_dim: int, stacklevel: int = 2, **measurements
+) -> None:
+    """Warn that ``metric="dense"`` fell back to the diagonal metric, and why.
+
+    The one definition of the warning: the shared driver (one flat target) and the vmapped
+    catalog engine (many galaxies) both call it, so the text and its D + 1 requirement are
+    stated once.
+
+    Parameters
+    ----------
+    prefix : str
+        What the message starts with (``"nuts: "``, or ``""``).
+    found : str
+        What the pilot gave, in the caller's terms (draws for one target, galaxies for many).
+    n_dim : int
+        Coordinates ``D``; a covariance of ``D`` coordinates needs ``D + 1`` usable draws.
+    stacklevel : int
+        As :func:`warnings.warn` at this function: 2 points at its caller, 3 at that
+        caller's caller.
+    **measurements
+        Quantities the message reports, carried on the warning instance.
+    """
+    warn_measured(
+        f"{prefix}metric='dense' fell back to the diagonal metric: {found} (it needs D + 1 = "
+        f"{n_dim + 1} usable draws and a positive definite covariance).",
+        UserWarning,
+        stacklevel=stacklevel,
+        n_dim=int(n_dim),
+        **measurements,
+    )
+
+
+def _tagged(
+    result: SamplerResult,
+    requested: str,
+    applied: str,
+    fallback: bool,
+    pilot_record: dict | None = None,
+) -> SamplerResult:
+    """Return ``result`` with the metric record, and the pilot's own record, in its diagnostics."""
     record = {
+        **(pilot_record or {}),
         "metric_requested": requested,
         "metric_applied": applied,
         "metric_fallback": bool(fallback),

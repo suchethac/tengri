@@ -9,6 +9,8 @@ them on a whitened target and mapping back.
 
 from __future__ import annotations
 
+import warnings
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -217,3 +219,50 @@ def test_a_point_estimate_pilots_with_the_curvature_not_a_sampler(monkeypatch):
         )
         assert result.diagnostics["metric_fallback"] is False
     assert ran == []
+
+
+def _curvature_record(logdensity, **cfg):
+    target = FlatTarget(logdensity, LatentLayout.vector(2), jnp.zeros(2))
+    return run_sampler(
+        "map", target, key=jax.random.PRNGKey(0), metric="dense", n_samples=40,
+        health_warnings=False, **cfg,
+    ).diagnostics
+
+
+def test_a_pilot_at_a_saddle_records_its_negative_eigenvalue_and_warns():
+    """The curvature pilot takes |eigenvalues|: a point that is not a maximum is reported."""
+    with pytest.warns(UserWarning, match="1 of 2 .*negative") as caught:
+        record = _curvature_record(lambda x, args: -0.5 * x[0] ** 2 + 0.5 * x[1] ** 2)
+    assert record["pilot_negative_eigenvalues"] == 1
+    assert record["pilot_floored_eigenvalues"] == 0
+    assert record["pilot_grad_norm"] == 0.0
+    assert len(caught) == 1
+
+
+def test_a_pilot_at_a_maximum_records_no_negative_eigenvalue_and_does_not_warn():
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        record = _curvature_record(lambda x, args: -0.5 * jnp.sum(x**2))
+    assert record["pilot_negative_eigenvalues"] == 0
+    assert record["pilot_floored_eigenvalues"] == 0
+
+
+def test_a_pilot_counts_the_eigenvalues_it_floors():
+    record = _curvature_record(lambda x, args: -0.5 * (1e7 * x[0] ** 2 + x[1] ** 2))
+    assert record["pilot_floored_eigenvalues"] == 1
+    assert record["pilot_negative_eigenvalues"] == 0
+
+
+def test_the_dense_fallback_warning_has_one_definition():
+    """The text is written once; every engine that falls back calls it."""
+    from pathlib import Path
+
+    import tengri
+
+    root = Path(tengri.__file__).parent
+    defining = [
+        str(p.relative_to(root))
+        for p in root.rglob("*.py")
+        if "fell back to the diagonal metric" in p.read_text()
+    ]
+    assert defining == ["inference/sampling/driver.py"], defining
