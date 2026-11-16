@@ -72,6 +72,7 @@ strings (static); the dispatched callables are pure JAX.
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from typing import Literal
 
 import jax.numpy as jnp
@@ -89,6 +90,7 @@ __all__ = [
     "SPECTRAL_EDGE_BLOCKS",
     "TORUS_ANISOTROPY_BLOCKS",
     "BlockCategory",
+    "BlockTemplates",
     "collect_block_templates",
     "disc_emits_xray",
     "register_agn_block",
@@ -529,7 +531,30 @@ def disc_emits_xray(name: str) -> bool:
     return bool(AGN_BLOCK_META.get(("disc", name), {}).get("emits_xray", False))
 
 
-def collect_block_templates(recipe: dict[str, str]) -> dict[str, object]:
+@dataclass(frozen=True)
+class BlockTemplates:
+    """The outcome of :func:`collect_block_templates`: the libraries and the refusals.
+
+    Attributes
+    ----------
+    templates : dict
+        Maps ``"<category>/<name>"`` to that block's template pytree.
+    declines : tuple of (str, str)
+        One ``("template_loader:<category>/<name>", reason)`` pair per loader that
+        could not read its data file. The block then falls back to its on-disk load.
+    """
+
+    templates: dict[str, object] = field(default_factory=dict)
+    declines: tuple[tuple[str, str], ...] = ()
+
+
+#: Exceptions a template loader raises when its data file is missing or unreadable
+#: (``FileNotFoundError`` from the data locator, ``OSError`` from ``h5py.File``). Any
+#: other exception is a bug in the loader and propagates.
+_MISSING_DATA_ERRORS = (OSError,)
+
+
+def collect_block_templates(recipe: dict[str, str]) -> BlockTemplates:
     """Load the template libraries a block recipe needs, outside any trace.
 
     Parameters
@@ -541,9 +566,10 @@ def collect_block_templates(recipe: dict[str, str]) -> dict[str, object]:
 
     Returns
     -------
-    dict
-        Maps ``"<category>/<name>"`` to that block's template pytree. Blocks
-        that declare no loader are absent. Empty if nothing needs threading.
+    BlockTemplates
+        ``templates`` maps ``"<category>/<name>"`` to each block's template pytree;
+        blocks that declare no loader, or whose loader returned None, are absent.
+        ``declines`` records every loader whose data file was missing or unreadable.
 
     Notes
     -----
@@ -551,20 +577,23 @@ def collect_block_templates(recipe: dict[str, str]) -> dict[str, object]:
     must happen *before* tracing so the arrays can be passed in as
     arguments. Calling it inside a trace defeats its entire purpose.
 
-    A loader that raises (missing data file, unreadable grid) is skipped
-    rather than propagated: the block will then fall back to its own
+    A loader that raises ``OSError`` (missing data file, unreadable grid) is
+    declined rather than propagated: the block will then fall back to its own
     on-disk load and merely bake, which is slow but still correct. Failing
     the whole model build here would turn a performance regression into an
-    outage.
+    outage. Any other exception propagates.
     """
     templates: dict[str, object] = {}
+    declines: list[tuple[str, str]] = []
     for category, name in recipe.items():
         loader = AGN_BLOCK_TEMPLATE_LOADERS.get((category, name))
         if loader is None:
             continue
+        key = f"{category}/{name}"
         try:
             bundle = loader()
-        except Exception:
+        except _MISSING_DATA_ERRORS as exc:
+            declines.append((f"template_loader:{key}", f"{key} template library: {exc}"))
             continue
         # A loader may legitimately return None when its library is absent in a
         # given install (e.g. the v2 SKIRTOR grid has no separate disc column,
@@ -572,8 +601,8 @@ def collect_block_templates(recipe: dict[str, str]) -> dict[str, object]:
         # in the dict that reads as "threaded" to anything doing a membership
         # test, so leave it out entirely.
         if bundle is not None:
-            templates[f"{category}/{name}"] = bundle
-    return templates
+            templates[key] = bundle
+    return BlockTemplates(templates=templates, declines=tuple(declines))
 
 
 def resolve_agn_block(category: BlockCategory, name: str) -> Callable:

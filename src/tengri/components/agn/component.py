@@ -253,8 +253,9 @@ class AGNSEDComponentState(SEDComponentState):
     filter_waves: Any | None = None
     filter_trans: Any | None = None
     skirtor_templates: Any | None = None
-    #: ``{"<category>/<name>": pytree}`` for every selected block that
-    #: declared a ``template_loader``. See ``collect_block_templates``.
+    #: :class:`BlockTemplates` (``templates`` maps ``"<category>/<name>"`` to each selected
+    #: block's pytree; ``declines`` carries every loader that could not read its file).
+    #: See ``collect_block_templates``.
     block_templates: Any | None = None
     #: Build-time :class:`BelowLibraryIndex` (X-ray absorption data below the library edge) of
     #: the composable torus's library sightline, on the grid the runner evaluates (the master
@@ -746,7 +747,8 @@ class AGNSEDComponent(TemplateThreading):
         # by ``config.model``: ``composable`` is the default in the build
         # grammar, so a gate on ``model == "skirtor"`` publishes nothing for
         # the recommended surface and every torus library bakes (#1383).
-        block_templates = collect_block_templates(self.block_recipe()) or None
+        # The whole result, declines included: the model that holds this state records them.
+        block_templates = collect_block_templates(self.block_recipe())
 
         return AGNSEDComponentState(
             name=self.name,

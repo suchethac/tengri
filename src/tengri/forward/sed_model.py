@@ -3365,7 +3365,7 @@ class SEDModel:
         _phot = getattr(self.observation, "photometry", None)
         _conv = getattr(_phot, "convention", FilterConvention.BESSELL)
         if _conv != FilterConvention.BESSELL:
-            raise NotImplementedError(
+            raise PrecomputeRefusal(
                 f"approx=WavePrecomp(...) currently supports only the photon-counting "
                 f"'bessell' convention, got convention={_conv!r}. Use the exact path "
                 f"(approx=None) for the energy/CIGALE convention."
@@ -3386,7 +3386,7 @@ class SEDModel:
         """
         spectro = getattr(observation, "spectroscopy", None)
         if spectro is not None and not spectro.nebular_lines:
-            raise ValueError(
+            raise PrecomputeRefusal(
                 "approx=SpectrumPrecomp() cannot drop the nebular lines from the spectrum: "
                 "the per-pixel lookup table carries the nebular family whole. Use the exact "
                 "path (approx=None) with Spectroscopy(nebular_lines=False)."
@@ -3418,7 +3418,7 @@ class SEDModel:
                     stacklevel=3,
                 )
             if self._spectrum_lut_needs_pixel_integral(observation):
-                raise ValueError(
+                raise PrecomputeRefusal(
                     f"approx=SpectrumPrecomp() samples the model at the pixel "
                     f"centers, but resample="
                     f"{observation.spectroscopy.resample!r} resolves to the "
@@ -3635,7 +3635,7 @@ class SEDModel:
             # attenuation never branches on filter_eff/spec_eff presence, so
             # the dense SED is always computed the same way either way.
             if (wave_cfgs or spec_cfgs) and getattr(spec, "dust_model", None) == "age_binned":
-                raise NotImplementedError(
+                raise PrecomputeRefusal(
                     "dust_attenuation={'type': 'age_binned'} has no WavePrecomp/"
                     "SpectrumPrecomp LUT support (#2528): the per-screen age-window "
                     "weights are not published to the precompute path. Use the "
@@ -11787,11 +11787,15 @@ class SEDModel:
             # replaces a gate on ``config.model == "skirtor"``, which published
             # nothing for ``composable`` (the build-grammar default) and so let
             # every torus library bake into the graph (#1383).
-            blocks = component._state.block_templates if component._state is not None else None
-            if blocks is None:
-                blocks = collect_block_templates(component.block_recipe()) or None
-            if blocks:
-                agn_templates["blocks"] = blocks
+            loaded = component._state.block_templates if component._state is not None else None
+            if loaded is None:
+                loaded = collect_block_templates(component.block_recipe())
+            # A loader whose data file is missing or unreadable is recorded here, not skipped:
+            # the block then falls back to its on-disk load (#3505 X1).
+            for what, reason in loaded.declines:
+                self.record_decline("agn", what, reason)
+            if loaded.templates:
+                agn_templates["blocks"] = loaded.templates
 
             band_table = arrays_of(self._band_table("agn", "band_table"))
             if band_table is not None:

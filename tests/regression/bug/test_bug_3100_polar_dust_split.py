@@ -52,7 +52,7 @@ def _evaluate(torus: str, cos_inc: float):
     }
     templates = collect_block_templates(
         {k[len("agn_") : -len("_block")]: v for k, v in selectors.items()}
-    )
+    ).templates
     params = {
         "agn_norm": "conserving",
         "agn_cos_inc": cos_inc,

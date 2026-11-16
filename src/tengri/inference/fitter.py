@@ -1481,17 +1481,39 @@ def _resolve_batch_fit_approx(model, approx, data_type):
 
     try:
         return _memoized_approx_clone(model, resolved)
-    except Exception as exc:  # broad on purpose, never break a working fit
+    except PrecomputeRefusal as refusal:
+        # Only a table's own refusal keeps the exact path; a bug propagates (#3505 X1).
+        reason = str(refusal)
+        model.record_decline("approx", _approx_decline_slot(resolved), reason)
         import warnings
 
         warnings.warn(
             f"Could not enable the precompute LUT for this batch fit "
-            f"({exc}). The fit is correct, only slower, a measured ~2-6x "
+            f"({reason}). The fit is correct, only slower, a measured ~2-6x "
             f"per forward evaluation on the exact path.",
             UserWarning,
             stacklevel=3,
         )
         return model
+
+
+def _approx_decline_slot(resolved) -> str:
+    """The ``approx`` decline slot of the config a refusal is about.
+
+    A single config names its own slot. For a tuple, the refusal is taken to be about the
+    LAST config, because the resolver appends the config it is adding; the message does not
+    always say which one refused, so this is a convention rather than a detection.
+    """
+    from tengri.forward.sed_model import FeaturePrecomp, SpectrumPrecomp, WavePrecomp
+
+    cfg = resolved[-1] if isinstance(resolved, tuple) else resolved
+    if isinstance(cfg, SpectrumPrecomp):
+        return "spectrum_precomp"
+    if isinstance(cfg, FeaturePrecomp):
+        return "feature_precomp"
+    if isinstance(cfg, WavePrecomp):
+        return "wave_precomp"
+    raise TypeError(f"no approx decline slot for {type(cfg).__name__}")
 
 
 # Jitted predict wrappers, memoized per (model, method name).

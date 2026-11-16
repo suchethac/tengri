@@ -45,7 +45,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL, DEFAULT_AGN_TORUS_FRAC
-from tengri.components.agn.blocks._protocol import collect_block_templates
+from tengri.components.agn.blocks._protocol import BlockTemplates, collect_block_templates
 from tengri.components.agn.blocks.recipe import Recipe
 from tengri.components.agn.blocks.runner import composable_agn_l_nu
 from tengri.forward.precompute.band_table import BandTable, BandTableContext, Decline
@@ -125,19 +125,20 @@ _INTERP_AXIS_TRANSFORM_JAX: dict[str, Any] = {
 AXIS_PARAMS: tuple[str, ...] = ()
 
 
-def _build_template_state(recipe: Recipe) -> dict[str, Any] | None:
+def _build_template_state(recipe: Recipe) -> BlockTemplates:
     """Load the recipe's template libraries per stage, as the model build threads them.
 
     Keyed ``"<category>/<name>"`` (:func:`collect_block_templates`), so each stage reads its
     own library. A flat ``{"grahsp": ...}`` bundle is handed by the runner to every stage, which
-    gives a non-GRAHSP block (the disc, the torus) the GRAHSP library as its own. ``None`` when
-    no block of the recipe declares a loader.
+    gives a non-GRAHSP block (the disc, the torus) the GRAHSP library as its own. The result's
+    ``templates`` is empty when no block of the recipe declares a loader; its ``declines`` name
+    every loader whose data file could not be read.
     """
     stages = {
         key.removeprefix("agn_").removesuffix("_block"): name
         for key, name in recipe.as_selector_dict().items()
     }
-    return collect_block_templates(stages) or None
+    return collect_block_templates(stages)
 
 
 def _evaluate_recipe_on_grid(
@@ -153,7 +154,7 @@ def _evaluate_recipe_on_grid(
     template-photometry helper.
     """
     fixed_values = dict(fixed_values or {})
-    template_state = _build_template_state(recipe)
+    template_state = _build_template_state(recipe).templates or None
     axis_names = recipe.axis_params or tuple(axis_grids.keys())
     grids = [np.asarray(axis_grids[name], dtype=np.float64) for name in axis_names]
     grid_shape = tuple(g.size for g in grids)

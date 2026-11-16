@@ -8,7 +8,7 @@ import pytest
 from tengri import DEFAULT, Fixed, SEDModel
 from tengri.config.exceptions import PrecomputeRefusal
 from tengri.forward.precompute.band_table import Decline
-from tengri.forward.precompute_report import precompute_engagement_report
+from tengri.forward.precompute_report import engagement_reports, precompute_engagement_report
 
 pytestmark = pytest.mark.contract
 
@@ -194,3 +194,74 @@ def test_lut_bias_cache_write_bug_propagates(monkeypatch):
     lut = _ReadOnlyModel()
     with pytest.raises(RuntimeError, match="a bug in __setattr__"):
         fitter._lut_forward_bias(_bias_stub(), lut, "photometry")
+
+
+def _age_binned_model(ssp, obs):
+    return SEDModel.build(
+        ssp_data=ssp,
+        observation=obs,
+        sfh={"type": "delayed", "all_params": Fixed(DEFAULT)},
+        dust_attenuation={
+            "type": "age_binned",
+            "screens": [{"law": "calzetti", "window_log_yr": (None, None)}],
+            "tau_0": 0.5,
+            "other_params": Fixed(DEFAULT),
+        },
+        neb={"type": "none"},
+        redshift=Fixed(0.0),
+        approx=None,
+    )
+
+
+def test_a_wave_precomp_refusal_is_a_precompute_refusal(ssp_data_wne, synthetic_tophat_obs):
+    """The age_binned refusal at construction is the refusal class, not a bare ValueError."""
+    from tengri import WavePrecomp
+
+    model = _age_binned_model(ssp_data_wne, synthetic_tophat_obs)
+    with pytest.raises(PrecomputeRefusal, match="age_binned"):
+        model.with_approx(WavePrecomp())
+
+
+def test_batch_resolver_records_a_refusal_under_its_config_slot_and_warns(
+    ssp_data_wne, synthetic_tophat_obs
+):
+    from tengri import WavePrecomp
+    from tengri.inference.fitter import _resolve_batch_fit_approx
+
+    model = _age_binned_model(ssp_data_wne, synthetic_tophat_obs)
+    with pytest.warns(UserWarning, match="age_binned"):
+        out = _resolve_batch_fit_approx(model, WavePrecomp(), "photometry")
+    assert out is model
+    decline = model.band_table_decline("approx", "wave_precomp")
+    assert decline is not None and "age_binned" in decline.reason
+
+
+@pytest.mark.parametrize("bug", [ValueError("a shape bug"), RuntimeError("a bug")])
+def test_batch_resolver_lets_a_plain_error_propagate_and_records_nothing(
+    monkeypatch, bug, ssp_data_wne, synthetic_tophat_obs
+):
+    from tengri import WavePrecomp
+    from tengri.inference import fitter
+
+    def broken(model, cfg):
+        raise bug
+
+    monkeypatch.setattr(fitter, "_memoized_approx_clone", broken)
+    model = _eb_model(ssp_data_wne, synthetic_tophat_obs, approx=None)
+    with pytest.raises(type(bug), match="bug"):
+        fitter._resolve_batch_fit_approx(model, WavePrecomp(), "photometry")
+    assert model.band_table_decline("approx", "wave_precomp") is None
+
+
+def test_engagement_report_reads_the_batch_refusal_by_its_approx_key(
+    ssp_data_wne, synthetic_tophat_obs
+):
+    from tengri import WavePrecomp
+    from tengri.inference.fitter import _resolve_batch_fit_approx
+
+    model = _age_binned_model(ssp_data_wne, synthetic_tophat_obs)
+    with pytest.warns(UserWarning):
+        _resolve_batch_fit_approx(model, WavePrecomp(), "photometry")
+    state = engagement_reports(model)[0].state_of("approx.wave_precomp")
+    assert state.state == "declined"
+    assert "age_binned" in state.reason
