@@ -705,7 +705,9 @@ def promote_to_runtime_redshift(model, redshifts):
     span = catalog_redshift_span(redshifts)
     if _is_runtime_redshift(model):
         return model
-    promote = getattr(model, "with_runtime_redshift", None)
+    promote: Callable[[tuple[float, float] | None], Any] | None = getattr(
+        model, "with_runtime_redshift", None
+    )
     spec = getattr(model, "spec", None)
     if not callable(promote) or spec is None or not spec.is_fixed("redshift"):
         return model
