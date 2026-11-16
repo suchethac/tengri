@@ -204,4 +204,4 @@ def test_free_redshift_declines_the_gate():
     model = _build(approx=True, redshift=Uniform(0.05, 0.2))
     template = model._template_data_for_jit()
     assert "shock_band_table" not in (template or {})
-    assert "redshift is free" in model.band_table_decline("shock", "band_table").reason
+    assert "redshift is a runtime input" in model.band_table_decline("shock", "band_table").reason
