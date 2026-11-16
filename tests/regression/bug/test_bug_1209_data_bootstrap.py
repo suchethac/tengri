@@ -168,32 +168,20 @@ def test_doctor_and_bench_share_one_answer(clean_env, monkeypatch, tmp_path):
 # ── one download_ssp ─────────────────────────────────────────────────────
 
 
-def test_data_download_ssp_is_deprecated_and_delegates(clean_env, monkeypatch, tmp_path):
-    """The duplicate twin warns and routes to the canonical implementation.
+def test_data_has_one_download_ssp_and_one_catalog_url():
+    """There is one download implementation and one catalog URL.
 
-    The two were separate implementations of one job, reachable under the same
-    name with incompatible signatures, and only one honored the environment.
+    The deprecated ``tengri.data`` copies were deleted rather than kept as
+    shims, so the only ``download_ssp`` is ``tengri.download_ssp`` and the only
+    catalog URL is ``tengri._data_setup.SSP_BASE_URL``.
     """
+    import tengri
     import tengri._data_setup as ds
     import tengri.data as td
 
-    seen = {}
-
-    def _fake(name, dest=None, force=False, progress=True):
-        seen.update(name=name, dest=dest, force=force, progress=progress)
-        return tmp_path / "x.h5"
-
-    monkeypatch.setattr(ds, "download_ssp", _fake)
-
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        td.download_ssp("fsps_prsc_miles_chabrier.h5", dest_dir=tmp_path, overwrite=True)
-
-    assert [w for w in caught if issubclass(w.category, DeprecationWarning)], (
-        "tengri.data.download_ssp did not warn"
-    )
-    assert seen["dest"] == tmp_path, "dest_dir was not forwarded as dest"
-    assert seen["force"] is True, "overwrite was not forwarded as force"
+    assert not hasattr(td, "download_ssp"), "tengri.data still exposes download_ssp"
+    assert not hasattr(td, "SSP_CATALOG_URL"), "tengri.data still exposes SSP_CATALOG_URL"
+    assert tengri.download_ssp is ds.download_ssp
 
 
 def test_download_ssp_progress_is_not_silently_dropped():

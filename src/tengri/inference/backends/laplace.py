@@ -31,11 +31,13 @@ from tengri.config.exceptions import (
     ImportanceSamplingUnreliableWarning,
     LaplaceNotAtModeWarning,
     LaplaceVarianceCeilingWarning,
+    NonFiniteGradientError,
     warn_measured,
 )
 from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
 from tengri.inference.backends._psis import pareto_k_threshold
 from tengri.inference.importance import StudentTProposal, importance_sample
+from tengri.inference.map_stationarity import nonfinite_parameter_names
 from tengri.inference.newton import _loss_derivatives_jit, newton_polish
 
 # Newton decrement above which the expansion point is reported as off-mode
@@ -172,6 +174,46 @@ def _newton_decrement(grad_flat, eigenvalues, eigenvectors):
         return float("inf")
     projected = eigenvectors.T @ grad_flat
     return float(0.5 * jnp.sum(projected**2 / eigenvalues))
+
+
+def _require_finite_derivatives(grad_flat, hessian, unravel_fn) -> None:
+    """Refuse a Laplace expansion whose gradient or Hessian is non-finite (#3546).
+
+    The covariance is the inverse Hessian and the evidence its log-determinant, so
+    one NaN entry makes every draw and the log-evidence NaN.
+
+    Parameters
+    ----------
+    grad_flat : array_like, shape (D,)
+        Gradient of the loss at the expansion point.
+    hessian : array_like, shape (D, D)
+        Hessian of the loss at the expansion point.
+    unravel_fn : callable
+        Maps a flat ``(D,)`` vector to the parameter dict.
+
+    Raises
+    ------
+    NonFiniteGradientError
+        If the gradient or the Hessian has a NaN or infinite entry, naming the
+        parameters whose row is affected.
+    """
+    bad_grad = ~np.isfinite(np.asarray(grad_flat, dtype=float))
+    hessian_finite = np.isfinite(np.asarray(hessian, dtype=float))
+    # A parameter's own curvature names it; cross terms alone fall back to the rows.
+    bad_hessian = ~np.diag(hessian_finite)
+    if not bad_hessian.any():
+        bad_hessian = ~hessian_finite.all(axis=1)
+    if not (bad_grad.any() or bad_hessian.any()):
+        return
+    which = "gradient" if bad_grad.any() else "Hessian"
+    names = nonfinite_parameter_names(bad_grad if bad_grad.any() else bad_hessian, unravel_fn)
+    raise NonFiniteGradientError(
+        f"Laplace approximation refused: the {which} of the objective with respect to "
+        f"{', '.join(repr(name) for name in names)} is non-finite at the expansion point, "
+        f"so there is no covariance or evidence to report. Fix the named parameter(s), "
+        f"or use a gradient-free method such as method='nss'.",
+        parameters=names,
+    )
 
 
 def _validate_importance_args(importance_draws, importance_df):
@@ -452,6 +494,7 @@ def run_laplace(
 
     # Loss gradient and exact Hessian at the optimizer's endpoint.
     grad_flat, hessian = _loss_derivatives_jit(logdensity_fn, theta_flat, data_args)
+    _require_finite_derivatives(grad_flat, hessian, unravel_fn)
 
     # Decrement at the endpoint, before any polish, on the raw spectrum.
     initial_eigenvalues, initial_eigenvectors = jnp.linalg.eigh(hessian)
@@ -470,6 +513,7 @@ def run_laplace(
             loss_grad=grad_flat,
             loss_hessian=hessian,
         )
+        _require_finite_derivatives(grad_flat, hessian, unravel_fn)
     if verbose:
         print(f"  Newton polish: {n_newton_accepted} step(s) accepted")
 

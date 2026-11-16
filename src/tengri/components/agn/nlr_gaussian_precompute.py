@@ -39,6 +39,7 @@ from tengri.components.agn.nlr import (
     _RICHARDSON_FLUXES,
     _RICHARDSON_WAVES,
 )
+from tengri.utils.physics_constants import GAUSSIAN_FWHM_PER_SIGMA
 
 # NLR Gaussian composer has no grid axes: all parameters are runtime.
 AXIS_PARAMS: tuple[str, ...] = ()
@@ -133,7 +134,7 @@ def build_lookup(preint: dict, **kwargs: Any):
     - ``l_disc_bol_erg``: bolometric disc luminosity [erg/s].
     - ``covering_fraction``: NLR covering fraction [0, 1].
     - ``sigma_nlr_kms``: Gaussian line width [km/s] (default
-      ``_NLR_FWHM_KMS / 2.355``).
+      ``_NLR_FWHM_KMS / GAUSSIAN_FWHM_PER_SIGMA``).
     - ``line_efficiency``: fraction of intercepted L converted to lines.
 
     """
@@ -146,7 +147,7 @@ def build_lookup(preint: dict, **kwargs: Any):
     def predict_nlr_photometry(
         l_disc_bol_erg,
         covering_fraction,
-        sigma_nlr_kms=_NLR_FWHM_KMS / 2.355,
+        sigma_nlr_kms=_NLR_FWHM_KMS / GAUSSIAN_FWHM_PER_SIGMA,
         line_efficiency=_NLR_LINE_EFFICIENCY,
     ):
         l_intercepted = covering_fraction * l_disc_bol_erg

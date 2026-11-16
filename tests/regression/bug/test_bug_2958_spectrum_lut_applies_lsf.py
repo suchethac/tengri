@@ -273,6 +273,111 @@ def test_d_resolution_none_is_bit_for_bit_prefix(ssp_data_wne):
     np.testing.assert_allclose(s[_IDX], np.asarray(_PREFIX_LUT_WNE_RNONE), rtol=_PIN_RTOL, atol=0)
 
 
+def _brute_ln_lambda_broaden(wave_rest, sed_rest, sigma_v_kms, *, step=2e-6):
+    """Gaussian in ln(lambda) on lambda F_lambda, on a fine uniform ln-lambda grid (#3436).
+
+    The same brute-force reference as test_bug_3436: a direct kernel on a grid far finer
+    than the lattice, applied by FFT, with no lattice. Returns ln(lambda) and lambda F.
+    """
+    sig = sigma_v_kms / 299792.458
+    x = np.arange(np.log(wave_rest[0]), np.log(wave_rest[-1]), step)
+    g = np.interp(np.exp(x), wave_rest, sed_rest) * np.exp(x)
+    half = int(np.ceil(12.0 * sig / step))
+    k = np.exp(-0.5 * (np.arange(-half, half + 1) * step / sig) ** 2)
+    k /= k.sum()
+    n = g.size + k.size
+    conv = np.fft.irfft(np.fft.rfft(g, n) * np.fft.rfft(k, n), n)
+    return x, conv[half : half + g.size]
+
+
+def _igm_case_reference(exact_model, sigma_v_kms):
+    """Brute-force LUT-free reference for the exact model with IGM, point-sampled.
+
+    The stellar light of this case is all of ``state.sed_intrinsic`` (no nebular or
+    instrument-only group), so the reference is T * B(S) on the rest grid, read at the
+    observed pixel centers, scaled per pixel to the model's sigma_v = 0 output.
+    """
+    state = exact_model.predict_state({"sigma_v_kms": 0.0})
+    wave_rest = np.asarray(state.wave)
+    sed = np.asarray(state.sed_intrinsic)
+    igm = np.asarray(state.derived["igm_transmission"])
+    x, g_b = _brute_ln_lambda_broaden(wave_rest, sed, sigma_v_kms)
+    _, g_0 = _brute_ln_lambda_broaden(wave_rest, sed, 1e-9)
+    t_f = np.interp(np.exp(x), wave_rest, igm)
+    wq = np.asarray(_WAVE_OBS) / (1.0 + _Z)
+    ref_b = np.interp(np.log(wq), x, g_b * t_f / np.exp(x))
+    ref_0 = np.interp(np.log(wq), x, g_0 * t_f / np.exp(x))
+    base = np.asarray(exact_model.predict_spectrum({"sigma_v_kms": 0.0}))
+    return ref_b * (base / ref_0)
+
+
+def test_d_sigma_v_exact_path_matches_brute_force_without_resolution(ssp_data_wne):
+    """#3436: the exact path with IGM and no resolution broadens at library resolution.
+
+    Resample mode: point (``_spec`` uses ``resample="point"``). Reference: the brute-force
+    ln-lambda broadening of the stellar light, times the IGM, at the pixel centers (1e-3).
+    The point readout is the closed-form Gaussian of #3512 (measured 7.2e-5 of peak).
+    """
+    exact = _build(
+        ssp_data_wne,
+        None,
+        spectro=_spec(resolution=None),
+        igm=_MADAU,
+        sigma_v=Uniform(0.0, 2000.0),
+    )
+    s150 = _spectrum(exact, 150.0)
+    ref = _igm_case_reference(exact, 150.0)
+    rel = float(np.max(np.abs(s150 - ref)) / np.max(np.abs(ref)))
+    print(f"NUMBERS #3436 exact vs brute-force reference at sigma_v=150: {rel:.6e} of peak")
+    assert rel <= 1e-3
+
+
+def test_d_sigma_v_zero_lut_agrees_with_exact_without_resolution(ssp_data_wne):
+    """The sigma_v = 0 LUT matches the exact path (point sampling, IGM, no resolution)."""
+    sv = Uniform(0.0, 2000.0)
+    exact = _build(ssp_data_wne, None, spectro=_spec(resolution=None), igm=_MADAU, sigma_v=sv)
+    lut = _build(
+        ssp_data_wne, SpectrumPrecomp(), spectro=_spec(resolution=None), igm=_MADAU, sigma_v=sv
+    )
+    s_exact, s_lut = _spectrum(exact, 0.0), _spectrum(lut, 0.0)
+    rel = float(np.max(np.abs(s_lut - s_exact)) / np.max(np.abs(s_exact)))
+    print(f"NUMBERS #3436 LUT vs exact at sigma_v=0, resolution=None: {rel:.6e} of peak")
+    assert rel <= 1e-5
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "SpectrumPrecomp still broadens on the model grid; fixed by #3413 (conserving) / "
+        "#3500 (point, IGM)"
+    ),
+)
+def test_d_sigma_v_lut_matches_brute_force_without_resolution(ssp_data_wne):
+    """Known gap, #3436 follow-up: the LUT at sigma_v = 150 without resolution.
+
+    Resample mode: point. Same reference and bar as the exact-path test above; expected to
+    fail until the table's dispersion is on the lattice.
+    """
+    exact = _build(
+        ssp_data_wne,
+        None,
+        spectro=_spec(resolution=None),
+        igm=_MADAU,
+        sigma_v=Uniform(0.0, 2000.0),
+    )
+    lut = _build(
+        ssp_data_wne,
+        SpectrumPrecomp(),
+        spectro=_spec(resolution=None),
+        igm=_MADAU,
+        sigma_v=Uniform(0.0, 2000.0),
+    )
+    ref = _igm_case_reference(exact, 150.0)
+    rel = float(np.max(np.abs(_spectrum(lut, 150.0) - ref)) / np.max(np.abs(ref)))
+    print(f"NUMBERS #3436 LUT vs brute-force reference at sigma_v=150: {rel:.6e} of peak")
+    assert rel <= 1e-3
+
+
 # ── (e) exact path bit-for-bit across the extraction ──────────────────────────
 
 _PINNED_EXACT = {

@@ -90,11 +90,13 @@ class TestBatchedRedshift:
             f"vs L_base={L_base} — the override never reached the forward pass."
         )
 
-    def test_catalog_z_range_required_for_batched_per_galaxy_z(
+    def test_per_galaxy_z_without_a_declared_range_promotes_one_model(
         self, ssp_data_wne, synthetic_tophat_obs
     ):
-        """Without the runtime-LUT, a batched per-galaxy-z fit would recompile per z."""
+        """A batched per-galaxy-z fit needs no declared range: one promoted model serves all z."""
         import jax
+
+        from tengri.forward.sed_model import SEDModel
 
         model = self._model(ssp_data_wne, synthetic_tophat_obs, z_range=None)
         key = jax.random.PRNGKey(2)
@@ -104,8 +106,21 @@ class TestBatchedRedshift:
             {"flux_obs": flux, "noise": noise, "redshift": 0.1},
             {"flux_obs": flux, "noise": noise, "redshift": 0.8},
         ]
-        with pytest.raises(ValueError, match="catalog_z_range"):
-            CatalogFitter(model, catalog).run("mcmc_nuts", key=key, n_warmup=5, n_samples=5)
+        promotions = []
+        real = SEDModel.with_runtime_redshift
+
+        def _count(self, z_range=None):
+            promotions.append(z_range)
+            return real(self, z_range)
+
+        SEDModel.with_runtime_redshift = _count
+        try:
+            cp = CatalogFitter(model, catalog).run("mcmc_nuts", key=key, n_warmup=5, n_samples=5)
+        finally:
+            SEDModel.with_runtime_redshift = real
+        assert cp.n_galaxies == 2
+        assert len(promotions) == 1, f"expected one promotion for two redshifts, got {promotions}"
+        assert model._catalog_z_range is None, "the caller's model was mutated"
 
     @pytest.mark.slow  # a real 2-galaxy NUTS catalog fit; see #1346 (shard OOM)
     def test_batched_heterogeneous_redshift_fits_and_separates(

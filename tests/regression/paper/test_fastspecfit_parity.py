@@ -91,6 +91,7 @@ def test_compute_line_fluxes_gaussian_identity():
     """Known amplitude + sigma → flux = A * sqrt(2π) * σ_ang."""
     from tengri.analysis.diagnostics.lines import compute_line_fluxes
     from tengri.observation.line_mask import _C_KMS
+    from tengri.utils.physics_constants import GAUSSIAN_FWHM_PER_SIGMA
 
     z = 0.5
     sigma_kms = 100.0
@@ -99,7 +100,7 @@ def test_compute_line_fluxes_gaussian_identity():
     z_waves = rest_waves * (1.0 + z)
 
     sigma_vel_sq = (sigma_kms / _C_KMS) ** 2
-    sigma_lsf_sq = (1.0 / (2.355 * R)) ** 2
+    sigma_lsf_sq = (1.0 / (GAUSSIAN_FWHM_PER_SIGMA * R)) ** 2
     sigma_ang_expected = z_waves * jnp.sqrt(sigma_vel_sq + sigma_lsf_sq)
 
     amplitudes = jnp.array([1e-17, 2e-17])
