@@ -110,7 +110,7 @@ ALLOWLIST: dict[str, str] = {
     "forward/sed_model.py::SEDModel.__init__": (
         "catalog or free redshift -> z-table enabled in both branches (#2858)"
     ),
-    "forward/sed_model.py::SEDModel._build_component_chain": (
+    "forward/sed_model.py::SEDModel._build_component_chain_in_scope": (
         "via redshift_is_runtime: catalog or free -> runtime z-table spec, never the placeholder"
     ),
     "forward/sed_model.py::SEDModel._get_or_build_predict_spectrum_on_grid_jit": (
