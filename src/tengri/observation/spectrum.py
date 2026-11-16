@@ -1224,6 +1224,70 @@ def _lattice_cell_means(wave_rest, sed_rest, origin, n_cells, edge_aa):
     return (cum[1:] - cum[:-1]) / h
 
 
+def lattice_centers(origin, n_cells: int) -> jnp.ndarray:
+    """Rest wavelengths [Angstrom] of the lattice cell centers, shape (n_cells,)."""
+    k = jnp.arange(n_cells, dtype=jnp.result_type(float))
+    return jnp.exp(origin + _LATTICE_DLNLAMBDA * (k + 0.5))
+
+
+def _lattice_nodes(origin, n_cells: int) -> jnp.ndarray:
+    """Rest wavelengths [Angstrom] of the lattice cell edges, shape (n_cells + 1,)."""
+    k = jnp.arange(n_cells + 1, dtype=jnp.result_type(float))
+    return jnp.exp(origin + _LATTICE_DLNLAMBDA * k)
+
+
+def lattice_cell_fraction_below(cell_centers, edge_aa: float) -> jnp.ndarray:
+    """Fraction of each lattice cell, in ln lambda, that lies below ``edge_aa`` [Angstrom].
+
+    One for a cell wholly below the edge, zero for one wholly above, and the covered part
+    for the cell the edge falls in. Shape (n_cells,), dimensionless.
+    """
+    offset = (jnp.log(edge_aa) - jnp.log(cell_centers)) / _LATTICE_DLNLAMBDA
+    return jnp.clip(offset + 0.5, 0.0, 1.0)
+
+
+def lattice_cell_transmission(wave_rest, transmission, origin, n_cells: int) -> jnp.ndarray:
+    """Mean over each lattice cell of a transmission curve given on ``wave_rest``.
+
+    The mean in wavelength of the curve's piecewise-linear interpolant, so an edge inside
+    a cell is weighted by where it falls. Shape (n_cells,), dimensionless.
+    """
+    nodes = _lattice_nodes(origin, n_cells)
+    cum = _cumulative_flux(wave_rest, transmission, nodes)
+    return (cum[1:] - cum[:-1]) / (nodes[1:] - nodes[:-1])
+
+
+def lattice_cell_lnu(cell_centers, wave_rest, sed_rest) -> jnp.ndarray:
+    r"""An SED on the lattice of the spectrum table, from its values on the model grid.
+
+    Returns :math:`\langle\lambda L_\nu\rangle_{\rm cell} / \lambda_c`: the mean of
+    :math:`\lambda L_\nu` over each cell in :math:`\ln\lambda`, for the piecewise-linear
+    interpolant of ``sed_rest`` (zero outside the grid's ends), over the cell-center
+    wavelength :math:`\lambda_c`. This is the quantity the exact projection loads onto the
+    lattice (:func:`compute_spectrum_lattice_lsf`), so a component that publishes it enters the
+    table with the same discretization.
+
+    Parameters
+    ----------
+    cell_centers : ndarray, shape (n_cells,)
+        Rest wavelengths of the cell centers [Angstrom] (:func:`lattice_centers`).
+    wave_rest : ndarray, shape (n_wave,)
+        Rest-frame model grid, ascending [Angstrom].
+    sed_rest : ndarray, shape (n_wave,)
+        :math:`L_\nu` on ``wave_rest`` [erg/s/Hz].
+
+    Returns
+    -------
+    ndarray, shape (n_cells,)
+        :math:`L_\nu` on the lattice [erg/s/Hz].
+    """
+    n_cells = cell_centers.shape[0]
+    origin = jnp.log(cell_centers[0]) - 0.5 * _LATTICE_DLNLAMBDA
+    scale_in, scale_out = _peak_factors(sed_rest)
+    means = _lattice_cell_means(wave_rest, sed_rest * scale_in, origin, n_cells, None)
+    return means * scale_out / cell_centers
+
+
 def _lattice_edge_readout(g, origin, n_cells, edges):
     """Pixel means between ``edges`` [Angstrom] of lattice cell means ``g``.
 
@@ -1741,39 +1805,41 @@ def project_spectrum(
             conserving=conserving,
             has_lyc_edge=has_lyc_edge,
         )
-    elif conserving and resolution is not None and resolution_matrix is None:
-        # The detector integrates the light that has already passed through the
-        # line-spread function: broaden on the model grid, then take the pixel
-        # integral (#2530).
-        flux = compute_spectrum_conserving_lsf(
-            sed_rest,
-            wave_rest,
-            wave_obs,
-            redshift,
-            dl_cm,
-            resolution=resolution,
-            sigma_lib_kms=sigma_lib_kms,
-            n_bins=n_bins,
-            sigma_v_kms=sigma_v_kms,
-        )
-        resolution = None
     elif resolution is not None and resolution_matrix is None:
-        # Point mode with an instrument: the kernel is applied on the ln-lambda lattice
-        # before the pixel centers are read, so a pixel does not depend on the pixel grid
-        # or on how the model grid is segmented (#3451, #3500).
-        flux = compute_spectrum_point_lsf(
-            sed_rest,
-            wave_rest,
-            wave_obs,
-            redshift,
-            dl_cm,
-            resolution=resolution,
-            span=point_lattice_span(wave_obs, redshift, z_window, lattice_window),
-            sigma_lib_kms=sigma_lib_kms,
-            sigma_v_kms=sigma_v_kms,
-            n_bins=n_bins,
-            has_lyc_edge=has_lyc_edge,
-        )
+        # An instrument kernel: it is applied on the ln-lambda lattice before the pixels
+        # are read, at their centers or as the mean between their edges, so a pixel does
+        # not depend on the pixel grid or on how the model grid is segmented (#2530,
+        # #3451, #3500).
+        span = point_lattice_span(wave_obs, redshift, z_window, lattice_window)
+        if conserving and span is None:
+            # No static redshift range to build a lattice from: the kernel on the model
+            # grid, then the pixel integral.
+            flux = compute_spectrum_conserving_lsf(
+                sed_rest,
+                wave_rest,
+                wave_obs,
+                redshift,
+                dl_cm,
+                resolution=resolution,
+                sigma_lib_kms=sigma_lib_kms,
+                n_bins=n_bins,
+                sigma_v_kms=sigma_v_kms,
+            )
+        else:
+            flux = compute_spectrum_lattice_lsf(
+                sed_rest,
+                wave_rest,
+                wave_obs,
+                redshift,
+                dl_cm,
+                resolution=resolution,
+                span=span,
+                sigma_lib_kms=sigma_lib_kms,
+                sigma_v_kms=sigma_v_kms,
+                n_bins=n_bins,
+                has_lyc_edge=has_lyc_edge,
+                conserving=conserving,
+            )
         resolution = None
     else:
         resampler = compute_spectrum_conserving if conserving else compute_spectrum
@@ -1798,89 +1864,6 @@ def project_spectrum(
         )
         flux = apply_calibration(flux, wave_obs, cal_coeffs, wmin, wmax)
     return flux
-
-
-def instrument_stage_on_pixels(
-    stellar_pix: jnp.ndarray,
-    nebular_pix: jnp.ndarray,
-    *,
-    wave_obs: jnp.ndarray,
-    resolution: jnp.ndarray | float,
-    sigma_lib_kms: jnp.ndarray | float,
-    lsf_scale: jnp.ndarray | float = 1.0,
-    n_bins: int = 16,
-    lsf_pad_pixels: int | None = None,
-) -> jnp.ndarray:
-    r"""Apply the instrument stage of the kernel split to resampled pixel fluxes (#2958).
-
-    Stage 3 of :func:`~tengri.observation.observation.project_spectrum_kernel_split`,
-    factored out so the exact path and the spectrum LUT share one implementation.
-    The stellar piece is convolved with
-
-    .. math::
-
-        \sigma_{\rm eff}(\lambda) = \sqrt{\sigma_{\rm inst}(\lambda)^2\,
-        s^2 - \sigma_{\rm lib}(\lambda)^2}, \qquad s = {\rm lsf\_scale},
-
-    and the nebular/shock/AGN-line piece with :math:`\sigma_{\rm inst}\,s` alone.
-    The galaxy's velocity dispersion is not added here: it was applied on the model
-    grid before the IGM (stage 1), so the stellar piece must not receive it twice.
-
-    Parameters
-    ----------
-    stellar_pix : ndarray, shape (n_pix,)
-        Stellar-kernel piece, already resampled to ``wave_obs`` and multiplied by the
-        IGM transmission [erg/s/cm^2/Hz].
-    nebular_pix : ndarray, shape (n_pix,)
-        Instrument-only piece, resampled to ``wave_obs`` and multiplied by the IGM
-        transmission [erg/s/cm^2/Hz].
-    wave_obs : ndarray, shape (n_pix,)
-        Observed-frame pixel wavelength grid [Angstrom].
-    resolution : float or ndarray, shape (n_pix,)
-        Spectral resolution :math:`R(\lambda)` (the instrument, before ``lsf_scale``).
-    sigma_lib_kms : float or ndarray, shape (n_pix,)
-        SSP library resolution [km/s] subtracted from the stellar piece only.
-    lsf_scale : float or traced scalar, default 1.0
-        Multiplicative scale on :math:`\sigma_{\rm inst}` (#2526).
-    n_bins : int, default 16
-        Piecewise-constant LSF bin count.
-    lsf_pad_pixels : int or None, optional
-        Static padding [pixels] for the observed-grid LSF (see
-        :func:`apply_lsf`); ``None`` derives it from the grid.
-
-    Returns
-    -------
-    ndarray, shape (n_pix,)
-        Observed spectral flux density [erg/s/cm^2/Hz], before calibration.
-
-    Notes
-    -----
-    **JIT-compatible**: yes; the Gaussian LSF is an FFT convolution with a
-    static pad, and ``lsf_scale`` may be traced.
-
-    Approximation of the instrument response as a Gaussian of width
-    :math:`\sigma_{\rm inst}(\lambda)` in velocity, as in :func:`apply_lsf`.
-    """
-    resolution_scaled = resolution / lsf_scale
-    flux_stellar = apply_lsf(
-        stellar_pix,
-        wave_obs,
-        resolution_scaled,
-        sigma_lib_kms=sigma_lib_kms,
-        n_bins=n_bins,
-        sigma_v_kms=0.0,
-        pad_pixels=lsf_pad_pixels,
-    )
-    flux_instrument_only = apply_lsf(
-        nebular_pix,
-        wave_obs,
-        resolution_scaled,
-        sigma_lib_kms=0.0,
-        n_bins=n_bins,
-        sigma_v_kms=0.0,
-        pad_pixels=lsf_pad_pixels,
-    )
-    return flux_stellar + flux_instrument_only
 
 
 @partial(jax.jit, static_argnames=("has_lyc_edge",))
@@ -1980,7 +1963,7 @@ _LATTICE_BOX_SIGMA_KMS = _LATTICE_DLNLAMBDA * _C_KM_S / math.sqrt(12.0)
 _POINT_NARROW_KERNEL_KMS = (20.0, 40.0)
 
 
-def compute_spectrum_point_lsf(
+def compute_spectrum_lattice_lsf(
     sed_rest: jnp.ndarray,
     wave_rest: jnp.ndarray,
     wave_obs: jnp.ndarray,
@@ -1994,11 +1977,13 @@ def compute_spectrum_point_lsf(
     igm_rest: jnp.ndarray | None = None,
     n_bins: int = 16,
     has_lyc_edge: bool = False,
+    conserving: bool = False,
 ) -> jnp.ndarray:
-    r"""Point-sampled spectrum with the kernels applied before sampling, on the ln-lambda lattice.
+    r"""Spectrum with the kernels applied before the pixels are read, on the ln-lambda lattice.
 
     The model is loaded onto the uniform :math:`\ln\lambda` lattice as exact cell means of
-    :math:`\lambda L_\nu`, broadened there, and read at the pixel centers:
+    :math:`\lambda L_\nu`, broadened there, and read at the pixel centers, or as the mean
+    between the pixel edges when ``conserving``:
 
     .. math::
 
@@ -2043,6 +2028,9 @@ def compute_spectrum_point_lsf(
         Segments of the instrument kernel when the resolution varies along the spectrum.
     has_lyc_edge : bool, optional
         The SED is a step at the Lyman edge. Static.
+    conserving : bool, optional
+        Pixel means between the pixel edges instead of the value at the pixel centers
+        (:math:`\lambda_c` in the equation). Needs a lattice (``span`` not ``None``). Static.
 
     Returns
     -------
@@ -2068,8 +2056,17 @@ def compute_spectrum_point_lsf(
     lattice, and the two are blended with a smooth weight in between; a zero-width kernel
     returns the point sample of the interpolant. With an IGM transmission every pixel is
     read on the lattice.
+
+    The pixel mean integrates the cell means exactly, so the conserving readout has no
+    box to remove and no narrow-kernel regime. Measured against the pixel mean of the
+    closed form (R = 500 to 5000, sigma_v 0 to 150 km/s): 3e-7 to 3e-5 of peak.
     """
     if span is None:
+        if conserving:
+            raise ValueError(
+                "the flux-conserving readout with an instrument resolution needs a static "
+                "ln-lambda lattice: give a fixed redshift or a redshift range"
+            )
         return _point_lsf_closed_form(
             sed_rest,
             wave_rest,
@@ -2086,10 +2083,7 @@ def compute_spectrum_point_lsf(
     edge_aa = LYMAN_LIMIT_AA if has_lyc_edge else None
     scale_in, scale_out = _peak_factors(sed_rest)
     pad = _lattice_pad_cells()
-    wave_q = wave_obs / (1.0 + redshift)
-    lam_c = jnp.exp(
-        origin + _LATTICE_DLNLAMBDA * (jnp.arange(n_cells, dtype=jnp.result_type(float)) + 0.5)
-    )
+    lam_c = lattice_centers(origin, n_cells)
     sed_in = sed_rest * scale_in
     if igm_rest is not None and _is_concrete_nonpositive(sigma_v_kms):
         # No dispersion: the IGM multiplies the model at its own nodes.
@@ -2099,43 +2093,116 @@ def compute_spectrum_point_lsf(
         # sigma_v, then the IGM, then the instrument (#2589). The transmission enters as
         # its exact cell mean, so an edge inside a cell is weighted by where it falls.
         on_lattice = broaden_velocity_only(on_lattice, lam_c, sigma_v_kms, 1, pad_pixels=pad)
-        nodes = jnp.exp(
-            origin + _LATTICE_DLNLAMBDA * jnp.arange(n_cells + 1, dtype=jnp.result_type(float))
-        )
-        igm_cum = _cumulative_flux(wave_rest, igm_rest, nodes)
-        on_lattice = on_lattice * (igm_cum[1:] - igm_cum[:-1]) / (nodes[1:] - nodes[:-1])
+        on_lattice = on_lattice * lattice_cell_transmission(wave_rest, igm_rest, origin, n_cells)
         sigma_v_kms = 0.0
-    resolution = jnp.asarray(resolution)
-    sigma_lib_kms = jnp.asarray(sigma_lib_kms)
-    resolution_pix, sigma_lib_pix = resolution, sigma_lib_kms
-    obs_c = lam_c * (1.0 + redshift)
-    if resolution.ndim > 0:
-        resolution = jnp.interp(obs_c, wave_obs, resolution)
-    if sigma_lib_kms.ndim > 0:
-        sigma_lib_kms = jnp.interp(obs_c, wave_obs, sigma_lib_kms)
-    # The cell mean has already smoothed the model by the lattice box, so the kernel
-    # applied here is the wanted width with the box removed in quadrature.
-    sigma_cells = lsf_sigma_eff_kms(resolution, sigma_lib_kms, sigma_v_kms)
-    excess = sigma_cells**2 - _LATTICE_BOX_SIGMA_KMS**2
-    wider = excess > 0.0
-    sigma_kernel = jnp.where(wider, jnp.sqrt(jnp.where(wider, excess, 1.0)), 0.0)
-    # One segment when the width is the same on every cell: the lattice is uniform in
-    # ln lambda, so a single sigma covers it.
-    broadened = broaden_velocity_only(
-        on_lattice, lam_c, sigma_kernel, 1 if sigma_cells.ndim == 0 else n_bins, pad_pixels=pad
+    pixel_sed = lattice_pixel_read(
+        on_lattice,
+        span,
+        wave_obs,
+        redshift,
+        resolution=resolution,
+        sigma_lib_kms=sigma_lib_kms,
+        sigma_v_kms=sigma_v_kms,
+        n_bins=n_bins,
+        conserving=conserving,
     )
-    pixel_sed = _lattice_center_readout(broadened, origin, n_cells, wave_q) / wave_q
-    if igm_rest is None:
+    if igm_rest is None and not conserving:
         pixel_sed = _blend_narrow_kernel(
             pixel_sed,
             sed_in,
             wave_rest,
             wave_obs,
             redshift,
-            lsf_sigma_eff_kms(resolution_pix, sigma_lib_pix, sigma_v_kms),
+            lsf_sigma_eff_kms(resolution, sigma_lib_kms, sigma_v_kms),
             has_lyc_edge,
         )
     return lnu_to_fnu(pixel_sed * scale_out, dl_cm, redshift)
+
+
+def lattice_pixel_read(
+    on_lattice: jnp.ndarray,
+    span: tuple[float, int],
+    wave_obs: jnp.ndarray,
+    redshift,
+    *,
+    resolution: jnp.ndarray | float | None = None,
+    sigma_lib_kms: jnp.ndarray | float = 0.0,
+    sigma_v_kms: jnp.ndarray | float = 0.0,
+    n_bins: int = 16,
+    conserving: bool = False,
+    remove_box: bool = True,
+) -> jnp.ndarray:
+    r"""Instrument kernel on the lattice, then the pixel readout.
+
+    The last stage of the projection, shared by the exact path
+    (:func:`compute_spectrum_lattice_lsf`) and the spectrum table
+    (``Observation.predict_spectrum_via_precomp``).
+
+    Parameters
+    ----------
+    on_lattice : ndarray, shape (n_cells,)
+        Cell means of :math:`\lambda L_\nu` on the lattice ``span`` [erg/s/Hz Angstrom].
+    span : tuple of (float, int)
+        Static lattice ``(origin, n_cells)``.
+    wave_obs : ndarray, shape (n_pix,)
+        Observed pixel centers [Angstrom].
+    redshift : float or tracer
+        Source redshift.
+    resolution : float or ndarray, shape (n_pix,), or None
+        Resolving power at each pixel; ``None`` applies no kernel.
+    sigma_lib_kms, sigma_v_kms : float or ndarray, optional
+        Library and velocity dispersions [km/s] entering :func:`lsf_sigma_eff_kms`.
+    n_bins : int, optional
+        Segments of the kernel when its width varies along the spectrum.
+    conserving : bool, optional
+        Pixel means between the pixel edges (``True``) or the value at the pixel centers
+        (``False``). Static.
+    remove_box : bool, optional
+        Take the cell-mean box out of the kernel in quadrature for the center readout.
+        ``False`` when an earlier kernel on ``on_lattice`` already had it removed. Static.
+
+    Returns
+    -------
+    ndarray, shape (n_pix,)
+        :math:`L_\nu` at each pixel [erg/s/Hz].
+
+    Notes
+    -----
+    A cell mean is the model smoothed by a box of dispersion ``_LATTICE_BOX_SIGMA_KMS``.
+    The center readout samples that smoothed function, so the box is removed from the
+    kernel in quadrature there. The pixel mean integrates the cell means exactly, so the
+    conserving readout applies the full kernel.
+    """
+    origin, n_cells = span
+    wave_q = wave_obs / (1.0 + redshift)
+    if resolution is not None:
+        lam_c = lattice_centers(origin, n_cells)
+        resolution = jnp.asarray(resolution)
+        sigma_lib_kms = jnp.asarray(sigma_lib_kms)
+        obs_c = lam_c * (1.0 + redshift)
+        if resolution.ndim > 0:
+            resolution = jnp.interp(obs_c, wave_obs, resolution)
+        if sigma_lib_kms.ndim > 0:
+            sigma_lib_kms = jnp.interp(obs_c, wave_obs, sigma_lib_kms)
+        sigma_cells = lsf_sigma_eff_kms(resolution, sigma_lib_kms, sigma_v_kms)
+        if conserving or not remove_box:
+            sigma_kernel = sigma_cells
+        else:
+            excess = sigma_cells**2 - _LATTICE_BOX_SIGMA_KMS**2
+            wider = excess > 0.0
+            sigma_kernel = jnp.where(wider, jnp.sqrt(jnp.where(wider, excess, 1.0)), 0.0)
+        # One segment when the width is the same on every cell: the lattice is uniform in
+        # ln lambda, so a single sigma covers it.
+        on_lattice = broaden_velocity_only(
+            on_lattice,
+            lam_c,
+            sigma_kernel,
+            1 if sigma_cells.ndim == 0 else n_bins,
+            pad_pixels=_lattice_pad_cells(),
+        )
+    if conserving:
+        return _lattice_edge_readout(on_lattice, origin, n_cells, _pixel_edges(wave_q))
+    return _lattice_center_readout(on_lattice, origin, n_cells, wave_q) / wave_q
 
 
 def point_lattice_span(wave_obs, redshift, z_window, lattice_window):

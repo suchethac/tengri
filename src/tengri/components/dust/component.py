@@ -924,9 +924,9 @@ class DustAttenuationSEDComponent(TemplateThreading):
                     -tau_v * _law(rb_sub_waves)
                 )
 
-        # SpectrumPrecomp: per-pixel transmission. A spectrum pixel
-        # is a single wavelength, so T(λ_pix) = exp(-τ·k(λ_pix)) is exact:
-        # no Taylor slope needed (contrast the filter branch above).
+        # SpectrumPrecomp: the transmission at the centers of the spectrum lattice
+        # cells. A cell is 15 km/s wide, so the curve is read at one wavelength
+        # with no Taylor slope (contrast the filter branch above).
         spec_eff = state.derived.get("spec_eff_waves")
         if spec_eff is not None:
             k_pix = curve(spec_eff)

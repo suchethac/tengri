@@ -153,7 +153,7 @@ ALLOWLIST: dict[str, str] = {
         "the dispersion is read at the model nodes unless it is a concrete zero; a traced "
         "value takes the read and is gated to the input where it is not positive"
     ),
-    "observation/spectrum.py::compute_spectrum_point_lsf": (
+    "observation/spectrum.py::compute_spectrum_lattice_lsf": (
         "with an IGM a concrete zero dispersion multiplies the model at its nodes; a traced "
         "value takes the lattice order sigma_v, IGM, instrument (equal at zero)"
     ),

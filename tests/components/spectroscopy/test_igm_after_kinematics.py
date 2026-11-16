@@ -599,7 +599,7 @@ def test_mutation_igm_before_kinematics_would_fail(tmp_path):
 
     # Fold the IGM into the stellar group before the lattice applies the dispersion.
     mutated_text = original_text.replace(
-        "            flux = compute_spectrum_point_lsf(\n"
+        "            flux = compute_spectrum_lattice_lsf(\n"
         "                sed_stellar_rest,\n"
         "                wave_rest,\n"
         "                wave_obs,\n"
@@ -610,7 +610,7 @@ def test_mutation_igm_before_kinematics_would_fail(tmp_path):
         "                sigma_lib_kms=sigma_lib_kms,\n"
         "                sigma_v_kms=sigma_v_kms,\n"
         "                igm_rest=igm_trans,\n",
-        "            flux = compute_spectrum_point_lsf(\n"
+        "            flux = compute_spectrum_lattice_lsf(\n"
         "                sed_stellar_rest * igm_trans,\n"
         "                wave_rest,\n"
         "                wave_obs,\n"

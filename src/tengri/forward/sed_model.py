@@ -3350,19 +3350,156 @@ class SEDModel:
             return None
         return lattice_span(np.asarray(wave_obs_np, dtype=np.float64), min(ends), max(ends))
 
+    def _spectrum_table_box_in_kernel(self) -> bool:
+        """Whether the table's velocity kernel has the lattice box removed.
+
+        The center readout samples the lattice's cell means, so one kernel on the stellar
+        group has the cell-mean box taken out of it in quadrature. That is the velocity
+        kernel when the pixels are point-sampled and either there is no instrument
+        resolution or ``sigma_v_kms`` is Fixed at a width the lattice resolves
+        (``_POINT_NARROW_KERNEL_KMS[0]``), which keeps the total width right where the
+        library resolution cancels the instrument's. Otherwise it is the instrument
+        kernel. The flux-conserving readout has no box to remove.
+        """
+        from tengri.observation.spectrum import _POINT_NARROW_KERNEL_KMS
+
+        observation = self.observation
+        spectro = getattr(observation, "spectroscopy", None)
+        if spectro is None or self._spectrum_lut_needs_pixel_integral(observation):
+            return False
+        if spectro.resolution is None:
+            return True
+        sigma_v = self._fixed_sigma_v_kms()
+        return sigma_v is not None and sigma_v >= _POINT_NARROW_KERNEL_KMS[0]
+
+    def _prior_lower_bound(self, name: str, default: float) -> float:
+        """Lower end of a parameter's declared range (its value when Fixed), else ``default``."""
+        try:
+            dist = self.spec.get_distribution(name)
+        except KeyError:
+            return default
+        return float(dist.bounds[0])
+
+    def _spectrum_table_narrowest_kernel_kms(self, observation) -> float:
+        """Smallest total kernel width [km/s] on any family the spectrum table carries.
+
+        The stellar group takes the velocity dispersion and the instrument kernel with the
+        library width removed; a separate nebular family takes the instrument alone. Each
+        is evaluated at the lower end of ``sigma_v_kms`` and ``lsf_scale`` and at the ends
+        of the redshift range, over the pixels. Build-time (NumPy).
+        """
+        from tengri.observation.spectrum import lsf_sigma_eff_kms, resolve_sigma_lib_kms
+
+        spectro = observation.spectroscopy
+        sigma_v = self._prior_lower_bound("sigma_v_kms", 0.0)
+        has_nebular_family = self.spec.nebular_mode not in ("off", "ssp")
+        if spectro.resolution is None:
+            return 0.0 if has_nebular_family else sigma_v
+        resolution = np.asarray(spectro.resolution) / self._prior_lower_bound("lsf_scale", 1.0)
+        wave_obs = np.asarray(spectro.wave_obs)
+        curve = self._sigma_lib_curve_for(self.ssp_data)
+        ends = [
+            z
+            for z in _redshift_ends(self.spec, getattr(self, "_catalog_z_range", None))
+            if np.isfinite(z)
+        ]
+        widths = [
+            lsf_sigma_eff_kms(
+                resolution,
+                resolve_sigma_lib_kms(wave_obs, z, getattr(spectro, "sigma_lib_kms", 0.0), curve),
+                sigma_v,
+            )
+            for z in ends
+        ]
+        if has_nebular_family:
+            widths.append(lsf_sigma_eff_kms(resolution, 0.0, 0.0))
+        return float(min(np.min(np.asarray(width)) for width in widths))
+
+    def _spectrum_table_decline_reason(self, observation) -> str | None:
+        """Why the spectrum table cannot serve this spectrum channel, or ``None`` if it can.
+
+        The one place the rule lives; :meth:`_spectrum_lut_serves_exactly` and
+        :meth:`_resolve_spectrum_precomp` both read it. The table declines:
+
+        - a banded resolution matrix (the table applies a Gaussian instrument kernel);
+        - point-sampled pixels where the kernel on one of its families can be narrower
+          than ``_POINT_NARROW_KERNEL_KMS[0]``
+          (:meth:`_spectrum_table_narrowest_kernel_kms`). The table holds cell means on
+          a lattice of 15 km/s cells, and the pixel-center value of a feature narrower
+          than a cell is not recoverable from them; the exact path reads such pixels in
+          closed form from the model grid. The flux-conserving readout integrates the
+          cell means exactly and has no such limit.
+
+        Parameters
+        ----------
+        observation : Observation or None
+            Observation whose spectroscopy configures the pixels.
+
+        Returns
+        -------
+        str or None
+            The reason, phrased to follow "the spectrum table cannot serve".
+        """
+        from tengri.observation.spectrum import _POINT_NARROW_KERNEL_KMS
+
+        spectro = getattr(observation, "spectroscopy", None)
+        if spectro is None:
+            return "an observation with no spectroscopy"
+        if getattr(spectro, "resolution_matrix", None) is not None:
+            return "a banded resolution matrix; it applies a Gaussian instrument kernel"
+        if self._spectrum_lut_needs_pixel_integral(observation):
+            return None
+        floor = _POINT_NARROW_KERNEL_KMS[0]
+        narrowest = self._spectrum_table_narrowest_kernel_kms(observation)
+        if narrowest < floor:
+            return (
+                f"point-sampled pixels whose kernel (velocity dispersion and instrument "
+                f"resolution, less the library's) can be as narrow as {narrowest:.3g} km/s; "
+                f"its ln-lambda lattice does not resolve a kernel below {floor:g} km/s"
+            )
+        return None
+
+    def _dust_law_step_in_spectrum(self, observation) -> float:
+        """Largest step of the dust curves inside the rest range the spectrum covers.
+
+        The curves are sampled every 0.05 Angstrom over the pixels' rest range at the ends
+        of the redshift range, and a step is a sample-to-sample change more than 100 times
+        the median one. Returns its size in :math:`k/k_V`, or 0.0 when no law has a step
+        there (or the model has no dust screen). Build-time (NumPy).
+
+        The Calzetti branches join at 0.63 micron with a step of 0.0062.
+        """
+        from tengri.components.dust.attenuation import resolve_dust_law
+
+        spectro = getattr(observation, "spectroscopy", None)
+        if spectro is None or self.spec.dust_model in ("off", "wg00"):
+            return 0.0
+        ends = [
+            z
+            for z in _redshift_ends(self.spec, getattr(self, "_catalog_z_range", None))
+            if np.isfinite(z)
+        ]
+        wave_obs = np.asarray(spectro.wave_obs, dtype=np.float64)
+        rest = np.arange(wave_obs[0] / (1.0 + max(ends)), wave_obs[-1] / (1.0 + min(ends)), 0.05)
+        largest = 0.0
+        for law in {self.spec.dust_law_bc, self.spec.dust_law_diff}:
+            change = np.abs(np.diff(np.asarray(resolve_dust_law(law)(jnp.asarray(rest)))))
+            steps = change[change > 100.0 * np.median(change)]
+            largest = max(largest, float(steps.max()) if steps.size else 0.0)
+        return largest
+
     def _spectrum_lut_serves_exactly(self, observation) -> bool:
-        """Whether the spectrum LUT can serve this spectrum channel exactly (#2958).
+        """Whether ``approx="auto"`` puts this spectrum channel on the spectrum table (#2958).
 
         The single source of truth for the ``approx="auto"`` routing of a
-        spectroscopy or joint fit and for the joint promotion gate. The LUT serves
-        the channel exactly when all three hold:
-
-        - the pixel integral is not required (point-sampled pixels, or pixels no
-          wider than the model grid, #2530);
-        - ``sigma_v_kms`` is Fixed (a free one broadens the stellar sum on the full
-          model grid every draw, which is slower than the exact path);
-        - no banded resolution matrix is attached (the LUT applies only a per-pixel
-          instrument kernel).
+        spectroscopy or joint fit and for the joint promotion gate. True when the
+        table can serve the channel (:meth:`_spectrum_table_decline_reason`),
+        ``sigma_v_kms`` is Fixed (a free one is convolved on the lattice every draw, and
+        once per age row with two-component dust, where it is slower than the exact
+        path), and no dust law has a step inside the spectrum's rest range
+        (:meth:`_dust_law_step_in_spectrum`). The table applies dust after the velocity
+        kernel and the exact path before it, so at a step the two differ by the step's
+        smoothing; an explicit ``SpectrumPrecomp()`` serves such a model and says so.
 
         Parameters
         ----------
@@ -3374,10 +3511,9 @@ class SEDModel:
         bool
             True if the spectrum channel may be served by :class:`SpectrumPrecomp`.
         """
-        spectro = getattr(observation, "spectroscopy", None)
-        if spectro is None or getattr(spectro, "resolution_matrix", None) is not None:
+        if self._spectrum_table_decline_reason(observation) is not None:
             return False
-        if self._spectrum_lut_needs_pixel_integral(observation):
+        if self._dust_law_step_in_spectrum(observation) > 0.0:
             return False
         return self._fixed_sigma_v_kms() is not None
 
@@ -3401,72 +3537,79 @@ class SEDModel:
         self._approx = self._approx.replace(wave_precomp=True)
 
     def _resolve_spectrum_precomp(self, cfg, observation) -> None:
-        """Activate the per-pixel spectrum LUT for one ``SpectrumPrecomp`` config.
+        """Activate the spectrum table for one ``SpectrumPrecomp`` config.
 
-        The LUT applies the exact path's three stages (stellar velocity dispersion on
-        the model grid, IGM, instrument kernel on the pixels), so it holds at any
-        scalar or per-pixel resolution; a banded resolution matrix is the one case it
-        cannot carry and falls back to the exact path with a warning.
-        Line-publishing nebular backends (Cue, CloudyGrid, …) are supported: their
-        discrete ``line_waves``/``line_lums`` are grid-independent and survive the
-        LUT path. Sets :attr:`_approx_config_spec` to the config (or ``None`` on the
-        resolution-matrix fallback). Shared by the single-object and composite paths (#610).
+        The table holds the templates on the ln-lambda lattice of the exact projection
+        and ends in the same kernel and readout, so it serves point-sampled and
+        flux-conserving pixels at any scalar or per-pixel resolution. Where it cannot
+        serve the channel (:meth:`_spectrum_table_decline_reason`) the model takes the
+        exact path and says why. Line-publishing nebular backends (Cue, CloudyGrid, …)
+        are supported: their discrete ``line_waves``/``line_lums`` are grid-independent
+        and survive the table path. Sets :attr:`_approx_config_spec` to the config (or
+        ``None`` on a decline). Shared by the single-object and composite paths (#610).
+
+        The table applies every dust screen after the velocity kernel. The owner's
+        ruling of 2026-11-17 is that diffuse dust acts after the kernel and birth-cloud
+        dust before it, so the table follows the ruled order for a diffuse screen and
+        the exact path, which attenuates before the kernel, is due to be reordered. The
+        two differ only at a step in the dust law, and a model with one is warned here.
         """
         spectro = getattr(observation, "spectroscopy", None)
         if spectro is not None and not spectro.nebular_lines:
             raise ValueError(
                 "approx=SpectrumPrecomp() cannot drop the nebular lines from the spectrum: "
-                "the per-pixel lookup table carries the nebular family whole. Use the exact "
+                "the lookup table carries the nebular family whole. Use the exact "
                 "path (approx=None) with Spectroscopy(nebular_lines=False)."
             )
-        if spectro is not None and getattr(spectro, "resolution_matrix", None) is not None:
-            # A banded operator is not a per-pixel scalar: the LUT cannot apply it, so the
-            # model takes the exact path and says so (#2958).
+        reason = None if spectro is None else self._spectrum_table_decline_reason(observation)
+        if reason is not None:
             import warnings
 
             warnings.warn(
-                "approx=SpectrumPrecomp() requested but the spectroscopy carries a banded "
-                "resolution matrix, which the per-pixel LUT cannot apply. The model falls "
-                "back to the exact path (no speed-up). Use approx=None to silence this.",
+                f"approx=SpectrumPrecomp() requested, but the spectrum table cannot serve "
+                f"{reason}. The model falls back to the exact path (no speed-up). Use "
+                f"approx=None to silence this.",
                 stacklevel=3,
             )
             self._approx = self._approx.replace(spectrum_precomp=False)
             self._approx_config_spec = None
-        else:
-            self._approx = self._approx.replace(spectrum_precomp=True)
-            self._approx_config_spec = cfg
-            if self._fixed_sigma_v_kms() is None:
-                import warnings
+            return
+        self._approx = self._approx.replace(spectrum_precomp=True)
+        self._approx_config_spec = cfg
+        if self._fixed_sigma_v_kms() is None:
+            import warnings
 
-                warnings.warn(
-                    "approx=SpectrumPrecomp() with a free sigma_v_kms broadens the stellar "
-                    "spectrum on the full model grid every draw, which costs roughly 15 times "
-                    "the exact path per gradient step; fixing sigma_v_kms keeps the lookup "
-                    "table cheap, and approx=None is faster for a free one.",
-                    stacklevel=3,
-                )
-            if self._spectrum_lut_needs_pixel_integral(observation):
-                raise ValueError(
-                    f"approx=SpectrumPrecomp() samples the model at the pixel "
-                    f"centers, but resample="
-                    f"{observation.spectroscopy.resample!r} resolves to the "
-                    f"flux-conserving pixel integral for this model grid and "
-                    f"pixel grid (pixels wider than the model grid), which the LUT "
-                    f"cannot carry (#2530). Use approx=None for the exact "
-                    f"spectrum, or Spectroscopy(resample='point') to accept point "
-                    f"sampling."
-                )
+            warnings.warn(
+                "approx=SpectrumPrecomp() with a free sigma_v_kms convolves the stellar "
+                "spectrum on the lattice every draw, and once per age row with "
+                "two-component dust, where approx=None is faster; fixing sigma_v_kms "
+                "keeps the lookup table cheap.",
+                stacklevel=3,
+            )
+        step = self._dust_law_step_in_spectrum(observation)
+        if step > 0.0:
+            import warnings
+
+            warnings.warn(
+                f"approx=SpectrumPrecomp(): the dust law has a step of {step:.2g} in k/k_V "
+                f"inside the spectrum's rest range. The table applies dust after the "
+                f"velocity kernel (the order ruled for diffuse dust) and the exact path "
+                f"before it, so the two differ near the step: measured up to 3.8e-3 of "
+                f"peak for point-sampled pixels and 9.5e-4 for flux-conserving ones at "
+                f"the largest optical depths, and below 1e-4 elsewhere.",
+                stacklevel=3,
+            )
 
     def _joint_spectrum_lut_promotion_blocked(self, observation) -> bool:
         """Whether a joint observation keeps its spectrum channel on the exact path.
 
         A joint observation promotes a photometry ``WavePrecomp`` onto the spectrum
         LUT as well (the components publish both LUT families in one pass). The
-        promotion is skipped when the pixel integral is required
-        (:meth:`_spectrum_lut_needs_pixel_integral`, #2530), when ``sigma_v_kms``
-        is free, or when a banded resolution matrix is attached. The free-sigma_v
-        case is slower on the LUT (the stellar sum is broadened on the full model
-        grid per draw), so the spectrum channel stays exact and says so once. The
+        promotion is skipped when the table cannot serve the channel
+        (:meth:`_spectrum_table_decline_reason`) or when ``sigma_v_kms`` is free. The
+        free-sigma_v case is slower on the LUT (the stellar sum is convolved on the
+        lattice per draw, once per age row), so the spectrum channel stays exact and
+        says so once. The
         decision is :meth:`_spectrum_lut_serves_exactly`, shared with ``approx="auto"``.
         An explicit ``SpectrumPrecomp()`` is never asked here; it is resolved earlier,
         stays on the table and warns about the cost there.
@@ -3483,16 +3626,17 @@ class SEDModel:
         """
         if self._spectrum_lut_serves_exactly(observation):
             return False
-        if self._fixed_sigma_v_kms() is None and not self._spectrum_lut_needs_pixel_integral(
-            observation
+        if (
+            self._fixed_sigma_v_kms() is None
+            and self._spectrum_table_decline_reason(observation) is None
         ):
             import warnings
 
             warnings.warn(
                 "The spectrum channel of this joint observation stays on the exact path "
-                "because sigma_v_kms is free: the lookup table would broaden the stellar "
-                "spectrum on the full model grid every draw, which is slower than the "
-                "exact path. Photometry keeps WavePrecomp. Pass "
+                "because sigma_v_kms is free: the lookup table would convolve the stellar "
+                "spectrum on its lattice every draw, once per age row, which is slower "
+                "than the exact path. Photometry keeps WavePrecomp. Pass "
                 "approx=(WavePrecomp(), SpectrumPrecomp()) to put the spectrum on the "
                 "lookup table anyway.",
                 stacklevel=4,
@@ -11646,6 +11790,8 @@ class SEDModel:
         # fully JAX-traceable, no eager fallback needed. ``phot_lut`` lets a
         # JOINT model also project photometry in the same kernel (Part A).
         spec_lut = bool(self._approx.get("spectrum_precomp")) and observation.can_do_spectroscopy
+        spec_lut_conserving = spec_lut and self._spectrum_lut_needs_pixel_integral(observation)
+        spec_lut_box_in_kernel = spec_lut and self._spectrum_table_box_in_kernel()
         phot_lut = bool(self._approx.get("wave_precomp"))
         # Photometry uses the LUT whenever it is on, also beside an exact spectrum. A
         # nebular grid does not change that: a spectrum keeps ``sed_nebular`` materialized
@@ -11686,13 +11832,13 @@ class SEDModel:
             # ``*_spec_lnu_precomp`` / ``*_phot_lnu_precomp`` family; collect
             # dicts and build the per-model Observables once so phot_fnu and
             # spec_fnu coexist. The stellar family carries the velocity dispersion
-            # (model grid, in the stellar component); the instrument stage runs on the
-            # pixels in ``predict_spectrum_via_precomp`` (#2958).
+            # (on the lattice, in the stellar component); the IGM, the instrument
+            # kernel and the pixel readout run in ``predict_spectrum_via_precomp``.
             if spec_lut:
                 from tengri.observation.spectrum import resolve_sigma_lib_kms
 
-                # The instrument stage runs on the pixel grid with the exact path's
-                # library resolution (#2958), so it resolves the same inputs.
+                # The instrument kernel takes the exact path's library resolution
+                # (#2958), so it resolves the same inputs.
                 spectroscopy = observation.spectroscopy
                 lut_sigma_lib_kms = resolve_sigma_lib_kms(
                     spectroscopy.wave_obs,
@@ -11708,6 +11854,9 @@ class SEDModel:
                         observables_type=None,
                         sigma_lib_kms=lut_sigma_lib_kms,
                         lsf_scale=self._get_lsf_scale(full),
+                        conserving=spec_lut_conserving,
+                        n_bins=lsf_n_bins,
+                        box_in_kernel=spec_lut_box_in_kernel,
                     )
                 )
                 if observation.can_do_photometry and phot_lut:
@@ -13408,6 +13557,12 @@ class SEDModel:
                     }
                 else:
                     spec_redshift_spec = {"mode": "fixed", "value": float(z_bounds[0])}
+                    z_min = z_max = float(z_bounds[0])
+                from tengri.observation.spectrum import lattice_span
+
+                spec_lattice = lattice_span(
+                    np.asarray(spec_wave_obs, dtype=np.float64), float(z_min), float(z_max)
+                )
 
         # MAIN PRECOMPUTATION LOOP: every component, one pass
         for idx, comp in enumerate(chain):
@@ -13513,29 +13668,23 @@ class SEDModel:
                         ssp_data=comp.ssp_data,
                         wave_grid=None,
                         approx=self._approx,
-                        spec_wave_obs=spec_wave_obs,
-                        redshift_spec=spec_redshift_spec,
                         spec_sigma_v_fixed=self._fixed_sigma_v_kms(),
-                        spec_lsf_n_bins=self._lsf_n_bins,
+                        spec_lattice=spec_lattice,
+                        spec_box_in_kernel=self._spectrum_table_box_in_kernel(),
                     )
                     # Merge spectrum LUT into existing state
                     if state is not None:
                         state = replace(
                             state,
                             ssp_spec_lut=spec_state.ssp_spec_lut,
-                            ssp_spec_ztable=spec_state.ssp_spec_ztable,
                             spec_sigma_v_fixed=spec_state.spec_sigma_v_fixed,
-                            spec_lsf_n_bins=spec_state.spec_lsf_n_bins,
-                            spec_rest_window=spec_state.spec_rest_window,
-                            spec_ssp_broadened=spec_state.spec_ssp_broadened,
-                            spec_ssp_broadened_slope=spec_state.spec_ssp_broadened_slope,
                         )
                     else:
                         state = spec_state
                 elif isinstance(comp, IGMSEDComponent) and spec_wave_obs is not None:
                     spec_igm = comp.precompute_spec_factors(
                         wave_rest=self.wavelengths,
-                        spec_wave_obs=spec_wave_obs,
+                        spec_lattice=spec_lattice,
                         redshift_spec=spec_redshift_spec,
                     )
                     if state is not None:

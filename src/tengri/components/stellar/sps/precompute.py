@@ -31,6 +31,7 @@ Usage:
 """
 
 import dataclasses
+import math
 from typing import NamedTuple
 
 import jax
@@ -214,52 +215,44 @@ class PhotometricPrecomputation(NamedTuple):
     slopes: "PhotometricPrecomputation | None" = None
 
 
-class SpectroscopicPrecomputation(NamedTuple):
-    """Pre-rebinned SSP templates for fast spectroscopy.
+class SpectrumLatticeTable(NamedTuple):
+    r"""SSP templates on the ln-lambda lattice of the spectrum projection.
 
-    Attributes
-    ----------
-    ssp_on_pixels : array, shape (n_met, n_age, n_pix) or (n_met, n_alpha, n_age, n_pix)
-        The fourth axis is present on a grid with an [alpha/Fe] axis.
-        SSP flux interpolated to observed spectral pixel wavelengths
-        in rest frame [erg/s/Hz/Msun], broadened by ``sigma_v_kms`` on the native
-        rest grid first when that is set.
-    wave_rest_pixels : array, shape (n_pix,)
-        Rest-frame wavelengths of spectral pixels [Angstrom].
-    wave_obs_pixels : array, shape (n_pix,)
-        Observed-frame wavelengths [Angstrom].
-    log10_flux_scale : float
-        ``log10`` of the geometric scaling factor (1+z) / (4π dL²)
-        [dex re cm⁻²]. Stored as a log for the reason given in
-        :class:`PhotometricPrecomputation` (#1859).
-    redshift : float
-        Source redshift [dimensionless].
+    Each template is stored as :math:`\langle\lambda L_\nu\rangle_{\rm cell} / \lambda_c`,
+    the mean of :math:`\lambda L_\nu` over a lattice cell over the cell-center wavelength
+    :math:`\lambda_c`: the quantity the exact projection loads onto the same lattice
+    (:func:`tengri.observation.spectrum.compute_spectrum_lattice_lsf`). The lattice is in the
+    rest frame, so one table serves every redshift its span covers.
+
+    Fields
+    ------
+    ssp_on_lattice : ndarray, shape (n_met, n_age, n_cells) or (n_met, n_alpha, n_age, n_cells)
+        Templates on the lattice [erg/s/Hz/Msun], broadened by ``kernel_sigma_kms`` when it
+        is set.
+    ssp_on_lattice_slope : ndarray, same shape
+        The same load applied to the native PCHIP slopes across metallicity; the read is a
+        cubic Hermite of (values, slopes).
+    cell_centers : ndarray, shape (n_cells,)
+        Rest wavelengths of the cell centers [Angstrom].
+    origin : float
+        ``ln`` of the first lattice node [dimensionless].
+    n_cells : int
+        Number of lattice cells.
     sigma_v_kms : float or None
-        Velocity dispersion [km/s] baked into ``ssp_on_pixels``; ``None`` when the
-        table is un-broadened.
-
-    Notes
-    -----
-    **JIT-compatible**: no; this is a data container produced by
-    :func:`precompute_spectroscopy` at startup; data itself is immutable
-    and suitable for use in JAX operations.
-
+        The fixed velocity dispersion the table was built for [km/s]; ``None`` when it is
+        free and the read broadens per draw.
+    box_in_kernel : bool
+        The velocity kernel has the lattice box removed in quadrature, because the read
+        samples the cell means at the pixel centers with no later kernel.
     """
 
-    ssp_on_pixels: jnp.ndarray
-    wave_rest_pixels: jnp.ndarray
-    wave_obs_pixels: jnp.ndarray
-    log10_flux_scale: float
-    redshift: float
-    #: Velocity dispersion [km/s] the templates were broadened with on the native rest
-    #: grid before sampling, or ``None`` for an un-broadened table. Stored so the table
-    #: records the kernel it carries; a draw whose dispersion differs must not reuse it.
+    ssp_on_lattice: jnp.ndarray
+    ssp_on_lattice_slope: jnp.ndarray
+    cell_centers: jnp.ndarray
+    origin: float
+    n_cells: int
     sigma_v_kms: "float | None" = None
-    #: The same linear build applied to the native PCHIP slopes across metallicity
-    #: (#3541): ``(n_met, ..., n_pix)`` like ``ssp_on_pixels``. The table is read by the
-    #: cubic Hermite of (values, slopes), which is exact at undeclared scatter. ``None``
-    #: only on a table built without the native slopes, which the stellar read refuses.
-    ssp_on_pixels_slope: "jnp.ndarray | None" = None
+    box_in_kernel: bool = False
 
 
 def precompute_photometry(
@@ -493,215 +486,99 @@ def precompute_restband_photometry(
     )
 
 
-def broaden_template_cube(ssp_flux, wave_ssp, sigma_v_kms, n_bins=16):
-    r"""Broaden every SSP template with one velocity dispersion on its native grid.
+_TEMPLATE_LATTICE_BATCH = 32  # templates per lax.map step: bounds the FFT working set
 
-    Applies :func:`~tengri.observation.spectrum.broaden_velocity_only`, the operation
-    the exact spectrum path applies to the stellar piece, to each ``(metallicity, age)``
-    template on the model wavelength grid. The convolution is linear, so a weighted sum
-    of the broadened templates equals the broadened weighted sum.
 
-    Parameters
-    ----------
-    ssp_flux : array, shape (..., n_wave)
-        Template cube [erg/s/Hz/Msun]; every leading axis is mapped over.
-    wave_ssp : array, shape (n_wave,)
-        Native rest-frame wavelength grid [Angstrom].
-    sigma_v_kms : float
-        Velocity dispersion [km/s]. A concrete non-positive value returns the cube
-        unchanged.
-    n_bins : int, default 16
-        Piecewise-constant segment count, as in the exact path.
+def lattice_velocity_kernel_kms(sigma_v_kms, box_in_kernel: bool):
+    r"""Width [km/s] of the velocity kernel applied on the lattice.
 
-    Returns
-    -------
-    ndarray, shape (..., n_wave)
-        Broadened cube, float, same shape as ``ssp_flux``.
-
-    Notes
-    -----
-    **JIT-compatible**: yes; templates are mapped in batches with ``jax.lax.map`` so
-    peak memory stays bounded. **Gradient-safe**: yes, though it is a build-time
-    routine and is not differentiated in practice.
+    ``sigma_v_kms`` itself, or :math:`\sqrt{\sigma_v^2 - \sigma_{\rm box}^2}` (zero where
+    that is not positive) when the cell-mean box is to be removed from it.
     """
-    from tengri.observation.spectrum import broaden_velocity_only
+    if not box_in_kernel:
+        return sigma_v_kms
+    from tengri.observation.spectrum import _LATTICE_BOX_SIGMA_KMS
 
-    flux = jnp.asarray(ssp_flux)
-    if not isinstance(sigma_v_kms, jax.Array) and float(sigma_v_kms) <= 0.0:
-        return flux
-    wave = jnp.asarray(wave_ssp)
-    flat = flux.reshape(-1, flux.shape[-1])
-    out = jax.lax.map(
-        lambda row: broaden_velocity_only(row, wave, sigma_v_kms, n_bins),
-        flat,
-        batch_size=_TEMPLATE_BROADEN_BATCH,
-    )
-    return out.reshape(flux.shape)
+    excess = jnp.asarray(sigma_v_kms) ** 2 - _LATTICE_BOX_SIGMA_KMS**2
+    wider = excess > 0.0
+    return jnp.where(wider, jnp.sqrt(jnp.where(wider, excess, 1.0)), 0.0)
 
 
-_TEMPLATE_BROADEN_BATCH = 32  # templates per lax.map step: bounds the FFT working set
+def spectrum_lattice_table_nbytes(ssp_flux_shape, n_cells: int, itemsize: int = 8) -> int:
+    """Bytes a :class:`SpectrumLatticeTable` holds: values and slopes on ``n_cells`` cells."""
+    n_templates = math.prod(ssp_flux_shape[:-1])
+    return 2 * n_templates * int(n_cells) * int(itemsize)
 
 
-def precompute_spectroscopy(
-    ssp_data, wave_obs_pixels, redshift, dl_cm, *, sigma_v_kms=None, n_bins=16
-) -> SpectroscopicPrecomputation:
-    """Pre-rebin SSP templates to observed spectral pixel wavelengths.
-
-    Reduces the wavelength dimension from ~7000 (native SSP) to
-    ~1000-3000 (observed pixels), cutting memory and compute.
-
-    Parameters
-    ----------
-    ssp_data : SSPData
-        SSP templates with ssp_flux [Lsun/Hz/Msun] and ssp_wave [Angstrom].
-    wave_obs_pixels : array, shape (n_pix,)
-        Observed-frame wavelengths of spectral pixels [Angstrom].
-    redshift : float
-        Source redshift (dimensionless).
-    dl_cm : float
-        Luminosity distance [cm].
-    sigma_v_kms : float, optional
-        Fixed stellar velocity dispersion [km/s]. When given, every template is
-        broadened by it on the native rest grid BEFORE it is sampled at the pixels,
-        as the exact path does (see :func:`broaden_template_cube`); sampling first
-        would alias sharp stellar features. ``None`` leaves the table un-broadened.
-    n_bins : int, default 16
-        Piecewise segment count of the broadening.
-
-    Returns
-    -------
-    SpectroscopicPrecomputation
-        Pre-rebinned SSP data for :func:`fast_spectrum`. ``sigma_v_kms`` records the
-        dispersion baked in.
-
-    Notes
-    -----
-    **JIT-compatible**: no, data precomputation function with numpy I/O.
-    **Gradient-safe**: not applicable (CPU preprocessing).
-
-    """
-    wave_rest_pixels = wave_obs_pixels / (1.0 + redshift)
-
-    # Interpolate all SSP spectra to the pixel rest-frame wavelengths
-    # Vectorized: compute weights once, apply to all (met, age) simultaneously
-    import numpy as np
-
-    ssp_flux_np = np.asarray(ssp_data.ssp_flux)
-    wave_rest_np = np.asarray(wave_rest_pixels)
-    wave_ssp_np = np.asarray(ssp_data.ssp_wave)
-    if sigma_v_kms is not None and float(sigma_v_kms) > 0.0:
-        ssp_flux_np = np.asarray(
-            broaden_template_cube(ssp_flux_np, wave_ssp_np, float(sigma_v_kms), n_bins)
-        )
-    ssp_on_pixels_np = _vectorized_interp(wave_rest_np, wave_ssp_np, ssp_flux_np)
-    ssp_on_pixels = jnp.array(ssp_on_pixels_np)
-
-    # The (1+z)/(4π d_L²) geometric scale as a log10 offset, rather than calling
-    # the ``@jit``'d ``lnu_to_fnu`` and ``float()``-casting; the latter raises
-    # ConcretizationTypeError when this precompute runs inside a jit trace
-    # (e.g. when the user calls ``predict_*`` for the first time inside a
-    # ``jax.jit`` wrapper without warming the chain). See companion fix in
-    # ``utils/grid_interp.py``. Log, not linear: the factor is ~1e-57 and stores
-    # as exactly 0.0 in float32 (#1859).
-    log10_flux_scale = _log10_flux_scale(redshift, dl_cm)
-    # ``redshift`` may itself be a tracer when this path runs inside jit;
-    # keep the conversion defensive in that case too.
-    try:
-        log10_flux_scale_out = float(log10_flux_scale)
-        redshift_out = float(redshift)
-    except (TypeError, jax.errors.ConcretizationTypeError):
-        log10_flux_scale_out = log10_flux_scale
-        redshift_out = redshift
-
-    return SpectroscopicPrecomputation(
-        ssp_on_pixels=ssp_on_pixels,
-        wave_rest_pixels=wave_rest_pixels,
-        wave_obs_pixels=wave_obs_pixels,
-        log10_flux_scale=log10_flux_scale_out,
-        redshift=redshift_out,
-        sigma_v_kms=None if sigma_v_kms is None else float(sigma_v_kms),
-    )
-
-
-class SpectroscopicZTable(NamedTuple):
-    """Free-z spectroscopy marker carrying the observed pixel grid.
-
-    Unlike the photometric ztable, the SSP flux is **not** pre-tabulated
-    across redshift. A spectrum resolves absorption features that sweep
-    across a fixed observed pixel as ``z`` changes, so interpolating
-    ``ssp_on_pixels`` between z-grid nodes would be inaccurate near any
-    spectral feature (filter integration hides this in the photometric
-    case). Instead, the stellar component re-interpolates the SSP cube to
-    ``wave_obs / (1 + z)`` at runtime: exact and fully differentiable in z.
-
-    Attributes
-    ----------
-    wave_obs_pixels : array, shape (n_pix,)
-        Observed-frame pixel wavelengths [Angstrom] (z-independent).
-    z_min, z_max : float
-        Redshift bounds the table was built for (advisory; runtime z is
-        not clamped to them).
-
-    Notes
-    -----
-    **JIT-compatible**: no, startup marker; leaves are immutable and safe
-    inside JAX operations.
-
-    """
-
-    wave_obs_pixels: jnp.ndarray
-    z_min: float
-    z_max: float
-
-
-def precompute_spectroscopy_ztable(
+def precompute_spectrum_lattice(
     ssp_data,
-    wave_obs_pixels,
-    z_grid=None,
-    z_min=0.001,
-    z_max=3.0,
-    n_z=100,
-) -> SpectroscopicZTable:
-    """Build the free-z spectroscopy marker (observed pixel grid only).
+    lattice: tuple[float, int],
+    *,
+    slope_flux,
+    sigma_v_kms: "float | None" = None,
+    box_in_kernel: bool = False,
+) -> SpectrumLatticeTable:
+    r"""Load the SSP templates onto the ln-lambda lattice (#3500).
 
-    The free-z spectrum path interpolates the SSP cube to the rest-frame
-    pixel grid ``wave_obs / (1 + z)`` at runtime rather than pre-tabulating
-    across redshift (see :class:`SpectroscopicZTable` for why). This builder
-    therefore just records the observed pixel grid and the z bounds.
+    Each template's piecewise-linear interpolant is integrated exactly over every lattice
+    cell (:func:`tengri.observation.spectrum.lattice_cell_lnu`) and, for a fixed velocity
+    dispersion, convolved there with the Gaussian in :math:`\ln\lambda`. The lattice is
+    uniform in :math:`\ln\lambda`, so the kernel has one width in cells along the spectrum.
 
     Parameters
     ----------
     ssp_data : SSPData
-        SSP templates (unused here; kept for signature symmetry with the
-        photometric ztable builder).
-    wave_obs_pixels : array, shape (n_pix,)
-        Observed-frame pixel wavelengths [Angstrom].
-    z_grid : array, optional
-        Custom redshift grid; only its min/max are recorded.
-    z_min, z_max : float
-        Redshift bounds [dimensionless].
-    n_z : int
-        Unused (kept for signature symmetry).
+        SSP library; ``ssp_flux`` has the wavelength axis last.
+    lattice : tuple of (float, int)
+        Static lattice ``(origin, n_cells)`` from
+        :func:`tengri.observation.spectrum.lattice_span`.
+    slope_flux : ndarray, same shape as ``ssp_data.ssp_flux``
+        Native PCHIP slopes across metallicity.
+    sigma_v_kms : float or None
+        Fixed velocity dispersion [km/s] to apply at build, or ``None`` for a free one.
+    box_in_kernel : bool
+        Remove the cell-mean box from the velocity kernel (:class:`SpectrumLatticeTable`).
 
     Returns
     -------
-    SpectroscopicZTable
-        Free-z marker carrying the observed pixel grid.
-
-    Notes
-    -----
-    **JIT-compatible**: no, startup marker.
-    **Gradient-safe**: not applicable (CPU preprocessing).
-
+    SpectrumLatticeTable
     """
-    del ssp_data, n_z
-    if z_grid is not None:
-        z_grid = jnp.asarray(z_grid)
-        z_min, z_max = float(z_grid[0]), float(z_grid[-1])
-    return SpectroscopicZTable(
-        wave_obs_pixels=jnp.asarray(wave_obs_pixels),
-        z_min=float(z_min),
-        z_max=float(z_max),
+    from tengri.observation.spectrum import (
+        _lattice_pad_cells,
+        broaden_velocity_only,
+        lattice_cell_lnu,
+        lattice_centers,
+    )
+
+    origin, n_cells = float(lattice[0]), int(lattice[1])
+    centers = lattice_centers(origin, n_cells)
+    wave = jnp.asarray(ssp_data.ssp_wave)
+    pad = _lattice_pad_cells()
+    fixed = sigma_v_kms is not None and float(sigma_v_kms) > 0.0
+    kernel = lattice_velocity_kernel_kms(float(sigma_v_kms), box_in_kernel) if fixed else None
+
+    def _load(row):
+        on_cells = lattice_cell_lnu(centers, wave, row)
+        if kernel is None:
+            return on_cells
+        return (
+            broaden_velocity_only(on_cells * centers, centers, kernel, 1, pad_pixels=pad) / centers
+        )
+
+    def _cube(flux):
+        flux = jnp.asarray(flux)
+        flat = flux.reshape(-1, flux.shape[-1])
+        out = jax.lax.map(_load, flat, batch_size=_TEMPLATE_LATTICE_BATCH)
+        return out.reshape((*flux.shape[:-1], n_cells))
+
+    return SpectrumLatticeTable(
+        ssp_on_lattice=_cube(ssp_data.ssp_flux),
+        ssp_on_lattice_slope=_cube(slope_flux),
+        cell_centers=centers,
+        origin=origin,
+        n_cells=n_cells,
+        sigma_v_kms=None if sigma_v_kms is None else float(sigma_v_kms),
+        box_in_kernel=bool(box_in_kernel),
     )
 
 

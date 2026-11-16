@@ -29,14 +29,14 @@ The forward-projection path is chosen **at model build time** via the
 ```python
 SEDModel.build(..., approx=None)              # exact wave-grid integration (default, reference)
 SEDModel.build(..., approx=WavePrecomp())     # photometry SSP×filter LUT  (the "hybrid" path)
-SEDModel.build(..., approx=SpectrumPrecomp()) # spectrum per-pixel LUT     (Phase 5)
+SEDModel.build(..., approx=SpectrumPrecomp()) # spectrum lattice table     (Phase 5)
 ```
 
 | `approx=` | What it does | Error vs exact |
 |-----------|--------------|----------------|
 | `None` | Full-resolution exact pipeline. | reference |
 | `WavePrecomp()` | Preintegrated SSP×filter LUT for stellar photometry (the speedup). Additive emitters (dust IR, radio, X-ray, AGN) are integrated through the true filter transmission — exact. Only the stellar **dust attenuation** uses the effective-wavelength (+Taylor) approximation. | stellar continuum machine-exact; additive emitters exact; stellar dust attenuation ~0.3–0.5% on real filters (Zacharegkas+2025) |
-| `SpectrumPrecomp()` | Per-pixel effective-wavelength continuum LUT for spectroscopy. High-R auto-falls-back to exact. | same caveats as above |
+| `SpectrumPrecomp()` | SSP templates on the ln-lambda lattice of the exact spectrum projection, read at the pixel centers or as pixel means. Declines a banded resolution matrix and point-sampled pixels with a kernel under 20 km/s. | same caveats as above |
 
 On a **joint** photometry+spectroscopy observation, either opt-in builds *both*
 LUT families and the forward pass projects both channels in one fused kernel

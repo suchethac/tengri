@@ -9,21 +9,30 @@
 Landed and verified (exact-vs-LUT parity < 0.21% on low-R continuum;
 gradients flow; no regressions):
 
-- **Continuum spectrum precomp (W1).** `approx=SpectrumPrecomp()` now
-  actually engages. The stellar component carries a pre-rebinned
-  SSP×pixel LUT (fixed-z `SpectroscopicPrecomputation`) or re-interpolates
-  the SSP cube to `wave_obs/(1+z)` at runtime (free-z — exact, avoids the
-  feature-sweep error of a z-grid table). It publishes
-  `stellar_spec_lnu_precomp` + `spec_eff_waves`; dust publishes per-pixel
-  transmission (single + two-component — **no Taylor moment**, a pixel is
-  one wavelength so `A(λ_pix)` is exact); `predict_spectrum_via_precomp`
-  composes emitters × transmission × cosmology.
-- **Kernel stages.** The LUT applies the exact path's stages in order: the
-  stellar velocity dispersion on the model grid (a pre-broadened template
-  table for fixed z and fixed `sigma_v_kms`, a full-grid stellar sum otherwise),
-  the IGM, then the instrument kernel on the pixels. A banded
-  `resolution_matrix` warns and falls back to the exact path. There is no
-  resolution cap: the LUT matches the exact path to 8e-4 at R = 5000.
+- **Continuum spectrum precomp (W1).** `approx=SpectrumPrecomp()` holds the
+  SSP templates on the ln-lambda lattice of the exact spectrum projection
+  (`SpectrumLatticeTable`, 15 km/s cells): each template is stored as the
+  cell means of lambda L_nu the exact path loads onto that lattice. The
+  lattice is in the rest frame, so one table serves a fixed and a free
+  redshift. The stellar component publishes `stellar_spec_lnu_precomp` and
+  `spec_eff_waves` (the cell centers); nebular, AGN and dust emission publish
+  cell means of their model-grid SED (`lattice_cell_lnu`); dust publishes its
+  transmission at the cell centers (no Taylor moment);
+  `predict_spectrum_via_precomp` composes emitters, transmission and
+  cosmology.
+- **Kernel stages.** The table runs the exact path's stages in order on the
+  lattice: the stellar velocity dispersion (applied to the templates at build
+  for a fixed `sigma_v_kms`, per draw for a free one), the IGM as its cell
+  mean, then the instrument kernel and the pixel readout through
+  `lattice_pixel_read`, the function the exact path ends in. The readout is
+  the value at the pixel centers or the mean between the pixel edges, so the
+  table serves point-sampled and flux-conserving pixels. It declines, with a
+  warning and the exact path, a banded `resolution_matrix` and point-sampled
+  pixels whose kernel can be narrower than 20 km/s
+  (`SEDModel._spectrum_table_decline_reason`). Dust is applied after the
+  velocity kernel where the exact path applies it before; the two differ
+  only at a step in the dust law (the 0.63 micron join of the Calzetti
+  branches).
 - **Emission lines on the precomp path (W2, option A below).** The
   line-publishing-backend refusal is **lifted**: `_apply_spec_precomp` now
   preserves the component's published dict, so a nebular backend's

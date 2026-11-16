@@ -683,7 +683,7 @@ def project_spectrum_kernel_split(
         _serves_on_lattice,
         broaden_velocity_only,
         broaden_velocity_only_window,
-        compute_spectrum_point_lsf,
+        compute_spectrum_lattice_lsf,
         point_lattice_span,
         project_spectrum,
         rest_grid_observed_window,
@@ -836,15 +836,23 @@ def project_spectrum_kernel_split(
         sed_stellar_rest, sed_instrument_only_rest = (
             _split_stellar_and_instrument_only_sed_pre_igm(state, sed_rest)
         )
-        if not conserving and resolution is not None and resolution_matrix is None:
-            # Point mode with an instrument: the dispersion, the IGM and the instrument
-            # kernel act on the ln-lambda lattice, in that order, before the pixel
-            # centers are read (#3451, #3500).
-            span = point_lattice_span(wave_obs, redshift, z_window, lattice_window)
+        span = (
+            point_lattice_span(wave_obs, redshift, z_window, lattice_window)
+            if resolution is not None and resolution_matrix is None
+            else None
+        )
+        if (
+            resolution is not None
+            and resolution_matrix is None
+            and (span is not None or not conserving)
+        ):
+            # A Gaussian instrument: the dispersion, the IGM and the instrument kernel act
+            # on the ln-lambda lattice, in that order, before the pixels are read (#3451,
+            # #3500). Without a lattice only the point readout has a closed form.
             if lines_rest is not None:
                 sed_instrument_only_rest = sed_instrument_only_rest - lines_rest
             resolution_scaled = resolution / lsf_scale
-            flux = compute_spectrum_point_lsf(
+            flux = compute_spectrum_lattice_lsf(
                 sed_stellar_rest,
                 wave_rest,
                 wave_obs,
@@ -857,7 +865,8 @@ def project_spectrum_kernel_split(
                 igm_rest=igm_trans,
                 n_bins=n_bins,
                 has_lyc_edge=has_lyc_edge,
-            ) + compute_spectrum_point_lsf(
+                conserving=conserving,
+            ) + compute_spectrum_lattice_lsf(
                 sed_instrument_only_rest,
                 wave_rest,
                 wave_obs,
@@ -870,6 +879,7 @@ def project_spectrum_kernel_split(
                 igm_rest=igm_trans,
                 n_bins=n_bins,
                 has_lyc_edge=has_lyc_edge,
+                conserving=conserving,
             )
         else:
             # The rest-grid pass only has to be exact where the observed grid reads it (#2832):
@@ -2628,79 +2638,6 @@ class Observation:
             return observables_type(phot_fnu, phot_rest_fnu)
         return out
 
-    def _lut_lsf_fnu(
-        self,
-        total_lnu,
-        nebular_lnu,
-        log10_cos,
-        igm_factor,
-        *,
-        sigma_lib_kms,
-        lsf_scale,
-    ):
-        """Observed F_nu on the pixel grid after IGM and the exact path's instrument stage.
-
-        Stage 3 of the exact path. The velocity dispersion (stage 1) is already in the
-        stellar family, which the stellar component broadens on the model grid before
-        sampling. The two buckets follow the exact path's assignment: the
-        instrument-only bucket is the dust-attenuated nebular emission and the stellar
-        bucket is the remainder of the sum.
-
-        Parameters
-        ----------
-        total_lnu : ndarray, shape (n_pix,)
-            Sum of every dust-attenuated per-pixel family [erg/s/Hz].
-        nebular_lnu : ndarray, shape (n_pix,)
-            Dust-attenuated nebular family, the instrument-only bucket [erg/s/Hz].
-        log10_cos : float or traced scalar
-            log10 of the cosmology factor ``(1 + z) / (4 pi d_L^2)``.
-        igm_factor : ndarray, shape (n_pix,), or None
-            Observed-frame IGM transmission at the pixels; ``None`` when no IGM is set.
-        sigma_lib_kms : float or ndarray, shape (n_pix,)
-            SSP library resolution [km/s].
-        lsf_scale : float or traced scalar
-            Multiplicative scale on the instrument width.
-
-        Returns
-        -------
-        ndarray, shape (n_pix,)
-            Observed F_nu [erg/s/cm^2/Hz] before calibration.
-
-        Raises
-        ------
-        ValueError
-            If the observation carries a banded resolution matrix. The LUT cannot carry
-            a banded operator; ``SEDModel`` falls back to the exact path at build time.
-
-        Notes
-        -----
-        **JIT-compatible**: yes; the branch on ``resolution_matrix`` is structural.
-
-        The stage order :math:`\\sigma_v \to` IGM :math:`\to` instrument holds on the LUT
-        as on the exact path.
-        """
-        from tengri.observation.spectrum import instrument_stage_on_pixels
-
-        spectro = self.spectroscopy
-        if spectro.resolution_matrix is not None:
-            raise ValueError(
-                "the spectrum LUT cannot apply a banded resolution_matrix; "
-                "build with approx=None for this observation (#2958)."
-            )
-        stellar_fnu = apply_log10_scale(total_lnu - nebular_lnu, log10_cos)
-        nebular_fnu = apply_log10_scale(nebular_lnu, log10_cos)
-        if igm_factor is not None:
-            stellar_fnu = stellar_fnu * igm_factor
-            nebular_fnu = nebular_fnu * igm_factor
-        return instrument_stage_on_pixels(
-            stellar_fnu,
-            nebular_fnu,
-            wave_obs=spectro.wave_obs,
-            resolution=spectro.resolution,
-            sigma_lib_kms=sigma_lib_kms,
-            lsf_scale=lsf_scale,
-        )
-
     def predict_spectrum_via_precomp(
         self,
         state,
@@ -2709,17 +2646,22 @@ class Observation:
         observables_type=None,
         sigma_lib_kms=0.0,
         lsf_scale=1.0,
+        conserving=False,
+        n_bins=16,
+        box_in_kernel=False,
     ):
-        """Project spectrum observables via the spectrum LUT.
+        r"""Project spectrum observables via the spectrum table.
 
-        Opt-in fast path for ``approx=SpectrumPrecomp()``. Sums all ``*_spec_lnu_precomp``
-        keys present in ``state.derived`` and applies the cosmology factor
-        ``(1+z)/(4π·dl²)`` to convert to observed F_ν. It runs the exact path's three
-        stages in the same order: the stellar velocity dispersion is already in the
-        stellar family (broadened on the model grid by the stellar component), the IGM
-        factor multiplies next, and the instrument stage runs on the pixel grid via
-        :func:`~tengri.observation.spectrum.instrument_stage_on_pixels`. With
-        ``resolution=None`` there is no instrument stage.
+        Opt-in fast path for ``approx=SpectrumPrecomp()``. The components publish their
+        ``*_spec_lnu_precomp`` families on the cells of the ln-lambda lattice the exact
+        projection uses (``spec_eff_waves`` holds the cell centers). This sums them,
+        applies the dust transmissions cell by cell, and then runs the exact path's last
+        stages on the lattice in the same order: the stellar velocity dispersion is
+        already in the stellar family, the IGM transmission multiplies next as its cell
+        mean, and the instrument kernel and the pixel readout are
+        :func:`~tengri.observation.spectrum.lattice_pixel_read`, the function the exact
+        path ends in. The stellar group takes the instrument kernel with the library
+        width removed, the nebular family the instrument alone.
 
         Parameters
         ----------
@@ -2733,23 +2675,42 @@ class Observation:
             :meth:`SEDModel.Observables`). When provided, returns an
             instance; when ``None``, returns a dict.
         sigma_lib_kms : float or ndarray, shape (n_pix,), default 0.0
-            SSP library resolution [km/s] subtracted from the stellar bucket.
+            SSP library resolution [km/s] subtracted from the stellar group.
         lsf_scale : float or traced scalar, default 1.0
             Multiplicative scale on the instrument width (#2526).
+        conserving : bool, default False
+            Pixel means between the pixel edges instead of the value at the pixel
+            centers. Static.
+        n_bins : int, default 16
+            Segments of the instrument kernel when the resolution varies along the
+            spectrum.
+        box_in_kernel : bool, default False
+            The stellar family's velocity kernel already has the lattice box removed
+            (:class:`~tengri.components.stellar.sps.precompute.SpectrumLatticeTable`),
+            so the instrument kernel on the stellar group keeps its full width. Static.
 
         Returns
         -------
         Observables or dict
-            ``spec_fnu`` populated from the spectrum LUT path.
+            ``spec_fnu`` [erg/s/cm^2/Hz] and ``spec_rest_fnu`` (the same sum with no IGM
+            and no instrument, at z = 0 and 10 pc), both of shape (n_pix,).
 
         Raises
         ------
         ValueError
-            If no ``*_spec_lnu_precomp`` keys are present.
+            If no ``*_spec_lnu_precomp`` keys are present, or the spectroscopy carries a
+            banded resolution matrix.
 
         Notes
         -----
-        **JIT-compatible**: yes, pure JAX arithmetic on the LUT entries.
+        **JIT-compatible**: yes. The lattice origin is read from ``spec_eff_waves``, so a
+        threaded table brings its own lattice.
+
+        Approximations against the exact path, which attenuates on the model grid before
+        the lattice load: the dust transmission is read at the cell centers (cells are
+        15 km/s wide) and applied after the velocity kernel instead of before it. The
+        lattice does not resolve a kernel narrower than about 25 km/s; the exact path
+        reads such pixels in closed form and this one does not.
         """
         from tengri.utils.cosmology import luminosity_distance
 
@@ -2811,62 +2772,77 @@ class Observation:
             nebular_dust = nebular_phi * t_single
         # else: no dust LUT published, leave total_spec_lnu unattenuated.
 
-        # Apply cosmology: observed F_ν = L_ν / (4π·d_L²) × (1 + z)
         z = jnp.asarray(
             require_redshift(params, "observation.observation.predict_spectrum_via_precomp")
         )
         dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
-        log10_cos = log10_flux_scale(z, dl_cm)
         spectro = self.spectroscopy
-
-        # spec_rest_fnu: same LUT sum projected at z=0, d_L=10pc.
-        from tengri.utils.physics_constants import TEN_PC_CM
-
-        # Log10 offset for the same reason as phot_rest_fnu (#3361).
-        spec_rest_fnu = apply_log10_scale(total_spec_lnu, log10_flux_scale(0.0, TEN_PC_CM))
-
-        # IGM / DLA attenuation. Unlike the photometry LUT, the spectrum LUT is
-        # per-pixel, so the observed-frame transmission is applied *exactly*:
-        # sample the transmission the IGM component published on the rest grid
-        # at each pixel's rest effective wavelength. Only the observed-frame flux
-        # is attenuated; spec_rest_fnu (z=0) carries no IGM (#932).
-        # Prefer the build-time per-pixel table. A pixel's rest effective wavelength
-        # is wave_obs/(1+z) and the curve is T(wave_rest*(1+z), z), so the sample
-        # collapses to T at the fixed observed instrument grid, a function of
-        # (z, pixel) alone. Sampling the full-grid curve here instead forced a
-        # 5994-point Inoue+2014 evaluation on every call and left the LUT buying
-        # NOTHING (2120 us exact vs 2098 us LUT). Bit-identical at the z-nodes.
-        igm_factor = state.derived.get("igm_spec_factor")
-        igm_trans = state.derived.get("igm_transmission")
-        eff_waves = state.derived.get("spec_eff_waves")
-        if igm_factor is None and igm_trans is not None and eff_waves is not None:
-            # Fallback: patchy / DLA read free parameters, so the transmission is
-            # not a function of redshift alone and cannot be tabulated.
-            igm_factor = jnp.interp(jnp.asarray(eff_waves), state.wave, igm_trans)
-        # Without a resolution there is no instrument kernel: the un-convolved sample,
-        # bit-for-bit as before #2958. With one, the exact path's instrument stage runs on
-        # the pixel grid (see ``_lut_lsf_fnu``); sigma_v is already in the stellar family.
-        if spectro.resolution is None:
-            spec_fnu = apply_log10_scale(total_spec_lnu, log10_cos)
-            if igm_factor is not None:
-                spec_fnu = spec_fnu * igm_factor
-        else:
-            spec_fnu = self._lut_lsf_fnu(
-                total_spec_lnu,
-                nebular_dust,
-                log10_cos,
-                igm_factor,
-                sigma_lib_kms=sigma_lib_kms,
-                lsf_scale=lsf_scale,
+        if spectro.resolution_matrix is not None:
+            raise ValueError(
+                "the spectrum table cannot apply a banded resolution_matrix; "
+                "build with approx=None for this observation (#2958)."
             )
 
+        from tengri.observation.spectrum import (
+            _LATTICE_DLNLAMBDA,
+            _peak_factors,
+            lattice_cell_transmission,
+            lattice_pixel_read,
+        )
+        from tengri.units import lnu_to_fnu
+        from tengri.utils.physics_constants import TEN_PC_CM
+
+        centers = jnp.asarray(state.derived["spec_eff_waves"])
+        n_cells = centers.shape[0]
+        origin = jnp.log(centers[0]) - 0.5 * _LATTICE_DLNLAMBDA
+        scale_in, scale_out = _peak_factors(total_spec_lnu)
+
+        def _at_pixels(lnu_cells, **kernel):
+            """L_nu at the pixels of a family given on the lattice cells."""
+            return scale_out * lattice_pixel_read(
+                lnu_cells * centers * scale_in,
+                (origin, n_cells),
+                spectro.wave_obs,
+                z,
+                conserving=conserving,
+                n_bins=n_bins,
+                **kernel,
+            )
+
+        # spec_rest_fnu: the same sum at z = 0 and 10 pc, with no IGM and no instrument.
+        # Log10 offset for the same reason as phot_rest_fnu (#3361).
+        spec_rest_fnu = apply_log10_scale(
+            _at_pixels(total_spec_lnu), log10_flux_scale(0.0, TEN_PC_CM)
+        )
+
+        # IGM / DLA attenuation of the observed-frame flux, as the mean over each cell.
+        # The build-time table is a function of redshift alone; patchy reionization and
+        # DLAs read free parameters, so their full-grid curve is averaged here.
+        igm_factor = state.derived.get("igm_spec_factor")
+        igm_trans = state.derived.get("igm_transmission")
+        if igm_factor is None and igm_trans is not None:
+            igm_factor = lattice_cell_transmission(state.wave, igm_trans, origin, n_cells)
+        stellar_group = total_spec_lnu - nebular_dust
+        if igm_factor is not None:
+            total_spec_lnu = total_spec_lnu * igm_factor
+            stellar_group = stellar_group * igm_factor
+            nebular_dust = nebular_dust * igm_factor
+        if spectro.resolution is None:
+            pixel_lnu = _at_pixels(total_spec_lnu)
+        else:
+            resolution = spectro.resolution / lsf_scale
+            pixel_lnu = _at_pixels(
+                stellar_group,
+                resolution=resolution,
+                sigma_lib_kms=sigma_lib_kms,
+                remove_box=not box_in_kernel,
+            )
+            if state.derived.get("nebular_spec_lnu_precomp") is not None:
+                pixel_lnu = pixel_lnu + _at_pixels(nebular_dust, resolution=resolution)
+        spec_fnu = lnu_to_fnu(pixel_lnu, dl_cm, z)
+
         # Flux calibration, the same Chebyshev polynomial the exact path applies
-        # inside ``project_spectrum`` (#1046). The LUT path must apply it itself:
-        # it never calls ``project_spectrum``, so without this a model built with
-        # ``approx=SpectrumPrecomp()`` silently DROPPED its calibration while the
-        # exact model applied it, cal_c* gradients were exactly zero under the
-        # LUT. Same failure as the LUT dropping AGN + nebular (#737/#740): the
-        # speed knob quietly changing the physics.
+        # inside ``project_spectrum`` (#1046).
         #
         # Observed frame only. The calibration models the *instrument's* flux
         # error, which has no meaning for the rest-frame (z=0, 10 pc) spectrum,

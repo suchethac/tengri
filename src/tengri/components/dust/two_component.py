@@ -2413,8 +2413,8 @@ class DustSEDComponent(TemplateThreading):
             # exact screen mixes with (the LUT consumers' contract).
             derived_overrides["dust_young_indicator"] = y_age
 
-        # SpectrumPrecomp: per-pixel BC + diffuse transmission.
-        # T_bc(λ_pix), T_diff(λ_pix) are exact at the pixel: no Taylor slope.
+        # SpectrumPrecomp: BC + diffuse transmission at the centers of the spectrum
+        # lattice cells (15 km/s wide, so one wavelength each and no Taylor slope).
         # The young indicator y(a) is reused to weight the per-age BC layer in
         # ``predict_spectrum_via_precomp``.
         spec_eff = state.derived.get("spec_eff_waves")
@@ -2433,7 +2433,7 @@ class DustSEDComponent(TemplateThreading):
             t_diff_pix = jnp.exp(-tau_diff * law_diff_fn(spec_eff, **diff_kw))
             derived_overrides["dust_spec_bc_transmission_precomp"] = t_bc_pix
             derived_overrides["dust_spec_diff_transmission_precomp"] = t_diff_pix
-            # The nebular emission's screen at the pixels: the same one-place
+            # The nebular emission's screen on the same cells: the same one-place
             # dispatch as the continuum and the lines.
             derived_overrides["dust_spec_neb_transmission_precomp"] = (
                 self.nebular_screen_transmission(params, spec_eff, neb_weights)

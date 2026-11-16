@@ -26,7 +26,12 @@ from typing import Any
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.lyc import ionizing_mask, log10_lyc_luminosity, lyc_shares
+from tengri.components.lyc import (
+    LYMAN_LIMIT_AA,
+    ionizing_mask,
+    log10_lyc_luminosity,
+    lyc_shares,
+)
 from tengri.components.nebular._constants import _LSUN_ERG
 from tengri.components.nebular._models import resolve_nebular_backend
 from tengri.components.nebular._params import (
@@ -1120,9 +1125,9 @@ class NebularSEDComponent(TemplateThreading):
                     ]
                 )
 
-        # Spectrum LUT family (SpectrumPrecomp): point-sample the *un-attenuated*
-        # rest-frame nebular SED at the pixel wavelengths (a pixel is a single
-        # wavelength, so this is exact). ``predict_spectrum_via_precomp`` puts
+        # Spectrum table family (SpectrumPrecomp): the *un-attenuated* rest-frame
+        # nebular SED on the cells of the spectrum lattice, loaded as the exact
+        # projection loads it. ``predict_spectrum_via_precomp`` puts
         # this in the dust-attenuable bucket and reddens it by the young-limit
         # screen (T_bc·T_diff), matching the exact path. Without this family the
         # Cue/CloudyGrid nebular emission was silently dropped from
@@ -1130,7 +1135,9 @@ class NebularSEDComponent(TemplateThreading):
         # vanished). BakedIn nebular is carried by ``stellar_spec_lnu_precomp``.
         spec_eff = state.derived.get("spec_eff_waves")
         if spec_eff is not None:
-            derived_overrides["nebular_spec_lnu_precomp"] = jnp.interp(
+            from tengri.observation.spectrum import lattice_cell_lnu
+
+            derived_overrides["nebular_spec_lnu_precomp"] = lattice_cell_lnu(
                 spec_eff, state.wave, nebular_sed
             )
 
@@ -1260,16 +1267,17 @@ class NebularSEDComponent(TemplateThreading):
                 ionizing_mask(sub_waves), neb_fesc, jnp.ones_like(sub_waves)
             )
 
-        # ── SpectrumPrecomp: identical defect, exact per-pixel fix (#2439,
-        # #2427, item 5). A spectrum pixel IS a single rest-frame wavelength
-        # (unlike a photometric band, which integrates over many), so there
-        # is no partition to make exact here -- the elementwise mask below
-        # already matches the dense path's ``sed_intrinsic`` mask exactly,
-        # pixel for pixel. ``spec_eff`` (rest-frame) is published by
-        # StellarSEDComponent before this component runs.
+        # ── SpectrumPrecomp: the same mask on the cells of the spectrum lattice
+        # (#2439, #2427, item 5). The masked SED is a step at the Lyman edge, so the
+        # cell the edge falls in is weighted by the part of it below the edge, as the
+        # exact projection's cell mean is. ``spec_eff`` holds the rest-frame cell
+        # centers, published by StellarSEDComponent before this component runs.
         stellar_spec = state.derived.get("stellar_spec_lnu_precomp")
         if stellar_spec is not None and spec_eff is not None:
-            spec_lyc_mask = jnp.where(ionizing_mask(spec_eff), neb_fesc, jnp.ones_like(spec_eff))
+            from tengri.observation.spectrum import lattice_cell_fraction_below
+
+            ionizing = lattice_cell_fraction_below(spec_eff, LYMAN_LIMIT_AA)
+            spec_lyc_mask = 1.0 - ionizing * (1.0 - neb_fesc)
             derived_overrides["stellar_spec_lnu_precomp"] = stellar_spec * spec_lyc_mask
 
         # ── Lyman-continuum dust absorption energy (#2539) ────────────────────

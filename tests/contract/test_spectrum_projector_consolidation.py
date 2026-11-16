@@ -25,7 +25,7 @@ from tengri.observation import Observation, Photometry, Spectroscopy
 from tengri.observation.photometry import FilterCurve
 from tengri.observation.spectrum import (
     compute_spectrum,
-    compute_spectrum_point_lsf,
+    compute_spectrum_lattice_lsf,
     lattice_span,
     project_spectrum,
 )
@@ -61,7 +61,7 @@ class TestProjectSpectrumDecomposition:
     """Test 1: project_spectrum is the point resampler, or the point readout with its kernel.
 
     With a resolution, point mode applies the kernel before sampling
-    (``compute_spectrum_point_lsf``, #3500), so the decomposition is one call.
+    (``compute_spectrum_lattice_lsf``, #3500), so the decomposition is one call.
     """
 
     def test_project_spectrum_no_resolution_equals_compute_spectrum(self, spectrum_inputs):
@@ -90,7 +90,7 @@ class TestProjectSpectrumDecomposition:
         resolution = 100.0
         sigma_lib_kms = 70.0
 
-        flux_manual = compute_spectrum_point_lsf(
+        flux_manual = compute_spectrum_lattice_lsf(
             spectrum_inputs["sed_rest"],
             spectrum_inputs["wave_rest"],
             spectrum_inputs["wave_obs"],
@@ -121,7 +121,7 @@ class TestProjectSpectrumDecomposition:
         resolution = 30.0 + 55.0 * (wave_um - 0.6)  # NIRSPEC PRISM-like
         resolution = jnp.clip(resolution, 30.0, 330.0)
 
-        flux_manual = compute_spectrum_point_lsf(
+        flux_manual = compute_spectrum_lattice_lsf(
             spectrum_inputs["sed_rest"],
             spectrum_inputs["wave_rest"],
             spectrum_inputs["wave_obs"],
@@ -152,7 +152,7 @@ class TestProjectSpectrumDecomposition:
         resolution = 100.0
         sigma_v_kms = 200.0
 
-        flux_manual = compute_spectrum_point_lsf(
+        flux_manual = compute_spectrum_lattice_lsf(
             spectrum_inputs["sed_rest"],
             spectrum_inputs["wave_rest"],
             spectrum_inputs["wave_obs"],

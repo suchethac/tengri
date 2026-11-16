@@ -442,55 +442,46 @@ class IGMSEDComponent(TemplateThreading):
     def precompute_spec_factors(
         self,
         wave_rest: jnp.ndarray,
-        spec_wave_obs: jnp.ndarray,
+        spec_lattice: tuple[float, int] | None,
         redshift_spec: Mapping[str, Any] | None = None,
     ) -> IGMSEDComponentState:
-        r"""Tabulate the per-pixel IGM transmission against redshift.
+        r"""Tabulate the IGM transmission on the spectrum lattice against redshift.
 
-        The SpectrumPrecomp twin of :meth:`precompute_band_factors`, and the same
-        bug: ``predict_spectrum_via_precomp`` sampled the full-grid Inoue+2014
-        curve at each pixel on every call, so the LUT bought nothing (2120 us
-        exact vs 2098 us LUT, 1.0x).
-
-        Pixel *i* is sampled at its rest effective wavelength
-        :math:`\lambda_{{\rm obs},i}/(1+z)` from a curve defined as
-        :math:`T(\lambda_{\rm rest}(1+z), z)`: the redshift cancels out of the
-        *wavelength*, leaving the transmission at the **fixed observed instrument
-        grid**. So the factor is a function of :math:`(z, i)` alone and moves to
-        build time.
-
-        Tabulates the *composed* operation (interp through the rest grid), not a
-        direct evaluation at the pixels, so the result is **bit-identical** to the
-        runtime; a direct evaluation would be marginally more accurate, but that
-        is still a behavior change, and this is meant to be a pure speedup.
+        The SpectrumPrecomp twin of :meth:`precompute_band_factors`. Each row is the mean
+        over every lattice cell of the rest-grid curve
+        :math:`T(\lambda_{\rm rest}(1+z), z)`, the factor the exact projection applies on
+        the same lattice (:func:`tengri.observation.spectrum.lattice_cell_transmission`).
+        The lattice is in the rest frame, where the Lyman edges do not move with
+        redshift, so the rows interpolate smoothly in :math:`z`.
 
         Parameters
         ----------
         wave_rest : array_like, shape (n_wave,)
             Rest-frame model wavelength grid [Angstrom].
-        spec_wave_obs : array_like, shape (n_pix,)
-            Observed-frame spectrum pixel centers [Angstrom].
+        spec_lattice : tuple of (float, int) or None
+            Static ln-lambda lattice ``(origin, n_cells)`` of the spectrum table.
         redshift_spec : mapping or None
             ``{'mode': 'fixed', 'value': z}`` or ``{'mode': 'free', ...}``.
 
         Returns
         -------
         IGMSEDComponentState
-            Carrying ``spec_zgrid`` / ``spec_table``, shape (n_z, n_pix).
+            Carrying ``spec_zgrid`` / ``spec_table``, shape (n_z, n_cells).
 
         Notes
         -----
         **JIT-compatible**: build-time only. Patchy reionization and DLAs read
         free parameters, so the factor is not a function of redshift alone;
-        those keep the exact full-grid path.
+        those keep the full-grid curve, averaged over the cells per draw.
         """
         import numpy as np
 
+        from tengri.observation.spectrum import lattice_cell_transmission
+
         if self.config.igm_patchy or self.config.use_dla:
             return IGMSEDComponentState(name=self.name)
-        if wave_rest is None or spec_wave_obs is None:
+        if wave_rest is None or spec_lattice is None:
             return IGMSEDComponentState(name=self.name)
-
         spec = dict(redshift_spec or {"mode": "fixed", "value": 0.0})
         if spec.get("mode") == "free":
             zgrid = np.linspace(
@@ -500,12 +491,11 @@ class IGMSEDComponent(TemplateThreading):
             )
         else:
             zgrid = np.asarray([float(spec.get("value", 0.0))])
-
         wave_rest = jnp.asarray(wave_rest)
-        wave_obs = jnp.asarray(spec_wave_obs)
+        origin, n_cells = float(spec_lattice[0]), int(spec_lattice[1])
         igm_model = self.config.igm_model
 
-        def _spec_row(z, wave_rest, wave_obs):
+        def _spec_row(z, wave_rest):
             trans = igm_absorption(
                 wave_rest * (1.0 + z),
                 z,
@@ -513,15 +503,11 @@ class IGMSEDComponent(TemplateThreading):
                 igm_model=igm_model,
                 use_dla=False,
             )
-            # Exactly what predict_spectrum_via_precomp did at runtime: sample the
-            # rest-grid curve at each pixel's rest effective wavelength.
-            return jnp.interp(wave_obs / (1.0 + z), wave_rest, trans)
+            return lattice_cell_transmission(wave_rest, trans, origin, n_cells)
 
         # One jitted program over the whole z grid, not one eager call per z
         # (#2769), as in precompute_band_factors.
-        spec_table = jax.jit(jax.vmap(_spec_row, in_axes=(0, None, None)))(
-            jnp.asarray(zgrid), wave_rest, wave_obs
-        )
+        spec_table = jax.jit(jax.vmap(_spec_row, in_axes=(0, None)))(jnp.asarray(zgrid), wave_rest)
         return IGMSEDComponentState(
             name=self.name,
             spec_zgrid=jnp.asarray(zgrid),

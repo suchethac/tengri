@@ -818,7 +818,9 @@ class EmissionComponent(SEDModelComponent):
         """
         # ``sed_ir`` is the shared full-grid emission from apply() (see the photometry
         # branch). Sample at spectrum pixels.
-        spec_lnu = jnp.interp(spec_eff_waves, state.wave, sed_ir)
+        from tengri.observation.spectrum import lattice_cell_lnu
+
+        spec_lnu = lattice_cell_lnu(spec_eff_waves, state.wave, sed_ir)
 
         return {"dust_emission_spec_lnu_precomp": spec_lnu}
 

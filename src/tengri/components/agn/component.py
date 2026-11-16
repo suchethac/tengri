@@ -1393,7 +1393,11 @@ class AGNSEDComponent(TemplateThreading):
         # AGN previously published only the photometry family.
         spec_eff = state.derived.get("spec_eff_waves")
         if spec_eff is not None:
-            derived_overrides["agn_spec_lnu_precomp"] = jnp.interp(spec_eff, state.wave, L_agn)
+            from tengri.observation.spectrum import lattice_cell_lnu
+
+            derived_overrides["agn_spec_lnu_precomp"] = lattice_cell_lnu(
+                spec_eff, state.wave, L_agn
+            )
 
         return state.add_intrinsic(L_agn).with_(
             derived=state.derived.with_(**derived_overrides),
