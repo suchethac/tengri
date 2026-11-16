@@ -379,13 +379,15 @@ def test_observation_branch_uses_cropped_pass_for_concrete_redshift(monkeypatch)
     from tengri.observation import observation as obs_mod
 
     calls = []
-    real = spectrum_mod.broaden_velocity_only_window
+    real = spectrum_mod.broaden_velocity_at_nodes
 
     def spy(*args, **kwargs):
-        calls.append(args[4:6])
+        # Point mode crops the dispersion to the observed window through ``window``.
+        if kwargs.get("window") is not None:
+            calls.append(tuple(kwargs["window"]))
         return real(*args, **kwargs)
 
-    monkeypatch.setattr(spectrum_mod, "broaden_velocity_only_window", spy)
+    monkeypatch.setattr(spectrum_mod, "broaden_velocity_at_nodes", spy)
     n = 4000
     wave_rest = np.geomspace(1000.0, 20000.0, n)
     wave_obs = np.linspace(3600.0, 9824.0, 1500)
@@ -510,13 +512,15 @@ def test_window_z_cropped_split_matches_full_grid(z, monkeypatch):
     """A concrete window_z crops the rest pass; the observed flux is unchanged to 1e-10."""
     wave_rest, wave_obs, sed, _ = _kernel_split_inputs(z=z)
     calls = []
-    real = spectrum_mod.broaden_velocity_only_window
+    real = spectrum_mod.broaden_velocity_at_nodes
 
     def spy(*args, **kwargs):
-        calls.append(args[4:6])
+        # Point mode crops the dispersion to the observed window through ``window``.
+        if kwargs.get("window") is not None:
+            calls.append(tuple(kwargs["window"]))
         return real(*args, **kwargs)
 
-    monkeypatch.setattr(spectrum_mod, "broaden_velocity_only_window", spy)
+    monkeypatch.setattr(spectrum_mod, "broaden_velocity_at_nodes", spy)
     full = _kernel_split(sed, wave_rest, wave_obs, z, window_z=None)
     assert calls == [], "window_z=None must keep the full-grid pass"
     cropped = _kernel_split(sed, wave_rest, wave_obs, z, window_z=z)
@@ -573,13 +577,15 @@ def test_window_z_observation_predict_on_fixed_z_igm_model(synthetic_ssp_wide, m
     full_params = merge_fixed_params(model.spec, p)
     kwargs = model._observation_predict_kwargs(p)
     calls = []
-    real = spectrum_mod.broaden_velocity_only_window
+    real = spectrum_mod.broaden_velocity_at_nodes
 
     def spy(*args, **kw):
-        calls.append(args[4:6])
+        # Point mode crops the dispersion to the observed window through ``window``.
+        if kw.get("window") is not None:
+            calls.append(tuple(kw["window"]))
         return real(*args, **kw)
 
-    monkeypatch.setattr(spectrum_mod, "broaden_velocity_only_window", spy)
+    monkeypatch.setattr(spectrum_mod, "broaden_velocity_at_nodes", spy)
     base_out = model.observation.predict(state, full_params, wave_obs=wave_obs, **kwargs)
     assert calls == []
     crop_out = model.observation.predict(
@@ -637,13 +643,15 @@ def test_fixed_redshift_public_predict_spectrum_crops_and_matches_full_grid(
     p = _public_params(model, 300.0)
 
     calls = []
-    real = spectrum_mod.broaden_velocity_only_window
+    real = spectrum_mod.broaden_velocity_at_nodes
 
     def spy(*args, **kwargs):
-        calls.append(args[4:6])
+        # Point mode crops the dispersion to the observed window through ``window``.
+        if kwargs.get("window") is not None:
+            calls.append(tuple(kwargs["window"]))
         return real(*args, **kwargs)
 
-    monkeypatch.setattr(spectrum_mod, "broaden_velocity_only_window", spy)
+    monkeypatch.setattr(spectrum_mod, "broaden_velocity_at_nodes", spy)
     public = np.asarray(model.predict_spectrum(p))
     assert len(calls) >= 1, "the public predict_spectrum path did not take the cropped pass"
     lo, hi = calls[0]
