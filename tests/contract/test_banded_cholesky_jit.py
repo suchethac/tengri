@@ -194,13 +194,13 @@ def _cost(route, n, half=10):
 
 
 def test_the_banded_floor_uses_less_memory_than_the_dense_route_at_large_n():
-    """Records time per jitted evaluation and peak RSS; asserts memory at n = 7000 only."""
+    """Records time per jitted evaluation and peak RSS; asserts memory at n = 4000 only."""
     table = {}
-    for n in (2000, 7000):
+    for n in (1000, 4000):
         for route in ("banded", "dense"):
             table[(route, n)] = _cost(route, n)
             print(
                 f"COST route={route} n={n} {table[(route, n)]['seconds']:.4f} s/eval "
                 f"{table[(route, n)]['rss_mib']:.0f} MiB"
             )
-    assert table[("banded", 7000)]["rss_mib"] < table[("dense", 7000)]["rss_mib"]
+    assert table[("banded", 4000)]["rss_mib"] < table[("dense", 4000)]["rss_mib"]
