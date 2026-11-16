@@ -361,7 +361,7 @@ def engagement_reports(
     Raises
     ------
     TypeError
-        If the target is not a recognised kind.
+        If the target is not a recognized kind.
     ValueError
         If ``regime`` is not a known value, does not match the target, or a posterior carries
         no model reference.

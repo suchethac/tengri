@@ -9,6 +9,8 @@ import tengri
 from tengri import DEFAULT, SEDModel, WavePrecomp
 from tengri.parameters import Fixed
 
+pytestmark = pytest.mark.contract
+
 BANDS = ["galex_nuv", "sdss_r"]
 PROBE_Z = 1.0
 

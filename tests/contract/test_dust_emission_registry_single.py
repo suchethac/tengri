@@ -16,6 +16,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.contract
+
 NAME = "DUST_EMISSION_MODELS"
 OWNER = "tengri.components.dust.emission.emission"
 OTHER = "tengri.components.dust.emission_templates"
@@ -61,9 +63,7 @@ def _module_level_definers() -> list[str]:
 
 
 def test_exactly_one_module_defines_registry_name():
-    assert _module_level_definers() == [OWNER], (
-        f"{NAME} must be defined only in {OWNER}"
-    )
+    assert _module_level_definers() == [OWNER], f"{NAME} must be defined only in {OWNER}"
 
 
 def test_other_module_does_not_expose_registry_name():
@@ -72,8 +72,11 @@ def test_other_module_does_not_expose_registry_name():
 
 
 def _fresh_registry_keys() -> set[str]:
-    """Import the owner module in a clean interpreter so other tests' registrations do not leak in."""
-    code = f"import importlib,json; m=importlib.import_module({OWNER!r}); print(json.dumps(sorted(getattr(m, {NAME!r}))))"
+    """Import the owner module in a clean interpreter, so other tests' registrations stay out."""
+    code = (
+        f"import importlib,json; m=importlib.import_module({OWNER!r}); "
+        f"print(json.dumps(sorted(getattr(m, {NAME!r}))))"
+    )
     out = subprocess.run(
         [sys.executable, "-c", code], capture_output=True, text=True, check=True
     ).stdout

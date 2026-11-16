@@ -132,7 +132,6 @@ def _pdr_luminosity_weight(umin, umax, alpha):
     return _expm1_over_u(s * L) / _expm1_over_u(t * L)
 
 
-
 # ── All template loading functions extracted from emission.py ─────
 
 

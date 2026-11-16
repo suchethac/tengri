@@ -10,6 +10,8 @@ from tengri.config.exceptions import PrecomputeRefusal
 from tengri.forward.precompute.band_table import Decline
 from tengri.forward.precompute_report import precompute_engagement_report
 
+pytestmark = pytest.mark.contract
+
 
 @pytest.mark.parametrize("bad", [None, "", "   ", 3])
 def test_decline_requires_a_reason(bad):
@@ -170,8 +172,9 @@ class _ReadOnlyModel:
 
 
 def _bias_stub():
-    import numpy as np
     from types import SimpleNamespace
+
+    import numpy as np
 
     return SimpleNamespace(spec=None, predict_photometry=lambda p: np.array([1.0, 2.0]))
 

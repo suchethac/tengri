@@ -494,9 +494,9 @@ def _try_feature_top_up(model, configs):
 
     A table's refusal is a :class:`~tengri.config.exceptions.PrecomputeRefusal`, raised only at
     the refusal site, and it is the detection ``approx='auto'`` relies on to keep the wave LUT.
-    Only that is caught; any other exception, a ``ValueError`` from a bug included, propagates. The reason is recorded on ``model`` as
-    a ``Decline`` in the model's one memo, ``_band_tables['approx']['feature_precomp']``, which the
-    engagement report reads (#3505 X1).
+    Only that is caught; any other exception, a ``ValueError`` from a bug included, propagates.
+    The reason is recorded on ``model`` as a ``Decline`` in the model's one memo,
+    ``_band_tables['approx']['feature_precomp']``, which the engagement report reads (#3505 X1).
 
     Parameters
     ----------
@@ -523,7 +523,7 @@ def _recorded_feature_decline(model) -> str:
 
 
 def _carry_approx_declines(model, resolved):
-    """Copy the approx declines recorded on ``model`` onto the ``resolved`` fallback and return it."""
+    """Copy the approx declines recorded on ``model`` onto the ``resolved`` fallback."""
     if resolved is not model:
         for slot, entry in getattr(model, "_band_tables", {}).get("approx", {}).items():
             resolved.record_decline("approx", slot, entry.reason)
@@ -2508,7 +2508,7 @@ class Fitter:
             and _feature_precomp_line_source_decline(model) is None
             and _feature_precomp_can_pay(model, serves_line_channel=True)
         )
-        configs =(*base, FeaturePrecomp()) if wants_lut else base
+        configs = (*base, FeaturePrecomp()) if wants_lut else base
         if not configs:
             return None
         return configs[0] if len(configs) == 1 else configs
