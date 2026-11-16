@@ -15,8 +15,6 @@ import warnings
 import numpy as np
 import pytest
 
-from tengri.observation.catalog import read_catalog
-
 pytestmark = pytest.mark.contract
 
 MJY = 1e-26  # erg/s/cm^2/Hz per mJy
@@ -71,7 +69,11 @@ def test_default_relative_error_fills_only_the_missing_column(fraction):
 
 
 def test_default_relative_error_uses_absolute_flux():
-    t = _table(sdss_i=np.array([-8.0, 9.0, 10.0, 11.0]))
+    t = _table(
+        sdss_g=np.array([1.0, 2.0, 3.0, 4.0]),
+        sdss_g_err=np.array([0.1] * 4),
+        sdss_i=np.array([-8.0, 9.0, 10.0, 11.0]),
+    )
     del t["sdss_i_err"]
     with pytest.warns(UserWarning):
         ca = _ingest(t, default_relative_error=0.1)
@@ -188,15 +190,18 @@ def test_lim_flag_refusals():
 
 
 def test_defaults_leave_the_ingest_unchanged():
-    t = _table()
+    """A clean table reads the same with no lim_flag; the CIGALE-encoded base is refused."""
+    t = _table(sdss_g=np.array([1.0, 2.0, 3.0, 4.0]), sdss_g_err=np.array([0.1, 0.2, 0.3, 0.4]))
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         ca = _ingest(t)
     np.testing.assert_allclose(ca.noise[:, 0], t["sdss_g_err"] * MJY, rtol=1e-12)
     assert bool(ca.presence.all()) and ca.censor is None
+    with pytest.raises(ValueError, match=r'lim_flag="full"'):
+        _ingest(_table())
 
 
-# ── read_catalog: the same defaulterror, on the CSV reader ────────
+# ── load_catalog: the CSV reader's column handling (#3547 D4) ─────
 
 
 def _write_csv(path, rows):
@@ -215,53 +220,23 @@ _CSV_ROWS = [
 ]
 
 
-def test_read_catalog_skips_a_column_without_errors_by_default(tmp_path):
-    from tengri.observation.catalog import read_catalog
+# The CSV reader's column handling. Its defaulterror and its cross-reader agreement
+# were ported to ingest_catalog above; a CSV band with no error column is refused
+# by load_catalog unless the caller names it as dropped (allow_unpaired_bands).
 
-    cat = read_catalog(_write_csv(tmp_path / "c.csv", _CSV_ROWS))
-    assert cat.filter_names == ("sdss_g", "sdss_r")
+_FILTER_MAP = {"sdss_g": "sdss_g", "sdss_r": "sdss_r", "sdss_i": "sdss_i"}
 
 
-def test_read_catalog_default_relative_error_keeps_the_column(tmp_path):
-    from tengri.observation.catalog import read_catalog
+def test_load_catalog_refuses_a_band_without_errors_unless_dropped_by_name(tmp_path):
+    from tengri.io import load_catalog
 
     path = _write_csv(tmp_path / "c.csv", _CSV_ROWS)
-    with pytest.warns(UserWarning, match=r"sdss_i taken as errors"):
-        cat = read_catalog(path, default_relative_error=0.1)
-    assert cat.filter_names == ("sdss_g", "sdss_r", "sdss_i")
-    j = cat.filter_names.index("sdss_i")
-    np.testing.assert_allclose(cat.noise[:, j], [0.8, 0.9, 1.0], rtol=1e-12)  # 0.1 * |flux|
-    np.testing.assert_allclose(cat.flux[:, j], [8.0, -9.0, 10.0], rtol=1e-12)
-    assert cat.mask[:, j].tolist() == [0, 0, 0]
-    # the CIGALE limit rule of the supplied columns is unchanged: negative error -> limit
-    assert cat.mask[:, 0].tolist() == [0, 1, 0]
-
-
-def test_read_catalog_rejects_a_negative_default_relative_error(tmp_path):
-    from tengri.observation.catalog import read_catalog
-
-    with pytest.raises(ValueError, match="default_relative_error"):
-        read_catalog(_write_csv(tmp_path / "c.csv", _CSV_ROWS), default_relative_error=-0.2)
-
-
-def test_ingest_lim_flag_noscaling_agrees_with_read_catalog(tmp_path):
-    """One CIGALE limit rule on both readers (observation/catalog.py: negative error -> limit)."""
-    from tengri.observation.catalog import read_catalog
-
-    with pytest.warns(UserWarning, match=r"sdss_i taken as errors"):
-        cat = read_catalog(_write_csv(tmp_path / "c.csv", _CSV_ROWS), default_relative_error=0.1)
-    t = {
-        "sdss_g": np.array([1.0, 2.0, 3.0]),
-        "sdss_g_err": np.array([0.1, -0.5, 0.3]),
-        "sdss_r": np.array([4.0, 5.0, 6.0]),
-        "sdss_r_err": np.array([0.4, 0.5, 0.6]),
-        "sdss_i": np.array([8.0, -9.0, 10.0]),
-    }
-    with pytest.warns(UserWarning):
-        ca = _ingest(t, default_relative_error=0.1, lim_flag="noscaling")
-    np.testing.assert_allclose(ca.flux / MJY, cat.flux, rtol=1e-12)
-    np.testing.assert_allclose(ca.noise / MJY, cat.noise, rtol=1e-12)
-    assert ca.censor.tolist() == cat.mask.tolist()
+    with pytest.raises(ValueError, match="sdss_i"):
+        load_catalog(path, filter_mapping=_FILTER_MAP)
+    with pytest.warns(UserWarning, match=r"sdss_i"):
+        cat = load_catalog(path, filter_mapping=_FILTER_MAP, allow_unpaired_bands=True)
+    assert tuple(cat["bands"]) == ("sdss_g", "sdss_r")
+    assert cat["dropped_bands"] == ["sdss_i"]
 
 
 # ── Edge cases and boundary conditions ──────────────────────────
@@ -280,7 +255,11 @@ def test_lim_flag_boundary_flux_exactly_minus_9990_is_kept():
 
 def test_default_relative_error_zero_is_accepted():
     """default_relative_error=0.0 is accepted and gives error=0 for the missing column."""
-    t = _table(sdss_i=np.array([5.0, 10.0, 15.0, 20.0]))
+    t = _table(
+        sdss_g=np.array([1.0, 2.0, 3.0, 4.0]),
+        sdss_g_err=np.array([0.1] * 4),
+        sdss_i=np.array([5.0, 10.0, 15.0, 20.0]),
+    )
     del t["sdss_i_err"]
     with pytest.warns(UserWarning):
         ca = _ingest(t, default_relative_error=0.0)
@@ -323,34 +302,35 @@ def test_lim_flag_dropped_cells_have_zero_error(flag):
         assert ca.noise[1, 0] == pytest.approx(0.4 * MJY, rel=1e-12)
 
 
-def test_read_catalog_unregistered_filter_column_skipped(tmp_path):
-    """read_catalog with default_relative_error skips missing-_err column if not a filter."""
+def test_load_catalog_ignores_a_column_that_is_not_mapped(tmp_path):
+    """A column outside filter_mapping, with no ``_err`` partner, is not a band."""
+    from tengri.io import load_catalog
+
     path = tmp_path / "test_unregistered.csv"
     path.write_text(
         "id,redshift,sdss_g,sdss_g_err,unknown_filter\na,0.1,1.0,0.1,5.0\nb,0.2,2.0,0.2,6.0\n"
     )
-    cat = read_catalog(path, default_relative_error=0.1)
-    assert "unknown_filter" not in cat.filter_names
-    assert cat.filter_names == ("sdss_g",)
+    cat = load_catalog(path, filter_mapping={"sdss_g": "sdss_g"})
+    assert tuple(cat["bands"]) == ("sdss_g",)
 
 
-def test_read_catalog_warns_when_a_registered_filter_column_is_dropped(tmp_path):
-    """A registered filter column with no ``_err`` partner is dropped, and the drop is named.
+def test_load_catalog_warns_when_a_mapped_band_is_dropped(tmp_path):
+    """A mapped band with no ``_err`` partner is dropped only by name, and the drop is named."""
+    from tengri.io import load_catalog
 
-    pcigale's ``_check_errors`` refuses such a band unless ``defaulterror`` is set. The
-    tengri default skips it, so the skip must not be silent.
-    """
     path = _write_csv(tmp_path / "c.csv", _CSV_ROWS)
-    with pytest.warns(UserWarning, match=r"sdss_i.*no 'sdss_i_err'.*dropped"):
-        cat = read_catalog(path)
-    assert cat.filter_names == ("sdss_g", "sdss_r")
+    with pytest.warns(UserWarning, match=r"sdss_i"):
+        cat = load_catalog(path, filter_mapping=_FILTER_MAP, allow_unpaired_bands=True)
+    assert cat["dropped_bands"] == ["sdss_i"]
 
 
-def test_read_catalog_does_not_warn_for_a_non_filter_column(tmp_path):
-    """A non-filter column without ``_err`` (a comment, a flag) is not a dropped band."""
+def test_load_catalog_does_not_warn_for_a_non_mapped_column(tmp_path):
+    """A non-mapped column without ``_err`` (a comment, a flag) is not a dropped band."""
+    from tengri.io import load_catalog
+
     path = tmp_path / "c.csv"
     path.write_text("id,redshift,sdss_g,sdss_g_err,comment\na,0.1,1.0,0.1,ok\n")
     with warnings.catch_warnings():
         warnings.simplefilter("error")
-        cat = read_catalog(path)
-    assert cat.filter_names == ("sdss_g",)
+        cat = load_catalog(path, filter_mapping={"sdss_g": "sdss_g"})
+    assert tuple(cat["bands"]) == ("sdss_g",)

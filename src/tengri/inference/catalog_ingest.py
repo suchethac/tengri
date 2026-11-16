@@ -14,7 +14,7 @@ import numpy as np
 
 from tengri.utils.conversions import maggies_to_fnu, ujy_to_fnu
 
-__all__ = ["CatalogArrays", "ingest_catalog"]
+__all__ = ["CatalogArrays"]
 
 # CIGALE ``pdf_analysis`` ``lim_flag`` options (pcigale 2025.1,
 # ``analysis_modules/pdf_analysis/__init__.py``) and the sentinel below which
@@ -143,12 +143,10 @@ def ingest_catalog(
         Not available with ``flux_unit="ab_mag"`` (a magnitude error is not a
         fraction of the flux).
 
-        Without ``lim_flag`` a sentinel flux (for example -9999) receives the
-        finite error ``default_relative_error * 9999`` and stays present, and a
-        flux of exactly 0 receives an error of 0. CIGALE always follows the
-        default error with its invalid-data check, which ``lim_flag`` reproduces:
-        pass ``lim_flag`` together with this option for a table that uses
-        CIGALE's sentinels.
+        A table with CIGALE's sentinels (a flux below -9990) needs ``lim_flag``
+        together with this option: CIGALE always follows the default error with its
+        invalid-data check, which ``lim_flag`` reproduces. Without ``lim_flag`` the
+        sentinel is refused, not given the error ``default_relative_error * |flux|``.
     lim_flag : {"none", "noscaling", "full"}, optional
         CIGALE's ``lim_flag`` convention (Boquien et al. 2019, A&A 622, A103) for
         a table whose error column encodes limits (pcigale
@@ -165,7 +163,10 @@ def ingest_catalog(
         ``"noscaling"`` and ``"full"`` give the same arrays here: CIGALE's
         ``"full"`` adds an analytic rescaling of the model amplitude that tengri
         does not perform (the amplitude is a fitted parameter). ``None`` (default)
-        leaves errors untouched. The two limit-producing options refuse
+        refuses a table that carries either encoding: a flux below -9990 or a
+        negative error raises ``ValueError`` naming the column and the row count,
+        and asks for ``lim_flag="full"`` (the declaration of the CIGALE convention).
+        Otherwise errors are untouched. The two limit-producing options refuse
         ``censor_cols`` (two sources of censor flags), and every option refuses
         ``flux_unit="ab_mag"``.
 
@@ -267,6 +268,7 @@ def ingest_catalog(
     flux_raw = np.column_stack(flux_arrays)  # (N, n_bands)
     err_raw = np.column_stack(err_arrays)  # (N, n_bands)
     n_galaxies = flux_raw.shape[0]
+    _refuse_undeclared_limit_encoding(flux_raw, err_raw, flux_cols, err_cols, lim_flag)
 
     # Step 4: Handle NaN in flux
     presence = np.isfinite(flux_raw)  # (N, n_bands), True = present
@@ -647,6 +649,50 @@ def _validate_cigale_input_options(default_relative_error, lim_flag, flux_unit, 
             "errors; it cannot be combined with censor_cols (two sources of "
             "censor flags). Pass one of them."
         )
+
+
+def _refuse_undeclared_limit_encoding(flux_raw, err_raw, flux_cols, err_cols, lim_flag):
+    """Refuse a CIGALE sentinel flux or negative error that no ``lim_flag`` declares (#3547).
+
+    Without ``lim_flag`` a flux below ``_CIGALE_INVALID_FLUX_THRESHOLD`` would be read as
+    a real detection and a negative error as noise. Those are the encodings ``lim_flag``
+    exists to declare, so the table must say which convention it uses.
+    """
+    if lim_flag is not None:
+        return
+    # A non-finite flux is an absent band (the missing= policy), not a sentinel value.
+    sentinel = np.isfinite(flux_raw) & (flux_raw < _CIGALE_INVALID_FLUX_THRESHOLD)
+    negative = np.isfinite(err_raw) & (err_raw < 0.0)
+    if not (sentinel.any() or negative.any()):
+        return
+    parts = []
+    if sentinel.any():
+        parts.append(
+            _describe_offending_columns(
+                f"sentinel flux (below {_CIGALE_INVALID_FLUX_THRESHOLD:g})",
+                sentinel,
+                flux_cols,
+            )
+        )
+    if negative.any():
+        parts.append(_describe_offending_columns("negative error", negative, err_cols))
+    raise ValueError(
+        "; ".join(parts) + ". Without a declaration these would be read as a detection or "
+        "as noise. Declare the convention: pass sentinels= to load_catalog for sentinel "
+        'flux values (nodata or limits), or lim_flag="full" for a CIGALE table (a sentinel '
+        "flux is dropped and a negative error becomes an upper limit)."
+    )
+
+
+def _describe_offending_columns(kind, offending, columns):
+    """Name each column holding an offending cell and how many rows it has."""
+    described = []
+    for j, name in enumerate(columns):
+        n_rows = int(offending[:, j].sum())
+        if n_rows:
+            plural = "row" if n_rows == 1 else "rows"
+            described.append(f"{kind} in column {name!r}: {n_rows} {plural}")
+    return "; ".join(described)
 
 
 def _apply_cigale_lim_flag(flux_raw, err_raw, presence, lim_flag):

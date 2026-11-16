@@ -1,5 +1,16 @@
 ## [Unreleased]
 
+### Removed
+- **BREAKING: `tengri.observation.catalog` (`read_catalog` and its `Catalog` dataclass) is deleted (#3547, #3505 D4).** There is one catalog reader. To read a CSV, use `tengri.io.load_catalog(path, filter_mapping=..., delimiter=..., id_col=...)`, which returns the bands and redshifts; the prebuilt column maps moved to `tengri.io` as `CIGALE_TO_TENGRI` and `CANDELS_TO_TENGRI`. To fit, build a `tengri.Catalog(fwd, table, flux_unit=..., ...)` from a table of named columns. The removed `Catalog` methods `galaxy(i)` and `select_detected(i)` have no replacement in this release.
+- **`read_catalog`'s sentinel masking is removed (#3547 D4).** A flux sentinel (below -9990) or a negative error used to be masked or read as an upper limit silently. `Catalog` now refuses them unless `lim_flag` declares the convention: pass `lim_flag="full"` for a CIGALE table.
+
+### Changed
+- **BREAKING: `ingest_catalog` is no longer public API (#3547 D4).** It is an internal function of `tengri.inference.catalog_ingest`; construct a `tengri.Catalog` instead.
+- **BREAKING: a sentinel flux or a negative error is refused without `lim_flag` (#3547 D4).** Without `lim_flag`, a flux below -9990 or a negative error raises `ValueError` naming the column and the row count, and asks for `lim_flag="full"`. Before, the sentinel was read as a real detection and the negative error as noise, silently. Tables that carry CIGALE's encoding must now declare it with `lim_flag`.
+- **BREAKING: `flux_unit` has no default on any public catalog constructor (#3547 D4).** The `"mJy"` default of the removed `read_catalog` went with it, and `tengri.Catalog` already required `flux_unit`. Pass it explicitly, e.g. `Catalog(fwd, table, flux_unit="mJy", redshift_col="z")`.
+- **`load_catalog` takes `filter_mapping`, `id_col` and `delimiter` and returns `"ids"` when an id column is present (#3547 D4).** A catalog with no `flux_<band>` columns is read by naming its columns in `filter_mapping`. A header-only file raises `ValueError`.
+- **`load_catalog(sentinels=...)` declares sentinel flux values at read time (#3547 D4).** `{-9999.0: "nodata"}` makes the cell absent (NaN flux and error, read with `ingest_catalog(..., missing="mask")`); `{-9999.0: ("upper_limit", 3.0)}` makes it a limit at 3 times its error with sigma equal to that error (censor +1; `"lower_limit"` gives -1). A bare limit name without a depth, an unknown status, or a sentinel in an error column raises. An undeclared sentinel is still refused by `ingest_catalog`, now naming both `sentinels=` and `lim_flag="full"`.
+
 ### Fixed
 - **Velocity dispersion broadens the spectrum with no instrument resolution (#3436).** With `resolution=None`, `sigma_v_kms` had no effect on the spectrum, so a free dispersion was silently inert. It now broadens the stellar group at library resolution (the owner ruling of 2026-11-13): the output is the unbroadened projection plus the dispersion's correction on a ln-lambda lattice, so it does not depend on how the model grid is partitioned. **Behaviour change for existing fits without a resolution that set `sigma_v_kms` > 0:** their spectra now broaden by the dispersion, and their free-dispersion posteriors change. Fits at `sigma_v_kms = 0` are bit-identical. `sigma_lib_kms` and `lsf_scale` still have no effect without a resolution.
 
