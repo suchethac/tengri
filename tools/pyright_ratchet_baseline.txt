@@ -1,7 +1,7 @@
 # Pyright ratchet baseline (tools/check_lint_ratchet.py pyright): error counts
 # per file under [tool.pyright] include, one pyright<TAB>path<TAB>count line each.
 # This list may only shrink: fix a file's errors, then rerun with --write-baseline.
-pyright	src/tengri/inference/_hierarchical_flat.py	27
+pyright	src/tengri/inference/_hierarchical_flat.py	10
 pyright	src/tengri/inference/_prediction.py	1
 pyright	src/tengri/inference/_registration.py	12
 pyright	src/tengri/inference/backends/_psis.py	1

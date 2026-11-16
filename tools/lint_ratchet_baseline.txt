@@ -87,7 +87,7 @@ T201	src/tengri/citations/papers.py	1
 T201	src/tengri/citations/registry.py	2
 T201	src/tengri/components/stellar/sps/dsps_wrapper.py	1
 T201	src/tengri/forward/convenience.py	5
-T201	src/tengri/inference/_hierarchical_flat.py	5
+T201	src/tengri/inference/_hierarchical_flat.py	4
 T201	src/tengri/inference/_sample_utils.py	3
 T201	src/tengri/inference/backends/evidence.py	3
 T201	src/tengri/inference/backends/laplace.py	8

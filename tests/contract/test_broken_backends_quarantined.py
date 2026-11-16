@@ -216,6 +216,26 @@ def test_the_batched_paths_actually_reach_the_gate():
         fitter.run("native_vi_linear", key=None)
 
 
+def test_a_vmapped_broken_sampler_is_refused_without_the_opt_in():
+    """``mcmc_ghmc`` is a member of the vmapped catalog set and ``tier="broken"``.
+
+    Membership of the set is structural, so the tier gate is all that keeps a catalog user
+    from a fast wrong answer: with ``forward_chunk_size`` set (the vectorized path) the call is
+    refused before any model work, and ``allow_unvalidated=True`` is the only way past.
+    """
+    from tengri import CatalogFitter
+    from tengri.inference.catalog_fitter import _vmapped_mcmc_tags
+
+    assert "mcmc_ghmc" in _vmapped_mcmc_tags()
+    assert get_backend("mcmc_ghmc").tier == "broken"
+    fitter = CatalogFitter(None, [{}])
+    with pytest.raises(BackendError, match="allow_unvalidated=True"):
+        fitter.run("mcmc_ghmc", key=None, forward_chunk_size=2)
+    with pytest.raises(Exception) as exc:
+        fitter.run("mcmc_ghmc", key=None, forward_chunk_size=2, allow_unvalidated=True)
+    assert not isinstance(exc.value, BackendError), "allow_unvalidated=True did not open the gate"
+
+
 def test_the_batched_escape_hatch_gets_past_the_gate():
     """A gate that never opens is as wrong as one that never closes.
 

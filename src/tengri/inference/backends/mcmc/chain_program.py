@@ -26,6 +26,11 @@ import jax
 import jax.numpy as jnp
 
 from tengri.inference.backends.mcmc import _shared
+from tengri.inference.sampling.chains import (
+    jittered_starts,
+    run_jittered_chains,
+    start_scale,
+)
 
 
 @dataclass(frozen=True)
@@ -67,6 +72,16 @@ class NUTSSamplerConfig:
     max_doublings: int
 
 
+#: Relative half-width of the per-step step-size jitter of fixed-trajectory HMC. A fixed
+#: ``n_leapfrog * step_size`` is periodic on a Gaussian: when it sits near a multiple of a
+#: mode's half-period the trajectory returns to its start, the chain stops mixing in that
+#: mode and the second moment is wrong while the mean is not (measured on a linear-Gaussian
+#: target: |std ratio - 1| up to 0.65 at 10 leapfrogs against 0.07 at 3). Drawing the step
+#: size uniformly in ``eps * [1 - j, 1 + j]`` independently of the state keeps the kernel
+#: reversible (Neal 2011, sec. 5.4.2.2) and breaks the periodicity.
+HMC_STEP_JITTER = 0.2
+
+
 @dataclass(frozen=True)
 class HMCConfig:
     """Static statics of the HMC family.
@@ -79,11 +94,15 @@ class HMCConfig:
         Dense mass matrix when True, diagonal when False.
     target_accept_rate : float
         Target acceptance rate of the step-size adaptation.
+    step_jitter : float
+        Relative half-width of the per-step step-size jitter (:data:`HMC_STEP_JITTER`);
+        0 is the plain BlackJAX kernel.
     """
 
     n_leapfrog: int
     use_dense: bool
     target_accept_rate: float
+    step_jitter: float = HMC_STEP_JITTER
 
 
 @dataclass(frozen=True)
@@ -168,11 +187,16 @@ class Adaptation:
     ensemble : bool
         True when ``state`` is a batch of warmed states, one per sampling chain, that
         the sampling chains start from (MEADS); False when it is one state.
+    adapts_metric : bool
+        True when the returned ``inverse_mass_matrix`` estimates the posterior covariance;
+        False when it is the identity of a family that tunes the step size alone (Barker,
+        MALA), which says nothing about the posterior's scale.
     """
 
     name: str
     run: Any
     ensemble: bool = False
+    adapts_metric: bool = True
 
 
 class CompilePlan(NamedTuple):
@@ -339,9 +363,14 @@ def _hmc_init(position, ld, key=None, cfg=None):
 
 
 def _hmc_step(kernel, state, key, ld, params, cfg):
-    """Advance HMC one step with the tuned step size and mass matrix."""
+    """Advance HMC one step with the tuned step size, jittered, and mass matrix."""
     step_size, inv_mass_matrix = params
-    return kernel(key, state, ld, step_size, inv_mass_matrix, cfg.n_leapfrog)
+    if cfg.step_jitter == 0.0:
+        return kernel(key, state, ld, step_size, inv_mass_matrix, cfg.n_leapfrog)
+    key, jitter_key = jax.random.split(key)
+    u = jax.random.uniform(jitter_key, dtype=jnp.result_type(step_size))
+    step = step_size * (1.0 + cfg.step_jitter * (2.0 * u - 1.0))
+    return kernel(key, state, ld, step, inv_mass_matrix, cfg.n_leapfrog)
 
 
 def _hmc_collect(state, info) -> Draw:
@@ -629,7 +658,7 @@ def _dual_averaging_run(warmup_key, init_flat, ld, n_warmup, cfg, info_fn):
 
 #: Dual-averaging step-size adaptation for the first-order family. Adapts the step size
 #: only, with the identity mass matrix, and reports no adaptation info.
-DUAL_AVERAGING = Adaptation(name="dual_averaging", run=_dual_averaging_run)
+DUAL_AVERAGING = Adaptation(name="dual_averaging", run=_dual_averaging_run, adapts_metric=False)
 
 
 def _adapt_body(
@@ -744,6 +773,7 @@ def run_chain(
     data_args,
     n_warmup,
     cfg,
+    chain_jitter=None,
 ) -> tuple[Draw, tuple]:
     """Adapt, then sample, in one program; return ``(draws, params)``.
 
@@ -761,9 +791,10 @@ def run_chain(
         Key of the sampler state, read only by families that start from a fresh state
         (``starts_from_warmup=False``); None otherwise.
     chain_keys : ndarray, shape (n_iter, 2) or (n_chains, n_iter, 2)
-        One key per sampling step, used as given. The three-dimensional form, for an
-        ensemble adaptation, runs one chain per leading index from the first ``n_chains``
-        warmed states.
+        One key per sampling step, used as given. The three-dimensional form runs one
+        chain per leading index. For an ensemble adaptation the chains start from the
+        first ``n_chains`` warmed states. Otherwise every chain starts from the one
+        adapted state with its position jittered by ``chain_jitter``.
     ld2 : callable (static)
         ``log_p(position, data_args)``.
     data_args : pytree
@@ -772,12 +803,15 @@ def run_chain(
         Warmup steps.
     cfg : NUTSConfig (static)
         Family statics.
+    chain_jitter : float or None
+        Standard deviation of the overdispersed chain starts in the three-dimensional
+        ``chain_keys`` form without an ensemble adaptation. Unused otherwise.
 
     Returns
     -------
     draws : Draw
         Sampling outputs with leading axis ``n_iter``, or ``(n_chains, n_iter)`` for the
-        ensemble form.
+        three-dimensional ``chain_keys`` form.
     params : tuple
         ``(step_size, inverse_mass_matrix)`` tuned by the adaptation.
     """
@@ -796,6 +830,21 @@ def run_chain(
             states, chain_keys
         )
         return draws, params
+    if chain_keys.ndim == 3:
+        if chain_jitter is None:
+            raise ValueError("several chains from one adaptation need a chain_jitter scale")
+        # Overdispersed chains from one adapted state: the adaptation is kept and only the
+        # positions are jittered, so a split R-hat over them is a real test. A family that
+        # does not start from warmup starts at ``init_flat``.
+        base = state.position if program.starts_from_warmup else init_flat
+        scale = start_scale(params[1] if adaptation.adapts_metric else None, chain_jitter)
+        starts = jittered_starts(base, warmup_key, chain_keys.shape[0], scale)
+        return run_jittered_chains(
+            lambda s, k: _sample_body(program, s, k, ld, params, cfg),
+            lambda p: program.init(p, ld, init_key, cfg),
+            starts,
+            chain_keys,
+        ), params
     if not program.starts_from_warmup:
         state = program.init(init_flat, ld, init_key, cfg)
     return _sample_body(program, state, chain_keys, ld, params, cfg), params
