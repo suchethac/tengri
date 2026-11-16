@@ -43,8 +43,7 @@ from __future__ import annotations
 import numpy as np
 from jax.scipy.special import ndtr
 
-#: Speed of light [km/s].
-C_KMS = 299792.458
+from tengri.utils.physics_constants import C_KM_S
 
 #: Pixels evaluated per block, to bound the (pixels x segments) work array.
 _BLOCK = 100
@@ -91,9 +90,9 @@ def sigma_ln_at_pixels(
         sig_lib = np.full(wave_obs.shape, float(sigma_lib_kms))
     else:
         sig_lib = np.interp(wave_rest, *(np.asarray(a, dtype=float) for a in sigma_lib_curve))
-    sig_inst = C_KMS / (2.3548 * float(resolution))
+    sig_inst = C_KM_S / (2.3548 * float(resolution))
     var = np.maximum((float(lsf_scale) * sig_inst) ** 2 - sig_lib**2, 0.0)
-    return np.sqrt(float(sigma_v_kms) ** 2 + var) / C_KMS
+    return np.sqrt(float(sigma_v_kms) ** 2 + var) / C_KM_S
 
 
 def _segment_integrals(u_a, u_b, mu, s, p, q):

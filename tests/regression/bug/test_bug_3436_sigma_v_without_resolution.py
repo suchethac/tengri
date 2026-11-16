@@ -29,11 +29,10 @@ from tengri.forward.sed_model import SpectrumPrecomp
 from tengri.observation.spectrum import compute_spectrum_conserving, project_spectrum
 from tengri.parameters import Fixed
 from tengri.utils.cosmology import luminosity_distance
-from tengri.utils.physics_constants import LOG10_ZSUN
+from tengri.utils.physics_constants import C_KM_S, LOG10_ZSUN
 
 pytestmark = pytest.mark.regression_bug
 
-_C_KMS = 299792.458
 _Z = 0.1
 _DL = float(luminosity_distance(jnp.asarray(_Z)))
 _BARE_SSP = "data/fsps_prsc_miles_chabrier.h5"
@@ -170,7 +169,7 @@ def _brute_force_reference(ssp):
     state = model0.predict_state({})
     wave_rest = np.asarray(state.wave)
     sed0 = np.asarray(state.derived["lnu_age"].sum(axis=0))
-    sigma_ln = _SIGMA_V_KMS / _C_KMS
+    sigma_ln = _SIGMA_V_KMS / C_KM_S
     reach = 12.0 * sigma_ln
     wq = _MODEL_WAVE_OBS / (1.0 + _MODEL_Z)
     out = (wave_rest >= wq.min() * np.exp(-reach)) & (wave_rest <= wq.max() * np.exp(reach))
@@ -283,7 +282,7 @@ def _brute_ln_lambda_broaden(wave_rest, sed_rest, sigma_v_kms, *, step=2e-6):
     kernel applied by FFT and no lattice. Returns the fine grid (ln lambda) and the
     broadened lambda F_lambda on it, so that a caller can integrate pixel means.
     """
-    sig = sigma_v_kms / _C_KMS
+    sig = sigma_v_kms / C_KM_S
     x = np.arange(np.log(wave_rest[0]), np.log(wave_rest[-1]), step)
     g = np.interp(np.exp(x), wave_rest, sed_rest) * np.exp(x)
     half = int(np.ceil(12.0 * sig / step))

@@ -7,7 +7,10 @@ against a unit Gaussian in ln lambda, not a lattice sample. Two independent refe
 - the analytic reference of ``tests/_lsf_reference.py``, which convolves F (not lambda F). Its
   identity ``B(lambda F)(l_c)/lambda_c = e^{s^2/2} R(l_c + s^2)`` maps it onto this readout;
 - brute-force quadrature of B(lambda F)/lambda on a fine ln-lambda grid, including the Lyman
-  step (:func:`edge_interp` semantics).
+  step (:func:`edge_interp` semantics);
+- :func:`broaden_velocity_only`, the one sigma_v convolution, applied to lambda F on a fine
+  log-uniform grid and read at the pixels. The closed form is the analytic special case of
+  that same Gaussian, so the two agree to the grid's own error.
 """
 
 from __future__ import annotations
@@ -18,7 +21,7 @@ import numpy as np
 import pytest
 
 from tengri.components.lyc import LYMAN_LIMIT_AA, edge_interp
-from tengri.observation.spectrum import point_readout_gaussian_ln
+from tengri.observation.spectrum import broaden_velocity_only, point_readout_gaussian_ln
 from tengri.utils.physics_constants import C_KM_S
 from tests._lsf_reference import convolve_piecewise_linear
 
@@ -80,3 +83,36 @@ def test_closed_form_matches_quadrature_across_lyman_step():
     assert wn[1] < LYMAN_LIMIT_AA and wn[3] > LYMAN_LIMIT_AA
     rel = np.max(np.abs(got - quad) / np.abs(quad))
     assert rel <= 1e-6, f"Lyman-step closed form vs quadrature {rel:.3e}"
+
+
+#: Fine log-uniform grid for the broaden_velocity_only reference [dimensionless ln lambda].
+_FINE_DLNLAM = 1e-5
+#: Measured 2.0e-7 of peak at _FINE_DLNLAM. Successive grid halvings (4e-5 .. 5e-6) differ by
+#: up to 4e-7, which is that grid's own error, so the bound is set a few times above both. The
+#: lattice point readout the closed form replaced was 3.7e-3 off.
+_FINE_GRID_PEAK_RTOL = 1e-6
+
+
+def test_closed_form_is_broaden_velocity_only_on_a_fine_grid():
+    """The closed form equals the one sigma_v convolution, on a fine grid, to the grid's error."""
+    wn = np.array([3000.0, 3600.0, 3900.0, 4000.0, 4100.0, 4600.0, 5200.0, 6000.0])
+    fn = np.array([1.0, 1.4, 0.6, 2.5, 0.9, 1.2, 1.0, 0.7])
+    z, sigma_v = 0.3, 300.0
+    # Pixels more than 10 sigma inside the model grid, so the grid convolution's edge
+    # padding never reaches them.
+    wobs = np.linspace(3400.0 * (1 + z), 5600.0 * (1 + z), 60)
+    closed = np.asarray(
+        point_readout_gaussian_ln(
+            jnp.asarray(fn),
+            jnp.asarray(wn),
+            jnp.asarray(wobs),
+            z,
+            jnp.full(wobs.shape, sigma_v / C_KM_S),
+        )
+    )
+    lam = np.exp(np.arange(np.log(wn[0]), np.log(wn[-1]), _FINE_DLNLAM))
+    lam_f = lam * np.interp(lam, wn, fn)
+    broad = np.asarray(broaden_velocity_only(jnp.asarray(lam_f), jnp.asarray(lam), sigma_v)) / lam
+    grid = np.interp(wobs / (1 + z), lam, broad)
+    rel = np.max(np.abs(grid - closed)) / np.max(np.abs(closed))
+    assert rel <= _FINE_GRID_PEAK_RTOL, f"closed form vs broaden_velocity_only: {rel:.3e} of peak"

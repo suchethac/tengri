@@ -1173,7 +1173,7 @@ def _peak_factors(*seds):
 
 
 def _model_cumulative(wave_rest, sed_rest, x, edge_aa):
-    """Exact cumulative integral of the model as :func:`_resample_peak_factored` forms it."""
+    """Exact cumulative integral of the model at ``x``, with the Lyman step when ``edge_aa``."""
     cum = _cumulative_flux(wave_rest, sed_rest, x)
     if edge_aa is not None:
         e = jnp.clip(x, wave_rest[0], wave_rest[-1])
@@ -1328,6 +1328,11 @@ def point_readout_gaussian_ln(
         \frac{\mathcal{B}(\lambda F)(\ell_c)}{\lambda_c}
         = \sum_{\rm seg} \bigl[p\,M_1 + q\,\lambda_c\,M_2\bigr].
 
+    This is the analytic special case of the Gaussian :func:`broaden_velocity_only` applies:
+    the same :math:`\sigma_v` kernel on :math:`\lambda F`, evaluated exactly at the pixel
+    instead of on a grid, so point mode carries no grid discretization. A test pins the two
+    together on a fine log-uniform grid.
+
     Segments are gathered per pixel in a static window of ``_POINT_REACH_LN`` on each side, so
     the cost is ``n_pix x n_window``, not ``n_pix x n_wave``.
 
@@ -1432,7 +1437,6 @@ def sigma_v_lattice_correction(
     h = _LATTICE_DLNLAMBDA
     edge_aa = LYMAN_LIMIT_AA if has_lyc_edge else None
     scale_in, scale_out = _peak_factors(stellar_rest)
-    sigma_cells = (jnp.asarray(sigma_v_kms) / _C_KM_S) / h
     pad = _lattice_pad_cells()
     wave_q = wave_obs / (1.0 + redshift)
     ell_c = origin + h * (jnp.arange(n_cells, dtype=jnp.result_type(float)) + 0.5)
@@ -1440,7 +1444,8 @@ def sigma_v_lattice_correction(
     t_c = None if igm_rest is None else jnp.interp(lam_c, wave_rest, igm_rest)
     if conserving:
         plain = _lattice_cell_means(wave_rest, stellar_rest * scale_in, origin, n_cells, edge_aa)
-        broad = _gaussian_fft_convolve(plain, sigma_cells, pad)
+        # One segment: the lattice is uniform in ln lambda, so a single sigma covers it.
+        broad = broaden_velocity_only(plain, lam_c, sigma_v_kms, 1, pad_pixels=pad)
         if t_c is not None:
             plain, broad = plain * t_c, broad * t_c
         pixel_sed = _lattice_edge_readout(broad - plain, origin, n_cells, _pixel_edges(wave_q))
@@ -1924,10 +1929,7 @@ def _flux_conserving_resample(
     all-zero SED has exponent 0. The two powers of two are applied as stop-gradient
     multiplies, because ``jnp.ldexp`` has an inexact derivative.
     """
-    exponent = jnp.frexp(jax.lax.stop_gradient(jnp.max(jnp.abs(sed_rest))))[1]
-    dtype = jnp.result_type(sed_rest)
-    scale_in = jax.lax.stop_gradient(jnp.ldexp(jnp.ones((), dtype), -exponent))
-    scale_out = jax.lax.stop_gradient(jnp.ldexp(jnp.ones((), dtype), exponent))
+    scale_in, scale_out = _peak_factors(sed_rest)
     means = _resample_peak_factored(wave_rest, sed_rest * scale_in, wave_query, edge_aa)
     return means * scale_out
 
@@ -2008,29 +2010,13 @@ def _resample_peak_factored(
     .. [1] Carnall, A. C. 2017, "SpectRes: A Fast Spectral Resampling Tool in
            Python", arXiv:1705.05165.
     """
-    mid = 0.5 * (wave_query[1:] + wave_query[:-1])
-    lo = wave_query[:1] - 0.5 * (wave_query[1:2] - wave_query[:1])
-    hi = wave_query[-1:] + 0.5 * (wave_query[-1:] - wave_query[-2:-1])
-    edges = jnp.concatenate([lo, mid, hi])  # (n_pix + 1,)
-
-    # Exact cumulative integral of the piecewise-linear model, clamped flat
-    # outside the grid. Inside interval i the integral from its left node is
-    # f_i t + (f_{i+1} - f_i) t^2 / (2 h_i), so its slope is the interpolated
-    # model value and the pixel flux is continuous in the edge position with a
-    # continuous first derivative (a linear interpolation of the node integrals
-    # would leave a slope that jumps each time an edge crosses a node, a step
-    # in the redshift gradient; #2530).
-    h = jnp.diff(wave_rest)
-    node_cum = jnp.concatenate(
-        [jnp.zeros(1), jnp.cumsum(0.5 * (sed_rest[1:] + sed_rest[:-1]) * h)]
-    )
-    e = jnp.clip(edges, wave_rest[0], wave_rest[-1])
-    i = jnp.clip(jnp.searchsorted(wave_rest, e, side="right") - 1, 0, wave_rest.shape[0] - 2)
-    t = e - wave_rest[i]
-    f0 = sed_rest[i]
-    flux_at_edges = node_cum[i] + f0 * t + 0.5 * (sed_rest[i + 1] - f0) / h[i] * t * t
-    if edge_aa is not None:
-        flux_at_edges = flux_at_edges + _step_minus_ramp(wave_rest, sed_rest, e, edge_aa)
+    # The exact cumulative integral of the model at the bin edges. Its slope is the
+    # interpolated model value, so the pixel flux is continuous in the edge position with a
+    # continuous first derivative (a linear interpolation of the node integrals would leave
+    # a slope that jumps each time an edge crosses a node, a step in the redshift gradient;
+    # #2530).
+    edges = _pixel_edges(wave_query)  # (n_pix + 1,)
+    flux_at_edges = _model_cumulative(wave_rest, sed_rest, edges, edge_aa)
     return (flux_at_edges[1:] - flux_at_edges[:-1]) / (edges[1:] - edges[:-1])
 
 

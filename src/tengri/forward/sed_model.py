@@ -1196,20 +1196,20 @@ _ALPHA_FE_MIN_RESOLVING_POWER = 1000.0
 _ALPHA_FE_REST_WINDOW_AA = (4800.0, 5400.0)
 
 
-def _alpha_fe_redshift_ends(spec, catalog_z_range=None) -> list[float]:
-    """Redshifts at which the model's [alpha/Fe] constraint is checked (#3487).
+def _redshift_ends(spec, catalog_z_range=None) -> list[float]:
+    """The redshifts a model can take, as the ends of their range (#3487, #3436).
 
     A catalog model's redshift is runtime (its Fixed spec value is a placeholder), so
-    both ends of the catalog range are checked. Otherwise a fixed redshift gives one
-    value and a free redshift both ends of its prior bounds, since a spectrum can cover
-    the window at one end and not the other.
+    both ends of the catalog range are returned. Otherwise a fixed redshift gives one
+    value and a free redshift the declared ends of its prior bounds, which may be
+    infinite.
     """
     if catalog_z_range is not None:
         return [float(catalog_z_range[0]), float(catalog_z_range[1])]
     dist = spec.get_distribution("redshift")
     if dist.is_fixed:
-        return [float(dist.value)]
-    return [float(bound) for bound in dist.bounds if bound is not None]
+        return [float(dist.bounds[0])]
+    return [float(bound) for bound in (getattr(dist, "bounds", None) or ()) if bound is not None]
 
 
 def _alpha_fe_observation_findings(
@@ -1253,7 +1253,7 @@ def _alpha_fe_observation_findings(
             measurements["resolving_power"] = resolving_power
     lo, hi = _ALPHA_FE_REST_WINDOW_AA
     wave_obs = np.asarray(spectroscopy.wave_obs, dtype=float)
-    for z in _alpha_fe_redshift_ends(spec, catalog_z_range):
+    for z in _redshift_ends(spec, catalog_z_range):
         rest = wave_obs / (1.0 + z)
         if rest.min() > lo or rest.max() < hi:
             findings.append(f"rest coverage {rest.min():.0f}-{rest.max():.0f} A at z = {z:g}")
@@ -3297,16 +3297,10 @@ class SEDModel:
 
         if wave_obs_np is None:
             return None
-        if self._catalog_z_range is not None:
-            z_lo, z_hi = self._catalog_z_range
-        elif self.z_fixed is not None:
-            z_lo = z_hi = float(self.z_fixed)
-        else:
-            bounds = getattr(self.spec.get_distribution("redshift"), "bounds", None)
-            if bounds is None or len(bounds) < 2 or not np.all(np.isfinite(bounds[:2])):
-                return None
-            z_lo, z_hi = float(bounds[0]), float(bounds[1])
-        return lattice_span(np.asarray(wave_obs_np, dtype=np.float64), float(z_lo), float(z_hi))
+        ends = _redshift_ends(self.spec, self._catalog_z_range)
+        if not ends or len(ends) > 2 or not np.all(np.isfinite(ends)):
+            return None
+        return lattice_span(np.asarray(wave_obs_np, dtype=np.float64), min(ends), max(ends))
 
     def _spectrum_lut_serves_exactly(self, observation) -> bool:
         """Whether the spectrum LUT can serve this spectrum channel exactly (#2958).
