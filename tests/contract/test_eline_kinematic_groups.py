@@ -185,13 +185,31 @@ def test_bad_group_specifications_are_refused(groups, match):
 
 def test_resolved_uv_catalog_and_names():
     uv = LineList.default_uv()
-    assert {"NIV_1483", "NIV_1486", "CIII_1907", "CIII_1909", "CIV_1548", "CIV_1551"} <= set(
+    assert {"NIV_1483", "NIV_1486", "CIII_1907", "CIII_1908", "CIV_1548", "CIV_1551"} <= set(
         uv.names
     )
     assert uv.doublets == ()
     assert np.all(np.diff(np.asarray(uv.wavelengths)) > 0)
     mixed = LineList.from_names(["NIV_1486", "Halpha", "CIV_1549"])
     assert set(mixed.names) == {"NIV_1486", "Halpha", "CIV_1549"}
+
+
+def test_one_line_catalog_serves_both_views():
+    """One table: no duplicated rows; the optical view keeps blends, the UV view resolves them."""
+    from tengri.observation import line_list as ll
+
+    assert not hasattr(ll, "_UV_RESOLVED_LINES")
+    names = [t[0] for t in ll._CATALOG_LINES]
+    assert len(names) == len(set(names))
+    keys = [(round(t[1], 2), t[2]) for t in ll._CATALOG_LINES]
+    assert len(keys) == len(set(keys)), "two rows describe the same transition"
+    optical = set(LineList.default_optical().names)
+    uv = set(LineList.default_uv().names)
+    assert not optical & ll._RESOLVED_ONLY
+    assert not uv & ll._BLENDED_UV
+    assert optical >= ll._BLENDED_UV
+    assert uv == ll._RESOLVED_UV
+    assert optical | uv == set(names)
 
 
 def test_from_names_optical_selection_is_unchanged():

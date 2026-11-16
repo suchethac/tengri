@@ -52,7 +52,7 @@ _DOUBLET_RATIOS: dict[tuple[str, str], float] = {
 #                is_strong, plot_group)
 # is_strong and plot_group match FastSpecFit emlines.ecsv (Moustakas+2023).
 
-_DEFAULT_OPTICAL_LINES: list[tuple[str, float, str, bool, bool, bool, str]] = [
+_CATALOG_LINES: list[tuple[str, float, str, bool, bool, bool, str]] = [
     # UV lines (1200-3000 Å)
     ("Lya", 1215.67, "H1", False, False, True, "lya_nv"),
     ("NV_1240", 1240.81, "N5", False, False, True, "lya_nv"),
@@ -68,6 +68,29 @@ _DEFAULT_OPTICAL_LINES: list[tuple[str, float, str, bool, bool, bool, str]] = [
     ("MgII_2803", 2803.53, "Mg2", False, False, True, "mgii_2796_2803"),
     ("NeV_3346", 3346.79, "Ne5", False, False, False, "nev_3346"),
     ("NeV_3426", 3426.85, "Ne5", False, False, False, "nev_3426"),
+    # Resolved UV components (rows in _RESOLVED_UV below). The C IV, O III], Si III] and
+    # C III] wavelengths are the Cue line catalog's (Cloudy labels, vacuum); N V, Si IV,
+    # N IV] and N III] are NIST ASD 5.12 vacuum wavelengths rounded to 0.01 A (observed
+    # for N V and Si IV, Ritz for the intercombination multiplets, which have no observed
+    # entry). Lya, HeII_1640, SiIII_1892 and CIII_1908 (the 1908.73 A component) above
+    # serve both views.
+    ("NV_1239", 1238.80, "N5", False, False, True, "lya_nv"),
+    ("NV_1243", 1242.80, "N5", False, False, True, "lya_nv"),
+    ("SiIV_1394", 1393.76, "Si4", False, False, False, "siliv_1396"),
+    ("SiIV_1403", 1402.77, "Si4", False, False, False, "siliv_1396"),
+    ("NIV_1483", 1483.32, "N4", False, False, False, "niv_1486"),
+    ("NIV_1486", 1486.50, "N4", False, False, True, "niv_1486"),
+    ("CIV_1548", 1548.19, "C4", False, True, True, "civ_1549_heii_1640"),
+    ("CIV_1551", 1550.77, "C4", False, True, True, "civ_1549_heii_1640"),
+    ("OIII_1661", 1660.81, "O3", False, False, False, "oiii_1663"),
+    ("OIII_1666", 1666.15, "O3", False, False, True, "oiii_1663"),
+    ("NIII_1747", 1746.82, "N3", False, False, False, "niii_1750"),
+    ("NIII_1749", 1748.65, "N3", False, False, False, "niii_1750"),
+    ("NIII_1750", 1749.67, "N3", False, False, True, "niii_1750"),
+    ("NIII_1752", 1752.16, "N3", False, False, False, "niii_1750"),
+    ("NIII_1754", 1754.00, "N3", False, False, False, "niii_1750"),
+    ("SiIII_1883", 1882.71, "Si3", False, False, False, "aliii_1857_siliii_1892_ciii_1908"),
+    ("CIII_1907", 1906.68, "C3", False, True, True, "aliii_1857_siliii_1892_ciii_1908"),
     # Optical lines (3700-6800 Å)
     ("H14", 3723.00, "H1", True, False, False, "balmer_high_order"),
     ("OII_3726", 3727.09, "O2", False, False, True, "oii_3726_29"),
@@ -115,35 +138,42 @@ _DEFAULT_OPTICAL_LINES: list[tuple[str, float, str, bool, bool, bool, str]] = [
     ("SIII_9532", 9533.23, "S3", False, False, False, "siii_9532"),
 ]
 
-# ── Resolved ultraviolet catalog (rest-frame vacuum wavelengths in Angstrom)
-# Same tuple layout. The C IV, O III], Si III] and C III] entries are the Cue line
-# catalog's (Cloudy labels, vacuum). N V, Si IV, N IV] and N III] are the NIST ASD
-# (version 5.12) vacuum wavelengths, rounded to 0.01 A: observed for N V and Si IV,
-# Ritz for the two intercombination multiplets, which have no observed entry.
+#: Rows of the resolved ultraviolet view (``LineList.default_uv``), the components of
+#: N V, Si IV, N IV], C IV, O III], N III], Si III] and C III] with the single lines
+#: between them. Rows named here and absent from the blended view are left out of
+#: ``LineList.default_optical``, which keeps one entry per blend.
+_RESOLVED_UV: frozenset[str] = frozenset(
+    {
+        "Lya",
+        "NV_1239",
+        "NV_1243",
+        "SiIV_1394",
+        "SiIV_1403",
+        "NIV_1483",
+        "NIV_1486",
+        "CIV_1548",
+        "CIV_1551",
+        "HeII_1640",
+        "OIII_1661",
+        "OIII_1666",
+        "NIII_1747",
+        "NIII_1749",
+        "NIII_1750",
+        "NIII_1752",
+        "NIII_1754",
+        "SiIII_1883",
+        "SiIII_1892",
+        "CIII_1907",
+        "CIII_1908",
+    }
+)
 
-_UV_RESOLVED_LINES: list[tuple[str, float, str, bool, bool, bool, str]] = [
-    ("Lya", 1215.67, "H1", False, False, True, "lya_nv"),
-    ("NV_1239", 1238.80, "N5", False, False, True, "lya_nv"),
-    ("NV_1243", 1242.80, "N5", False, False, True, "lya_nv"),
-    ("SiIV_1394", 1393.76, "Si4", False, False, False, "siliv_1396"),
-    ("SiIV_1403", 1402.77, "Si4", False, False, False, "siliv_1396"),
-    ("NIV_1483", 1483.32, "N4", False, False, False, "niv_1486"),
-    ("NIV_1486", 1486.50, "N4", False, False, True, "niv_1486"),
-    ("CIV_1548", 1548.19, "C4", False, True, True, "civ_1549_heii_1640"),
-    ("CIV_1551", 1550.77, "C4", False, True, True, "civ_1549_heii_1640"),
-    ("HeII_1640", 1640.42, "He2", False, False, False, "civ_1549_heii_1640"),
-    ("OIII_1661", 1660.81, "O3", False, False, False, "oiii_1663"),
-    ("OIII_1666", 1666.15, "O3", False, False, True, "oiii_1663"),
-    ("NIII_1747", 1746.82, "N3", False, False, False, "niii_1750"),
-    ("NIII_1749", 1748.65, "N3", False, False, False, "niii_1750"),
-    ("NIII_1750", 1749.67, "N3", False, False, True, "niii_1750"),
-    ("NIII_1752", 1752.16, "N3", False, False, False, "niii_1750"),
-    ("NIII_1754", 1754.00, "N3", False, False, False, "niii_1750"),
-    ("SiIII_1883", 1882.71, "Si3", False, False, False, "aliii_1857_siliii_1892_ciii_1908"),
-    ("SiIII_1892", 1892.03, "Si3", False, False, True, "aliii_1857_siliii_1892_ciii_1908"),
-    ("CIII_1907", 1906.68, "C3", False, True, True, "aliii_1857_siliii_1892_ciii_1908"),
-    ("CIII_1909", 1908.73, "C3", False, True, True, "aliii_1857_siliii_1892_ciii_1908"),
-]
+#: Blended UV rows of the default view, at the doublet centroid, whose components are in
+#: ``_RESOLVED_UV``. The default view's C III] row is the 1908.73 A component itself.
+_BLENDED_UV: frozenset[str] = frozenset({"NV_1240", "SiIV_1396", "CIV_1549"})
+
+#: Components that exist only in the resolved view.
+_RESOLVED_ONLY: frozenset[str] = _RESOLVED_UV - {"Lya", "HeII_1640", "SiIII_1892", "CIII_1908"}
 
 # ── 13-line catalog matching eline_marginalization.py
 # Same wavelengths and insertion order as DEFAULT_LINE_WAVELENGTHS there.
@@ -424,7 +454,9 @@ class LineList:
         constraints follow the FastSpecFit standard (Moustakas et al. 2023).
 
         """
-        lines = sorted(_DEFAULT_OPTICAL_LINES, key=lambda t: t[1])
+        lines = sorted(
+            (t for t in _CATALOG_LINES if t[0] not in _RESOLVED_ONLY), key=lambda t: t[1]
+        )
         return cls._from_line_tuples(lines)
 
     @classmethod
@@ -571,9 +603,8 @@ class LineList:
             assert ll.n_lines == 4
 
         """
-        known = {t[0] for t in _DEFAULT_OPTICAL_LINES}
-        extra = [t for t in _UV_RESOLVED_LINES if t[0] not in known]
-        return cls._from_line_tuples(_DEFAULT_OPTICAL_LINES + extra).select(names=names)
+        lines = sorted(_CATALOG_LINES, key=lambda t: t[1])
+        return cls._from_line_tuples(lines).select(names=names)
 
     @classmethod
     def default_uv(cls) -> LineList:
@@ -593,7 +624,8 @@ class LineList:
         resonant doublets depart from 2:1 when optically thick. The default optical
         catalog keeps the blended entries (``CIV_1549``, ``CIII_1908``).
         """
-        return cls._from_line_tuples(_UV_RESOLVED_LINES)
+        lines = sorted((t for t in _CATALOG_LINES if t[0] in _RESOLVED_UV), key=lambda t: t[1])
+        return cls._from_line_tuples(lines)
 
     # ── Filtering ─────────────────────────────────────────────────
 
@@ -1101,8 +1133,8 @@ def _is_broad_candidate(name: str, species: str) -> bool:
 def _get_doublet_ratio_by_wavelength(primary_wave: float, secondary_wave: float) -> float:
     """Look up doublet ratio by wavelength proximity to known pairs (within 5 Å)."""
     for (pname, sname), ratio in _DOUBLET_RATIOS.items():
-        pwave = next((t[1] for t in _DEFAULT_OPTICAL_LINES if t[0] == pname), None)
-        swave = next((t[1] for t in _DEFAULT_OPTICAL_LINES if t[0] == sname), None)
+        pwave = next((t[1] for t in _CATALOG_LINES if t[0] == pname), None)
+        swave = next((t[1] for t in _CATALOG_LINES if t[0] == sname), None)
         if (
             pwave is not None
             and swave is not None
