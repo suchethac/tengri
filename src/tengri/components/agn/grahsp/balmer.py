@@ -20,11 +20,11 @@ References
 
 from __future__ import annotations
 
-import math
-
 import jax.numpy as jnp
 from jax import Array
 from jax.scipy import special as jsp_special
+
+from tengri.utils.physics_constants import GAUSSIAN_FWHM_PER_SIGMA
 
 __all__ = ["balmer_continuum"]
 
@@ -34,7 +34,7 @@ _H_C_PER_K_B_NM_K = 1.439e7  # h*c/k_B in nm*K (Planck constant)
 _BALMER_EDGE_NM = 364.6  # Balmer edge in nm
 _BC_TEMPERATURE_K = 15000.0  # Black-body temperature in K
 _BC_TAU = 1.0  # Optical depth (dimensionless)
-_FWHM_PER_SIGMA = 2.0 * math.sqrt(2.0 * math.log(2.0))  # FWHM = 2 sqrt(2 ln 2) sigma
+_FWHM_PER_SIGMA = GAUSSIAN_FWHM_PER_SIGMA
 _BC_CONVOLUTION_THRESHOLD_NM = 250.0  # Below this, use non-convolved truncation
 
 
