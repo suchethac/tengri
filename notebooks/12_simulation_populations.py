@@ -50,6 +50,7 @@ from tengri import (
     Catalog,
     DEFAULT,
     Fixed,
+    FREE,
     ForwardModel,
     Observation,
     Photometry,
@@ -445,9 +446,8 @@ def throughput(model, n=256, chunk=128, reps=5, gas=False):
     return min(ts) / n
 
 
-ssp_bare = tengri.load_ssp(
-    "mist_c3k_hr_chabrier_noNE", download=True
-)  # bare twin: Cloudy needs bare (#3465)
+# Cloudy needs a bare-stellar grid: the MIST c3k twin without nebular emission.
+ssp_bare = tengri.load_ssp("mist_c3k_hr_chabrier_noNE", download=True)
 
 
 def build_cloudy():
@@ -462,13 +462,14 @@ def build_cloudy():
             "law": "calzetti",
             "all_params": Fixed(DEFAULT),
         },
-        neb={"type": "cloudy", "all_params": Fixed(DEFAULT)},
+        neb={"type": "cloudy", "logZ_gas": FREE, "all_params": Fixed(DEFAULT)},
         approx=WavePrecomp(),
     )
     return ForwardModel.build(sed=sed)
 
 
 BENCH_N = 128  # keep the heavy configurations small enough to be safe
+CLOUDY_N = 32  # the live backend needs ~0.2 GB per galaxy; 32 fit a laptop
 
 t_baked = throughput(fwd, n=BENCH_N)
 
@@ -477,8 +478,8 @@ t_baked = throughput(fwd, n=BENCH_N)
 # it again -- two heavy models resident at once is what pushes a laptop over.
 before_cloudy = peak_rss_gb()
 cloudy_model = build_cloudy()
-t_cloudy = throughput(cloudy_model, n=BENCH_N, gas=True)
-cloudy_mb_per_galaxy = 1024 * (peak_rss_gb() - before_cloudy) / BENCH_N
+t_cloudy = throughput(cloudy_model, n=CLOUDY_N, gas=True)
+cloudy_mb_per_galaxy = 1024 * (peak_rss_gb() - before_cloudy) / CLOUDY_N
 del cloudy_model
 gc.collect()
 
@@ -503,11 +504,11 @@ print(
 # are what you need, baked-in is both the right answer and the fast one.
 #
 # The memory column is the part people get caught by. The same choice that
-# costs you an order of magnitude in speed costs you roughly an order of
-# magnitude in *footprint*, which moves the batch ceiling by the same factor:
-# a batch width that is comfortable on the baked-in path is an OOM kill on the
-# live one. Measured here at width 2048, the live path wanted about 19 GB and
-# was `SIGKILL`ed on a machine with 17 GB free (no traceback, exit -9).
+# costs you hundreds of times in speed costs you about as much in
+# *footprint*, which moves the batch ceiling by the same factor: a batch
+# width that is comfortable on the baked-in path is an OOM kill on the live
+# one. Budget the live path's chunk as its MB/gal above times the chunk
+# size; a run that exceeds free memory is killed with no traceback (exit -9).
 #
 # ### 5b. `WavePrecomp`
 #
