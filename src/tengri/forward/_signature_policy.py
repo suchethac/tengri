@@ -247,6 +247,7 @@ SIGNATURE_POLICY: KeyPolicy = {
     # ── Redshift / cosmology ────────────────────────────────────────────
     "_z_fixed": content("fixed-redshift VALUE; compiled kernels close over derived tables"),
     "_catalog_z_range": content("catalog-fit redshift range; the ztable shape can differ"),
+    "_z_runtime": content("runtime redshift (#3505): z is traced, no distance is baked"),
     # ── Param map (build-time, frozen) ─────────────────────────────────
     "_param_map": content("owner-flagged: the frozen name map decides which runtime inputs exist"),
     # ── Compile-time knobs ──────────────────────────────────────────────

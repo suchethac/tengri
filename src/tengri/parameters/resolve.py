@@ -72,8 +72,11 @@ def _mirror_value_conflicts(spec, params):
     return conflicts
 
 
-def refuse_fixed_overrides(spec, params):
+def refuse_fixed_overrides(spec, params, runtime_keys=()):
     r"""Refuse any params key the spec declared Fixed (#2296).
+
+    ``runtime_keys`` names Fixed keys the calling model reads at runtime anyway
+    (``("redshift",)`` on a runtime-redshift model, #3505); those pass through.
 
     Fixed parameters are not required at predict time; that is what fixing them
     *means*, so a user's dict legitimately omits them. However, a user **cannot**
@@ -125,7 +128,9 @@ def refuse_fixed_overrides(spec, params):
     """
     from tengri.config.exceptions import ParameterError
 
-    offending = sorted((set(params) & set(spec.fixed_params)) - set(spec.mirrors))
+    offending = sorted(
+        (set(params) & set(spec.fixed_params)) - set(spec.mirrors) - set(runtime_keys)
+    )
     if offending:
         detail = "; ".join(f"{k!r} (pinned {spec.fixed_value(k)!r})" for k in offending)
         raise ParameterError(
@@ -149,8 +154,12 @@ def refuse_fixed_overrides(spec, params):
         )
 
 
-def merge_fixed_params(spec, params):
+def merge_fixed_params(spec, params, runtime_keys=()):
     r"""Refuse Fixed key overrides, then merge Fixed values into params.
+
+    A ``runtime_keys`` name (#3505) may be passed in ``params`` at call time, and
+    is otherwise filled from its Fixed value, which is its default: an omitted z
+    takes the model's declared redshift.
 
     This is the one seam through which every caller's params dict meets the
     spec's fixed values. It refuses any Fixed key present (#2296), then fills in
@@ -187,7 +196,7 @@ def merge_fixed_params(spec, params):
     caller of this function never sees the placeholder -- the same guarantee
     ``spec.sample()`` already gives its own free-only output.
     """
-    refuse_fixed_overrides(spec, params)
+    refuse_fixed_overrides(spec, params, runtime_keys)
 
     merged = dict(params)
     for name in spec.fixed_params:
