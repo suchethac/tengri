@@ -374,11 +374,19 @@ def test_cropped_rest_grid_pass_equals_full_grid_on_observed_grid():
     assert err <= 1e-10, err
 
 
+def _bands(wave_obs, resolution):
+    """Banded Gaussian resolution matrix on ``wave_obs``."""
+    from tengri.observation.banded import gaussian_resolution_bands
+
+    return gaussian_resolution_bands(jnp.asarray(wave_obs), resolution)
+
+
 def test_observation_branch_uses_cropped_pass_for_concrete_redshift(monkeypatch):
     """The IGM branch hands the rest-grid pass to the window helper when z is concrete.
 
-    Conserving mode: point mode with an instrument runs on the ln-lambda lattice, which
-    covers only the observed window by construction (#3500).
+    Banded resolution matrix: a Gaussian resolution runs on the ln-lambda lattice, which
+    covers only the observed window by construction (#3500), so the rest-grid pass and its
+    window belong to the matrix branch.
     """
     from tengri.observation import observation as obs_mod
 
@@ -406,7 +414,8 @@ def test_observation_branch_uses_cropped_pass_for_concrete_redshift(monkeypatch)
         jnp.asarray(wave_obs),
         1.0,
         1.0e28,
-        resolution=_R_SCALAR,
+        resolution=None,
+        resolution_matrix=_bands(wave_obs, _R_SCALAR),
         sigma_lib_kms=0.0,
         sigma_v_kms=150.0,
         window_z=1.0,
@@ -502,7 +511,8 @@ def _kernel_split(sed, wave_rest, wave_obs, z, **kwargs):
             jnp.asarray(wave_obs),
             z,
             dl_cm,
-            resolution=_R_SCALAR,
+            resolution=None,
+        resolution_matrix=_bands(wave_obs, _R_SCALAR),
             sigma_lib_kms=0.0,
             sigma_v_kms=150.0,
             conserving=True,
@@ -554,8 +564,9 @@ def test_window_z_observation_predict_on_fixed_z_igm_model(synthetic_ssp_wide, m
 
     z = 1.0
     wave_obs = jnp.linspace(2000.0, 3200.0, 300)
+    # A banded resolution matrix: the branch that keeps the rest-grid pass (#3500).
     spec = Spectroscopy(
-        wave_obs=wave_obs, resolution=3000.0, sigma_lib_kms=70.0, resample="conserving"
+        wave_obs=wave_obs, resolution_matrix=_bands(wave_obs, 3000.0), resample="conserving"
     )
     obs = Observation(spectroscopy=spec)
     with warnings.catch_warnings():
@@ -608,8 +619,9 @@ def _igm_model_for_public_path(ssp, wave_obs, redshift):
     """A photometry-and-spectroscopy IGM model with the given redshift spec."""
     import warnings
 
+    # A banded resolution matrix: the branch that keeps the rest-grid pass (#3500).
     spec = Spectroscopy(
-        wave_obs=wave_obs, resolution=3000.0, sigma_lib_kms=70.0, resample="conserving"
+        wave_obs=wave_obs, resolution_matrix=_bands(wave_obs, 3000.0), resample="conserving"
     )
     obs = Observation(spectroscopy=spec)
     with warnings.catch_warnings():

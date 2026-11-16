@@ -3583,16 +3583,18 @@ class SEDModel:
             )
         step = self._dust_law_step_in_spectrum(observation)
         if step > 0.0:
-            import warnings
+            from tengri.config.exceptions import warn_measured
 
-            warnings.warn(
+            warn_measured(
                 f"approx=SpectrumPrecomp(): the dust law has a step of {step:.2g} in k/k_V "
                 f"inside the spectrum's rest range. The table applies dust after the "
                 f"velocity kernel (the order ruled for diffuse dust) and the exact path "
                 f"before it, so the two differ near the step: measured up to 3.8e-3 of "
                 f"peak for point-sampled pixels and 9.5e-4 for flux-conserving ones at "
                 f"the largest optical depths, and below 1e-4 elsewhere.",
+                UserWarning,
                 stacklevel=3,
+                dust_law_step=step,
             )
 
     def _joint_spectrum_lut_promotion_blocked(self, observation) -> bool:

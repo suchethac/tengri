@@ -267,7 +267,9 @@ def test_spectrum_precomp_serves_a_conserving_resample(ssp):
     f_exact = np.asarray(exact.predict_spectrum(p))
     assert np.all(np.isfinite(f_table)) and np.all(f_table >= 0.0)
     peak = float(np.max(np.abs(f_exact)))
-    assert np.max(np.abs(f_table - f_exact)) / peak < 1e-3, "table disagrees with exact conserving"
+    rel = float(np.max(np.abs(f_table - f_exact)) / peak)
+    # Measured: 9.4e-7 of peak.
+    assert rel < 1e-4, "table disagrees with exact conserving"
 
 
 @pytest.mark.gradient

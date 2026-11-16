@@ -25,7 +25,7 @@ from tengri import (
     Spectroscopy,
     SpectrumPrecomp,
 )
-from tengri.inference.fitter import Fitter
+from tengri.inference.fitter import Fitter, _inner_sed
 from tengri.observation.line_flux_data import LineFluxData
 
 pytestmark = pytest.mark.regression_bug
@@ -84,16 +84,23 @@ def test_auto_serves_coarse_conserving_pixels_from_the_table(synthetic_ssp_wide)
 
     The table serves a flux-conserving pixel integral at any kernel width (#3500), and
     the undeclared sigma_v_kms is Fixed at 0, so auto takes the table. It must agree with
-    the exact path within 1e-3 of the peak.
+    the exact path within 1e-4 of the peak.
     """
     fwd, flux, noise = _spectroscopy_fixture(synthetic_ssp_wide, coarse=True)
     fitter = Fitter(fwd, flux, noise, data_type="spectroscopy")  # approx="auto" default
     assert fitter.model._has_modern_approx()
     exact = Fitter(fwd, flux, noise, data_type="spectroscopy", approx=None)
-    f_auto = np.asarray(fitter.model.predict_spectrum({}))
-    f_exact = np.asarray(exact.model.predict_spectrum({}))
+    # The inner SED models: ``ForwardModel.predict_spectrum`` is the exact spectrum on both.
+    table_sed, exact_sed = _inner_sed(fitter.model), _inner_sed(exact.model)
+    assert table_sed._approx.get("spectrum_precomp") and not exact_sed._approx.get(
+        "spectrum_precomp"
+    )
+    f_auto = np.asarray(table_sed.predict_spectrum({}))
+    f_exact = np.asarray(exact_sed.predict_spectrum({}))
     peak = float(np.max(np.abs(f_exact)))
-    assert np.max(np.abs(f_auto - f_exact)) / peak < 1e-3, "auto table disagrees with exact"
+    rel = float(np.max(np.abs(f_auto - f_exact)) / peak)
+    # Measured: 6.1e-6 of peak. Not zero: the two are different routes.
+    assert 0.0 < rel < 1e-4, "auto table disagrees with exact"
 
 
 def test_auto_keeps_feature_precomp_for_a_spectroscopy_line_channel(synthetic_ssp_wide):
