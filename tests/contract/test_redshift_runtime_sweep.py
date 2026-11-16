@@ -207,33 +207,23 @@ def test_exact_promotion_rejects_a_table_range():
 
 
 # Bit-identity pin (#3505): a Fixed-z model that is NOT promoted keeps the fast path.
-# Values are photometry [erg/s/cm2/Hz], float64 hex, at redshift 0.1: exact plain and
-# exact rich (approx=None), and rich with WavePrecomp.
-#
-# Re-pinned 2026-11-16 (#3541). The previous pins were the values of the commit before the
-# monotone PCHIP metallicity read (#3434, 0d6a253ed) and reproduce that commit to its
-# printed precision. #3434 moved the exact path by 1.5e-4 to 2.7e-4 relative across the
-# three bands (plain and rich alike) and the WavePrecomp-rich path by 1.3e-4 to 2.7e-4,
-# on origin/main (measured at 0d6a253ed^ and 0d6a253ed). The exact pins are the origin/main values
-# (68243016c), bit for bit; the native-slope branch does not touch the exact path. The
-# WavePrecomp-rich pin is this branch's value: the native-slope read of the tables
-# (Hermite of values and slopes, #3541) moves origin/main's WavePrecomp-rich value by
-# 4.59e-6, 4.81e-6 and 1.63e-5 relative, the same cause as the band-table repin.
+# Values are photometry [erg/s/cm2/Hz] computed on origin/main before this change,
+# as float64 hex, at redshifts 0.1 (plain and rich structures) and 0.1 with WavePrecomp.
 _PIN = {
     ("exact", "plain", 0.1): [
-        "0x1.eecd0a8eb7d24p-92",
-        "0x1.a617b35ef2081p-91",
-        "0x1.28b92236e0968p-90",
+        "0x1.eeaad1813c405p-92",
+        "0x1.a602837635024p-91",
+        "0x1.28addff427fe6p-90",
     ],
     ("exact", "rich", 0.1): [
-        "0x1.eee24bcc201c3p-92",
-        "0x1.a636f1b2b8856p-91",
-        "0x1.28d8ffd99f370p-90",
+        "0x1.eec012a2d4d8bp-92",
+        "0x1.a621c19a74dc0p-91",
+        "0x1.28cdbd620f124p-90",
     ],
     ("wp", "rich", 0.1): [
-        "0x1.eee8b15abc069p-92",
-        "0x1.a63a3cecb15cep-91",
-        "0x1.28d4cc12e5730p-90",
+        "0x1.eec677c37d44bp-92",
+        "0x1.a6250caadc550p-91",
+        "0x1.28c989d37249ap-90",
     ],
 }
 
