@@ -35,7 +35,7 @@ import jax.numpy as jnp
 from jax import Array
 
 from tengri.utils.host_array import device_table, host_array
-from tengri.utils.physics_constants import GAUSSIAN_FWHM_PER_SIGMA
+from tengri.utils.physics_constants import C_KM_S as _C_KMS, GAUSSIAN_FWHM_PER_SIGMA
 
 __all__ = [
     "AGN_TYPE_BL",
@@ -50,7 +50,6 @@ AGN_TYPE_SY2: int = 2
 AGN_TYPE_LINER: int = 3
 
 # Speed of light, km/s
-_C_KMS: float = 299792.458
 # FWHM-to-sigma conversion factor.
 _FWHM_TO_SIGMA = host_array(1.0 / GAUSSIAN_FWHM_PER_SIGMA)  # 0-d, see #2271
 # Reference wavelength in nm (5100 Å).

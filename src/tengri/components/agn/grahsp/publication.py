@@ -34,7 +34,7 @@ from jax import Array
 
 from tengri.components.agn.grahsp.bolometric import BBB_BOL_CUT_NM
 from tengri.utils.host_array import device_table
-from tengri.utils.physics_constants import GAUSSIAN_FWHM_PER_SIGMA
+from tengri.utils.physics_constants import C_KM_S as _C_KMS, GAUSSIAN_FWHM_PER_SIGMA
 
 __all__ = [
     "BASE_PER_DECADE",
@@ -75,7 +75,6 @@ _WINDOW_OFFSETS: np.ndarray = np.arange(-WINDOW_SIGMA, WINDOW_SIGMA + 1.0)
 _FWHM_TO_SIGMA: float = 1.0 / GAUSSIAN_FWHM_PER_SIGMA
 """FWHM -> sigma for a Gaussian, 1 / (2 sqrt(2 ln 2))."""
 
-_C_KMS: float = 299792.458
 """Speed of light [km/s]."""
 
 

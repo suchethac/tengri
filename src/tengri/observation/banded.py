@@ -36,11 +36,10 @@ import numpy as np
 from jax.scipy import linalg as jax_linalg
 from scipy import linalg as scipy_linalg
 
-from tengri.utils.physics_constants import GAUSSIAN_FWHM_PER_SIGMA
+from tengri.utils.physics_constants import C_KM_S as _C_KM_S, GAUSSIAN_FWHM_PER_SIGMA
 
 # Speed of light and Gaussian FWHM conversion, mirror observation/spectrum.py
 # so the banded Gaussian LSF matches apply_lsf exactly.
-_C_KM_S = 299792.458  # km/s
 _FWHM_TO_SIGMA = GAUSSIAN_FWHM_PER_SIGMA
 # Pixels per block of the blocked forward substitution; the block is widened to the
 # band's half-bandwidth when that is larger.
