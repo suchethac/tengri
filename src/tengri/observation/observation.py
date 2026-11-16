@@ -453,6 +453,7 @@ def project_spectrum_kernel_split(
     nebular_lines: bool = True,
     z_window: tuple[float, float] | None = None,
     lattice_window: tuple[float, int] | None = None,
+    kernel_sigma_bound_kms: float | None = None,
 ) -> jnp.ndarray:
     r"""Project a rest-frame SED to an observed spectrum with the #2519/#2526/#2589 kernel split.
 
@@ -745,6 +746,7 @@ def project_spectrum_kernel_split(
                 conserving=conserving,
                 has_lyc_edge=has_lyc_edge,
                 resolution_matrix=resolution_matrix,
+                kernel_sigma_bound_kms=kernel_sigma_bound_kms,
             )
             flux_instrument_only = project_spectrum(
                 sed_instrument_only,
@@ -761,6 +763,7 @@ def project_spectrum_kernel_split(
                 conserving=conserving,
                 has_lyc_edge=has_lyc_edge,
                 resolution_matrix=resolution_matrix,
+                kernel_sigma_bound_kms=kernel_sigma_bound_kms,
             )
             flux = flux_stellar + flux_instrument_only
         elif resolution is None:
@@ -778,6 +781,7 @@ def project_spectrum_kernel_split(
                 cal_coeffs=None,
                 conserving=conserving,
                 has_lyc_edge=has_lyc_edge,
+                kernel_sigma_bound_kms=kernel_sigma_bound_kms,
             )
         else:
             sed_stellar, sed_instrument_only = _split_stellar_and_instrument_only_sed(
@@ -800,6 +804,7 @@ def project_spectrum_kernel_split(
                 cal_coeffs=None,
                 conserving=conserving,
                 has_lyc_edge=has_lyc_edge,
+                kernel_sigma_bound_kms=kernel_sigma_bound_kms,
             )
             flux_instrument_only = project_spectrum(
                 sed_instrument_only,
@@ -815,6 +820,7 @@ def project_spectrum_kernel_split(
                 cal_coeffs=None,
                 conserving=conserving,
                 has_lyc_edge=has_lyc_edge,
+                kernel_sigma_bound_kms=kernel_sigma_bound_kms,
             )
             flux = flux_stellar + flux_instrument_only
     else:
@@ -860,6 +866,7 @@ def project_spectrum_kernel_split(
                 conserving=conserving,
                 has_lyc_edge=has_lyc_edge,
                 resolution_matrix=resolution_matrix,
+                kernel_sigma_bound_kms=kernel_sigma_bound_kms,
             )
             flux_instrument_only = project_spectrum(
                 sed_instrument_only,
@@ -876,6 +883,7 @@ def project_spectrum_kernel_split(
                 conserving=conserving,
                 has_lyc_edge=has_lyc_edge,
                 resolution_matrix=resolution_matrix,
+                kernel_sigma_bound_kms=kernel_sigma_bound_kms,
             )
             flux = flux_stellar + flux_instrument_only
         elif resolution is None:
@@ -893,6 +901,7 @@ def project_spectrum_kernel_split(
                 cal_coeffs=None,
                 conserving=conserving,
                 has_lyc_edge=has_lyc_edge,
+                kernel_sigma_bound_kms=kernel_sigma_bound_kms,
             )
         elif not conserving:
             # Point-sampled pixels: resample each piece and apply the shared instrument
@@ -932,6 +941,7 @@ def project_spectrum_kernel_split(
                 cal_coeffs=None,
                 conserving=conserving,
                 has_lyc_edge=has_lyc_edge,
+                kernel_sigma_bound_kms=kernel_sigma_bound_kms,
             )
             flux_instrument_only = project_spectrum(
                 sed_instrument_only,
@@ -947,6 +957,7 @@ def project_spectrum_kernel_split(
                 cal_coeffs=None,
                 conserving=conserving,
                 has_lyc_edge=has_lyc_edge,
+                kernel_sigma_bound_kms=kernel_sigma_bound_kms,
             )
             flux = flux_stellar + flux_instrument_only
 
@@ -1572,6 +1583,7 @@ class Observation:
         observables_type=None,
         window_z: float | None = None,
         lattice_window: tuple[float, int] | None = None,
+        kernel_sigma_bound_kms: float | None = None,
     ) -> dict[str, jnp.ndarray]:
         r"""Project an orchestrator :class:`ForwardState` into observable channels.
 
@@ -1773,6 +1785,7 @@ class Observation:
                 window_z=window_z,
                 nebular_lines=self.spectroscopy.nebular_lines,
                 lattice_window=lattice_window,
+                kernel_sigma_bound_kms=kernel_sigma_bound_kms,
             )
 
         # If observables_type is provided, populate and return the NamedTuple.

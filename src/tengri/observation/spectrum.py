@@ -1548,6 +1548,7 @@ def project_spectrum(
     has_lyc_edge: bool = False,
     lsf_pad_pixels: int | None = None,
     z_window: tuple[float, float] | None = None,
+    kernel_sigma_bound_kms: float | None = None,
 ) -> jnp.ndarray:
     r"""Project a panchromatic model SED onto an observed-frame spectrum grid.
 
@@ -1750,6 +1751,7 @@ def project_spectrum(
             sigma_lib_kms=sigma_lib_kms,
             sigma_v_kms=sigma_v_kms,
             has_lyc_edge=has_lyc_edge,
+            kernel_sigma_bound_kms=kernel_sigma_bound_kms,
         )
         resolution = None
     else:
@@ -1942,6 +1944,7 @@ def compute_spectrum_point_lsf(
     sigma_lib_kms: jnp.ndarray | float = 0.0,
     sigma_v_kms: jnp.ndarray | float = 0.0,
     has_lyc_edge: bool = False,
+    kernel_sigma_bound_kms: float | None = None,
 ) -> jnp.ndarray:
     r"""Point-sampled spectrum with the instrument and velocity kernel applied before sampling.
 
@@ -1979,6 +1982,10 @@ def compute_spectrum_point_lsf(
         Stellar velocity dispersion [km/s].
     has_lyc_edge : bool, optional
         The SED is a step at the Lyman edge. Static.
+    kernel_sigma_bound_kms : float, optional
+        Static upper bound on the kernel width over every pixel and every value the traced
+        inputs can take [km/s]. The per-pixel segment window reaches six times it. Default
+        :func:`_lsf_sigma_bound_kms`, which assumes 2000 km/s for a traced component.
 
     Returns
     -------
@@ -2001,7 +2008,9 @@ def compute_spectrum_point_lsf(
     sigma_ln = jnp.broadcast_to(
         lsf_sigma_eff_kms(resolution, sigma_lib_kms, sigma_v_kms) / _C_KM_S, wave_q.shape
     )
-    reach_ln = 6.0 * _lsf_sigma_bound_kms(resolution, sigma_v_kms) / _C_KM_S
+    if kernel_sigma_bound_kms is None:
+        kernel_sigma_bound_kms = _lsf_sigma_bound_kms(resolution, sigma_v_kms)
+    reach_ln = 6.0 * float(kernel_sigma_bound_kms) / _C_KM_S
     closed = point_readout_gaussian_ln(
         sed_in,
         wave_rest,
