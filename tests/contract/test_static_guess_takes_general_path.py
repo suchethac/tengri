@@ -139,10 +139,24 @@ ALLOWLIST: dict[str, str] = {
         "is static and the eager call on the same model runs the check"
     ),
     "forward/sed_model.py::redshift_is_runtime": "unknown distribution -> runtime (#2858)",
-    "forward/sed_model.py::_alpha_fe_redshift_ends": (
+    "forward/sed_model.py::_redshift_ends": (
         "catalog model -> both ends of the catalog z range, never the placeholder; free "
         "redshift -> both ends of its prior; only a non-catalog Fixed redshift gives its "
-        "one value (#3487 warning)"
+        "one value (#3487 warning; the #3436 lattice window, whose caller returns None for "
+        "an unbounded range so the projection raises at build)"
+    ),
+    "observation/spectrum.py::_cell_window_width": (
+        "traced model grid -> every cell in the window, the exact general path; the static "
+        "window width is only an optimization for a concrete grid (#3512)"
+    ),
+    "observation/spectrum.py::_concrete_z_range": (
+        "traced redshift with no static window -> ValueError at build naming the fix (a fixed "
+        "redshift or finite prior bounds); never a lattice spanned from a guessed z (#3436)"
+    ),
+    "observation/spectrum.py::_serves_on_lattice": (
+        "traced sigma_v -> the lattice route, which serves every sigma_v (a traced zero is "
+        "gated to an exactly-zero correction); only a concrete non-positive sigma_v keeps the "
+        "unbroadened projection (#3436)"
     ),
     "observation/spectroscopy.py::Spectroscopy.resolve_conserving": (
         "traced grid -> resample mode resolved on the configured grid (see gap below)"
