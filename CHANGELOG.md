@@ -122,6 +122,7 @@
 - `tengri.HierarchicalFitter`, use `tengri.PopulationFitter`. Removed without a changelog entry (#3358).
 - `tengri.SpectroscopyConfig`, use `tengri.Spectroscopy` for the observation's spectroscopic axis, and `approx=SpectrumPrecomp()` at `SEDModel.build` for the build-time spectrum table. Removed without a changelog entry (#3358).
 - `SEDModel.precompute_spectroscopy(wave)`, the spectrum table is built at build time from `Observation.spectroscopy.wave_obs`: pass `approx=SpectrumPrecomp()` to `SEDModel.build`. Removed without a changelog entry (#3358).
+- `tengri.data.download_ssp` and `tengri.data.SSP_CATALOG_URL`, the deprecated second copies of the SSP download. Use `tengri.download_ssp(name, dest=None, force=False, progress=True)`, the one implementation (its `dest` and `force` replace `dest_dir` and `overwrite`); the catalog URL is `tengri._data_setup.SSP_BASE_URL`. `tengri.data.list_remote_ssps` is unchanged. Removed without a deprecation alias.
 
 ### Fixed
 - **`Fitter(approx='auto')` no longer raises for a spectrum with nuisance line amplitudes and no nebular backend (#3374).** The automatic policy attached `FeaturePrecomp` whenever lines were fitted, and the build refused it when there was no line-flux channel and no backend to tabulate. It now attaches the line table only when there is something to tabulate.
