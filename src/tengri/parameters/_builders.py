@@ -87,6 +87,13 @@ _LAZY_DECL_SOURCES: dict[str, tuple[str, str]] = {
 }
 
 
+#: Nebular modes whose backend renders emission lines into the model (``"ssp"`` lines are
+#: baked into the SSP grid, ``"off"`` has none).
+_LINE_RENDERING_NEBULAR: frozenset[str] = frozenset(
+    {"cloudy", "cue", "cb19", "gutkin16", "mappings", "mappings_agn"}
+)
+
+
 def _resolve_lazy_bucket(name: str) -> dict:
     """Resolve a lazily-imported parameter bucket.
 
@@ -421,7 +428,11 @@ def _build_param_registry(
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
-    if eline_mode in ("marginalized", "fitted"):
+    # The default kinematic pair (eline_sigma_kms, eline_delta_v_kms) is declared
+    # whenever the model renders emission lines (a nebular backend), not only when a
+    # spectrum fits them: it is the one source of a rendered line's width and offset
+    # (owner ruling 2026-11-16), read through line_kinematics_at.
+    if eline_mode in ("marginalized", "fitted") or nebular in _LINE_RENDERING_NEBULAR:
         eline_bucket = _resolve_lazy_bucket("_ELINE_PARAMS")
         for pname, (desc, check, err, default) in eline_bucket.items():
             registry[pname] = (desc, check, err)

@@ -2836,7 +2836,7 @@ _VALID_CSP_INTEGRATION = ("trapz", "log_trapz", "log_interp", "dsps_native", "ds
 _DEFAULT_CSP_INTEGRATION = "trapz"
 
 
-def _snap_to_nebular_catalog(model, target_wavelengths, *, tol_aa=0.5):
+def _snap_to_nebular_catalog(model, target_wavelengths, *, tol_aa=None):
     r"""Snap each target wavelength within ``tol_aa`` of a catalog line to it.
 
     :meth:`SEDModel.enable_fast_nebular`'s reconstruction serves photometry
@@ -2864,7 +2864,9 @@ def _snap_to_nebular_catalog(model, target_wavelengths, *, tol_aa=0.5):
         Rest-frame vacuum target line wavelengths [Angstrom], as given by
         the caller.
     tol_aa : float, optional
-        Snap tolerance [Angstrom]. Default 0.5.
+        Snap tolerance [Angstrom]. Default
+        :data:`~tengri.observation.eline_marginalization.LINE_MATCH_TOL_AA`, the one
+        tolerance of every line-wavelength match.
 
     Returns
     -------
@@ -2888,11 +2890,13 @@ def _snap_to_nebular_catalog(model, target_wavelengths, *, tol_aa=0.5):
     if catalog is None:
         return jnp.asarray(target)
 
+    from tengri.observation.eline_marginalization import LINE_MATCH_TOL_AA, _match_to_catalog
+
     catalog = np.asarray(catalog, dtype=dtype)
-    diffs = np.abs(target[:, None] - catalog[None, :])
-    nearest_val = catalog[np.argmin(diffs, axis=1)]
-    nearest_dist = np.min(diffs, axis=1)
-    return jnp.asarray(np.where(nearest_dist <= tol_aa, nearest_val, target))
+    nearest, matched, _ = _match_to_catalog(
+        target, catalog, LINE_MATCH_TOL_AA if tol_aa is None else tol_aa
+    )
+    return jnp.asarray(np.where(matched, catalog[nearest], target))
 
 
 #: Content keys of the builds whose #2069 ``agn_log_lbol`` probe already passed,

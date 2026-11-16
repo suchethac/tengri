@@ -974,6 +974,62 @@ def kinematic_param_names(group: str) -> tuple[str, str]:
     return f"eline_sigma_kms{suffix}", f"eline_delta_v_kms{suffix}"
 
 
+#: Largest rest-wavelength distance at which a line is the same line as a catalog
+#: entry [Angstrom]: rounded literature values and air/vacuum slips sit inside it,
+#: distinct transitions outside it. The one tolerance of every wavelength match.
+LINE_MATCH_TOL_AA: float = 0.5
+
+
+def _match_to_catalog(targets, catalog_wavelengths, tol_aa=LINE_MATCH_TOL_AA):
+    """Nearest catalog line of each target, whether it is within ``tol_aa``, and how many are.
+
+    Parameters
+    ----------
+    targets : array_like, shape (n,)
+        Rest-frame vacuum wavelengths to match [Angstrom].
+    catalog_wavelengths : array_like, shape (m,)
+        Rest-frame vacuum catalog wavelengths [Angstrom].
+    tol_aa : float
+        Match tolerance [Angstrom].
+
+    Returns
+    -------
+    nearest : ndarray of int, shape (n,)
+        Index of the nearest catalog line (0 when the catalog is empty).
+    matched : ndarray of bool, shape (n,)
+        True where the nearest catalog line is within ``tol_aa``.
+    n_within : ndarray of int, shape (n,)
+        Number of catalog lines within ``tol_aa``.
+
+    Notes
+    -----
+    Build-time NumPy, not traced. Shared by the nebular catalog snap and the
+    kinematic membership, so both use one rule.
+    """
+    targets = np.asarray(targets, dtype=np.float64)
+    catalog = np.asarray(catalog_wavelengths, dtype=np.float64)
+    if catalog.size == 0:
+        zeros = np.zeros(targets.shape, dtype=int)
+        return zeros, np.zeros(targets.shape, dtype=bool), zeros
+    diffs = np.abs(targets[:, None] - catalog[None, :])
+    within = diffs <= tol_aa
+    return np.argmin(diffs, axis=1), within.any(axis=1), within.sum(axis=1)
+
+
+def _gather_kinematics(params, fixed_values, groups, index):
+    """Width and offset of every line from its group's parameters (the one gather)."""
+    values = [
+        tuple(
+            jnp.asarray(params.get(name, fixed_values.get(name, 0.0)))
+            for name in kinematic_param_names(group)
+        )
+        for group in groups
+    ]
+    sigma = jnp.stack([v[0] for v in values])[index]
+    delta_v = jnp.stack([v[1] for v in values])[index]
+    return sigma, delta_v
+
+
 def line_kinematics(params, fixed_values, catalog) -> tuple[jnp.ndarray, jnp.ndarray]:
     r"""Return the intrinsic width and velocity offset of every catalog line.
 
@@ -1001,17 +1057,123 @@ def line_kinematics(params, fixed_values, catalog) -> tuple[jnp.ndarray, jnp.nda
     parameters are absent from both mappings reads zero, the instrument-limited
     line at the systemic redshift.
     """
-    values = [
-        tuple(
-            jnp.asarray(params.get(name, fixed_values.get(name, 0.0)))
-            for name in kinematic_param_names(group)
+    return _gather_kinematics(params, fixed_values, catalog.kinematic_groups, catalog.group_index)
+
+
+class KinematicMembership(NamedTuple):
+    """Which kinematic group each rendered line belongs to, resolved at build.
+
+    Attributes
+    ----------
+    groups : tuple of str
+        Group names, the default group ``""`` first.
+    index : ndarray of int, shape (n,)
+        Index into ``groups`` of each rendered line.
+    unrendered : tuple of str
+        Catalog lines assigned to a named group that no rendered line matches: the
+        group's width and offset reach the spectrum's fitted columns but nothing the
+        model renders (photometry, the forward spectrum).
+    """
+
+    groups: tuple[str, ...]
+    index: np.ndarray
+    unrendered: tuple[str, ...]
+
+
+def kinematic_membership(observation, rest_wavelengths) -> KinematicMembership:
+    """Assign each rendered line to the kinematic group of the catalog line it is.
+
+    Parameters
+    ----------
+    observation : Observation or None
+        The model's observation. Its spectroscopy's effective catalog, when there is
+        one, names the groups; a photometry-only observation (or ``None``) puts every
+        line in the default group.
+    rest_wavelengths : array_like, shape (n,)
+        Rest-frame vacuum wavelengths of the lines the model renders (a nebular
+        backend's catalog) [Angstrom]. Concrete values: membership is decided at
+        build, never inside a trace.
+
+    Returns
+    -------
+    KinematicMembership
+
+    Raises
+    ------
+    ValueError
+        When a rendered line lies within :data:`LINE_MATCH_TOL_AA` of two primary
+        catalog lines, so its group is ambiguous.
+
+    Notes
+    -----
+    A rendered line takes the group of the primary catalog line it matches (the
+    rule of :func:`_match_to_catalog`); every other rendered line takes the default
+    group. Added components (``<line>__<group>``) are spectrum-side columns only and
+    are never rendered, so they are not matched. Rest wavelengths are used, so the
+    membership does not depend on the redshift.
+    """
+    waves = np.asarray(rest_wavelengths, dtype=np.float64).reshape(-1)
+    spectroscopy = getattr(observation, "spectroscopy", None)
+    catalog = getattr(spectroscopy, "effective_catalog", None)
+    if catalog is None:
+        return KinematicMembership(("",), np.zeros(waves.shape, dtype=int), ())
+    names = tuple(catalog.names)
+    primary = np.array(["__" not in n for n in names], dtype=bool)
+    groups = ("", *(g for g in catalog.kinematic_groups if g != ""))
+    order = {g: i for i, g in enumerate(groups)}
+    cat_group = np.array([order[g] for g in catalog.line_groups], dtype=int)[primary]
+    cat_names = tuple(n for n, keep in zip(names, primary) if keep)
+    cat_waves = np.asarray(catalog.wavelengths, dtype=np.float64)[primary]
+    nearest, matched, n_within = _match_to_catalog(waves, cat_waves)
+    ambiguous = np.where(n_within > 1)[0]
+    if ambiguous.size:
+        raise ValueError(
+            f"rendered line at {waves[ambiguous[0]]:.2f} A matches {int(n_within[ambiguous[0]])} "
+            f"catalog lines within {LINE_MATCH_TOL_AA} A, so its kinematic group is ambiguous"
         )
-        for group in catalog.kinematic_groups
-    ]
-    index = catalog.group_index
-    sigma = jnp.stack([v[0] for v in values])[index]
-    delta_v = jnp.stack([v[1] for v in values])[index]
-    return sigma, delta_v
+    index = np.where(matched, cat_group[nearest], 0)
+    rendered = np.zeros(cat_waves.shape, dtype=bool)
+    rendered[nearest[matched]] = True
+    unrendered = tuple(
+        cat_names[j] for j in range(len(cat_names)) if cat_group[j] != 0 and not rendered[j]
+    )
+    return KinematicMembership(groups, index, unrendered)
+
+
+def line_kinematics_at(
+    params, fixed_values, observation, rest_wavelengths
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    r"""Width and offset of every line a model renders, from the observation's groups.
+
+    Parameters
+    ----------
+    params : mapping
+        Sampled parameter values.
+    fixed_values : mapping
+        Fixed parameter values, read when a name is absent from ``params``.
+    observation : Observation or None
+        The model's observation (see :func:`kinematic_membership`).
+    rest_wavelengths : array_like, shape (n,)
+        Rest-frame vacuum wavelengths of the rendered lines [Angstrom]; concrete.
+
+    Returns
+    -------
+    sigma_kms : ndarray, shape (n,)
+        Intrinsic velocity dispersion of each line [km/s].
+    delta_v_kms : ndarray, shape (n,)
+        Velocity offset of each line from the systemic redshift [km/s].
+
+    Notes
+    -----
+    The one lookup for rendered lines (the nebular forward spectrum, band tables,
+    the band line projection); :func:`line_kinematics` serves the spectrum's
+    catalog. Both use the same gather. **JIT-compatible**: yes, the membership is
+    resolved from concrete wavelengths before tracing and only parameter values are
+    traced; a traced ``rest_wavelengths`` is refused by NumPy. **Gradient-safe**:
+    yes, the gather is linear.
+    """
+    membership = kinematic_membership(observation, rest_wavelengths)
+    return _gather_kinematics(params, fixed_values, membership.groups, membership.index)
 
 
 def line_resolution(resolution, wave_obs, line_wavelengths, redshift):
