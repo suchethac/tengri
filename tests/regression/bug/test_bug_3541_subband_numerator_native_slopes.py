@@ -23,6 +23,7 @@ from tengri.components.stellar.sps.met_pchip import read_met
 from tengri.components.stellar.sps.precompute import precompute_photometry
 from tengri.observation.filters import load_filter_set
 from tengri.parameters.translate import LOG10_ZSUN
+from tengri.utils.filter_convention import FilterConvention
 
 pytestmark = pytest.mark.regression_bug
 
@@ -97,6 +98,7 @@ def _exact_node(ssp, z):
         taylor_correction=False,
         n_subbands=N_SUB,
         lyc_gate=False,
+        convention=FilterConvention.BESSELL,
     )
 
 

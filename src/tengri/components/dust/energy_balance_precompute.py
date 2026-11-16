@@ -64,6 +64,7 @@ import jax.numpy as jnp
 
 from tengri.components.dust._params import DEFAULT_DUST_F_OBSCURATION
 from tengri.components.lyc import LYMAN_LIMIT_AA, edge_trapezoid, ionizing_mask
+from tengri.utils.resident_bytes import resident_nbytes
 
 __all__ = [
     "EnergyBalanceLUT",
@@ -136,6 +137,24 @@ class EnergyBalanceLUT(NamedTuple):
     #: whole table of this type: its families are the slope siblings of ``B``/``G`` and
     #: the rest. ``None`` on a table built without them; the metallicity read refuses that.
     slopes: EnergyBalanceLUT | None = None
+
+    @property
+    def nbytes(self) -> int:
+        """Resident bytes of the stored arrays, the native-slope sibling included (#3541)."""
+        return resident_nbytes(
+            self.B,
+            self.G,
+            self.tau_bc_grid,
+            self.tau_diff_grid,
+            self.B_fesc,
+            self.G_fesc,
+            self.B_old,
+            self.G_old,
+            self.B_fesc_old,
+            self.G_fesc_old,
+            self.ln1pz,
+            self.slopes,
+        )
 
 
 def build_energy_balance_lut(

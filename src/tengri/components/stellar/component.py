@@ -2635,6 +2635,28 @@ class StellarSEDComponentState(SEDComponentState):
     #: what ``WavePrecomp(igm_fold="auto")`` resolved to (#2445).
     igm_fold_resolved: str | None = None
 
+    @property
+    def nbytes(self) -> int:
+        """Resident bytes of every stored array, each counted once (#3541).
+
+        The tables contribute their own ``nbytes`` (values plus the native-slope sibling);
+        the pre-broadened cube, its slope and the padded filter curves are counted here.
+        Python scalars count 0. One number per state is what the precompute byte budget reads.
+        """
+        from tengri.utils.resident_bytes import resident_nbytes
+
+        return resident_nbytes(
+            self.ssp_phot_lut,
+            self.ssp_phot_ztable,
+            self.restband_lut,
+            self.ssp_spec_lut,
+            self.ssp_spec_ztable,
+            self.spec_ssp_broadened,
+            self.spec_ssp_broadened_slope,
+            self.phot_fw_padded,
+            self.phot_ft_padded,
+        )
+
 
 class _SfhOnSspAges(NamedTuple):
     """Outputs of :func:`evaluate_sfh` (phase B of ``apply``)."""
