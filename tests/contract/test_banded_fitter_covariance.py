@@ -108,6 +108,17 @@ def test_spectroscopy_keeps_a_dense_inverse_for_a_non_banded_covariance():
     np.testing.assert_allclose(spec.cov_inv, np.linalg.inv(dense), rtol=1e-9)
 
 
+def test_a_covariance_that_is_not_positive_definite_is_refused_by_name_at_construction():
+    """The factor is taken eagerly when the observation is built, where a check can see values."""
+    a = _banded_spd(5, N_PIX, HALF_BAND)
+    a[10, 10] = -1.0
+    wave = np.linspace(4000.0, 7000.0, N_PIX)
+    with pytest.raises(ValueError, match="covariance is not positive definite"):
+        Spectroscopy(wave_obs=wave, covariance=_as_banded(a, HALF_BAND))
+    with pytest.raises(ValueError, match="covariance is not positive definite"):
+        Spectroscopy(wave_obs=wave, covariance=a)
+
+
 def _fitter_data_args(spec, obs, noise):
     """The data_args the Fitter threads into its loss for this spectroscopy."""
     holder = SimpleNamespace(
