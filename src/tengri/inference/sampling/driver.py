@@ -358,9 +358,8 @@ def _judged(
         step = diag.get("step_size")
         if step is not None and not (np.isfinite(step) and step > 1e-8):
             problems.append(f"the adapted step size collapsed to {step:.3g}")
-        if sampler.name == "smc":
-            if problem := smc_ess_problem(diag):
-                problems.append(problem)
+        if sampler.name == "smc" and (problem := smc_ess_problem(diag)):
+            problems.append(problem)
         if "lowrank_rank" in diag:
             extra, more = health.lowrank_diagnostics(
                 diag["lowrank_rank"], diag["lowrank_weakest_log_lambda"], diag["lowrank_dim"]

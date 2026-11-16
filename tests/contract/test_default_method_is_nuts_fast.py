@@ -64,3 +64,45 @@ def test_fit_surfaces_default_to_default_method(surface):
 
         param = inspect.signature(Fitter.run).parameters["method"]
     assert param.default == DEFAULT_METHOD
+
+
+def test_many_evaluation_set_is_what_the_registry_entries_declare():
+    """A method is many-evaluation iff its entry carries a chain, ensemble or nested sampler."""
+    from tengri.inference._backend_registry import all_backends
+
+    sampled = {
+        e.name
+        for e in all_backends()
+        if e.sampler is not None and e.sampler.kind in ("chain", "ensemble", "nested")
+    }
+    derived = _many_eval_samplers()
+    assert sampled <= derived
+    assert derived - sampled == {"native_vi_linear", "native_vi_nonlinear"}
+    assert {
+        "mcmc_barker",
+        "mcmc_mala",
+        "mcmc_hmc_lowrank",
+        "hmc_is",
+        "pathfinder",
+    } <= derived
+
+
+@pytest.mark.parametrize(
+    "method", ["mcmc_barker", "mcmc_mala", "mcmc_hmc_lowrank", "hmc_is", "pathfinder"]
+)
+def test_the_exact_path_advisory_reaches_the_newly_listed_samplers(method):
+    import types
+    import warnings
+
+    from tengri.inference.fitter import _warn_if_exact_forward_path
+
+    model = types.SimpleNamespace(
+        observation=types.SimpleNamespace(photometry=object(), spectroscopy=None),
+        approx=types.SimpleNamespace(wave_precomp=None),
+    )
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        _warn_if_exact_forward_path(model, method)
+    assert any(
+        f"Fitting with '{method}' on the exact forward path" in str(w.message) for w in caught
+    )

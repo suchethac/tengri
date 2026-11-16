@@ -11,7 +11,6 @@ import jax
 import jax.numpy as jnp
 
 
-
 def _require_moving_chain(chain, method):
     """Refuse a retained chain whose draws are all identical.
 

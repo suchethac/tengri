@@ -8,12 +8,12 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from tengri.inference.sampling.driver import Sampler
     from tengri.inference.backends.mcmc.chain_program import (
         Adaptation,
         ChainProgram,
         CompilePlan,
     )
+    from tengri.inference.sampling.driver import Sampler
 
 
 @dataclass(frozen=True)
