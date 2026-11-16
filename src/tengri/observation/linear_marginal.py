@@ -24,6 +24,18 @@ from tengri.utils.scale import diag_gaussian_log_normalization
 #: 50-sigma outlier; the slowest is ``dof = 3``, two coefficients, an outlier); 40 leaves margin.
 _IRLS_STEPS = 40
 
+#: A Student-t mode whose weights still move by more than this under one further iteration
+#: (dimensionless) has not converged. Converged cells of the tests sit below 1e-9.
+WEIGHT_CHANGE_WARN = 1e-6
+
+#: Two starts that reach marginals differing by more than this [nats] found different modes.
+START_GAP_WARN = 1e-3
+
+#: Largest ratio of nuisance columns to data inside the range where the Student-t marginal
+#: reached the best mode in every measured case (``tests/contract``); above it the objective
+#: can be multimodal and the reported mode need not be the global one.
+RELIABLE_COLUMN_RATIO = 0.2
+
 
 class MarginalResult(NamedTuple):
     """Marginal log-likelihood and coefficient posterior of a linear nuisance model.
@@ -42,12 +54,23 @@ class MarginalResult(NamedTuple):
         Student-t noise only: the largest change of an iteratively-reweighted weight under one
         further iteration (dimensionless), the convergence diagnostic of the mode. ``None``
         for the Gaussian marginal, which has no iteration.
+    start_gap : ndarray, shape () or None
+        Student-t noise only: the difference [nats] between the marginals reached from the two
+        starting points (the Gaussian solution and the solution weighted at the prior mean).
+        The larger marginal is returned. A gap above zero means the posterior of the
+        coefficients has more than one mode. ``None`` for the Gaussian marginal.
+    n_data : ndarray, shape () or None
+        Student-t noise only: the number of unmasked data [dimensionless], with the number of
+        coefficients (``coef_hat.shape[0]``) the size of the problem the other two diagnostics
+        describe. ``None`` for the Gaussian marginal.
     """
 
     log_like: jnp.ndarray
     coef_hat: jnp.ndarray
     coef_cov: jnp.ndarray
     weight_change: jnp.ndarray | None = None
+    start_gap: jnp.ndarray | None = None
+    n_data: jnp.ndarray | None = None
 
 
 def marginalize_linear_nuisance(
@@ -238,7 +261,9 @@ def marginalize_linear_nuisance(
     reweighted least squares, the Gaussian scale-mixture form of the Student-t [2]_: each step
     is this function's Gaussian solve with :math:`\sigma_i` replaced by
     :math:`\sigma_i/\sqrt{w_i}`, :math:`w_i = (\nu+1)/(\nu + z_i^2)`, :math:`z_i = r_i/\sigma_i`,
-    started from the Gaussian solution (:math:`w_i = 1`) and run for a fixed number of steps.
+    run for a fixed number of steps from two starting points, the Gaussian solution
+    (:math:`w_i = 1`) and the solution weighted at the prior mean of the coefficients; the larger
+    of the two marginals is returned and their difference is ``start_gap``.
     With ``chol_lower`` the noise is one multivariate Student-t of scale matrix :math:`C`: a
     single weight :math:`w = (\nu+n)/(\nu+r^\mathsf{T}C^{-1}r)` rescales :math:`C`, and the
     curvature is the mixing-weight one, :math:`H = w\,X^\mathsf{T}C^{-1}X + \Lambda^{-1}`, the
@@ -252,6 +277,17 @@ def marginalize_linear_nuisance(
     quadrature than the per-datum mixing-weight curvature
     :math:`X^\mathsf{T}\mathrm{diag}(w_i/\sigma_i^2)X + \Lambda^{-1}` on every cell of the
     quadrature tests (worst 0.46 against 0.73 nat).
+
+    **Several modes.** The Student-t posterior of the nuisance coefficients can be multimodal,
+    and two starts do not find every mode. Against the best of 30 optimizer restarts of the same
+    penalized density (60 data, 20-sigma outliers of random sign, :math:`\nu` of 3 and 10, 10
+    seeds per cell), the returned mode was within 0.1 nat of the best in every seed up to one
+    coefficient per five data, with 0, 10 and 30% outliers. At one coefficient per three data and
+    at least 10% outliers, 7 to 9 of 10 seeds reached the best mode; the others are usually,
+    not always, visible in ``weight_change`` or ``start_gap``. A number of coefficients
+    comparable to the number of data is not measured further. ``weight_change``, ``start_gap``,
+    and the ratio of coefficients to data are read by
+    :func:`~tengri.inference.sampler_health.check_student_t_mode` at the end of a fit.
 
     This is an approximation. The Laplace integral treats the posterior of :math:`\beta` as
     Gaussian about its mode, and :math:`H` is the expected rather than the observed curvature
@@ -394,44 +430,55 @@ def _student_t_marginal(data, model0, design, *, dof, sigma, chol_lower, pix_mas
     def step(beta):
         return gaussian_at(1.0 / weights(beta)).coef_hat
 
-    start = jax.lax.stop_gradient(gaussian_at(1.0).coef_hat)
-    beta = jax.lax.custom_root(
-        lambda b: b - step(b),
-        start,
-        lambda _f, b0: jax.lax.fori_loop(0, _IRLS_STEPS, lambda _i, b: step(b), b0),
-        _solve_linear_map,
-    )
-    w = weights(beta)
-    final = gaussian_at(1.0 / w)
-    stat = statistic(beta)
-    if joint:
-        diagonal = chol_lower.data[0]
-        weighted = diag_gaussian_log_normalization(diagonal / jnp.sqrt(w), weight) - 0.5 * w * stat
-        density = multivariate_student_t_log_density(
-            stat, 2.0 * jnp.sum(jnp.log(diagonal)), n_eff, dof
+    def laplace_from(start):
+        """The Laplace marginal at the mode that the iteration reaches from ``start``."""
+        beta = jax.lax.custom_root(
+            lambda b: b - step(b),
+            jax.lax.stop_gradient(start),
+            lambda _f, b0: jax.lax.fori_loop(0, _IRLS_STEPS, lambda _i, b: step(b), b0),
+            _solve_linear_map,
         )
-    else:
-        weighted = diag_gaussian_log_normalization(sigma / jnp.sqrt(w), weight) - 0.5 * jnp.sum(
-            w * stat * stat
+        w = weights(beta)
+        final = gaussian_at(1.0 / w)
+        stat = statistic(beta)
+        if joint:
+            diagonal = chol_lower.data[0]
+            weighted = (
+                diag_gaussian_log_normalization(diagonal / jnp.sqrt(w), weight) - 0.5 * w * stat
+            )
+            density = multivariate_student_t_log_density(
+                stat, 2.0 * jnp.sum(jnp.log(diagonal)), n_eff, dof
+            )
+            curvature = final
+        else:
+            weighted = diag_gaussian_log_normalization(
+                sigma / jnp.sqrt(w), weight
+            ) - 0.5 * jnp.sum(w * stat * stat)
+            density = student_t_log_density(
+                data,
+                sigma,
+                model0 + design @ beta,
+                dof,
+                present=None if pix_mask is None else weight > 0,
+            )
+            curvature = gaussian_at((dof + 3.0) / (dof + 1.0))
+        logdet_change = (
+            jnp.linalg.slogdet(curvature.coef_cov)[1] - jnp.linalg.slogdet(final.coef_cov)[1]
         )
-        density = student_t_log_density(
-            data,
-            sigma,
-            model0 + design @ beta,
-            dof,
-            present=None if pix_mask is None else weight > 0,
+        return MarginalResult(
+            log_like=final.log_like + density - weighted + 0.5 * logdet_change,
+            coef_hat=beta,
+            coef_cov=curvature.coef_cov,
+            weight_change=jax.lax.stop_gradient(jnp.max(jnp.abs(weights(final.coef_hat) - w))),
         )
-    if joint:
-        curvature = final
-    else:
-        curvature = gaussian_at((dof + 3.0) / (dof + 1.0))
-    logdet_change = (
-        jnp.linalg.slogdet(curvature.coef_cov)[1] - jnp.linalg.slogdet(final.coef_cov)[1]
+
+    prior_mean = gaussian.get("prior_mean")
+    centered = jnp.zeros(design.shape[1], design.dtype) if prior_mean is None else prior_mean
+    from_gaussian = laplace_from(gaussian_at(1.0).coef_hat)
+    from_prior = laplace_from(gaussian_at(1.0 / weights(centered)).coef_hat)
+    take_prior = (from_prior.log_like > from_gaussian.log_like) | jnp.isnan(from_gaussian.log_like)
+    best = jax.tree_util.tree_map(
+        lambda a, b: jnp.where(take_prior, b, a), from_gaussian, from_prior
     )
-    next_w = weights(final.coef_hat)
-    return MarginalResult(
-        log_like=final.log_like + density - weighted + 0.5 * logdet_change,
-        coef_hat=beta,
-        coef_cov=curvature.coef_cov,
-        weight_change=jax.lax.stop_gradient(jnp.max(jnp.abs(next_w - w))),
-    )
+    gap = jax.lax.stop_gradient(jnp.abs(from_prior.log_like - from_gaussian.log_like))
+    return best._replace(start_gap=gap, n_data=jax.lax.stop_gradient(n_eff))

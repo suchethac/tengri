@@ -280,6 +280,9 @@ class Channel:
     log_norm : callable, optional
         ``log_norm(data, noise)``: the constant ``loglik`` omits [nats]; zero for a term
         that already returns its normalization.
+    marginal : bool, optional
+        The channel is a linear-nuisance marginal, and ``loglik`` takes ``diagnostics`` and
+        then returns ``(value, MarginalResult)``.
     """
 
     name: str
@@ -290,6 +293,7 @@ class Channel:
     applies: Callable = lambda data, noise: True
     supersedes: tuple = ()
     log_norm: Callable = lambda data, noise: 0.0
+    marginal: bool = False
 
 
 def _part(arr, block, noise):
@@ -546,7 +550,7 @@ def _calibration_applies(data, noise):
     )
 
 
-def _calibration_loglik(preds, data, noise):
+def _calibration_loglik(preds, data, noise, diagnostics=False):
     cal = noise.calibration
     chol, offsets = _chol(data, noise)
     return calibration_marginal_term(
@@ -566,6 +570,7 @@ def _calibration_loglik(preds, data, noise):
         chol_offsets=offsets,
         f_cal=_floor(preds, noise),
         dof=_dof(noise),
+        diagnostics=diagnostics,
     )
 
 
@@ -581,7 +586,7 @@ def _lines_applies(data, noise):
     )
 
 
-def _lines_loglik(preds, data, noise):
+def _lines_loglik(preds, data, noise, diagnostics=False):
     lines = noise.lines
     obs, err = _part(data["data"], "spec", noise), _part(data["noise"], "spec", noise)
     model = preds.spec_fnu
@@ -601,6 +606,7 @@ def _lines_loglik(preds, data, noise):
             chol_offsets=offsets,
             f_cal=_floor(preds, noise),
             dof=_dof(noise),
+            diagnostics=diagnostics,
         )
     if lines.prior_type == "model":
         return eline_model_marginal_term(
@@ -618,6 +624,7 @@ def _lines_loglik(preds, data, noise):
             chol_offsets=offsets,
             f_cal=_floor(preds, noise),
             dof=_dof(noise),
+            diagnostics=diagnostics,
         )
     return eline_flat_marginal_term(
         model,
@@ -629,6 +636,7 @@ def _lines_loglik(preds, data, noise):
         chol_offsets=offsets,
         f_cal=_floor(preds, noise),
         dof=_dof(noise),
+        diagnostics=diagnostics,
     )
 
 
@@ -640,7 +648,7 @@ def _calibration_lines_applies(data, noise):
     )
 
 
-def _calibration_lines_loglik(preds, data, noise):
+def _calibration_lines_loglik(preds, data, noise, diagnostics=False):
     cal, lines = noise.calibration, noise.lines
     chol, offsets = _chol(data, noise)
     return calibration_eline_marginal_term(
@@ -669,6 +677,7 @@ def _calibration_lines_loglik(preds, data, noise):
         chol_offsets=offsets,
         f_cal=_floor(preds, noise),
         dof=_dof(noise),
+        diagnostics=diagnostics,
     )
 
 
@@ -773,6 +782,7 @@ CHANNELS: tuple = (
         True,
         optional_keys=("spec_chol_data", "spec_cov_chol_data"),
         applies=_calibration_applies,
+        marginal=True,
     ),
     Channel(
         "lines",
@@ -781,6 +791,7 @@ CHANNELS: tuple = (
         True,
         optional_keys=("spec_chol_data", "spec_cov_chol_data"),
         applies=_lines_applies,
+        marginal=True,
     ),
     Channel(
         "calibration_lines",
@@ -789,6 +800,7 @@ CHANNELS: tuple = (
         True,
         optional_keys=("spec_chol_data", "spec_cov_chol_data"),
         applies=_calibration_lines_applies,
+        marginal=True,
     ),
     Channel(
         "line_fluxes",
@@ -894,7 +906,7 @@ def validate(noise: NoiseSpec, data_keys_present) -> None:
         raise ValueError("a dense covariance with marginalization needs spec_cov_chol_data")
 
 
-def score(preds: Predictions, data: Mapping, noise: NoiseSpec):
+def score(preds: Predictions, data: Mapping, noise: NoiseSpec, return_diagnostics: bool = False):
     """Log-likelihood of one galaxy: the sum over the channels present in ``data``.
 
     Parameters
@@ -905,11 +917,16 @@ def score(preds: Predictions, data: Mapping, noise: NoiseSpec):
         The data bundle; its key set selects the channels.
     noise : NoiseSpec
         The noise model.
+    return_diagnostics : bool, optional
+        Also return the primitive's ``MarginalResult`` of each marginal channel, which carries
+        the Student-t convergence diagnostics. Static. Default ``False``.
 
     Returns
     -------
     scalar
         ``log p(d | params)`` [nats] without the constants :func:`log_normalization` returns.
+    list of MarginalResult
+        Only with ``return_diagnostics``: one per marginal channel scored.
 
     Notes
     -----
@@ -918,9 +935,43 @@ def score(preds: Predictions, data: Mapping, noise: NoiseSpec):
     _refuse_unscorable(noise)
     _check_presence(data, noise)
     total = jnp.asarray(0.0)
+    results = []
     for channel in selected_channels(data, noise):
-        total = total + channel.loglik(preds, data, noise)
-    return total
+        if return_diagnostics and channel.marginal:
+            value, result = channel.loglik(preds, data, noise, diagnostics=True)
+            results.append(result)
+        else:
+            value = channel.loglik(preds, data, noise)
+        total = total + value
+    return (total, results) if return_diagnostics else total
+
+
+def mode_summary(results) -> dict | None:
+    """Reduce the :class:`~tengri.observation.linear_marginal.MarginalResult` of each marginal.
+
+    Parameters
+    ----------
+    results : sequence of MarginalResult
+        The second return value of :func:`score` with ``return_diagnostics=True``, evaluated
+        eagerly or fetched from a jitted call.
+
+    Returns
+    -------
+    dict or None
+        ``weight_change`` and ``start_gap`` (the largest over the marginals), and the
+        ``n_columns`` and ``n_data`` of the marginal with the most columns per datum. ``None``
+        when no Student-t marginal is scored.
+    """
+    student_t = [r for r in results if r is not None and r.weight_change is not None]
+    if not student_t:
+        return None
+    widest = max(student_t, key=lambda r: r.coef_hat.shape[0] / max(float(r.n_data), 1.0))
+    return {
+        "weight_change": max(float(r.weight_change) for r in student_t),
+        "start_gap": max(float(r.start_gap) for r in student_t),
+        "n_columns": int(widest.coef_hat.shape[0]),
+        "n_data": float(widest.n_data),
+    }
 
 
 def log_normalization(data: Mapping, noise: NoiseSpec):

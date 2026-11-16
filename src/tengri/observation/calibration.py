@@ -310,7 +310,7 @@ def joint_calibration_line_marginal(
     )
 
 
-@partial(jax.jit, static_argnames=("n_poly", "chol_offsets"))
+@partial(jax.jit, static_argnames=("n_poly", "chol_offsets", "diagnostics"))
 def marginalize_calibration(
     model_flux: jnp.ndarray,
     obs_flux: jnp.ndarray,
@@ -324,7 +324,8 @@ def marginalize_calibration(
     chol_data: jnp.ndarray | None = None,
     chol_offsets: tuple[int, ...] | None = None,
     dof: jnp.ndarray | None = None,
-) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    diagnostics: bool = False,
+) -> tuple:
     r"""Analytically marginalize over calibration polynomial coefficients.
 
     Given a model SED m(lambda) and observed spectrum d(lambda) with noise
@@ -372,6 +373,10 @@ def marginalize_calibration(
         approximation at the iteratively reweighted mode (see
         :func:`~tengri.observation.linear_marginal.marginalize_linear_nuisance`). Default:
         None (Gaussian noise, exact).
+    diagnostics : bool, optional, keyword-only
+        Append the :class:`~tengri.observation.linear_marginal.MarginalResult` of the primitive
+        to the returned tuple; it carries the Student-t convergence diagnostics. Static.
+        Default: ``False``.
 
     Returns
     -------
@@ -428,7 +433,8 @@ def marginalize_calibration(
         dof=dof,
     )
     c_hat_err = jnp.sqrt(jnp.diag(result.coef_cov))
-    return result.log_like, result.coef_hat, c_hat_err
+    out = (result.log_like, result.coef_hat, c_hat_err)
+    return (*out, result) if diagnostics else out
 
 
 def mean_multiplier_vector(
@@ -521,7 +527,17 @@ def _whiten_banded(chol_lower: BandedMatrix, unit, weight) -> BandedMatrix:
     )
 
 
-@partial(jax.jit, static_argnames=("n_segments", "n_poly", "cal_prior", "q_prior", "chol_offsets"))
+@partial(
+    jax.jit,
+    static_argnames=(
+        "n_segments",
+        "n_poly",
+        "cal_prior",
+        "q_prior",
+        "chol_offsets",
+        "diagnostics",
+    ),
+)
 def marginalize_calibration_segments(
     model_flux: jnp.ndarray,
     obs_flux: jnp.ndarray,
@@ -543,7 +559,8 @@ def marginalize_calibration_segments(
     chol_data: jnp.ndarray | None = None,
     chol_offsets: tuple[int, ...] | None = None,
     dof: jnp.ndarray | None = None,
-) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    diagnostics: bool = False,
+) -> tuple:
     r"""Marginalize per-segment calibration scales and a Chebyshev tilt in closed form.
 
     The calibrated model of a multi-camera spectrum is
@@ -620,6 +637,10 @@ def marginalize_calibration_segments(
         approximation at the iteratively reweighted mode (see
         :func:`~tengri.observation.linear_marginal.marginalize_linear_nuisance`). Default:
         None (Gaussian noise, exact).
+    diagnostics : bool, optional, keyword-only
+        Append the :class:`~tengri.observation.linear_marginal.MarginalResult` of the primitive
+        to the returned tuple; it carries the Student-t convergence diagnostics. Static.
+        Default: ``False``.
 
     Returns
     -------
@@ -774,7 +795,8 @@ def marginalize_calibration_segments(
         offset_scale = mean_model * unit if free else 1.0
         coef_hat = coef_unit * (q_null @ gamma_hat) + offset_scale * u_vec * shift
         cov = coef_unit**2 * (q_null @ gamma_cov @ q_null.T)
-    return log_like, coef_hat, jnp.sqrt(jnp.diag(cov))
+    out = (log_like, coef_hat, jnp.sqrt(jnp.diag(cov)))
+    return (*out, result) if diagnostics else out
 
 
 @jax.jit

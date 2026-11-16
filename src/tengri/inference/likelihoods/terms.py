@@ -58,6 +58,11 @@ __all__ = [
 ]
 
 
+def _with_result(value, result, diagnostics):
+    """``value``, or ``(value, result)`` when the caller asks for the primitive's diagnostics."""
+    return (value, result) if diagnostics else value
+
+
 def floor_value(params, name, default=0.0):
     """The fractional calibration floor ``params[name]`` [dimensionless], or ``default``.
 
@@ -256,6 +261,7 @@ def calibration_marginal_term(
     chol_offsets=None,
     f_cal=None,
     dof=None,
+    diagnostics=False,
 ):
     """Marginal log-likelihood with the Chebyshev calibration polynomial integrated out.
 
@@ -278,10 +284,15 @@ def calibration_marginal_term(
     measured for more coefficients, where it is expected to grow. The information is positive
     definite by construction. A pixel covariance makes the noise one multivariate Student-t (see
     :func:`~tengri.observation.linear_marginal.marginalize_linear_nuisance`).
+
+    With ``diagnostics=True`` the value is returned with the
+    :class:`~tengri.observation.linear_marginal.MarginalResult` of the primitive, as
+    ``(value, result)``; ``result`` carries the Student-t convergence diagnostics and is
+    ``None`` for Gaussian noise on the calibration path.
     """
     err, chol_data, chol_offsets = floored_noise(model_flux, err, chol_data, chol_offsets, f_cal)
     if n_segments > 0 or cal_prior != "gaussian" or has_q:
-        return marginalize_calibration_segments(
+        segmented = marginalize_calibration_segments(
             model_flux,
             obs,
             err,
@@ -297,8 +308,10 @@ def calibration_marginal_term(
             chol_data=chol_data,
             chol_offsets=chol_offsets,
             dof=dof,
-        )[0]
-    log_lik, _c_hat, _c_err = marginalize_calibration(
+            diagnostics=diagnostics,
+        )
+        return _with_result(segmented[0], segmented[-1], diagnostics)
+    log_lik, _c_hat, _c_err, *rest = marginalize_calibration(
         model_flux=model_flux,
         obs_flux=obs,
         obs_err=err,
@@ -308,8 +321,9 @@ def calibration_marginal_term(
         chol_data=chol_data,
         chol_offsets=chol_offsets,
         dof=dof,
+        diagnostics=diagnostics,
     )
-    return log_lik
+    return _with_result(log_lik, rest[0] if rest else None, diagnostics)
 
 
 def eline_flat_marginal_term(
@@ -325,6 +339,7 @@ def eline_flat_marginal_term(
     chol_offsets=None,
     f_cal=None,
     dof=None,
+    diagnostics=False,
 ):
     """Normalized marginal log-likelihood under a zero-mean Gaussian line prior.
 
@@ -344,7 +359,7 @@ def eline_flat_marginal_term(
     :func:`floored_noise`).
 
     With ``dof`` (Student-t noise) the value is the Laplace approximation described in
-    :func:`calibration_marginal_term`.
+    :func:`calibration_marginal_term`, including ``diagnostics``.
     """
     err, chol_data, chol_offsets = floored_noise(model_flux, err, chol_data, chol_offsets, f_cal)
     result, _width, _scatter = line_marginal(
@@ -358,7 +373,7 @@ def eline_flat_marginal_term(
         chol_offsets=chol_offsets,
         dof=dof,
     )
-    return result.log_like
+    return _with_result(result.log_like, result, diagnostics)
 
 
 def eline_cloudy_marginal_term(
@@ -375,6 +390,7 @@ def eline_cloudy_marginal_term(
     chol_offsets=None,
     f_cal=None,
     dof=None,
+    diagnostics=False,
 ):
     """Normalized marginal log-likelihood with line amplitudes under the Cloudy-ratio prior.
 
@@ -389,7 +405,7 @@ def eline_cloudy_marginal_term(
     :func:`floored_noise`).
 
     With ``dof`` (Student-t noise) the value is the Laplace approximation described in
-    :func:`calibration_marginal_term`.
+    :func:`calibration_marginal_term`, including ``diagnostics``.
     """
     err, chol_data, chol_offsets = floored_noise(model_flux, err, chol_data, chol_offsets, f_cal)
     from tengri.observation.eline_priors import cloudy_line_priors
@@ -409,6 +425,7 @@ def eline_cloudy_marginal_term(
         chol_data=chol_data,
         chol_offsets=chol_offsets,
         dof=dof,
+        diagnostics=diagnostics,
     )
 
 
@@ -428,6 +445,7 @@ def eline_model_marginal_term(
     chol_offsets=None,
     f_cal=None,
     dof=None,
+    diagnostics=False,
 ):
     """Marginal log-likelihood with line amplitudes centered on the model's own lines.
 
@@ -439,7 +457,7 @@ def eline_model_marginal_term(
     :func:`floored_noise`).
 
     With ``dof`` (Student-t noise) the value is the Laplace approximation described in
-    :func:`calibration_marginal_term`.
+    :func:`calibration_marginal_term`, including ``diagnostics``.
     """
     err, chol_data, chol_offsets = floored_noise(model_flux, err, chol_data, chol_offsets, f_cal)
     prior = _model_prior(
@@ -458,7 +476,7 @@ def eline_model_marginal_term(
         scale=unit.scale,
         dof=dof,
     )
-    return result.log_like
+    return _with_result(result.log_like, result, diagnostics)
 
 
 def fitted_line_model(model_flux, design, amplitudes):
@@ -544,6 +562,7 @@ def calibration_eline_marginal_term(
     chol_offsets=None,
     f_cal=None,
     dof=None,
+    diagnostics=False,
 ):
     """Joint marginal over the calibration polynomial and the line amplitudes.
 
@@ -555,7 +574,7 @@ def calibration_eline_marginal_term(
     :func:`floored_noise`).
 
     With ``dof`` (Student-t noise) the value is the Laplace approximation described in
-    :func:`calibration_marginal_term`.
+    :func:`calibration_marginal_term`, including ``diagnostics``.
     """
     err, chol_data, chol_offsets = floored_noise(model_flux, err, chol_data, chol_offsets, f_cal)
     params = params or {}
@@ -594,8 +613,9 @@ def calibration_eline_marginal_term(
             chol_data=chol_data,
             chol_offsets=chol_offsets,
             dof=dof,
-        )[0]
-        return marginal
+            diagnostics=diagnostics,
+        )
+        return _with_result(marginal[0], marginal[-1], diagnostics)
     basis = calibration_basis(wavelength, wavelength.min(), wavelength.max(), n_poly)
     if chol_data is None:
         sigma = jnp.maximum(err, _representable_floor(_ERR_FLOOR))
@@ -616,4 +636,4 @@ def calibration_eline_marginal_term(
     result = joint_calibration_line_marginal(
         obs, model_flux, basis, line, prior_sigma, whitening=whitening, dof=dof
     )
-    return result.log_like
+    return _with_result(result.log_like, result, diagnostics)

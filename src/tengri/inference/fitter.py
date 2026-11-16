@@ -4505,6 +4505,9 @@ class Fitter:
             from tengri.inference.sampler_health import check_sampler_convergence
 
             check_sampler_convergence(result, backend=entry.name)
+        from tengri.inference.sampler_health import check_student_t_mode
+
+        check_student_t_mode(self, result)
         return result
 
     def summary(self) -> str:

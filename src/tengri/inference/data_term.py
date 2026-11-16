@@ -18,6 +18,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 
@@ -26,6 +27,7 @@ from tengri.inference.channels import (
     NoiseSpec,
     Predictions,
     log_normalization,
+    mode_summary,
     score,
     selected_channels,
     validate,
@@ -278,6 +280,30 @@ class DataTerm:
         if self._predict is None:
             raise ValueError("this data term wraps a user likelihood and has no NoiseSpec")
         return self._predict(params, data_args)
+
+    def mode_report(self, params: Mapping, data_args: Mapping):
+        """Convergence report of the Student-t marginals at ``params``, or ``None``.
+
+        Parameters
+        ----------
+        params : dict
+            Resolved physical parameters, free and fixed, with mirrors merged.
+        data_args : dict
+            The traced data bundle, with the same structure as ``self.data_args``.
+
+        Returns
+        -------
+        dict or None
+            See :func:`~tengri.inference.channels.mode_summary`; ``None`` when the term has no
+            Student-t marginal, or wraps a user likelihood.
+        """
+        if self.noise is None or self.noise.dof is None or not self.noise.student_t:
+            return None
+
+        def diagnosed(p, d):
+            return score(self.predictions(p, d), d, self.noise, return_diagnostics=True)[1]
+
+        return mode_summary(jax.jit(diagnosed)(params, data_args))
 
     def log_normalization(self, data_args: Mapping):
         """Return the constant :meth:`log_prob` omits, in nats (#3427).
