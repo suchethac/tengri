@@ -103,24 +103,24 @@ from tengri.utils.atomic_io import atomic_path
 # several times more (~2-6x measured, depending on which components are active),
 # and the sampler pays that factor on the whole fit. Used to steer users to the
 # fast path (see run()).
-_MANY_EVAL_SAMPLERS = frozenset(
-    {
-        "mcmc",
-        "mcmc_nuts",
-        "mcmc_nuts_fast",
-        "mcmc_hmc",
-        "mcmc_dynamic_hmc",
-        "mcmc_chees",
-        "mcmc_smc",
-        "mcmc_ess",
-        "mcmc_ghmc",
-        "mcmc_mclmc",
-        "mcmc_adjusted_mclmc",
-        "nss",
-        "native_vi_linear",
-        "native_vi_nonlinear",
-    }
-)
+#: Backends with no sampler of the shared driver that still evaluate the model thousands of times.
+_NATIVE_MANY_EVAL = frozenset({"native_vi_linear", "native_vi_nonlinear"})
+
+
+def _many_eval_samplers() -> frozenset[str]:
+    """Return the methods whose fit is thousands of forward evaluations.
+
+    Read from the backend registry when asked: every chain, ensemble or nested sampler, plus
+    the pure JAX variational pair, which iterates a nonlinear map the same way.
+    """
+    from tengri.inference.sampling.driver import get_sampler, method_map
+
+    sampled = frozenset(
+        method
+        for method in method_map()
+        if get_sampler(method).kind in ("chain", "ensemble", "nested")
+    )
+    return sampled | _NATIVE_MANY_EVAL
 
 
 def _prewarm_logger():
@@ -162,7 +162,7 @@ def _warn_if_exact_forward_path(model, backend_name: str) -> None:
     accessor delegates to the inner SED, so the question has one spelling and
     one answer. (Supersedes the private ``_effective_approx`` probe.)
     """
-    if backend_name not in _MANY_EVAL_SAMPLERS:
+    if backend_name not in _many_eval_samplers():
         return
     observation = getattr(model, "observation", None)
     has_phot = getattr(observation, "photometry", None) is not None

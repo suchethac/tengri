@@ -37,6 +37,7 @@ from tengri.observation.observation import Observation
 from tengri.observation.photometry_config import Photometry
 from tengri.observation.spectroscopy import Spectroscopy
 from tengri.registry import _RegistryTable
+from tengri.utils.filter_convention import FilterConvention
 
 __all__ = ["Instrument", "list_instruments"]
 
@@ -94,7 +95,10 @@ class Instrument:
         """SDSS five-band optical photometry (u, g, r, i, z)."""
         return cls(
             name="SDSS",
-            photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]),
+            photometry=Photometry.from_names(
+                ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"],
+                convention=FilterConvention.BESSELL,
+            ),
             description="SDSS ugriz; the canonical low-z optical photometric set.",
         )
 
@@ -103,7 +107,9 @@ class Instrument:
         """2MASS near-infrared photometry (J, H, Ks)."""
         return cls(
             name="2MASS",
-            photometry=Photometry.from_names(["2mass_j", "2mass_h", "2mass_ks"]),
+            photometry=Photometry.from_names(
+                ["2mass_j", "2mass_h", "2mass_ks"], convention=FilterConvention.BESSELL
+            ),
             description="2MASS JHKs near-infrared.",
         )
 
@@ -112,7 +118,9 @@ class Instrument:
         """GALEX FUV + NUV ultraviolet photometry."""
         return cls(
             name="GALEX",
-            photometry=Photometry.from_names(["galex_fuv", "galex_nuv"]),
+            photometry=Photometry.from_names(
+                ["galex_fuv", "galex_nuv"], convention=FilterConvention.BESSELL
+            ),
             description="GALEX FUV + NUV; the canonical low-z UV set.",
         )
 
@@ -121,7 +129,9 @@ class Instrument:
         """WISE four-band mid-infrared photometry (W1–W4)."""
         return cls(
             name="WISE",
-            photometry=Photometry.from_names(["wise_w1", "wise_w2", "wise_w3", "wise_w4"]),
+            photometry=Photometry.from_names(
+                ["wise_w1", "wise_w2", "wise_w3", "wise_w4"], convention=FilterConvention.BESSELL
+            ),
             description="WISE W1–W4 mid-IR.",
         )
 
@@ -130,7 +140,9 @@ class Instrument:
         """Spitzer IRAC four-channel photometry (3.6, 4.5, 5.8, 8.0 µm)."""
         return cls(
             name="Spitzer_IRAC",
-            photometry=Photometry.from_names(["irac_36", "irac_45", "irac_58", "irac_80"]),
+            photometry=Photometry.from_names(
+                ["irac_36", "irac_45", "irac_58", "irac_80"], convention=FilterConvention.BESSELL
+            ),
             description="Spitzer IRAC 3.6/4.5/5.8/8.0 µm.",
         )
 
@@ -140,7 +152,8 @@ class Instrument:
         return cls(
             name="Herschel",
             photometry=Photometry.from_names(
-                ["herschel_100", "herschel_160", "herschel_250", "herschel_350", "herschel_500"]
+                ["herschel_100", "herschel_160", "herschel_250", "herschel_350", "herschel_500"],
+                convention=FilterConvention.BESSELL,
             ),
             description="Herschel PACS 100/160 + SPIRE 250/350/500 µm.",
         )
@@ -151,7 +164,8 @@ class Instrument:
         return cls(
             name="UKIDSS",
             photometry=Photometry.from_names(
-                ["ukidss_z", "ukidss_y", "ukidss_j", "ukidss_h", "ukidss_k"]
+                ["ukidss_z", "ukidss_y", "ukidss_j", "ukidss_h", "ukidss_k"],
+                convention=FilterConvention.BESSELL,
             ),
             description="UKIDSS ZYJHK near-infrared.",
         )
@@ -172,7 +186,8 @@ class Instrument:
                     "hst_f125w",
                     "hst_f140w",
                     "hst_f160w",
-                ]
+                ],
+                convention=FilterConvention.BESSELL,
             ),
             description="HST ACS optical + WFC3 NIR; the workhorse high-z imaging set.",
         )
@@ -192,7 +207,8 @@ class Instrument:
                     "jwst_f277w",
                     "jwst_f356w",
                     "jwst_f444w",
-                ]
+                ],
+                convention=FilterConvention.BESSELL,
             ),
             description="JWST NIRCam wide bands (F070W–F444W); the canonical JADES/CEERS set.",
         )

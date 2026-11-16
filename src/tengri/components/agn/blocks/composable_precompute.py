@@ -54,6 +54,7 @@ from tengri.forward.precompute.templates import (
     collapse_fixed_axes,
     precompute_template_photometry,
 )
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid_interp import (
     library_lookup,
 )
@@ -268,6 +269,7 @@ def precompute(
     wave_rest: np.ndarray | None = None,
     agn_log_lbol_default: float = DEFAULT_AGN_LOG_LBOL,
     extra_redshifts: tuple[float, ...] = (),
+    convention: FilterConvention,
 ) -> dict:
     r"""Build a preintegrated photometry grid for a composable AGN recipe.
 
@@ -425,6 +427,7 @@ def precompute(
         # via L_nu = L_lambda * lambda^2 / c again.
         energy_normalize=False,
         units="lnu",
+        convention=convention,
     )
 
     def _ln_band_flux(grid) -> np.ndarray:
@@ -445,6 +448,7 @@ def precompute(
                 dl_cm=1.0,
                 energy_normalize=False,
                 units="lnu",
+                convention=convention,
             )
         )
         for z_extra in extra_redshifts
@@ -820,7 +824,7 @@ def _build_agn_band_table(ctx: BandTableContext) -> tuple[dict | None, str | Non
         attenuation=selectors["attenuation"],
         axis_params=tuple(axis_grids) if fixed_only else tuple(axes_names),
     )
-    filter_waves, filter_trans = ctx.filters
+    filter_waves, filter_trans = ctx.bands.filters
 
     def _tabulate(grids):
         return module.table_arrays(
@@ -834,6 +838,7 @@ def _build_agn_band_table(ctx: BandTableContext) -> tuple[dict | None, str | Non
                 fixed_values=fixed_values,
                 wave_rest=np.asarray(ctx.wave, dtype=np.float64),
                 extra_redshifts=(0.0,),
+                convention=ctx.bands.convention,
             ),
             "composable_agn",
         )

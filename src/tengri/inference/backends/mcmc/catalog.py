@@ -57,9 +57,9 @@ import weakref
 
 import jax
 import jax.numpy as jnp
+import jax.scipy.linalg
 
 from tengri.config.exceptions import ConfigError
-from tengri.inference._backend_registry import get_backend
 from tengri.inference.backends.mcmc._shared import (
     _CHEES_JITTER_SCALE,
     _CHEES_LEARNING_RATE,
@@ -71,11 +71,6 @@ from tengri.inference.backends.mcmc._shared import (
     _resolve_chees_ensemble,
     ghmc_catalog_scan,
 )
-from tengri.inference.backends.mcmc.chain_program import (
-    HMCConfig,
-    NUTSConfig,
-    run_chain,
-)
 from tengri.inference.likelihoods.gaussian import inv_noise_std
 from tengri.inference.preconditioning import (
     MAX_METRIC_CONDITION,
@@ -85,8 +80,9 @@ from tengri.inference.preconditioning import (
     traced_metric_conditioning,
     traced_preconditioner,
 )
-
-_SAMPLERS = ("nuts", "hmc", "chees", "ghmc")
+from tengri.inference.sampling.chains import jittered_starts
+from tengri.inference.sampling.families import DENSE_FAMILIES, run_chain_family
+from tengri.inference.sampling.target import pilot_whitening, whiten_logdensity
 
 #: Cache of preconditioned log-densities, keyed by ``(base_fn, strength)``.
 #:
@@ -178,6 +174,34 @@ def ghmc_default_chains(n_dim, n_superchains=GHMC_DEFAULT_SUPERCHAINS, n_folds=G
     return -(-need // unit) * unit
 
 
+def ghmc_ensemble_size(n_dim, n_chains, n_superchains=None, n_folds=None):
+    """Return how many chains the ghmc catalog engine runs and returns per galaxy.
+
+    Parameters
+    ----------
+    n_dim : int
+        Number of sampled coordinates D.
+    n_chains : int
+        Requested chains, a minimum.
+    n_superchains, n_folds : int or None
+        MEADS geometry. When either is given the ensemble is exactly ``n_chains`` and the
+        counts are validated by the engine; otherwise the defaults apply.
+
+    Returns
+    -------
+    int
+        ``n_chains`` for an explicit geometry; else the smallest multiple of
+        ``lcm(n_superchains, n_folds)`` that is at least ``n_chains`` and
+        :func:`ghmc_default_chains`. Every one of these chains is returned.
+    """
+    n_chains = max(1, int(n_chains))
+    if n_superchains is not None or n_folds is not None:
+        return n_chains
+    n_superchains, n_folds = GHMC_DEFAULT_SUPERCHAINS, GHMC_DEFAULT_FOLDS
+    unit = math.lcm(n_superchains, n_folds)
+    return max(ghmc_default_chains(n_dim, n_superchains, n_folds), -(-n_chains // unit) * unit)
+
+
 def ghmc_superchain_starts(init_flat, key, n_chains, n_superchains, jitter_scale):
     """Return the MEADS ensemble's starting positions, one distinct draw per superchain.
 
@@ -186,7 +210,8 @@ def ghmc_superchain_starts(init_flat, key, n_chains, n_superchains, jitter_scale
     init_flat : array_like, shape (D,)
         Seed position in the latent space [dimensionless].
     key : PRNGKey
-        Split into one key per superchain.
+        The key of :func:`~tengri.inference.sampling.chains.jittered_starts`, the one start
+        rule of every sampler; the superchain starts are its ``n_superchains`` rows.
     n_chains : int
         Total number of chains, a multiple of ``n_superchains``.
     n_superchains : int
@@ -204,9 +229,7 @@ def ghmc_superchain_starts(init_flat, key, n_chains, n_superchains, jitter_scale
     -----
     **JIT/vmap-compatible**: the output shape depends only on the static counts.
     """
-    keys = jax.random.split(key, n_superchains)
-    draws = jax.vmap(lambda k: jax.random.normal(k, init_flat.shape, dtype=init_flat.dtype))(keys)
-    starts = init_flat[None, :] + jitter_scale * draws
+    starts = jittered_starts(init_flat, key, n_superchains, jitter_scale)
     return jnp.repeat(starts, n_chains // n_superchains, axis=0)
 
 
@@ -528,7 +551,9 @@ def _mapped_program(fn, batch_size):
     return program
 
 
-def _catalog_live_chains(sampler: str, *, n_chains: int, n_ensemble: int | str) -> int:
+def _catalog_live_chains(
+    sampler: str, *, n_chains: int, n_ensemble: int | str, n_dim: int | None = None
+) -> int:
     """Chains one galaxy carries through the catalog engine, the width its budget divides by.
 
     ChEES vmaps its resolved adaptation ensemble, a superset of the sampling chains,
@@ -542,6 +567,8 @@ def _catalog_live_chains(sampler: str, *, n_chains: int, n_ensemble: int | str) 
         Requested sampling chains per galaxy.
     n_ensemble : int or ``"auto"``
         ChEES adaptation ensemble; ignored by the other samplers.
+    n_dim : int or None
+        Sampled coordinates, read by ``"ghmc"``, whose MEADS ensemble is returned whole.
 
     Returns
     -------
@@ -550,6 +577,8 @@ def _catalog_live_chains(sampler: str, *, n_chains: int, n_ensemble: int | str) 
     """
     if sampler == "chees":
         return _resolve_chees_ensemble(n_ensemble, n_chains)
+    if sampler == "ghmc" and n_dim is not None:
+        return ghmc_ensemble_size(n_dim, n_chains)
     return max(1, int(n_chains))
 
 
@@ -567,14 +596,17 @@ def build_catalog_mcmc_engine(
     thread_redshift: bool = False,
     thread_line_fluxes: bool = False,
     n_chains: int = 1,
-    n_superchains: int = GHMC_DEFAULT_SUPERCHAINS,
-    n_folds: int = GHMC_DEFAULT_FOLDS,
+    n_superchains: int | None = None,
+    n_folds: int | None = None,
     rewhiten_at: float = GHMC_DEFAULT_REWHITEN_AT,
     n_ensemble: int | str = CATALOG_CHEES_ENSEMBLE,
     ensemble_jitter: float | None = None,
     chain_jitter: float | None = None,
     max_leapfrog_steps: int = 200,
     chees_learning_rate: float = _CHEES_LEARNING_RATE,
+    chees_dense: bool = False,
+    metric: str = "diag",
+    return_metric_info: bool = False,
     mass_matrix_estimation=None,
     precondition: bool | float | None = None,
     precondition_floor: float = PRIOR_METRIC_FLOOR,
@@ -633,10 +665,13 @@ def build_catalog_mcmc_engine(
         unchanged. When True, per-galaxy line_flux_obs and line_flux_err arrays
         are substituted into data_args.
     n_chains : int, default 1
-        Sampling chains **per galaxy**, concatenated into that galaxy's draws.
-        ``"nuts"`` and ``"hmc"`` accept only 1 here; ChEES accepts more, which is
-        what lets a catalog fit carry a split R-hat over genuinely separate
-        chains rather than over two halves of one.
+        Sampling chains **per galaxy**, concatenated into that galaxy's draws. Every sampler
+        accepts any count, which is what lets a catalog fit carry a split R-hat over
+        genuinely separate chains rather than over two halves of one. ``"ghmc"`` is the one
+        exception to "returns ``n_chains``": MEADS adapts from an ensemble of at least
+        ``2 D K`` chains, and every chain of it is a sampling chain, so ``n_chains`` is a
+        minimum and the engine returns :func:`ghmc_ensemble_size` chains (``n_chains``
+        itself when ``n_superchains`` or ``n_folds`` is given, which must then divide it).
     n_ensemble : int or "auto", default :data:`CATALOG_CHEES_ENSEMBLE`
         ChEES adaptation-ensemble width, **within each galaxy**. Ignored by
         ``"nuts"`` / ``"hmc"``.
@@ -661,6 +696,11 @@ def build_catalog_mcmc_engine(
         states. A float seeds them independently and overdispersed, which is
         what makes a per-galaxy split R-hat a real test rather than a
         consistency check.
+    chees_dense : bool, default False
+        ChEES only. Samples with a dense metric instead of the diagonal one: a pilot ChEES
+        run per galaxy estimates the shrunk covariance of its draws (see
+        ``CATALOG_DENSE_SHRINKAGE``), and the final run samples in its whitened
+        coordinates. Costs two ChEES adaptations per galaxy.
     max_leapfrog_steps : int, default 200
         Hard cap on ChEES's adapted trajectory length. **This is the parameter
         that keeps a vmapped ChEES batch bounded**: lanes with different adapted
@@ -728,22 +768,22 @@ def build_catalog_mcmc_engine(
     (``run_chain`` for the NUTS and HMC chain programs) takes ``data_args`` traced,
     so different galaxies never trigger recompilation.
     """
-    if sampler not in _SAMPLERS:
-        raise ValueError(f"sampler must be one of {_SAMPLERS}, got {sampler!r}")
-
+    if metric not in ("diag", "dense"):
+        raise ValueError(f"metric must be 'diag' or 'dense', got {metric!r}")
+    dense_requested = metric == "dense" or bool(chees_dense)
     n_chains = max(1, int(n_chains))
-    if sampler not in ("chees", "ghmc") and n_chains != 1:
-        raise ValueError(
-            f"sampler={sampler!r} runs exactly one chain per galaxy in the catalog "
-            f"path, got n_chains={n_chains}. Window adaptation is per galaxy here, so "
-            "a second chain would have to re-run it; only the ChEES path adapts once "
-            "over an ensemble and can then sample several chains from it. Use "
-            "method='mcmc_chees' for a per-galaxy multi-chain R-hat."
-        )
+    explicit_ensemble = False
     if sampler == "ghmc":
-        _check_ghmc_counts(n_chains, int(n_superchains), int(n_folds))
         if not 0.0 <= float(rewhiten_at) < 1.0:
             raise ValueError(f"rewhiten_at must lie in [0, 1), got {rewhiten_at!r}")
+        # An explicit ensemble geometry (either count given) binds ``n_chains`` to it. Left
+        # to the defaults, MEADS runs the ensemble it needs and the first ``n_chains`` of
+        # its chains are the ones returned, as for the ChEES ensemble.
+        explicit_ensemble = n_superchains is not None or n_folds is not None
+        n_superchains = GHMC_DEFAULT_SUPERCHAINS if n_superchains is None else int(n_superchains)
+        n_folds = GHMC_DEFAULT_FOLDS if n_folds is None else int(n_folds)
+        if explicit_ensemble:
+            _check_ghmc_counts(n_chains, n_superchains, n_folds)
     ensemble_size = _resolve_chees_ensemble(n_ensemble, n_chains) if sampler == "chees" else 0
     if ensemble_jitter is None:
         ensemble_scale = _MEADS_JITTER_SCALE if sampler == "ghmc" else _CHEES_JITTER_SCALE
@@ -771,8 +811,12 @@ def build_catalog_mcmc_engine(
     # the unpreconditioned program is byte-for-byte the one this module compiled
     # before preconditioning existed.
     n_dim = int(_init_flat.shape[0])
+    n_ensemble_ghmc = n_chains
     if sampler == "ghmc":
-        _check_ghmc_chains_per_fold(n_chains, int(n_folds), n_dim)
+        if explicit_ensemble:
+            _check_ghmc_chains_per_fold(n_chains, n_folds, n_dim)
+        else:
+            n_ensemble_ghmc = ghmc_ensemble_size(n_dim, n_chains)
     strength = (
         GHMC_WHITENING_STRENGTH
         if sampler == "ghmc" and precondition is None
@@ -821,120 +865,134 @@ def build_catalog_mcmc_engine(
             sample_args = (precond.matrix, data_args)
             sample_init = precond.to_latent(init_flat)
 
-        warmup_key, chain_key = jax.random.split(gal_key)
-        chain_keys = jax.random.split(chain_key, n_chain)
+        n_burn = n_burnin
 
         def restore(positions):
             """Map draws out of the whitened coordinates. Identity when off.
 
-            ``positions @ A.T`` is row-wise ``A @ v``, so one expression covers
-            both the ``(n_iter, D)`` NUTS/HMC stack and the ChEES
-            ``(n_chains, n_iter, D)`` one. Called on every return path: draws
-            left in the sampled basis are finite, correctly shaped and wrong.
+            ``positions @ A.T`` is row-wise ``A @ v``, so one expression covers the
+            ``(n_chains, n_iter, D)`` stack. Called on every return path: draws left in the
+            sampled basis are finite, correctly shaped and wrong.
             """
             return positions if precond is None else positions @ precond.matrix.T
 
-        if sampler == "ghmc":
-            # MEADS over the sampling chains themselves: the ensemble starts from
-            # superchain-grouped draws and its final states are the chains that sample.
-            starts = ghmc_superchain_starts(
-                sample_init,
-                jax.random.fold_in(gal_key, 1),
-                n_chains,
-                int(n_superchains),
-                float(ensemble_scale),
-            )
-            gh_keys = jax.random.split(chain_key, n_chains * n_chain).reshape(n_chains, n_chain, 2)
-            positions, divergent, _step_size, _inv_mass, _alpha, _delta = ghmc_catalog_scan(
-                starts,
+        def one_pass(init, logdensity, args, salt, dense_native):
+            """One sampling pass: ``(n_chains, n_chain, D)`` positions and divergence flags."""
+            pass_key = gal_key if salt is None else jax.random.fold_in(gal_key, salt)
+            warmup_key, chain_key = jax.random.split(pass_key)
+            if sampler == "ghmc":
+                # MEADS over the sampling chains themselves: the ensemble starts from
+                # superchain-grouped draws and its final states are the chains that sample.
+                starts = ghmc_superchain_starts(
+                    init,
+                    jax.random.fold_in(pass_key, 1),
+                    n_ensemble_ghmc,
+                    n_superchains,
+                    float(ensemble_scale),
+                )
+                gh_keys = jax.random.split(chain_key, n_ensemble_ghmc * n_chain).reshape(
+                    n_ensemble_ghmc, n_chain, 2
+                )
+                positions, divergent, *_ = ghmc_catalog_scan(
+                    starts,
+                    warmup_key,
+                    gh_keys,
+                    logdensity,
+                    args,
+                    n_warmup,
+                    n_folds,
+                    float(rewhiten_at),
+                )
+                return positions, divergent
+            if sampler == "chees":
+                # This galaxy's OWN ChEES adaptation, over an ensemble of ``ensemble_size``
+                # chains that all target THIS galaxy's posterior: per-galaxy adaptation,
+                # ensemble on the inner axis, nothing shared with any other lane.
+                ck = jax.random.split(chain_key, n_chains * n_chain).reshape(n_chains, n_chain, 2)
+                positions, divergent, _step, _inv_mass, _n_leapfrog = _chees_scan(
+                    init,
+                    warmup_key,
+                    ck,
+                    logdensity,
+                    args,
+                    n_warmup,
+                    ensemble_size,
+                    n_chains,
+                    n_chain,
+                    float(ensemble_scale),
+                    1.0,  # jitter_amount: BlackJAX's full Halton jitter
+                    target_accept_rate,
+                    max_leapfrog_steps,
+                    float(chees_learning_rate),
+                    mass_matrix_estimation,
+                    None if chain_jitter is None else float(chain_jitter),
+                )
+                return positions, divergent
+            settings = {
+                "n_warmup": n_warmup,
+                "n_leapfrog": n_leapfrog,
+                "max_num_doublings": max_num_doublings,
+                "target_accept_rate": target_accept_rate,
+                "ghmc_alpha": 0.8,
+                "ghmc_delta": 0.65,
+            }
+            draws, _ = run_chain_family(
+                sampler,
+                logdensity,
+                args,
+                init,
                 warmup_key,
-                gh_keys,
-                sample_logdensity,
-                sample_args,
-                n_warmup,
-                int(n_folds),
-                float(rewhiten_at),
+                chain_key,
+                n_chains=n_chains,
+                n_chain=n_chain,
+                n_warmup=n_warmup,
+                cfg=settings,
+                dense=dense_native,
+                chain_jitter=chain_jitter,
             )
-            positions = restore(positions[:, n_burnin:])
-            divergent = divergent[:, n_burnin:]
-            if precond is not None:
-                # A galaxy whose metric could not be factorized is reported, not sampled in a
-                # different basis: its draws are NaN and every transition is flagged divergent.
-                positions = jnp.where(metric_ok, positions, jnp.nan)
-                divergent = divergent | ~metric_ok
-            return positions.reshape(-1, positions.shape[-1]), divergent.reshape(-1)
+            positions, divergent = draws.position, draws.divergent
+            if divergent is None:  # Metropolis-corrected first-order families report none
+                divergent = jnp.zeros(positions.shape[:-1], dtype=bool)
+            if n_chains == 1:
+                positions, divergent = positions[None], divergent[None]
+            return positions, divergent
 
-        if sampler == "chees":
-            # This galaxy's OWN ChEES adaptation, over an ensemble of
-            # ``ensemble_size`` chains that all target THIS galaxy's posterior.
-            # Convention 1 + convention 3 of the module docstring: per-galaxy
-            # adaptation, ensemble on the inner axis. Nothing here is shared with
-            # any other lane, so a galaxy's draws do not depend on which galaxies
-            # it was batched with -- the property that would be lost if the
-            # ensemble were reused as the galaxy axis.
-            #
-            # ``chain_keys`` is reshaped to the (n_chains, n_iter, 2) layout
-            # ``_chees_scan`` wants. Splitting per chain here rather than inside
-            # keeps the key stream identical in shape to the NUTS/HMC lanes.
-            ck = jax.random.split(chain_key, n_chains * n_chain).reshape(n_chains, n_chain, 2)
-            positions, divergent, _step_size, _inv_mass, _n_leapfrog = _chees_scan(
-                sample_init,
-                warmup_key,
-                ck,
-                sample_logdensity,
-                sample_args,
-                n_warmup,
-                ensemble_size,
-                n_chains,
-                n_chain,
-                float(ensemble_scale),
-                1.0,  # jitter_amount: BlackJAX's full Halton jitter
-                target_accept_rate,
-                max_leapfrog_steps,
-                float(chees_learning_rate),
-                mass_matrix_estimation,
-                None if chain_jitter is None else float(chain_jitter),
-            )
-            # Burn-in is per chain (the ``_vmap_chains`` contract), so it is
-            # sliced BEFORE the chains are flattened together. Slicing after
-            # would drop the head of chain 0 and nothing from the rest.
-            positions = restore(positions[:, n_burnin:])
-            divergent = divergent[:, n_burnin:]
-            return positions.reshape(-1, positions.shape[-1]), divergent.reshape(-1)
-
-        if sampler == "nuts":
-            entry = get_backend("mcmc_nuts")
-            adaptation = entry.adaptation_for({"pathfinder_warmstart": False})
-            cfg = NUTSConfig(
-                max_doublings=max_num_doublings,
-                use_dense=use_dense,
-                target_accept_rate=target_accept_rate,
-            )
-        else:  # "hmc"
-            entry = get_backend("mcmc_hmc")
-            adaptation = entry.adaptation_for(
-                {"dense_mass_matrix": bool(use_dense), "n_leapfrog_steps": n_leapfrog}
-            )
-            cfg = HMCConfig(
-                n_leapfrog=n_leapfrog,
-                use_dense=use_dense,
-                target_accept_rate=target_accept_rate,
-            )
-        draws, _ = run_chain(
-            entry.chain_program,
-            adaptation,
-            sample_init,
-            warmup_key,
-            None,
-            chain_keys,
-            sample_logdensity,
-            sample_args,
-            n_warmup,
-            cfg,
+        native_dense = bool(use_dense) or (dense_requested and sampler in DENSE_FAMILIES)
+        positions, divergent = one_pass(
+            sample_init, sample_logdensity, sample_args, None, native_dense
         )
-        positions, divergent = draws.position, draws.divergent
-
-        # Discard per-galaxy burn-in (n_burnin is static -> uniform shape).
-        return restore(positions[n_burnin:]), divergent[n_burnin:]
+        fallback = jnp.asarray(False)
+        if dense_requested and sampler not in DENSE_FAMILIES:
+            # A dense metric from a pilot, for any sampler without a dense adaptation of its
+            # own: the diagonal pass above gives post-burn-in, non-divergent draws whose
+            # shrunk covariance is Sigma. The final pass samples zeta with y = mu + L zeta,
+            # L L^T = Sigma. A pilot that cannot define a metric keeps its own draws.
+            dim = sample_init.shape[-1]
+            pilot_burn = max(n_burnin, n_chain // 2)
+            pilot = positions[:, pilot_burn:].reshape(-1, dim)
+            usable = ~divergent[:, pilot_burn:].reshape(-1) & jnp.all(jnp.isfinite(pilot), axis=-1)
+            mu, factor, fallback = pilot_whitening(pilot, usable)
+            dense_positions, dense_divergent = one_pass(
+                jax.scipy.linalg.solve_triangular(factor, sample_init - mu, lower=True),
+                whiten_logdensity(sample_logdensity),
+                (mu, factor, sample_args),
+                2,
+                False,
+            )
+            dense_positions = mu + dense_positions @ factor.T
+            positions = jnp.where(fallback, positions, dense_positions)
+            divergent = jnp.where(fallback, divergent, dense_divergent)
+        positions = restore(positions[:, n_burn:])
+        divergent = divergent[:, n_burn:]
+        if sampler == "ghmc" and precond is not None:
+            # A galaxy whose metric could not be factorized is reported, not sampled in a
+            # different basis: its draws are NaN and every transition is flagged divergent.
+            positions = jnp.where(metric_ok, positions, jnp.nan)
+            divergent = divergent | ~metric_ok
+        positions = positions.reshape(-1, positions.shape[-1])
+        divergent = divergent.reshape(-1)
+        if return_metric_info:
+            return positions, divergent, fallback
+        return positions, divergent
 
     return run_one, unravel_fn

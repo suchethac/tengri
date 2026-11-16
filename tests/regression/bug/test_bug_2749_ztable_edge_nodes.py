@@ -34,6 +34,9 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.utils.filter_convention import FilterConvention
+from tests._band_keys import ztable_key
+
 pytestmark = pytest.mark.regression_bug
 
 LYMAN_LIMIT_AA = 911.76
@@ -235,7 +238,15 @@ def test_lookup_equals_the_table_at_every_node(ssp_data_wne):
     from tengri.utils.grid_interp import pchip_interp_local
 
     waves, trans = _curves(BANDS)
-    zt = precompute_photometry_ztable(ssp_data_wne, waves, trans, z_min=0.05, z_max=1.5, n_z=14)
+    zt = precompute_photometry_ztable(
+        ssp_data_wne,
+        waves,
+        trans,
+        z_min=0.05,
+        z_max=1.5,
+        n_z=14,
+        convention=FilterConvention.BESSELL,
+    )
     assert np.asarray(zt.z_grid).size > 14, "the 4-band set has crossings in range"
     for k, zk in enumerate(np.asarray(zt.z_grid)):
         got = pchip_interp_local(zt.z_grid, zt.ssp_phot_table, zk)
@@ -255,12 +266,18 @@ def test_off_node_error_is_no_worse_than_the_old_triweight_window(ssp_data_wne):
 
     waves, trans = _curves(BANDS)
     grid = jnp.linspace(0.05, 1.5, 60)
-    zt = precompute_photometry_ztable(ssp_data_wne, waves, trans, z_grid=grid)
+    zt = precompute_photometry_ztable(
+        ssp_data_wne, waves, trans, z_grid=grid, convention=FilterConvention.BESSELL
+    )
     edges = edges_for_grid(grid)
     new_err, old_err = np.zeros(len(BANDS)), np.zeros(len(BANDS))
     for z in (0.3, 0.7, 0.9, 0.97, 1.2, 1.4):
         truth = _compute_photometry_ztable(
-            ssp_data_wne, waves, trans, z_grid=jnp.asarray([z, z + 1e-3])
+            ssp_data_wne,
+            waves,
+            trans,
+            z_grid=jnp.asarray([z, z + 1e-3]),
+            convention=FilterConvention.BESSELL,
         ).ssp_phot_table[0]
         flux = lambda tab: np.asarray(jnp.sum(tab, axis=(0, 1)))  # noqa: E731
         f_true = flux(truth)
@@ -296,7 +313,6 @@ def test_redshift_gradient_tracks_the_exact_path_across_the_crossing(ssp_id, z):
 
 def test_cache_key_differs_when_the_crossings_differ(ssp_data_wne):
     from tengri.components.stellar.sps import ztable_grid as zg
-    from tengri.components.stellar.sps.precompute import _ztable_cache_key
     from tengri.utils.filter_convention import FilterConvention
 
     waves, trans = _curves(["galex_fuv"])
@@ -305,7 +321,7 @@ def test_cache_key_differs_when_the_crossings_differ(ssp_data_wne):
     assert with_edges.shape != uniform.shape
 
     def key(grid):
-        return _ztable_cache_key(
+        return ztable_key(
             ssp_data_wne, waves, trans, grid, False, False, FilterConvention.BESSELL, 0, False
         )
 

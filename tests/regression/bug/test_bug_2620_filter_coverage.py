@@ -25,6 +25,7 @@ import pytest
 
 from tengri import DEFAULT, Fitter, Fixed, ForwardModel, Observation, SEDModel, Uniform
 from tengri.observation.photometry_config import FilterCurve, Photometry
+from tengri.utils.filter_convention import FilterConvention
 
 pytestmark = [pytest.mark.regression_bug]
 
@@ -71,7 +72,9 @@ class TestFilterCoverageFraction:
 
         waves = [b.wave for b in _BANDS]
         trans = [b.trans for b in _BANDS]
-        frac = filter_coverage_fraction(waves, trans, np.geomspace(3300.0, 11000.0, 4000))
+        frac = filter_coverage_fraction(
+            waves, trans, np.geomspace(3300.0, 11000.0, 4000), convention=FilterConvention.BESSELL
+        )
         assert frac[0] == pytest.approx(0.0, abs=1e-9)
         assert 0.2 < frac[1] < 0.8
         assert frac[2] == pytest.approx(1.0, abs=1e-9)

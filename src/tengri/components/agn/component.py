@@ -130,6 +130,7 @@ from tengri.protocols.component import (
     SEDComponentState,
     declared_default,
 )
+from tengri.utils.band_projection import BandSpec
 from tengri.utils.scale import log10_add
 
 __all__ = [
@@ -252,6 +253,8 @@ class AGNSEDComponentState(SEDComponentState):
     name: str = "agn"
     filter_waves: Any | None = None
     filter_trans: Any | None = None
+    #: BandSpec the cached passbands are integrated with (convention, sub-band scheme).
+    band_spec: Any | None = None
     skirtor_templates: Any | None = None
     #: :class:`BlockTemplates` (``templates`` maps ``"<category>/<name>"`` to each selected
     #: block's pytree; ``declines`` carries every loader that could not read its file).
@@ -687,6 +690,7 @@ class AGNSEDComponent(TemplateThreading):
         wave_grid: jnp.ndarray | None = None,
         approx: Mapping[str, bool] | None = None,
         filters: tuple[tuple[jnp.ndarray, jnp.ndarray], ...] | None = None,
+        bands: BandSpec | None = None,
     ) -> AGNSEDComponentState:
         r"""Cache filter passbands and SKIRTOR templates for precomputation.
 
@@ -724,6 +728,11 @@ class AGNSEDComponent(TemplateThreading):
         skirtor_templates = None
 
         if approx.get("wave_precomp") and filters is not None:
+            if bands is None:
+                raise ValueError(
+                    "AGNSEDComponent.precompute: cached passbands need the observation's "
+                    "BandSpec; pass bands=."
+                )
             filter_waves = tuple(jnp.asarray(fw) for fw, _ in filters)
             filter_trans = tuple(jnp.asarray(ft) for _, ft in filters)
 
@@ -754,6 +763,7 @@ class AGNSEDComponent(TemplateThreading):
             name=self.name,
             filter_waves=filter_waves,
             filter_trans=filter_trans,
+            band_spec=bands if filter_waves is not None else None,
             skirtor_templates=skirtor_templates,
             block_templates=block_templates,
             torus_below_index=torus_below_index,
@@ -1359,7 +1369,14 @@ class AGNSEDComponent(TemplateThreading):
                 else:
                     agn_phot_lnu_precomp = jnp.asarray(
                         [
-                            lnu_filter_integral(L_agn, state.wave, fw, ft, redshift=z)
+                            lnu_filter_integral(
+                                L_agn,
+                                state.wave,
+                                fw,
+                                ft,
+                                redshift=z,
+                                convention=self._state.band_spec.convention,
+                            )
                             for fw, ft in zip(
                                 self._state.filter_waves,
                                 self._state.filter_trans,
@@ -1374,7 +1391,14 @@ class AGNSEDComponent(TemplateThreading):
                 # physical quantity from the exact path (769 % in des_g at z=0.5).
                 agn_restband_lnu_precomp = jnp.asarray(
                     [
-                        lnu_filter_integral(L_agn, state.wave, fw, ft, redshift=0.0)
+                        lnu_filter_integral(
+                            L_agn,
+                            state.wave,
+                            fw,
+                            ft,
+                            redshift=0.0,
+                            convention=self._state.band_spec.convention,
+                        )
                         for fw, ft in zip(
                             self._state.filter_waves,
                             self._state.filter_trans,

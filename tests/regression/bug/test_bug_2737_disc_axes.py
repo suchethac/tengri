@@ -16,6 +16,7 @@ from tengri import Uniform
 from tengri.components.agn import disc_precompute as adapter
 from tengri.components.agn.disc import multicolor_disc, powerlaw_disc
 from tengri.parameters.parameters import Parameters
+from tengri.utils.filter_convention import FilterConvention
 
 pytestmark = pytest.mark.regression_bug
 
@@ -55,7 +56,12 @@ def test_powerlaw_widened_alpha_table_equals_exact_closure_at_alpha_minus_2_7():
     fw = [f[0] for f in _FILTERS]
     ft = [f[1] for f in _FILTERS]
     result = adapter.precompute(
-        fw, ft, 0.0, _powerlaw_parameters(-3.0, 0.5), model="powerlaw_disc"
+        fw,
+        ft,
+        0.0,
+        _powerlaw_parameters(-3.0, 0.5),
+        model="powerlaw_disc",
+        convention=FilterConvention.BESSELL,
     )
     lookup = adapter.build_lookup(result, model="powerlaw_disc")
     log_lbol = 10.0
@@ -92,7 +98,9 @@ def test_ss_disc_table_equals_exact_closure_off_node():
     """
     fw = [f[0] for f in _FILTERS]
     ft = [f[1] for f in _FILTERS]
-    result = adapter.precompute(fw, ft, 0.0, _ss_parameters(), model="ss_disc")
+    result = adapter.precompute(
+        fw, ft, 0.0, _ss_parameters(), model="ss_disc", convention=FilterConvention.BESSELL
+    )
     lookup = adapter.build_lookup(result, model="ss_disc")
     worst = 0.0
     for mbh, lbol in _SS_OFF_NODE:

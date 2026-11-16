@@ -255,6 +255,8 @@ def _build_term_response_table(ctx, comp, fw_pad, ft_pad, *, amplitudes=False):
     # The reference wavelengths as one array, evaluated exactly as the per-call path does.
     lam_ref = jnp.asarray(np.asarray(wave)[[peaks[key] for key in keys]], dtype=wave.dtype)
 
+    convention = ctx.bands.convention
+
     def _node(z):
         terms_all = [_terms(z, probe) for probe in probes]
         terms_a = terms_all[0]
@@ -284,7 +286,7 @@ def _build_term_response_table(ctx, comp, fw_pad, ft_pad, *, amplitudes=False):
                 rank1_ok = ~live | jnp.allclose(s_b, scale * s_a, rtol=_RANK1_RTOL, atol=0.0)
                 alive_ok = ~live | (jnp.all(jnp.isfinite(s_b)) & (jnp.max(jnp.abs(s_b)) > 0.0))
                 term_ok = term_ok & rank1_ok & alive_ok
-            row = lnu_filter_integral_batch(s_a, wave, fw_pad, ft_pad, z)
+            row = lnu_filter_integral_batch(s_a, wave, fw_pad, ft_pad, z, convention=convention)
             rows.append(jnp.where(live, row, jnp.zeros_like(row)))
             # S_ref = 1 keeps A = term/1 = 0 finite instead of 0/0.
             s_ref.append(jnp.where(live, ref, jnp.ones_like(ref)))
@@ -376,6 +378,7 @@ def additive_term_shape_table(ctx, name) -> BandTable | Decline:
             parameters=ctx.spec,
             model=key,
             term=term,
+            convention=ctx.bands.convention,
         )
         if term_table is None:
             return Decline(f"the {key} adapter built no shape table for term {term!r}")

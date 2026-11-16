@@ -24,6 +24,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.utils.filter_convention import FilterConvention
+
 pytestmark = pytest.mark.crossval
 
 # Physical constants (CGS, matching tengri's values)
@@ -455,6 +457,7 @@ class TestPhotometryFlatSpectrum:
                 filt_trans,
                 z,
                 dl_cm,
+                convention=FilterConvention.BESSELL,
             )
         )
 
@@ -491,6 +494,7 @@ class TestPhotometryFlatSpectrum:
                 filt_trans,
                 z,
                 dl_cm,
+                convention=FilterConvention.BESSELL,
             )
         )
 

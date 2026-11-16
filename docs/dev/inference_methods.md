@@ -1017,7 +1017,7 @@ run-path adaptation rule (`BackendEntry.adaptation_for(kwargs)`), and a compile 
 
 `fitter.compile()`, the batched vmap path (`_fit_batch_vmap_mcmc`) and the catalog lanes
 resolve their program through the registry rather than by family name. The hierarchical flat
-seam runs one `run_chain` branch for every driver in `flat_chain_drivers()`.
+seam runs every chain family of `sampling/families.py` through `run_chain`.
 
 **Compile exception (GHMC).** `compile()` warms GHMC with the window pairing that the
 hierarchical lane runs (`WINDOW_GHMC`, diagonal mass). `run()` samples GHMC with MEADS, whose

@@ -55,8 +55,8 @@ failing.
 8. Dispatch sites that now go through the registry: `Fitter.compile()`, the batched vmap path
    `_fit_batch_vmap_mcmc` (four copies of the sampling scan become one scan over
    `program.step` and `program.collect` inside the existing memoized kernel), the NUTS and HMC
-   lanes of `catalog.py` (`run_chain`), and the flat seam (one `run_chain` branch for every
-   driver in `flat_chain_drivers()`). The deleted shims were `_nuts_full_scan`, `_nuts_warmup_only`,
+   lanes of `catalog.py` (`run_chain`), and the flat seam (every chain family of
+   `sampling/families.py` runs through `run_chain`). The deleted shims were `_nuts_full_scan`, `_nuts_warmup_only`,
    `_nuts_chain_scan`, `_hmc_full_scan`, `_hmc_warmup_only`, `_hmc_chain_scan`,
    `_dynamic_hmc_full_scan`, `_dynamic_hmc_chain_scan`, `_ghmc_full_scan`, `_ghmc_chain_scan`,
    `_ghmc_meads_scan`, `_first_order_full_scan` and `_first_order_chain_scan`.

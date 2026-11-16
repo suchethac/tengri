@@ -118,8 +118,8 @@ from tengri.parameters.translate import (
     check_unknown_params,
     get_internal_params,
 )
+from tengri.utils.band_projection import BandSpec
 from tengri.utils.batching import GALAXY_CHUNK_SIZE
-from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid import (
     grid_spacing,
     interpolate_to_linear_time,
@@ -2421,11 +2421,8 @@ def _fold_igm_exact_into_subbands(
     igm_comp,
     stellar_state,
     ssp_data,
-    filters,
+    bands,
     redshift_spec,
-    *,
-    lyc_gate=False,
-    convention=FilterConvention.BESSELL,
 ):
     r"""Rebuild the sub-band weights with IGM transmission inside the integrand.
 
@@ -2463,17 +2460,12 @@ def _fold_igm_exact_into_subbands(
         Carrying either the fixed-z photometry LUT or the free-z z-table.
     ssp_data : SSPData
         Template grid, shape ``(n_met, n_age, n_wave)`` [erg/s/Hz/Msun].
-    filters : sequence of (wave, trans) pairs
-        Filter curves [Angstrom], [dimensionless].
+    bands : BandSpec
+        The spec the sub-band tensors were built with (filter curves, bandpass weight and the
+        Lyman-limit gate, so the ratio is taken over the partition of the tensor it multiplies).
     redshift_spec : dict or None
         Redshift specification; supplies the redshift of a fixed-z LUT. A free
         redshift is folded on every node of the z-table's own grid.
-    lyc_gate : bool, optional
-        Whether the sub-band tensors were built with the forced Lyman-limit edge
-        (``K + 1`` chunks). Must match the build, or the ratio is taken over a
-        different partition from the tensor it multiplies.
-    convention : FilterConvention, optional
-        Bandpass weight the tensors were built with; same reason.
 
     Returns
     -------
@@ -2495,7 +2487,7 @@ def _fold_igm_exact_into_subbands(
 
     import numpy as np
 
-    if stellar_state is None or ssp_data is None or not filters:
+    if stellar_state is None or ssp_data is None or bands is None or bands.n_filters == 0:
         return stellar_state
 
     blocker = _exact_fold_blocker(igm_comp, stellar_state)
@@ -2504,14 +2496,12 @@ def _fold_igm_exact_into_subbands(
 
     from tengri.components.igm import exact_fold
 
-    def _partition(tensor):
+    igm_model = getattr(getattr(igm_comp, "config", None), "igm_model", None)
+
+    def _spec_of(tensor):
+        # The partition the tensor was built with: its chunk count fixes K.
         n_chunks = int(np.shape(tensor)[-1])
-        return {
-            "igm_model": getattr(getattr(igm_comp, "config", None), "igm_model", None),
-            "n_subbands": n_chunks - 1 if lyc_gate else n_chunks,
-            "lyc_gate": lyc_gate,
-            "convention": convention,
-        }
+        return bands.replace(n_subbands=n_chunks - 1 if bands.lyc_gate else n_chunks)
 
     from tengri.components.stellar.sps.met_pchip import native_slope_flux
 
@@ -2537,14 +2527,14 @@ def _fold_igm_exact_into_subbands(
         z = _fixed_redshift_value(redshift_spec) if redshift_spec else float(lut.redshift)
         # The folded integrals are the linear objects (#3541): the table and its native-slope
         # sibling are the same quadrature on F and on S, and the ratio is formed after the read.
-        fold = exact_fold.subband_fold(ssp_data, filters, z, **_partition(subband))
+        fold = exact_fold.subband_fold(ssp_data, _spec_of(subband), z, igm_model=igm_model)
         phi, num = _folded(fold, subband, _bare_num(lut.ssp_subband_waves_rest, subband))
         new = lut._replace(ssp_subband_phot_igm=phi, ssp_subband_num_igm=num)
         if lut.slopes is not None:
             sib = lut.slopes
             sib_phot = np.asarray(sib.ssp_subband_phot)
             fold_s = exact_fold.subband_fold(
-                _slope_ssp(ssp_data), filters, z, **_partition(subband)
+                _slope_ssp(ssp_data), _spec_of(subband), z, igm_model=igm_model
             )
             phi_s, num_s = _folded(
                 fold_s, sib_phot, _bare_num(sib.ssp_subband_waves_rest, sib_phot)
@@ -2560,14 +2550,16 @@ def _fold_igm_exact_into_subbands(
         if table.shape[-1] <= 0:
             return stellar_state
         z_grid = np.asarray(ztable.z_grid)
-        fold = exact_fold.subband_fold_table(ssp_data, filters, z_grid, **_partition(table))
+        fold = exact_fold.subband_fold_table(
+            ssp_data, _spec_of(table), z_grid, igm_model=igm_model
+        )
         phi, num = _folded(fold, table, _bare_num(ztable.subband_waves_rest_table, table))
         new = ztable._replace(ssp_subband_phot_igm_table=phi, subband_num_igm_table=num)
         if ztable.slopes is not None:
             sib = ztable.slopes
             sib_table = np.asarray(sib.ssp_subband_phot_table)
             fold_s = exact_fold.subband_fold_table(
-                _slope_ssp(ssp_data), filters, z_grid, **_partition(table)
+                _slope_ssp(ssp_data), _spec_of(table), z_grid, igm_model=igm_model
             )
             phi_s, num_s = _folded(
                 fold_s, sib_table, _bare_num(sib.subband_waves_rest_table, sib_table)
@@ -2624,7 +2616,7 @@ def _exact_fold_blocker(igm_comp, stellar_state):
 
 
 def _resolve_igm_fold(
-    igm_fold, igm_comp, stellar_state, ssp_data=None, filters=None, on_decline=None
+    igm_fold, igm_comp, stellar_state, ssp_data=None, bands=None, on_decline=None
 ) -> str:
     """Resolve ``"auto"`` to the fold that can actually be built here.
 
@@ -2648,8 +2640,8 @@ def _resolve_igm_fold(
     ssp_data : SSPData, optional
         Template grid. The exact fold needs it and returns the state untouched
         without it.
-    filters : sequence, optional
-        Filter curves, on the same footing as ``ssp_data``.
+    bands : BandSpec, optional
+        The observation's band spec, on the same footing as ``ssp_data``.
     on_decline : callable, optional
         Called with the reason whenever ``"auto"`` falls back to ``"node"``.
 
@@ -2670,7 +2662,7 @@ def _resolve_igm_fold(
     if igm_fold != "auto":
         return igm_fold
 
-    if ssp_data is None or not filters:
+    if ssp_data is None or bands is None or bands.n_filters == 0:
         if on_decline is not None:
             on_decline(
                 "auto fell back to the node fold: the exact fold needs the SSP "
@@ -2691,11 +2683,9 @@ def _fold_igm_into_subbands(
     stellar_state,
     igm_fold="node",
     ssp_data=None,
-    filters=None,
+    bands=None,
     redshift_spec=None,
     *,
-    lyc_gate=False,
-    convention=FilterConvention.BESSELL,
     on_decline=None,
 ):
     r"""Fold the IGM transmission into the stellar sub-band quadrature weights.
@@ -2731,13 +2721,10 @@ def _fold_igm_into_subbands(
         integral), or "auto" ("exact" where it can be built, "node" elsewhere).
     ssp_data : SSPData, optional
         SSP templates, required for "exact" fold.
-    filters : tuple, optional
-        Filter data, required for "exact" fold.
+    bands : BandSpec, optional
+        The spec the tensors were built with, required for "exact" fold.
     redshift_spec : dict, optional
         Redshift specification, required for "exact" fold.
-    lyc_gate, convention : optional
-        The sub-band partition the tensors were built with; passed to the exact
-        fold (see :func:`_fold_igm_exact_into_subbands`).
     on_decline : callable, optional
         Called with the reason at every point the fold is not built at build
         time. The caller records it on the model (``record_decline``).
@@ -2766,19 +2753,13 @@ def _fold_igm_into_subbands(
         return stellar_state
 
     igm_fold = _resolve_igm_fold(
-        igm_fold, igm_comp, stellar_state, ssp_data, filters, on_decline=note
+        igm_fold, igm_comp, stellar_state, ssp_data, bands, on_decline=note
     )
 
     # Dispatch to node or exact fold
     if igm_fold == "exact":
         result = _fold_igm_exact_into_subbands(
-            igm_comp,
-            stellar_state,
-            ssp_data,
-            filters,
-            redshift_spec,
-            lyc_gate=lyc_gate,
-            convention=convention,
+            igm_comp, stellar_state, ssp_data, bands, redshift_spec
         )
         built = result is not stellar_state
         if not built:
@@ -3420,20 +3401,12 @@ class SEDModel:
     def _resolve_wave_precomp(self, cfg) -> None:
         """Activate the photometry SSP × filter LUT for one ``WavePrecomp`` config.
 
-        The WavePrecomp LUT bakes the filter-convolution convention at build time
-        (ADR-0017). Only the photon-counting Bessell weight is threaded through the
-        component preintegration so far; refuse the energy convention rather than
-        silently producing Bessell fluxes. Shared by the single-object and the
-        composite ``(WavePrecomp, SpectrumPrecomp)`` paths (#610).
+        The LUT bakes the observation's :class:`~tengri.utils.band_projection.BandSpec` (filters,
+        filter convention, sub-band scheme) in at build time (ADR-0017); every builder reads
+        that one spec, so the photon-counting (Bessell) and energy (CIGALE) conventions are
+        both served. Shared by the single-object and the composite
+        ``(WavePrecomp, SpectrumPrecomp)`` paths (#610).
         """
-        _phot = getattr(self.observation, "photometry", None)
-        _conv = getattr(_phot, "convention", FilterConvention.BESSELL)
-        if _conv != FilterConvention.BESSELL:
-            raise PrecomputeRefusal(
-                f"approx=WavePrecomp(...) currently supports only the photon-counting "
-                f"'bessell' convention, got convention={_conv!r}. Use the exact path "
-                f"(approx=None) for the energy/CIGALE convention."
-            )
         self._approx = self._approx.replace(wave_precomp=True)
 
     def _resolve_spectrum_precomp(self, cfg, observation) -> None:
@@ -4271,15 +4244,21 @@ class SEDModel:
             return
         z_rep = self._representative_redshift()
         names = list(getattr(self.observation.photometry, "names", []) or [])
+        from tengri.utils.band_projection import BandSpec
+
+        # The band pivot under the observation's own convention, read from the BandSpec the
+        # table builders use, so the warning names the wavelength the dust law is misjudged at.
+        pivots_obs = BandSpec(
+            filters=(self.filter_waves, self.filter_trans),
+            convention=self.observation.photometry.convention,
+            n_subbands=None,
+            lyc_gate=False,
+        ).pivot_wavelengths()
         blue: list[tuple[str, float]] = []
         for i, (w, t) in enumerate(zip(self.filter_waves, self.filter_trans)):
-            w = jnp.asarray(w)
-            t = jnp.asarray(t)
-            denom = float(jnp.sum(t * w))
-            if denom <= 0.0:
+            if float(jnp.sum(jnp.asarray(t) * jnp.asarray(w))) <= 0.0:
                 continue
-            # Bessell photon-counting pivot ∫ λ²T dλ / ∫ λT dλ (observed frame).
-            lam_eff_rest = float(jnp.sum(t * w * w) / denom) / (1.0 + z_rep)
+            lam_eff_rest = float(pivots_obs[i]) / (1.0 + z_rep)
             if lam_eff_rest < 2000.0:  # rest-UV: Calzetti steepens / is extrapolated
                 blue.append((names[i] if i < len(names) else f"band[{i}]", lam_eff_rest))
         if not blue:
@@ -4502,8 +4481,11 @@ class SEDModel:
                 spec = spec.with_params(**obs_params)
         elif filters is not None:
             from tengri.observation.photometry_config import Photometry
+            from tengri.utils.filter_convention import FilterConvention
 
-            observation = Observation(photometry=Photometry.from_filter_set(filters))
+            observation = Observation(
+                photometry=Photometry.from_filter_set(filters, convention=FilterConvention.BESSELL)
+            )
 
         return observation, spec
 
@@ -4963,7 +4945,7 @@ class SEDModel:
             return None
         axis = np.asarray(self.wavelengths, dtype=float) * (1.0 + float(z))
         return filter_coverage_fraction(
-            phot.filter_waves, phot.filter_trans, axis, phot.convention
+            phot.filter_waves, phot.filter_trans, axis, convention=phot.convention
         )
 
     def _photometry_or_none(self):
@@ -12938,6 +12920,22 @@ class SEDModel:
         ctx = self._band_table_context(self._cached_component_chain)
         return provider.band_table(ctx, component=name, slot=slot)
 
+    def _band_spec(self) -> BandSpec | None:
+        """The observation's band spec: filter curves, its convention, the sub-band count.
+
+        ``lyc_gate`` is False here; a builder with a live Lyman-continuum mask states it with
+        :meth:`BandSpec.replace`. ``None`` for a model without photometry: it has no bands to
+        project, so no band table is built for it.
+        """
+        if self._photometry_or_none() is None:
+            return None
+        return BandSpec(
+            filters=(self.filter_waves, self.filter_trans),
+            convention=self.observation.photometry.convention,
+            n_subbands=int(self._approx.get("n_subbands", 0)),
+            lyc_gate=False,
+        )
+
     def _band_table_context(self, chain) -> BandTableContext:
         """The model state a band-table adapter builds from, with ``ask`` bound to the memo.
 
@@ -12951,7 +12949,7 @@ class SEDModel:
         return BandTableContext(
             spec=self.spec,
             wave=self._rest_wavelength,
-            filters=(self.filter_waves, self.filter_trans),
+            bands=self._band_spec(),
             padded_filters=(
                 getattr(state, "phot_fw_padded", None),
                 getattr(state, "phot_ft_padded", None),
@@ -13427,6 +13425,7 @@ class SEDModel:
 
         # Build filter/redshift specs once (reused by all components)
         filters = None
+        bands = None
         redshift_spec = None  # photometry z-table spec
         spec_redshift_spec = None  # spectroscopy z-table spec, kept apart from the above (#2858)
         spec_wave_obs = None
@@ -13449,6 +13448,10 @@ class SEDModel:
                         strict=False,
                     )
                 )
+                # The one band spec every component below integrates with: the
+                # observation's filter curves, its convention, the sub-band count and
+                # whether a live Lyman-continuum mask is in force.
+                bands = self._band_spec().replace(lyc_gate=lyc_mask_live)
 
                 # Redshift spec for photometry
                 if not runtime_z:
@@ -13533,6 +13536,7 @@ class SEDModel:
                         filters=filters,
                         redshift_spec=redshift_spec,
                         lyc_gate=lyc_mask_live,
+                        bands=bands,
                     )
                 elif (isinstance(comp, AGNSEDComponent) and filters is not None) or (
                     isinstance(comp, NebularSEDComponent) and filters is not None
@@ -13544,12 +13548,12 @@ class SEDModel:
                         wave_grid=self.wavelengths if isinstance(comp, AGNSEDComponent) else None,
                         approx=self._approx,
                         filters=filters,
+                        bands=bands,
                     )
                 elif isinstance(comp, IGMSEDComponent):
                     igm_state = comp.precompute_band_factors(
                         wave_rest=self.wavelengths,
-                        photometry=self.observation.photometry,
-                        filters=filters,
+                        bands=bands,
                         redshift_spec=redshift_spec,
                     )
                     # The band factors ARE the precompute product for IGM: its own
@@ -13578,14 +13582,8 @@ class SEDModel:
                                 chain[0]._state,
                                 igm_fold=igm_fold_mode,
                                 ssp_data=chain[0].ssp_data,
-                                filters=filters,
+                                bands=bands,
                                 redshift_spec=redshift_spec,
-                                lyc_gate=lyc_mask_live,
-                                convention=getattr(
-                                    self.observation.photometry,
-                                    "convention",
-                                    FilterConvention.BESSELL,
-                                ),
                                 on_decline=lambda reason: self.record_decline(
                                     "igm", "fold", reason
                                 ),

@@ -15,6 +15,8 @@ import inspect
 import numpy as np
 import pytest
 
+from tests._band_keys import band_key, ztable_key
+
 pytestmark = pytest.mark.contract
 
 
@@ -29,16 +31,10 @@ def test_ztable_request_all_fields_change_digest():
         version=4,
         ssp_wave=array_key(np.arange(4.0)),
         ssp_flux=array_key(np.arange(4.0)),
-        filters=(
-            (array_key(np.arange(3.0)), array_key(np.arange(3.0))),
-            (array_key(np.arange(2.0)), array_key(np.arange(2.0))),
-        ),
+        bands="spec-a",
         z_grid=array_key(np.arange(5.0)),
         apply_igm=False,
         taylor_correction=False,
-        convention="bessell",
-        n_subbands=0,
-        lyc_gate=False,
         cosmology=baked(DEFAULT_COSMO),
         x64=False,
         backend="cpu",
@@ -50,31 +46,18 @@ def test_ztable_request_all_fields_change_digest():
     for field in dataclasses.fields(ZTableRequest):
         if field.name == "version":
             perturbed = dataclasses.replace(baseline, version=5)
-        elif field.name == "lyc_gate":
-            perturbed = dataclasses.replace(baseline, lyc_gate=True)
         elif field.name == "ssp_wave":
             perturbed = dataclasses.replace(baseline, ssp_wave=array_key(np.arange(5.0)))
         elif field.name == "ssp_flux":
             perturbed = dataclasses.replace(baseline, ssp_flux=array_key(np.arange(5.0)))
-        elif field.name == "filters":
-            # Change one filter wave
-            perturbed = dataclasses.replace(
-                baseline,
-                filters=(
-                    (array_key(np.arange(4.0)), array_key(np.arange(3.0))),
-                    (array_key(np.arange(2.0)), array_key(np.arange(2.0))),
-                ),
-            )
+        elif field.name == "bands":
+            perturbed = dataclasses.replace(baseline, bands="spec-b")
         elif field.name == "z_grid":
             perturbed = dataclasses.replace(baseline, z_grid=array_key(np.arange(6.0)))
         elif field.name == "apply_igm":
             perturbed = dataclasses.replace(baseline, apply_igm=True)
         elif field.name == "taylor_correction":
             perturbed = dataclasses.replace(baseline, taylor_correction=True)
-        elif field.name == "convention":
-            perturbed = dataclasses.replace(baseline, convention="vega")
-        elif field.name == "n_subbands":
-            perturbed = dataclasses.replace(baseline, n_subbands=1)
         elif field.name == "cosmology":
             perturbed = dataclasses.replace(baseline, cosmology=baked({"Om0": 0.3, "h": 0.7}))
         elif field.name == "x64":
@@ -145,8 +128,7 @@ def test_subband_band_request_all_fields_change_digest():
         igm_model="inoue",
         igm_patchy=False,
         use_dla=False,
-        filters=((array_key(np.arange(3.0)), array_key(np.arange(3.0))),),
-        convention="bessell",
+        bands="spec-a",
         x64=False,
         backend="cpu",
     )
@@ -167,12 +149,8 @@ def test_subband_band_request_all_fields_change_digest():
             perturbed = dataclasses.replace(baseline, igm_patchy=True)
         elif field.name == "use_dla":
             perturbed = dataclasses.replace(baseline, use_dla=True)
-        elif field.name == "filters":
-            perturbed = dataclasses.replace(
-                baseline, filters=((array_key(np.arange(4.0)), array_key(np.arange(3.0))),)
-            )
-        elif field.name == "convention":
-            perturbed = dataclasses.replace(baseline, convention="vega")
+        elif field.name == "bands":
+            perturbed = dataclasses.replace(baseline, bands="spec-b")
         elif field.name == "x64":
             perturbed = dataclasses.replace(baseline, x64=True)
         elif field.name == "backend":
@@ -193,12 +171,9 @@ def test_exact_fold_request_all_fields_change_digest():
         version=3,
         ssp_wave=array_key(np.arange(4.0)),
         ssp_flux=array_key(np.arange(4.0)),
-        filters=((array_key(np.arange(3.0)), array_key(np.arange(3.0))),),
+        bands="spec-a",
         z_grid=array_key(np.arange(5.0)),
         igm_model="inoue",
-        n_subbands=3,
-        lyc_gate=False,
-        convention="bessell",
         x64=False,
         backend="cpu",
     )
@@ -206,12 +181,9 @@ def test_exact_fold_request_all_fields_change_digest():
         "version": 4,
         "ssp_wave": array_key(np.arange(5.0)),
         "ssp_flux": array_key(np.arange(5.0)),
-        "filters": ((array_key(np.arange(4.0)), array_key(np.arange(3.0))),),
+        "bands": "spec-b",
         "z_grid": array_key(np.arange(6.0)),
         "igm_model": "madau",
-        "n_subbands": 4,
-        "lyc_gate": True,
-        "convention": "energy",
         "x64": True,
         "backend": "gpu",
     }
@@ -246,8 +218,8 @@ def test_precompute_has_one_version_constant():
     assert version_constants[0] == "_ZTABLE_CACHE_VERSION"
 
 
-def test_ztable_version_is_9():
-    """_ZTABLE_CACHE_VERSION is 9.
+def test_ztable_version_is_10():
+    """_ZTABLE_CACHE_VERSION is 10.
 
     4->5 for L3's one-Lyman-edge fix: the LyC table and (when lyc_gate) the
     sub-band tensors moved off the bare 912 Å literal onto LYMAN_LIMIT_AA and
@@ -258,18 +230,21 @@ def test_ztable_version_is_9():
     the running-total cancellation. 8->9 for #2769's transposed-layout fold,
     which reorders the sums (up to 3.7e-14 scaled on the moment table). In every
     case no ZTableRequest field changes, so only the version separates a warm
-    cache from the new content.
+    cache from the new content. 9->10 for #3505: the request hashes ``BandSpec.key()``
+    in place of the separate filter, convention, sub-band and Lyman-gate fields, and the
+    table is built by the shared band engine (sub-band nodes of an empty chunk under the
+    Lyman gate move by up to 4e-6).
     """
     from tengri.components.stellar.sps.precompute import _ZTABLE_CACHE_VERSION
 
-    assert _ZTABLE_CACHE_VERSION == 9
+    assert _ZTABLE_CACHE_VERSION == 10
 
 
-def test_subband_version_is_3():
-    """_CACHE_VERSION in _subband_cache is 4."""
+def test_subband_version_is_5():
+    """_CACHE_VERSION in _subband_cache is 5 (4->5 for #3505: requests hash BandSpec.key())."""
     from tengri.components.igm._subband_cache import _CACHE_VERSION
 
-    assert _CACHE_VERSION == 4
+    assert _CACHE_VERSION == 5
 
 
 def test_ionspec_version_is_4():
@@ -311,15 +286,14 @@ def test_ztable_cache_key_reads_the_cosmology_default(monkeypatch):
 
     args = (FakeSSPData(), [np.array([0.1, 0.2])], [np.array([0.5, 0.8])], np.array([0.0, 1.0]))
     kwargs = dict(apply_igm=False, taylor_correction=False, convention="bessell", n_subbands=0)
-    key_default = precompute._ztable_cache_key(*args, **kwargs)
+    key_default = ztable_key(*args, **kwargs)
     monkeypatch.setattr(precompute, "DEFAULT_COSMO", CosmoParams(Om0=0.25, w0=-1.0, wa=0.0, h=0.7))
-    key_other = precompute._ztable_cache_key(*args, **kwargs)
+    key_other = ztable_key(*args, **kwargs)
     assert key_default != key_other, "a changed cosmology default did not change the z-table key"
 
 
 def test_ztable_cache_key_stability():
     """_ztable_cache_key returns stable digest strings for identical inputs."""
-    from tengri.components.stellar.sps.precompute import _ztable_cache_key
 
     # Create minimal synthetic SSP data
     class FakeSSPData:
@@ -332,7 +306,7 @@ def test_ztable_cache_key_stability():
     z_grid = np.array([0.0, 1.0])
 
     # Two identical calls should return the same hash
-    key1 = _ztable_cache_key(
+    key1 = ztable_key(
         ssp_data,
         filter_waves,
         filter_trans,
@@ -342,7 +316,7 @@ def test_ztable_cache_key_stability():
         convention="bessell",
         n_subbands=0,
     )
-    key2 = _ztable_cache_key(
+    key2 = ztable_key(
         ssp_data,
         filter_waves,
         filter_trans,
@@ -359,7 +333,6 @@ def test_ztable_cache_key_stability():
 
 def test_ztable_cache_key_changes_with_n_subbands():
     """_ztable_cache_key changes when n_subbands changes."""
-    from tengri.components.stellar.sps.precompute import _ztable_cache_key
 
     # Create minimal synthetic SSP data
     class FakeSSPData:
@@ -371,7 +344,7 @@ def test_ztable_cache_key_changes_with_n_subbands():
     filter_trans = [np.array([0.5, 0.8])]
     z_grid = np.array([0.0, 1.0])
 
-    key_k0 = _ztable_cache_key(
+    key_k0 = ztable_key(
         ssp_data,
         filter_waves,
         filter_trans,
@@ -381,7 +354,7 @@ def test_ztable_cache_key_changes_with_n_subbands():
         convention="bessell",
         n_subbands=0,
     )
-    key_k5 = _ztable_cache_key(
+    key_k5 = ztable_key(
         ssp_data,
         filter_waves,
         filter_trans,
@@ -397,7 +370,6 @@ def test_ztable_cache_key_changes_with_n_subbands():
 
 def test_ztable_cache_key_changes_with_filter():
     """_ztable_cache_key changes when filter transmission changes."""
-    from tengri.components.stellar.sps.precompute import _ztable_cache_key
 
     # Create minimal synthetic SSP data
     class FakeSSPData:
@@ -411,7 +383,7 @@ def test_ztable_cache_key_changes_with_filter():
     filter_trans_1 = [np.array([0.5, 0.8])]
     filter_trans_2 = [np.array([0.5, 0.9])]  # Changed transmission
 
-    key1 = _ztable_cache_key(
+    key1 = ztable_key(
         ssp_data,
         filter_waves,
         filter_trans_1,
@@ -421,7 +393,7 @@ def test_ztable_cache_key_changes_with_filter():
         convention="bessell",
         n_subbands=0,
     )
-    key2 = _ztable_cache_key(
+    key2 = ztable_key(
         ssp_data,
         filter_waves,
         filter_trans_2,
@@ -437,7 +409,7 @@ def test_ztable_cache_key_changes_with_filter():
 
 def test_subband_cache_key_stability():
     """cache_key and band_factor_key return stable digest strings."""
-    from tengri.components.igm._subband_cache import band_factor_key, cache_key
+    from tengri.components.igm._subband_cache import cache_key
 
     waves_rest = np.array([100.0, 200.0])
     z_grid = np.array([0.0, 1.0])
@@ -451,6 +423,6 @@ def test_subband_cache_key_stability():
     filter_waves = [np.array([100.0, 200.0])]
     filter_trans = [np.array([0.5, 0.8])]
 
-    bkey1 = band_factor_key(waves_rest, filter_waves, filter_trans, z_grid, "inoue", "bessell")
-    bkey2 = band_factor_key(waves_rest, filter_waves, filter_trans, z_grid, "inoue", "bessell")
+    bkey1 = band_key(waves_rest, filter_waves, filter_trans, z_grid, "inoue", "bessell")
+    bkey2 = band_key(waves_rest, filter_waves, filter_trans, z_grid, "inoue", "bessell")
     assert bkey1 == bkey2, "Identical band_factor_key calls produced different hashes"

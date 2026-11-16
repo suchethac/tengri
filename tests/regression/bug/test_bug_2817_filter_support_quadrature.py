@@ -22,6 +22,7 @@ import numpy as np
 import pytest
 
 from tengri.observation.photometry import lnu_filter_integral
+from tengri.utils.filter_convention import FilterConvention
 
 pytestmark = pytest.mark.regression_bug
 
@@ -48,7 +49,11 @@ def test_band_average_matches_the_closed_form_on_a_fine_sed_grid():
     -4.2e-5 at 5 A spacing (-2.1e-3 at 250 A, -4.2e-3 at 500 A); after it, -2.1e-7.
     """
     wave, L = _sed_on(5.0)
-    got = float(lnu_filter_integral(L, wave, _FILTER_WAVE, _FILTER_TRANS, 0.0))
+    got = float(
+        lnu_filter_integral(
+            L, wave, _FILTER_WAVE, _FILTER_TRANS, 0.0, convention=FilterConvention.BESSELL
+        )
+    )
     assert got == pytest.approx(_band_mean_of_lambda(), rel=1e-6)
 
 
@@ -60,7 +65,11 @@ def test_coarse_sed_grid_adds_only_the_weight_trapezoid(spacing):
     contribution (the pre-fix values were -2.1e-3 and -4.2e-3).
     """
     wave, L = _sed_on(spacing)
-    got = float(lnu_filter_integral(L, wave, _FILTER_WAVE, _FILTER_TRANS, 0.0))
+    got = float(
+        lnu_filter_integral(
+            L, wave, _FILTER_WAVE, _FILTER_TRANS, 0.0, convention=FilterConvention.BESSELL
+        )
+    )
     assert got == pytest.approx(_band_mean_of_lambda(), rel=5e-3), (spacing, got)
 
 
@@ -74,7 +83,19 @@ def test_the_flux_is_continuous_in_redshift_for_a_smooth_sed():
     L = (wave / 1e4) ** -1.0
     z = np.linspace(0.995, 1.015, 801)
     y = np.array(
-        [float(lnu_filter_integral(L, wave, _FILTER_WAVE, _FILTER_TRANS, float(zi))) for zi in z]
+        [
+            float(
+                lnu_filter_integral(
+                    L,
+                    wave,
+                    _FILTER_WAVE,
+                    _FILTER_TRANS,
+                    float(zi),
+                    convention=FilterConvention.BESSELL,
+                )
+            )
+            for zi in z
+        ]
     )
     d2 = np.abs(np.diff(y, 2)) / np.abs(y).max()
     assert d2.max() < 1e-6, (d2.max(), z[int(np.argmax(d2)) + 1])

@@ -89,9 +89,10 @@ def main() -> None:
         print(f"{name:<32}{cells}")
 
     print("-" * len(header))
-    print(f"{'parameters within 5% of an edge':<32}" + "".join(
-        f"{edge_counts[s]:>12}" for s in args.seeds
-    ))
+    print(
+        f"{'parameters within 5% of an edge':<32}"
+        + "".join(f"{edge_counts[s]:>12}" for s in args.seeds)
+    )
 
     # A mock whose fluxes span many decades, or which carries a near-zero band,
     # is a different hazard from a truth at a prior edge: the likelihood's

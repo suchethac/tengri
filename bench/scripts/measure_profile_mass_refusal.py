@@ -29,8 +29,6 @@ Output: JSON lines (one configuration per line) to bench/results/, plus a summar
 from __future__ import annotations
 
 import argparse
-import importlib
-import inspect
 import json
 import logging
 import sys
@@ -45,7 +43,6 @@ if _SRC_PATH not in sys.path:
     sys.path.insert(0, _SRC_PATH)
 
 import jax
-import numpy as np
 
 # Configure float64 (required for profile_mass checks)
 jax.config.update("jax_enable_x64", True)
@@ -58,7 +55,6 @@ from tengri import (
     SEDModel,
     recipes,
 )
-from tengri.forward.convenience import mock_spectrum
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(name)s: %(message)s")
@@ -69,24 +65,26 @@ RESULTS_DIR = REPO_ROOT / "bench" / "results"
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Profile mass backends from mass_profile.py
-PROFILE_MASS_BACKENDS = frozenset({
-    "map",
-    "laplace",
-    "mcmc",
-    "mcmc_nuts",
-    "mcmc_nuts_fast",
-    "mcmc_hmc",
-    "mcmc_dynamic_hmc",
-    "mcmc_ghmc",
-    "mcmc_chees",
-    "mcmc_mclmc",
-    "mcmc_adjusted_mclmc",
-    "mcmc_barker",
-    "mcmc_mala",
-    "mcmc_hmc_lowrank",
-    "mcmc_smc",
-    "hmc_is",
-})
+PROFILE_MASS_BACKENDS = frozenset(
+    {
+        "map",
+        "laplace",
+        "mcmc",
+        "mcmc_nuts",
+        "mcmc_nuts_fast",
+        "mcmc_hmc",
+        "mcmc_dynamic_hmc",
+        "mcmc_ghmc",
+        "mcmc_chees",
+        "mcmc_mclmc",
+        "mcmc_adjusted_mclmc",
+        "mcmc_barker",
+        "mcmc_mala",
+        "mcmc_hmc_lowrank",
+        "mcmc_smc",
+        "hmc_is",
+    }
+)
 
 
 @dataclass
@@ -207,7 +205,12 @@ def extract_notebook_fixtures(
     if nb_name == "stochastic_sfh_recovery":
         # This notebook has a specific configuration at line ~589
         # Case B: photometry + 8 emission lines, method="mcmc_hmc"
-        fixtures[f"{nb_name}_case_B"] = ("emission_lines", None, "mcmc_hmc", "stochastic_sfh_recovery.py case B")
+        fixtures[f"{nb_name}_case_B"] = (
+            "emission_lines",
+            None,
+            "mcmc_hmc",
+            "stochastic_sfh_recovery.py case B",
+        )
 
     return fixtures
 
@@ -253,7 +256,9 @@ def measure_configuration(
             # Add any default free parameters
             for param_name in model.spec.free_params:
                 dist = model.spec.get_distribution(param_name)
-                params[param_name] = float(dist.bounds[0] + 0.5 * (dist.bounds[1] - dist.bounds[0]))
+                params[param_name] = float(
+                    dist.bounds[0] + 0.5 * (dist.bounds[1] - dist.bounds[0])
+                )
 
             # Generate mock data
             mock_data = model.mock(params, snr=20.0, key=jax.random.PRNGKey(0))
@@ -285,6 +290,7 @@ def measure_configuration(
         try:
             # Build a ForwardModel wrapper
             from tengri import ForwardModel
+
             forward = ForwardModel.build(sed=model, observation=obs)
 
             # Construct the Fitter with profile_mass="auto"

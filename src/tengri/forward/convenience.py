@@ -1181,8 +1181,9 @@ def build_model_from_config(
     if filters is not None:
         try:
             from tengri.observation.photometry_config import Photometry
+            from tengri.utils.filter_convention import FilterConvention
 
-            obs_photometry = Photometry.from_names(filters)
+            obs_photometry = Photometry.from_names(filters, convention=FilterConvention.BESSELL)
         except (ImportError, AttributeError):
             pass
 

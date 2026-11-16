@@ -67,6 +67,7 @@ from tengri.components.lyc import LYMAN_LIMIT_AA
 from tengri.cosmology import age_at_z
 from tengri.observation.photometry import FilterCurve, lnu_filter_integral
 from tengri.observation.spectroscopy import Spectroscopy
+from tengri.utils.filter_convention import FilterConvention
 from tests._data_skip import requires_cue_weights
 from tests.regression.bug.test_bug_2439_precomp_lyc_mask import _make_lyc_ssp
 
@@ -260,6 +261,7 @@ def test_band_flux_matches_split_at_edge(lyc_ssp, fesc, z, dust, igm):
             filt.trans,
             z,
             has_lyc_edge=_has_lyc_edge(s_exact),
+            convention=FilterConvention.BESSELL,
         )
     )
     ref = _reference_band_flux(s_exact.sed_intrinsic, s_exact.wave, filt.wave, filt.trans, z)
@@ -406,6 +408,7 @@ def test_gradient_wrt_fesc_finite_and_analytic(lyc_ssp):
             filt.trans,
             z,
             has_lyc_edge=_has_lyc_edge(state),
+            convention=FilterConvention.BESSELL,
         )
 
     for fesc0 in (0.1, 0.5, 0.9):
@@ -492,6 +495,7 @@ class TestRealGridIssueRows:
                 filt.trans,
                 z,
                 has_lyc_edge=_has_lyc_edge(s_exact),
+                convention=FilterConvention.BESSELL,
             )
         )
         ref = _reference_band_flux(s_exact.sed_intrinsic, s_exact.wave, filt.wave, filt.trans, z)

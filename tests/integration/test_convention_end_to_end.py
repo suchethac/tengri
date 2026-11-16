@@ -101,18 +101,16 @@ def test_string_convention_accepted(ssp):
 
 
 @_skip
-def test_waveprecomp_rejects_energy_convention(ssp):
-    """WavePrecomp LUT path refuses energy rather than silently using Bessell."""
+def test_waveprecomp_serves_energy_convention(ssp):
+    """The WavePrecomp LUT builds under the energy convention and predicts positive fluxes."""
     obs = Observation(photometry=Photometry.from_names(_NAMES, convention="energy"))
-    from tengri.config.exceptions import PrecomputeRefusal
-
-    with pytest.raises(PrecomputeRefusal, match="bessell"):
-        SEDModel(
-            spec=_spec(),
-            ssp_data=ssp,
-            observation=obs,
-            approx=WavePrecomp(z_min=0.0, z_max=1.0, n_z=50),
-        )
+    m = SEDModel(
+        spec=_spec(),
+        ssp_data=ssp,
+        observation=obs,
+        approx=WavePrecomp(z_min=0.0, z_max=1.0, n_z=50),
+    )
+    assert np.all(np.asarray(m.predict_photometry(_PARAMS)) > 0)
 
 
 @_skip

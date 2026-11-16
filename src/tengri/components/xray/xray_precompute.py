@@ -65,6 +65,7 @@ from tengri.forward.precompute.templates import (
     collapse_fixed_axes,
     precompute_template_photometry,
 )
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid_interp import PreintegratedGrid
 from tengri.utils.host_array import device_table, host_array
 from tengri.utils.physics_constants import C_AA as _C_AA
@@ -96,6 +97,8 @@ def _build_grid_xrb(
     redshift: float,
     gamma_h_grid: np.ndarray,
     gamma_l_grid: np.ndarray,
+    *,
+    convention: FilterConvention,
 ) -> PreintegratedGrid:
     gamma_h_grid = np.asarray(gamma_h_grid, dtype=np.float64)
     gamma_l_grid = np.asarray(gamma_l_grid, dtype=np.float64)
@@ -121,6 +124,7 @@ def _build_grid_xrb(
         dl_cm=1.0,
         energy_normalize=False,
         units="lnu",
+        convention=convention,
     )
 
 
@@ -130,6 +134,8 @@ def _build_grid_corona(
     redshift: float,
     gamma_grid: np.ndarray,
     alpha_ox_grid: np.ndarray,
+    *,
+    convention: FilterConvention,
 ) -> PreintegratedGrid:
     gamma_grid = np.asarray(gamma_grid, dtype=np.float64)
     alpha_ox_grid = np.asarray(alpha_ox_grid, dtype=np.float64)
@@ -171,6 +177,7 @@ def _build_grid_corona(
         dl_cm=1.0,
         energy_normalize=False,
         units="lnu",
+        convention=convention,
     )
 
 
@@ -180,6 +187,8 @@ def _build_grid_corona_lopez24(
     redshift: float,
     gamma_grid: np.ndarray,
     alpha_irx_grid: np.ndarray,
+    *,
+    convention: FilterConvention,
 ) -> PreintegratedGrid:
     gamma_grid = np.asarray(gamma_grid, dtype=np.float64)
     alpha_irx_grid = np.asarray(alpha_irx_grid, dtype=np.float64)
@@ -205,6 +214,7 @@ def _build_grid_corona_lopez24(
         dl_cm=1.0,
         energy_normalize=False,
         units="lnu",
+        convention=convention,
     )
 
 
@@ -259,6 +269,7 @@ def precompute(
     *,
     model: str = "xray_corona",
     axis_grids: tuple[np.ndarray, np.ndarray] | None = None,
+    convention: FilterConvention,
 ) -> dict:
     """Build preintegrated X-ray grid; auto-collapse Fixed-parameter axes.
 
@@ -275,6 +286,8 @@ def precompute(
     axis_grids : tuple[ndarray, ndarray], optional
         Custom 2D grid axes; defaults match the documented validity ranges
         of the underlying physics functions.
+    convention : FilterConvention, keyword-only
+        Bandpass weight, the observation's (``BandSpec.convention``).
 
     Returns
     -------
@@ -298,7 +311,7 @@ def precompute(
         a1 = literal1 if user1 is None else np.asarray(user1, dtype=np.float64)
     else:
         a1 = _axis(AXIS_PARAMS[model][1], user1, literal1, parameters)
-    preint = _BUILDERS[model](filter_waves, filter_trans, redshift, a0, a1)
+    preint = _BUILDERS[model](filter_waves, filter_trans, redshift, a0, a1, convention=convention)
     result = {
         "grid_phot": preint.phot,
         "axes": (jnp.asarray(a0), jnp.asarray(a1)),
@@ -418,6 +431,7 @@ def term_shape_table(
     parameters: Any,
     model: str,
     term: str,
+    convention: FilterConvention,
 ) -> dict | None:
     """Shape-only band table of one X-ray term, built through the shared normalizer.
 
@@ -467,6 +481,7 @@ def term_shape_table(
         filter_waves_padded,
         filter_trans_padded,
         redshift,
+        convention=convention,
     )
 
 

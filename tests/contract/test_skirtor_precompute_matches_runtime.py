@@ -41,6 +41,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.utils.filter_convention import FilterConvention
+
 pytestmark = [pytest.mark.contract, pytest.mark.regression_bug]
 
 #: The 5e-2 off-node contract shared with the other torus tables.
@@ -112,7 +114,9 @@ def setup():
     exact = _runtime_bands(runtime)
     exact64 = _runtime_bands(lambda w, **kw: skirtor._skirtor_grid_sed(w, grid64, **kw))
 
-    precomp = skirtor_precompute.precompute(waves, trans, 0.0, None, grid_path=path)
+    precomp = skirtor_precompute.precompute(
+        waves, trans, 0.0, None, grid_path=path, convention=FilterConvention.BESSELL
+    )
     lookup = skirtor_precompute.build_lookup(precomp)
     axes = [np.asarray(a, dtype=float) for a in precomp["axes"]]
     return {
@@ -135,7 +139,9 @@ def _bands(lnu, wave, waves, trans):
 
     return jnp.stack(
         [
-            lnu_filter_integral(lnu, wave, jnp.asarray(w), jnp.asarray(t), 0.0)
+            lnu_filter_integral(
+                lnu, wave, jnp.asarray(w), jnp.asarray(t), 0.0, convention=FilterConvention.BESSELL
+            )
             for w, t in zip(waves, trans, strict=True)
         ]
     )
@@ -256,6 +262,7 @@ def test_precompute_records_a_fixed_axis(setup):
         0.0,
         _FixedAxes({"agn_cos_inc": 0.3}),
         grid_path=setup["path"],
+        convention=FilterConvention.BESSELL,
     )
     assert preint["_collapsed_axes"] == {4: 0.3}
     assert preint["grid_phot"].shape == setup["precomp"]["grid_phot"].shape

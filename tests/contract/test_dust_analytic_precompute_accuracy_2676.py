@@ -12,6 +12,7 @@ import numpy as np
 import pytest
 
 from tengri.components.dust._params import PARAMS as _DUST_PARAMS
+from tengri.utils.filter_convention import FilterConvention
 
 pytestmark = pytest.mark.contract
 
@@ -58,7 +59,9 @@ def lookup(model, kw, fw, ft, **grids):
     """Lookup value from precomputed grid."""
     from tengri.components.dust import dust_analytic_precompute as adapter
 
-    res = adapter.precompute([fw], [ft], 0.0, None, model=model, **grids)
+    res = adapter.precompute(
+        [fw], [ft], 0.0, None, model=model, **grids, convention=FilterConvention.BESSELL
+    )
     q = [kw[n] for n in adapter.AXIS_PARAMS[model]]
     return float(np.asarray(adapter.build_lookup(res, model=model)(1.0, *q)).ravel()[0])
 
@@ -80,7 +83,12 @@ def test_off_node_accuracy_default_grids(model):
     names = adapter.AXIS_PARAMS[model]
     filters = [tophat(*b) for b in _BANDS_UM]
     res = adapter.precompute(
-        [f[0] for f in filters], [f[1] for f in filters], 0.0, None, model=model
+        [f[0] for f in filters],
+        [f[1] for f in filters],
+        0.0,
+        None,
+        model=model,
+        convention=FilterConvention.BESSELL,
     )
     lookup_fn = adapter.build_lookup(res, model=model)
 
@@ -190,7 +198,15 @@ def test_band_beyond_rest_grid_refused():
 
     fw, ft = tophat(15_000_000, 20_000_000)  # 15-20 m
     with pytest.raises(ValueError, match="Filter 0 RED edge"):
-        adapter.precompute([fw], [ft], 0.0, None, model="modified_blackbody", **_MM_GRIDS)
+        adapter.precompute(
+            [fw],
+            [ft],
+            0.0,
+            None,
+            model="modified_blackbody",
+            **_MM_GRIDS,
+            convention=FilterConvention.BESSELL,
+        )
 
 
 def test_pah_drude_coverage():
@@ -199,7 +215,9 @@ def test_pah_drude_coverage():
     from tengri.components.dust.emission import DUST_EMISSION_MODELS as M
 
     fw, ft = tophat(40, 70)
-    res = adapter.precompute([fw], [ft], 0.0, None, model="pah_drude")
+    res = adapter.precompute(
+        [fw], [ft], 0.0, None, model="pah_drude", convention=FilterConvention.BESSELL
+    )
 
     wide_pah = np.asarray(M["pah_drude"](jnp.asarray(WIDE), 1.0), dtype=float)
     ex = np.trapezoid(np.interp(fw, WIDE, wide_pah) * ft / fw, fw) / np.trapezoid(ft / fw, fw)
@@ -228,7 +246,9 @@ def test_redshift_off_node():
     )
 
     # Lookup at redshift z
-    res = adapter.precompute([fw], [ft], z, None, model="modified_blackbody")
+    res = adapter.precompute(
+        [fw], [ft], z, None, model="modified_blackbody", convention=FilterConvention.BESSELL
+    )
     lkp = float(
         np.asarray(adapter.build_lookup(res, model="modified_blackbody")(1.0, 47.3, 1.65)).ravel()[
             0
@@ -246,12 +266,14 @@ import json, sys
 import numpy as np
 import jax, jax.numpy as jnp
 from tengri.components.dust import dust_analytic_precompute as adapter
+from tengri.utils.filter_convention import FilterConvention
 
 assert not jax.config.jax_enable_x64
 spec = json.loads(sys.argv[1])
 filters = [(np.asarray(w), np.asarray(t)) for w, t in spec["filters"]]
 res = adapter.precompute(
     [f[0] for f in filters], [f[1] for f in filters], 0.0, None, model=spec["model"],
+    convention=FilterConvention.BESSELL,
     **{k: np.asarray(v) for k, v in spec["grids"].items()},
 )
 fn = adapter.build_lookup(res, model=spec["model"])
@@ -334,6 +356,7 @@ def test_float32_value_and_gradient_are_finite(model):
         None,
         model=model,
         **{k: np.asarray(v) for k, v in grids.items()},
+        convention=FilterConvention.BESSELL,
     )
     ref = np.asarray(adapter.build_lookup(res, model=model)(1.0, *query))
     assert out["value"][2] == pytest.approx(ref[2], rel=1e-4)
@@ -356,7 +379,12 @@ def test_off_node_accuracy_far_ir_at_z3(model):
     bands = ((250, 500), (750, 950))
     filters = [tophat(*b) for b in bands]
     res = adapter.precompute(
-        [f[0] for f in filters], [f[1] for f in filters], z, None, model=model
+        [f[0] for f in filters],
+        [f[1] for f in filters],
+        z,
+        None,
+        model=model,
+        convention=FilterConvention.BESSELL,
     )
     lookup_fn = adapter.build_lookup(res, model=model)
     rng = np.random.RandomState(7)
@@ -417,7 +445,12 @@ def test_casey2012_mid_ir_accuracy_default_grids():
     for z, bands in cases:
         filters = [tophat(*b) for b in bands]
         res = adapter.precompute(
-            [f[0] for f in filters], [f[1] for f in filters], z, None, model="casey2012"
+            [f[0] for f in filters],
+            [f[1] for f in filters],
+            z,
+            None,
+            model="casey2012",
+            convention=FilterConvention.BESSELL,
         )
         lookup_fn = adapter.build_lookup(res, model="casey2012")
         worst = np.zeros(len(bands))

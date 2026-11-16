@@ -28,14 +28,10 @@ import numpy as np
 
 from tengri.forward.energy_balance import bolometric_absorbed_log10
 from tengri.parameters.resolve import require_redshift
-from tengri.utils.filter_convention import FilterConvention, filter_weight_np
-from tengri.utils.grid_interp import (
-    _np_trapezoid,
-    _vectorized_interp,
-    subband_quadrature,
-)
+from tengri.utils.band_projection import BandSpec, project_bands
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.physics_constants import C_AA, LYMAN_LIMIT_AA
-from tengri.utils.scale import representable_denominator, representable_floor
+from tengri.utils.scale import representable_floor
 
 __all__ = [
     "_lyc_cutoff_for",
@@ -63,12 +59,12 @@ def _nebular_subband_channels(
     filters: Sequence[tuple[np.ndarray, np.ndarray]],
     redshift: float,
     n_subbands: int,
+    convention: FilterConvention,
 ) -> tuple[np.ndarray, np.ndarray]:
     r"""Sub-band integrals and quadrature nodes of per-node nebular SEDs.
 
-    Mirrors the union-grid quadrature of
-    :func:`~tengri.utils.grid_interp.preintegrate_grid`, so the chunks factor the
-    exact filter integral the stellar LUT factors.
+    One call of :func:`~tengri.utils.band_projection.project_bands`, so the chunks factor
+    the exact filter integral the stellar LUT factors.
 
     Parameters
     ----------
@@ -82,6 +78,8 @@ def _nebular_subband_channels(
         Redshift at which the filters are projected (0 for the rest-band twin).
     n_subbands : int
         Number of chunks K per filter.
+    convention : FilterConvention
+        Bandpass weight, the observation's (``BandSpec.convention``).
 
     Returns
     -------
@@ -96,35 +94,18 @@ def _nebular_subband_channels(
     -----
     **JIT-compatible**: no; build-time numpy precompute.
     """
-    sed = np.asarray(sed_nodes_rest, dtype=np.float64)
-    wave_obs = np.asarray(wave_rest, dtype=np.float64) * (1.0 + redshift)
-    n_points = sed.shape[0]
-    phi = np.zeros((n_points, len(filters), n_subbands))
-    lam_rest = np.zeros_like(phi)
-    for f_idx, (fw, ft) in enumerate(filters):
-        fw_np = np.asarray(fw, dtype=np.float64)
-        ft_np = np.asarray(ft, dtype=np.float64)
-        # Same support rule as the whole-band filter integral (#2817): SED nodes
-        # are clipped into the filter's own support, so the sub-band chunks sum to
-        # the whole band exactly. A node past an edge would otherwise carry a
-        # transmission ramp from the edge value to zero across the straddle segment.
-        f_lo, f_hi = float(fw_np.min()), float(fw_np.max())
-        grid = np.sort(np.concatenate([np.clip(wave_obs, f_lo, f_hi), fw_np]))
-        lo = np.searchsorted(grid, f_lo, side="left")
-        hi = np.searchsorted(grid, f_hi, side="right")
-        grid = grid[lo:hi]
-        trans = np.interp(grid, fw_np, ft_np, left=0.0, right=0.0)
-        tw_grid = trans * filter_weight_np(grid, FilterConvention.BESSELL)
-        denom = _np_trapezoid(tw_grid, grid)
-        eff_obs = _np_trapezoid(tw_grid * grid, grid) / np.maximum(
-            denom, representable_denominator(1e-30)
-        )
-        integrand = _vectorized_interp(grid, wave_obs, sed) * tw_grid[None, :]
-        phi[:, f_idx, :], nodes = subband_quadrature(
-            grid, tw_grid, integrand, denom, n_subbands, float(eff_obs)
-        )
-        lam_rest[:, f_idx, :] = nodes / (1.0 + redshift)
-    return phi, lam_rest
+    sed_T = np.ascontiguousarray(np.asarray(sed_nodes_rest, dtype=np.float64).T)
+    spec = BandSpec(
+        filters=([fw for fw, _ in filters], [ft for _, ft in filters]),
+        convention=convention,
+        n_subbands=n_subbands,
+        lyc_gate=False,
+    )
+    grid = project_bands(sed_T, wave_rest, spec, redshift, grid_dims=(sed_T.shape[1],))
+    return (
+        np.asarray(grid.subband_phot, dtype=np.float64),
+        np.asarray(grid.subband_waves_rest, dtype=np.float64),
+    )
 
 
 def _nebular_screen_for(
@@ -342,12 +323,16 @@ def _nebular_filters(model) -> tuple | None:
     return None
 
 
-def _chunked_subbands(sed_all, neg_log_qh, wave_rest, filters, redshift, n_subbands):
+def _chunked_subbands(
+    sed_all, neg_log_qh, wave_rest, filters, redshift, n_subbands, convention: FilterConvention
+):
     """:func:`_nebular_subband_channels` in node batches, scaled to per-Q_H (float64)."""
     phis, lams = [], []
     for i in range(0, sed_all.shape[0], _SUBBAND_NODE_CHUNK):
         sl = slice(i, i + _SUBBAND_NODE_CHUNK)
-        phi, lam = _nebular_subband_channels(sed_all[sl], wave_rest, filters, redshift, n_subbands)
+        phi, lam = _nebular_subband_channels(
+            sed_all[sl], wave_rest, filters, redshift, n_subbands, convention
+        )
         phis.append(phi * 10.0 ** neg_log_qh[sl, None, None])
         lams.append(lam)
     return np.concatenate(phis, axis=0), np.concatenate(lams, axis=0)
@@ -398,6 +383,7 @@ def _build_dust_channels(
     dust_component,
     eb_tau_grids,
     n_subbands,
+    convention: FilterConvention,
 ) -> dict:
     """The ``NebularGridTable`` dust-channel fields, or ``{}`` where none is requested.
 
@@ -450,9 +436,9 @@ def _build_dust_channels(
             )
         )
         n_wave_nodes = int(np.asarray(wave_rest).size)
-        phi, lam = _chunked_subbands(sed, nlq, wave_rest, filters, ref_z, k)
+        phi, lam = _chunked_subbands(sed, nlq, wave_rest, filters, ref_z, k, convention)
         _check_conservation(phi, phot_all, "observed-band", n_nodes=n_wave_nodes)
-        phi_r, lam_r = _chunked_subbands(sed, nlq, wave_rest, filters, 0.0, k)
+        phi_r, lam_r = _chunked_subbands(sed, nlq, wave_rest, filters, 0.0, k, convention)
         _check_conservation(phi_r, rest_all, "rest-band", n_nodes=n_wave_nodes)
         out.update(
             log_phot_subband_per_qh=_log_channel(phi, grid_shape),

@@ -12,6 +12,7 @@ from tengri.analysis.diagnostics.spectral import (
     rest_frame_luminosity,
     uv_slope_beta,
 )
+from tengri.utils.filter_convention import FilterConvention
 
 pytestmark = pytest.mark.bounds
 
@@ -192,7 +193,13 @@ class TestRestFrameLuminosity:
         l_nu_flat = jnp.ones_like(wavelength_sed)
 
         filter_wave, filter_trans = tophat_filter
-        l_phot = rest_frame_luminosity(wavelength_sed, l_nu_flat, filter_wave, filter_trans)
+        l_phot = rest_frame_luminosity(
+            wavelength_sed,
+            l_nu_flat,
+            filter_wave,
+            filter_trans,
+            convention=FilterConvention.BESSELL,
+        )
 
         # For flat spectrum, the photometry should be close to 1
         # (exact value depends on filter shape and interpolation)
@@ -204,7 +211,13 @@ class TestRestFrameLuminosity:
         l_nu_zero = jnp.zeros_like(wavelength_sed)
 
         filter_wave, filter_trans = tophat_filter
-        l_phot = rest_frame_luminosity(wavelength_sed, l_nu_zero, filter_wave, filter_trans)
+        l_phot = rest_frame_luminosity(
+            wavelength_sed,
+            l_nu_zero,
+            filter_wave,
+            filter_trans,
+            convention=FilterConvention.BESSELL,
+        )
 
         np.testing.assert_allclose(l_phot, 0.0)
 
@@ -213,7 +226,9 @@ class TestRestFrameLuminosity:
         l_nu = jnp.ones_like(wavelength_sed)
 
         filter_wave, filter_trans = tophat_filter
-        l_phot = rest_frame_luminosity(wavelength_sed, l_nu, filter_wave, filter_trans)
+        l_phot = rest_frame_luminosity(
+            wavelength_sed, l_nu, filter_wave, filter_trans, convention=FilterConvention.BESSELL
+        )
 
         assert jnp.ndim(l_phot) == 0
 
@@ -222,7 +237,9 @@ class TestRestFrameLuminosity:
         l_nu = jnp.abs(jnp.sin(wavelength_sed)) + 1.0
 
         filter_wave, filter_trans = tophat_filter
-        l_phot = rest_frame_luminosity(wavelength_sed, l_nu, filter_wave, filter_trans)
+        l_phot = rest_frame_luminosity(
+            wavelength_sed, l_nu, filter_wave, filter_trans, convention=FilterConvention.BESSELL
+        )
 
         assert l_phot >= 0.0
 
@@ -231,8 +248,16 @@ class TestRestFrameLuminosity:
         l_nu = jnp.ones_like(wavelength_sed)
 
         filter_wave, filter_trans = tophat_filter
-        l_phot1 = rest_frame_luminosity(wavelength_sed, l_nu, filter_wave, filter_trans)
-        l_phot2 = rest_frame_luminosity(wavelength_sed, 2.0 * l_nu, filter_wave, filter_trans)
+        l_phot1 = rest_frame_luminosity(
+            wavelength_sed, l_nu, filter_wave, filter_trans, convention=FilterConvention.BESSELL
+        )
+        l_phot2 = rest_frame_luminosity(
+            wavelength_sed,
+            2.0 * l_nu,
+            filter_wave,
+            filter_trans,
+            convention=FilterConvention.BESSELL,
+        )
 
         np.testing.assert_allclose(l_phot2, 2.0 * l_phot1, rtol=0.01)
 
@@ -265,7 +290,13 @@ class TestRestFrameColor:
 
         filter_wave, filter_trans = blue_filter
         color = rest_frame_color(
-            wavelength_sed, l_nu, filter_wave, filter_trans, filter_wave, filter_trans
+            wavelength_sed,
+            l_nu,
+            filter_wave,
+            filter_trans,
+            filter_wave,
+            filter_trans,
+            convention=FilterConvention.BESSELL,
         )
 
         np.testing.assert_allclose(color, 0.0, atol=1e-5)
@@ -279,7 +310,15 @@ class TestRestFrameColor:
         blue_wave, blue_trans = blue_filter
         red_wave, red_trans = red_filter
 
-        color = rest_frame_color(wavelength_sed, l_nu, blue_wave, blue_trans, red_wave, red_trans)
+        color = rest_frame_color(
+            wavelength_sed,
+            l_nu,
+            blue_wave,
+            blue_trans,
+            red_wave,
+            red_trans,
+            convention=FilterConvention.BESSELL,
+        )
 
         # For flat spectrum, blue and red fluxes should be similar
         # so color should be close to 0
@@ -295,7 +334,15 @@ class TestRestFrameColor:
         blue_wave, blue_trans = blue_filter
         red_wave, red_trans = red_filter
 
-        color = rest_frame_color(wavelength_sed, l_nu, blue_wave, blue_trans, red_wave, red_trans)
+        color = rest_frame_color(
+            wavelength_sed,
+            l_nu,
+            blue_wave,
+            blue_trans,
+            red_wave,
+            red_trans,
+            convention=FilterConvention.BESSELL,
+        )
 
         # Red filter should have more flux, so m_blue - m_red = -2.5*log(f_blue/f_red) > 0
         assert color > 0.0
@@ -310,7 +357,15 @@ class TestRestFrameColor:
         blue_wave, blue_trans = blue_filter
         red_wave, red_trans = red_filter
 
-        color = rest_frame_color(wavelength_sed, l_nu, blue_wave, blue_trans, red_wave, red_trans)
+        color = rest_frame_color(
+            wavelength_sed,
+            l_nu,
+            blue_wave,
+            blue_trans,
+            red_wave,
+            red_trans,
+            convention=FilterConvention.BESSELL,
+        )
 
         # Blue filter should have more flux, so m_blue - m_red = -2.5*log(f_blue/f_red) < 0
         assert color < 0.0
@@ -322,6 +377,14 @@ class TestRestFrameColor:
         blue_wave, blue_trans = blue_filter
         red_wave, red_trans = red_filter
 
-        color = rest_frame_color(wavelength_sed, l_nu, blue_wave, blue_trans, red_wave, red_trans)
+        color = rest_frame_color(
+            wavelength_sed,
+            l_nu,
+            blue_wave,
+            blue_trans,
+            red_wave,
+            red_trans,
+            convention=FilterConvention.BESSELL,
+        )
 
         assert jnp.ndim(color) == 0

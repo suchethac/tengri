@@ -297,7 +297,15 @@ def _profile_exact_path(model, params, n: int = 200) -> PipelineReport:
             """Integrate SED through all filter curves."""
             fluxes = []
             for fwi, fti in zip(fw_list, ft_list):
-                f = compute_flux_density(sed, model.ssp_data.ssp_wave, fwi, fti, z, dl_cm)
+                f = compute_flux_density(
+                    sed,
+                    model.ssp_data.ssp_wave,
+                    fwi,
+                    fti,
+                    z,
+                    dl_cm,
+                    convention=model.observation.photometry.convention,
+                )
                 fluxes.append(f)
             return jnp.array(fluxes)
 
