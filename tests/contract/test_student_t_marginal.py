@@ -250,6 +250,26 @@ def test_the_mode_is_differentiated_implicitly_to_second_order(covariance):
     assert float(jnp.max(jnp.abs(hessian - hessian.T))) < 1e-8 * float(jnp.max(jnp.abs(hessian)))
 
 
+def test_a_start_that_diverges_does_not_poison_the_value_or_gradient_of_the_other():
+    """A flat prior ignores its mean, but the weights at that mean overflow: that start is NaN."""
+    n_data = 30
+    grid = np.linspace(-1.0, 1.0, n_data)
+    design = jnp.asarray(np.stack([np.ones(n_data), grid], axis=1))
+    data = jnp.asarray(1.0 + 0.3 * grid + 0.05 * np.random.default_rng(0).standard_normal(n_data))
+    sigma = jnp.full(n_data, 0.05)
+
+    def marginal(d, mean):
+        return marginalize_linear_nuisance(
+            d, jnp.zeros(n_data), design, sigma=sigma, prior_mean=jnp.array([mean, 0.0]), dof=3.0
+        )
+
+    value = marginal(data, 1.0e200).log_like
+    assert float(value) == pytest.approx(float(marginal(data, 0.0).log_like), abs=1e-9)
+    grad = jax.grad(lambda d: marginal(d, 1.0e200).log_like)(data)
+    reference = jax.grad(lambda d: marginal(d, 0.0).log_like)(data)
+    np.testing.assert_allclose(np.asarray(grad), np.asarray(reference), rtol=1e-8, atol=1e-10)
+
+
 def test_a_masked_pixel_is_the_pixel_removed():
     data, model0, design, sigma = _primitive_inputs()
     data[4] += 30.0 * sigma[4]

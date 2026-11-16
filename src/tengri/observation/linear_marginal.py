@@ -145,8 +145,10 @@ def marginalize_linear_nuisance(
     Returns
     -------
     MarginalResult
-        Named tuple ``(log_like, coef_hat, coef_cov)``. ``log_like`` has shape ``()``,
-        ``coef_hat`` shape ``(k,)``, ``coef_cov`` shape ``(k, k)``.
+        Named tuple ``(log_like, coef_hat, coef_cov, weight_change, start_gap, n_data)``.
+        ``log_like`` has shape ``()``, ``coef_hat`` shape ``(k,)``, ``coef_cov`` shape
+        ``(k, k)``. The last three are the Student-t diagnostics, scalars with shape ``()``,
+        and ``None`` for Gaussian noise (see :class:`MarginalResult`).
 
     Notes
     -----
@@ -260,7 +262,7 @@ def marginalize_linear_nuisance(
         H = \frac{\nu+1}{\nu+3}\,X^\mathsf{T}\mathrm{diag}(\sigma^{-2})X + \Lambda^{-1},
 
     with :math:`r_i = d_i - m_{0,i} - (X\beta)_i`. The mode is found by iteratively
-    reweighted least squares, the Gaussian scale-mixture form of the Student-t [2]_: each step
+    reweighted least squares, the Gaussian scale-mixture form of the Student-t [1]_: each step
     is this function's Gaussian solve with :math:`\sigma_i` replaced by
     :math:`\sigma_i/\sqrt{w_i}`, :math:`w_i = (\nu+1)/(\nu + z_i^2)`, :math:`z_i = r_i/\sigma_i`,
     run for a fixed number of steps from two starting points, the Gaussian solution
@@ -315,10 +317,7 @@ def marginalize_linear_nuisance(
 
     References
     ----------
-    .. [1] B. D. Johnson et al., "Prospector: Stellar Population Inference from Spectra
-       and SEDs," ApJS, 254, 22 (2021). arXiv:2012.01426.
-       https://doi.org/10.3847/1538-4365/abef67
-    .. [2] K. L. Lange, R. J. A. Little and J. M. G. Taylor, "Robust Statistical Modeling
+    .. [1] K. L. Lange, R. J. A. Little and J. M. G. Taylor, "Robust Statistical Modeling
        Using the t Distribution," J. Am. Stat. Assoc., 84, 881-896 (1989).
        https://doi.org/10.1080/01621459.1989.10478852
 
@@ -487,8 +486,14 @@ def _student_t_marginal(data, model0, design, *, dof, sigma, chol_lower, pix_mas
 
     prior_mean = gaussian.get("prior_mean")
     centered = jnp.zeros(design.shape[1], design.dtype) if prior_mean is None else prior_mean
-    from_gaussian = laplace_from(gaussian_at(1.0).coef_hat)
-    from_prior = laplace_from(gaussian_at(1.0 / weights(centered)).coef_hat)
+    gaussian_start = gaussian_at(1.0).coef_hat
+    prior_start = gaussian_at(1.0 / weights(centered)).coef_hat
+    # A start that is not finite would send NaN through its branch and, multiplied by the zero
+    # cotangent of the unselected branch, into the gradient of the selected one. It is replaced
+    # by the other start before the branch runs; the two then coincide and ``start_gap`` is 0.
+    prior_start = jnp.where(jnp.all(jnp.isfinite(prior_start)), prior_start, gaussian_start)
+    from_gaussian = laplace_from(gaussian_start)
+    from_prior = laplace_from(prior_start)
     take_prior = (from_prior.log_like > from_gaussian.log_like) | jnp.isnan(from_gaussian.log_like)
     best = jax.tree_util.tree_map(
         lambda a, b: jnp.where(take_prior, b, a), from_gaussian, from_prior
