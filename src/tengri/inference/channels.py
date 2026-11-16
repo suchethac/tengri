@@ -30,10 +30,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.inference.likelihoods.gaussian import (
-    diag_gaussian_log_prob,
-    student_t_log_norm_per_point,
-)
+from tengri.inference.likelihoods.gaussian import diag_gaussian_log_prob
 from tengri.inference.likelihoods.terms import (
     calibration_eline_marginal_term,
     calibration_marginal_term,
@@ -47,7 +44,7 @@ from tengri.inference.likelihoods.terms import (
     floor_value,
     student_t_term,
 )
-from tengri.observation.noise import student_t_log_density
+from tengri.observation.noise import student_t_log_density, student_t_log_norm_per_point
 from tengri.utils.scale import LOG_2PI, diag_gaussian_log_normalization
 
 __all__ = [

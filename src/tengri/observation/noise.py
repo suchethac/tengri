@@ -477,6 +477,29 @@ def censored_neg_log_likelihood(
 # ── Energy and metric for JIT EVI engine ──────────────────────────
 
 
+def student_t_log_norm_per_point(dof: float | jnp.ndarray) -> jnp.ndarray:
+    r"""Per-point constant of a location-scale Student-t.
+
+    The constant is :math:`\log\Gamma\!\left(\tfrac{\nu+1}{2}\right)
+    - \log\Gamma\!\left(\tfrac{\nu}{2}\right) - \tfrac12\log(\nu\pi)`.
+
+    Parameters
+    ----------
+    dof : float or array
+        Degrees of freedom :math:`\nu`.
+
+    Returns
+    -------
+    scalar jnp.ndarray
+        The constant added to each point's log-density [nats].
+    """
+    return (
+        jax.scipy.special.gammaln((dof + 1.0) / 2.0)
+        - jax.scipy.special.gammaln(dof / 2.0)
+        - 0.5 * jnp.log(dof * math.pi)
+    )
+
+
 def variable_noise_hamiltonian(
     data: jnp.ndarray,
     noise_obs: jnp.ndarray,
@@ -553,12 +576,7 @@ def variable_noise_hamiltonian(
         #            - n [lgamma((ν+1)/2) - lgamma(ν/2) - ½log(ν/2)]
         energy = 0.5 * (dof + 1.0) * jnp.sum(jnp.log(1.0 + r**2 / dof)) + logdet
         n_data = data.shape[0]
-        norm_term = (
-            jax.scipy.special.gammaln((dof + 1.0) / 2.0)
-            - jax.scipy.special.gammaln(dof / 2.0)
-            - 0.5 * jnp.log(dof / 2.0)
-        )
-        return energy - n_data * norm_term
+        return energy - n_data * (student_t_log_norm_per_point(dof) + 0.5 * LOG_2PI)
     else:
         # Gaussian: ½ Σ r² + Σ log(σ_eff)
         return 0.5 * jnp.sum(r**2) + logdet
@@ -1169,7 +1187,7 @@ class StudentTLikelihood:
 
     Notes
     -----
-    **JIT-compatible**: yes, uses ``jax.scipy.stats.t.logpdf``.
+    **JIT-compatible**: yes, evaluates :func:`student_t_log_density` per datum.
 
     The log-likelihood per data point is:
 
@@ -1221,8 +1239,7 @@ class StudentTLikelihood:
 
         Notes
         -----
-        **JIT-compatible**: yes, delegates to
-        ``jax.scipy.stats.t.logpdf``.
+        **JIT-compatible**: yes, delegates to :func:`student_t_log_density`.
 
         Avoids numerical instability by clamping σ to ≥ eps internally.
 
@@ -1242,8 +1259,7 @@ class StudentTLikelihood:
         eps = 1e-8
         sigma_safe = jnp.maximum(sigma, eps)
 
-        # Standardize residuals
-        residual = (observed - predicted) / sigma_safe
-
-        # Student-t log-pdf from JAX; include -log(sigma) normalization
-        return jax.scipy.stats.t.logpdf(residual, self.dof) - jnp.log(sigma_safe)
+        # One datum at a time through the one Student-t density.
+        return jax.vmap(
+            lambda d, m, e: student_t_log_density(d[None], e[None], m[None], self.dof)
+        )(observed, predicted, sigma_safe)

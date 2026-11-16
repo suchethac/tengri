@@ -27,9 +27,6 @@ computation in tengri goes through here.
 
 from __future__ import annotations
 
-import math
-
-import jax
 import jax.numpy as jnp
 from jax.tree_util import Partial
 
@@ -45,7 +42,6 @@ __all__ = [
     "diag_noise_operators",
     "inv_noise_std",
     "standardized_residual",
-    "student_t_log_norm_per_point",
     "whiten",
 ]
 
@@ -247,26 +243,3 @@ def diag_gaussian_log_prob(
     **JIT-compatible**: yes, pure JAX.
     """
     return -0.5 * diag_gaussian_chi2(predicted, observed, sigma, sigma_floor, presence)
-
-
-def student_t_log_norm_per_point(dof: float | jnp.ndarray) -> jnp.ndarray:
-    r"""Per-point constant of a location-scale Student-t.
-
-    The constant is :math:`\log\Gamma\!\left(\tfrac{\nu+1}{2}\right)
-    - \log\Gamma\!\left(\tfrac{\nu}{2}\right) - \tfrac12\log(\nu\pi)`.
-
-    Parameters
-    ----------
-    dof : float or array
-        Degrees of freedom :math:`\nu`.
-
-    Returns
-    -------
-    scalar jnp.ndarray
-        The constant added to each point's log-density [nats].
-    """
-    return (
-        jax.scipy.special.gammaln((dof + 1.0) / 2.0)
-        - jax.scipy.special.gammaln(dof / 2.0)
-        - 0.5 * jnp.log(dof * math.pi)
-    )
