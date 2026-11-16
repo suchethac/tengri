@@ -38,7 +38,7 @@ from tengri.observation.eline_catalog import (
     DEFAULT_LINE_WAVELENGTHS,  # noqa: F401, re-exported for convenience
 )
 from tengri.observation.linear_marginal import marginalize_linear_nuisance
-from tengri.utils.physics_constants import C_AA
+from tengri.utils.physics_constants import C_AA, C_KM_S, GAUSSIAN_FWHM_PER_SIGMA
 from tengri.utils.scale import log10_four_pi_dl2
 
 # ── Public API ────────────────────────────────────────────────────
@@ -48,43 +48,38 @@ from tengri.utils.scale import log10_four_pi_dl2
 def _build_eline_design_matrix_jitted(
     wave_obs: jnp.ndarray,
     line_wavelengths: jnp.ndarray,
-    spectral_resolution: float,
+    spectral_resolution: jnp.ndarray,
     redshift: float,
-    eline_sigma_kms: float,
-    eline_delta_v_kms: float,
+    eline_sigma_kms: jnp.ndarray,
+    eline_delta_v_kms: jnp.ndarray,
 ) -> jnp.ndarray:
-    """Internal JIT-compiled implementation of build_eline_design_matrix."""
-    c_kms = 299792.458
+    """Gaussian line profiles, one column per line; per-line arrays of shape ``(n_lines,)``."""
 
-    def _single_column(lam_rest):
+    def _single_column(lam_rest, resolution_j, sigma_j, delta_v_j):
         """Build a normalized Gaussian profile for a single emission line."""
         lam_obs = lam_rest * (1.0 + redshift)
-        # Velocity offset: convert km/s to wavelength shift
-        delta_lam = lam_obs * eline_delta_v_kms / c_kms
-        lam_center = lam_obs + delta_lam
-        # Instrument resolution
-        sigma_inst = lam_obs / (2.355 * spectral_resolution)
-        # Intrinsic velocity broadening
-        sigma_vel = lam_obs * eline_sigma_kms / c_kms
-        # Combined sigma
+        lam_center = lam_obs + lam_obs * delta_v_j / C_KM_S
+        sigma_inst = lam_obs / (GAUSSIAN_FWHM_PER_SIGMA * resolution_j)
+        sigma_vel = lam_obs * sigma_j / C_KM_S
         sigma = jnp.sqrt(sigma_inst**2 + sigma_vel**2)
-        profile = jnp.exp(-0.5 * ((wave_obs - lam_center) / sigma) ** 2) / (
+        return jnp.exp(-0.5 * ((wave_obs - lam_center) / sigma) ** 2) / (
             jnp.sqrt(2.0 * jnp.pi) * sigma
         )
-        return profile
 
     # vmap over lines -> (n_lines, n_pix), then transpose -> (n_pix, n_lines)
-    columns = jax.vmap(_single_column)(line_wavelengths)
+    columns = jax.vmap(_single_column)(
+        line_wavelengths, spectral_resolution, eline_sigma_kms, eline_delta_v_kms
+    )
     return columns.T
 
 
 def build_eline_design_matrix(
     wave_obs: jnp.ndarray,
     line_wavelengths: jnp.ndarray,
-    spectral_resolution: float,
+    spectral_resolution: float | jnp.ndarray,
     redshift: float,
-    eline_sigma_kms: float = 0.0,
-    eline_delta_v_kms: float = 0.0,
+    eline_sigma_kms: float | jnp.ndarray = 0.0,
+    eline_delta_v_kms: float | jnp.ndarray = 0.0,
 ) -> jnp.ndarray:
     """Build the (n_pix, n_lines) Gaussian design matrix.
 
@@ -104,15 +99,17 @@ def build_eline_design_matrix(
         Observed-frame wavelength grid [Angstrom].
     line_wavelengths : array, shape (n_lines,)
         Rest-frame vacuum wavelengths of the lines [Angstrom].
-    spectral_resolution : float
+    spectral_resolution : float or array, shape (n_lines,)
         Instrument spectral resolution R = lambda / delta_lambda
-        [dimensionless].
+        [dimensionless]. An array gives each line its own resolution.
     redshift : float
         Source redshift [dimensionless].
-    eline_sigma_kms : float
-        Intrinsic velocity broadening [km/s]. Default 0.
-    eline_delta_v_kms : float
-        Velocity offset from systemic [km/s]. Default 0.
+    eline_sigma_kms : float or array, shape (n_lines,)
+        Intrinsic velocity broadening [km/s]. Default 0. An array gives each
+        line its own width (see :func:`line_kinematics`).
+    eline_delta_v_kms : float or array, shape (n_lines,)
+        Velocity offset from systemic [km/s]. Default 0. An array gives each
+        line its own offset.
 
     Returns
     -------
@@ -128,13 +125,13 @@ def build_eline_design_matrix(
     enable proper line amplitude marginalization in
     :func:`marginalize_emission_lines`.
     """
+    n_lines = jnp.shape(line_wavelengths)[0]
+    resolution, sigma_kms, delta_v_kms = (
+        jnp.broadcast_to(jnp.asarray(value), (n_lines,))
+        for value in (spectral_resolution, eline_sigma_kms, eline_delta_v_kms)
+    )
     return _build_eline_design_matrix_jitted(
-        wave_obs,
-        line_wavelengths,
-        spectral_resolution,
-        redshift,
-        eline_sigma_kms,
-        eline_delta_v_kms,
+        wave_obs, line_wavelengths, resolution, redshift, sigma_kms, delta_v_kms
     )
 
 
@@ -959,6 +956,103 @@ def build_line_design_matrix(
     return jnp.concatenate([A_narrow, A_broad], axis=1)
 
 
+def kinematic_param_names(group: str) -> tuple[str, str]:
+    """Return the ``(width, offset)`` parameter names of one kinematic group.
+
+    Parameters
+    ----------
+    group : str
+        Group name; ``""`` is the default group.
+
+    Returns
+    -------
+    tuple of str
+        ``("eline_sigma_kms", "eline_delta_v_kms")`` for the default group, and
+        the same names with ``_<group>`` appended for a named one.
+    """
+    suffix = f"_{group}" if group else ""
+    return f"eline_sigma_kms{suffix}", f"eline_delta_v_kms{suffix}"
+
+
+def line_kinematics(params, fixed_values, catalog) -> tuple[jnp.ndarray, jnp.ndarray]:
+    r"""Return the intrinsic width and velocity offset of every catalog line.
+
+    Parameters
+    ----------
+    params : mapping
+        Sampled parameter values.
+    fixed_values : mapping
+        Fixed parameter values, read when a name is absent from ``params``.
+    catalog : LineList
+        Line catalog; its ``kinematic_groups`` and ``group_index`` set which
+        parameters each line reads.
+
+    Returns
+    -------
+    sigma_kms : ndarray, shape (n_lines,)
+        Intrinsic velocity dispersion of each line [km/s].
+    delta_v_kms : ndarray, shape (n_lines,)
+        Velocity offset of each line from the systemic redshift [km/s].
+
+    Notes
+    -----
+    **JIT-compatible**: yes. The group structure is static; only the parameter
+    values are traced. **Gradient-safe**: yes, the gather is linear. A group whose
+    parameters are absent from both mappings reads zero, the instrument-limited
+    line at the systemic redshift.
+    """
+    values = [
+        tuple(
+            jnp.asarray(params.get(name, fixed_values.get(name, 0.0)))
+            for name in kinematic_param_names(group)
+        )
+        for group in catalog.kinematic_groups
+    ]
+    index = catalog.group_index
+    sigma = jnp.stack([v[0] for v in values])[index]
+    delta_v = jnp.stack([v[1] for v in values])[index]
+    return sigma, delta_v
+
+
+def line_resolution(resolution, wave_obs, line_wavelengths, redshift):
+    r"""Return the spectral resolution at each redshifted emission line.
+
+    Parameters
+    ----------
+    resolution : float, array_like of shape (n_pix,), or None
+        Spectral resolution R = lambda / delta_lambda [dimensionless]: a scalar,
+        a value per pixel of ``wave_obs``, or ``None`` when none is declared.
+    wave_obs : array_like, shape (n_pix,)
+        Observed-frame wavelength grid, increasing [Angstrom].
+    line_wavelengths : array_like, shape (n_lines,)
+        Rest-frame vacuum line wavelengths [Angstrom].
+    redshift : float
+        Source redshift [dimensionless]; may be traced.
+
+    Returns
+    -------
+    float or Array, shape (n_lines,)
+        The scalar itself; 2000.0 for ``None``; for a per-pixel array, R linearly
+        interpolated to each line's observed center :math:`\lambda_j (1 + z)`,
+        held at the end values for a line off the grid (such a line has no
+        pixels, so its width does not enter the likelihood).
+
+    Notes
+    -----
+    **JIT-compatible**: yes; the scalar/array branch is on the static shape.
+    **Gradient-safe**: yes with respect to the redshift. The per-galaxy and
+    batched likelihoods both use this rule (#3343); before it, an array was
+    reduced to its median, so the instrumental width of a line at either end of
+    a grating whose R changes by a factor of two was wrong by up to that factor.
+    """
+    if resolution is None:
+        return 2000.0
+    if not getattr(resolution, "ndim", 0):
+        return float(resolution)
+    lam_obs = jnp.asarray(line_wavelengths) * (1.0 + redshift)
+    return jnp.interp(lam_obs, jnp.asarray(wave_obs), jnp.asarray(resolution))
+
+
 def eline_scalar_resolution(resolution) -> float:
     """Return the scalar resolution R that sets the emission-line profile width.
 
@@ -975,8 +1069,9 @@ def eline_scalar_resolution(resolution) -> float:
 
     Notes
     -----
-    Pure NumPy, evaluated at Python level. An array reduces to its median because
-    the Gaussian design matrix takes one number and R varies slowly across a band.
+    Pure NumPy, evaluated at Python level. Used only where no wavelength grid
+    pairs with the array (a banded-resolution galaxy of the batched path falls back
+    to its template's value). Line profiles use :func:`line_resolution`.
     """
     if resolution is None:
         return 2000.0

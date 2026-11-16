@@ -54,6 +54,12 @@ def _percentile_label(level) -> str:
     return text.replace(".", "p").replace("-", "m")
 
 
+def _runtime_values_of(galaxy) -> dict | None:
+    """One galaxy's own values of the model's runtime keys (its redshift), or ``None``."""
+    z = galaxy.get("redshift")
+    return None if z is None else {"redshift": z}
+
+
 def _sample_dict_for_summary(posterior, properties=None):
     """Everything worth summarizing for one galaxy: parameters + derived properties.
 
@@ -1006,6 +1012,20 @@ class _CatalogFitterOriginal:
         self.approx = approx
         self.galaxies = list(galaxies)
         self.n_galaxies = len(self.galaxies)
+        # Per-galaxy redshifts run as a runtime input of ONE promoted model: an exact
+        # model gets no table, a tabulated one a table over this catalog's span, and a
+        # declared catalog_z_range is used as it is (#3505). The caller's model is kept.
+        per_galaxy_z = [g["redshift"] for g in self.galaxies if "redshift" in g]
+        if per_galaxy_z and len(per_galaxy_z) != self.n_galaxies:
+            missing = [i for i, g in enumerate(self.galaxies) if "redshift" not in g]
+            raise ValueError(
+                f"only some galaxies carry a 'redshift': row(s) {missing} have none. Give "
+                "every galaxy a redshift, or none (all are then fit at the model's own)."
+            )
+        if per_galaxy_z:
+            from tengri.inference.fitter import promote_to_runtime_redshift
+
+            self.model = promote_to_runtime_redshift(self.model, per_galaxy_z)
         # For the #1671 bias advisory in run(): the exact reference when
         # resolution produced a LUT clone. Deferred to run() so construction
         # stays cheap; priced once for the whole catalog (the probe caches on
@@ -1264,14 +1284,6 @@ class _CatalogFitterOriginal:
         # dropped in silence -- that is how per-galaxy line fluxes reached the
         # objective on mcmc_nuts and not on map (#1599).
         self._refuse_unsupported_channels(resolved)
-        _has_pg_z = any("redshift" in g for g in self.galaxies)
-        if _has_pg_z and resolved in self._MCMC_VMAPPABLE and self._catalog_z_range() is None:
-            raise ValueError(
-                "Batched per-galaxy redshift requires a catalog_z_range so ONE "
-                "compiled program serves all redshifts. Build the model with "
-                "approx=WavePrecomp(catalog_z_range=(zmin, zmax)), or use "
-                "method='map' (sequential, recompiles per redshift). See #1337."
-            )
         if resolved in self._NATIVE_VMAPPABLE:
             return self._run_native(
                 resolved,
@@ -1545,24 +1557,10 @@ class _CatalogFitterOriginal:
                 presence=g.get("presence", None),
                 cache=self.cache,
                 profile_mass=profile_mass,
+                approx=self.approx,
             )
             self._dummy_fitters[key] = cached
         return cached
-
-    def _catalog_z_range(self):
-        """The model's ``catalog_z_range`` (the runtime-redshift LUT span), or None.
-
-        A ``catalog_z_range`` is what lets a per-galaxy redshift flow as a runtime
-        input so ONE compiled program serves all z (#1337 phase 2). Reads it from a
-        ``ForwardModel`` (via its population's SED) or a bare ``SEDModel``.
-        """
-        m = self.model
-        if hasattr(m, "populations"):
-            try:
-                return m.populations[0].sed._catalog_z_range
-            except (AttributeError, IndexError):
-                return None
-        return getattr(m, "_catalog_z_range", None)
 
     def _get_catalog_linear_engine(self):
         if self._catalog_linear_engine is None:
@@ -1765,6 +1763,7 @@ class _CatalogFitterOriginal:
                 diagnostics={"n_iterations": int(all_n_iters[i])},
                 loss_history=None,
                 _model=self.model,
+                _runtime_values=_runtime_values_of(self.galaxies[i]),
             )
             _attach_summaries(post_i, store, percentiles, reducers, properties)
             posteriors.append(post_i)
@@ -2129,7 +2128,12 @@ class _CatalogFitterOriginal:
 
         _reject_non_finite_data(all_data_orig, all_noise_orig, all_presence_orig)
         _refuse_uncovered_bands(
-            self.model, all_data_orig, all_noise_orig, all_presence_orig, self.data_type
+            self.model,
+            all_data_orig,
+            all_noise_orig,
+            all_presence_orig,
+            self.data_type,
+            redshifts=[g["redshift"] for g in self.galaxies] if per_galaxy_z else None,
         )
         # Per-galaxy redshift (#1337 phase 2); dummy zeros when not threaded.
         if per_galaxy_z:
@@ -2318,6 +2322,7 @@ class _CatalogFitterOriginal:
                 },
                 loss_history=None,
                 _model=self.model,
+                _runtime_values=_runtime_values_of(self.galaxies[i]),
             )
             # Reinsert the analytically marginalized mass for THIS galaxy,
             # before ``_attach_summaries`` runs: derived properties are computed
@@ -2349,6 +2354,7 @@ class _CatalogFitterOriginal:
                     line_obs=None if _line_obs_i is None else jnp.asarray(_line_obs_i),
                     line_err=None if _line_err_i is None else jnp.asarray(_line_err_i),
                     key=jax.random.fold_in(key, i),
+                    runtime_values=_runtime_values_of(self.galaxies[i]),
                 )
 
             _attach_summaries(post_i, store, percentiles, reducers, properties)
@@ -2644,6 +2650,7 @@ class _CatalogFitterOriginal:
                 line_flux_data=self._galaxy_line_fluxes(galaxy),
                 cache=self.cache,
                 params_override=override,
+                approx=self.approx,
             )
             try:
                 post_i = fitter_i.run(method, key=keys[i], verbose=False, **kwargs)

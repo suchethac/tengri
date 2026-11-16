@@ -45,9 +45,8 @@ class TestShockLineFluxes:
         Assertion 3: Precondition—shock Hα contribution > noise floor
         (non-vacuity: verifies shock emits and reaches the line catalog).
         """
-        from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel
+        from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel, download_ssp
         from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
-        from tengri.data import download_ssp
 
         # Use bare stellar SSP; add Cue nebular backend (wNE not in catalog)
         ssp_path = download_ssp("fsps_prsc_miles_chabrier")
@@ -126,10 +125,9 @@ class TestShockLineFluxes:
         """Warning fires when shock is active with Cue backend (#927)."""
         import warnings
 
-        from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel
+        from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, download_ssp
         from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
         from tengri.config.exceptions import ShockPhotoionizedMixedWarning
-        from tengri.data import download_ssp
 
         ssp_path = download_ssp("fsps_prsc_miles_chabrier")
         ssp = load_ssp_data(str(ssp_path))
@@ -176,9 +174,8 @@ class TestShockLineFluxes:
         but does not change the discrete line catalog, proving shock lines are
         excluded from the catalog predict_line_fluxes reads.
         """
-        from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel
+        from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel, download_ssp
         from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
-        from tengri.data import download_ssp
 
         ssp_path = download_ssp("fsps_prsc_miles_chabrier")
         ssp = load_ssp_data(str(ssp_path))
@@ -231,10 +228,9 @@ class TestShockLineFluxes:
         """No warning when shock is disabled (#927)."""
         import warnings
 
-        from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel
+        from tengri import DEFAULT, Fixed, Observation, Photometry, SEDModel, download_ssp
         from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
         from tengri.config.exceptions import ShockPhotoionizedMixedWarning
-        from tengri.data import download_ssp
 
         ssp_path = download_ssp("fsps_prsc_miles_chabrier")
         ssp = load_ssp_data(str(ssp_path))

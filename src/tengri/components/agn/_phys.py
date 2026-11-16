@@ -17,6 +17,7 @@ from tengri.utils.physics_constants import (
     AA_TO_CM as ANGSTROM_CM,
     C_CGS as C_LIGHT,
     C_KM_S,
+    GAUSSIAN_FWHM_PER_SIGMA,
     H_PLANCK,
     K_BOLTZ,
     L_SUN,
@@ -229,7 +230,7 @@ def gaussian_line_profile(
     **Numerical safeguard**: :math:`\\sigma_\\lambda` is clamped to [0.01 Å, ∞)
     to avoid spurious delta-function behavior when FWHM is very small.
     """
-    sigma_ang = line_center * (fwhm_kms / C_KM_S) / 2.3548200450309493
+    sigma_ang = line_center * (fwhm_kms / C_KM_S) / GAUSSIAN_FWHM_PER_SIGMA
     sigma_ang = jnp.maximum(sigma_ang, 0.01)
 
     phi_lam = jnp.exp(-0.5 * ((wavelength - line_center) / sigma_ang) ** 2) / (
@@ -403,7 +404,7 @@ def lines_to_sed(
     from tengri.utils.physics_constants import C_KM_S
 
     fwhm_aa = line_wavelengths * fwhm_kms / C_KM_S
-    sigma_aa = fwhm_aa / 2.3548200450309493  # 2*sqrt(2*ln2)
+    sigma_aa = fwhm_aa / GAUSSIAN_FWHM_PER_SIGMA
 
     # Gaussian profiles: shape (n_wave, n_lines)
     dwave = wave_obs[:, None] - line_wavelengths[None, :]

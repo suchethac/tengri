@@ -588,28 +588,171 @@ def _forget_memoized_approx_clone(model, cfg) -> None:
         bucket.pop(_approx_clone_key(cfg), None)
 
 
-# Redshift-override clones, memoized per (source model, override z).
-#
-# ``params_override={"redshift": z}`` on a model without ``catalog_z_range`` is
-# evaluated on a model rebuilt at ``z`` (see ``_model_at_override_redshift``).
-# Same rationale as ``_APPROX_CLONE_CACHE``: the compile caches key on model
-# identity, so the same (source, z) must return the same object or every fit at
-# that z recompiles. Distinct z values get distinct models, hence distinct
-# programs; a program compiled against another z's tables can never be reused.
-_REDSHIFT_CLONE_CACHE: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+# Runtime-redshift promotions, per source model and quantized table span (#3505). Every
+# route that supplies a redshift the model was not built at (a ``params_override``, a
+# catalog's per-galaxy redshifts) evaluates the source promoted by
+# ``with_runtime_redshift``, with z passed as data, so every redshift in the span reuses
+# one compiled program. Keyed by the source's identity (the compile caches key on model
+# identity, so the same source must return the same promoted object) and by the span
+# quantized outward to ``_SPAN_STEP``, so a repeated or similar catalog reuses the
+# promotion and its compile. An exact model has no table: its key is None.
+_RUNTIME_REDSHIFT_PROMOTIONS: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+
+#: Grid [dimensionless] the promoted table span is quantized outward to.
+_SPAN_STEP = 0.05
+#: Padding of a catalog's redshift span, as a fraction of the span, and its floor.
+_SPAN_PAD_FRAC = 0.01
+_SPAN_MIN_PAD = 1e-3
+
+
+def catalog_redshift_span(redshifts) -> tuple[float, float]:
+    """The table span that covers a set of redshifts, quantized outward.
+
+    The span is ``[min z, max z]`` padded by ``max(1% of the span, 1e-3)``, clipped at
+    zero and rounded outward to a multiple of 0.05, so catalogs with similar redshifts
+    share one promoted model and one compile.
+
+    Parameters
+    ----------
+    redshifts : array_like, shape (n,)
+        Redshifts [dimensionless], all finite.
+
+    Returns
+    -------
+    tuple of float
+        ``(z_lo, z_hi)`` [dimensionless].
+
+    Raises
+    ------
+    ValueError
+        If ``redshifts`` is empty or any entry is NaN or infinite; the message names
+        the offending row indices.
+    """
+    z = np.asarray(redshifts, dtype=float).ravel()
+    if z.size == 0:
+        raise ValueError("cannot derive a redshift span from an empty redshift list")
+    _refuse_non_finite(z)
+    lo, hi = float(z.min()), float(z.max())
+    pad = max(_SPAN_PAD_FRAC * (hi - lo), _SPAN_MIN_PAD)
+    q_lo = np.floor(max(0.0, lo - pad) / _SPAN_STEP + 1e-9) * _SPAN_STEP
+    q_hi = np.ceil((hi + pad) / _SPAN_STEP - 1e-9) * _SPAN_STEP
+    return (round(float(q_lo), 10), round(float(q_hi), 10))
+
+
+def _refuse_non_finite(z) -> None:
+    """Raise ``ValueError`` naming the rows of ``z`` that are NaN or infinite."""
+    bad = np.flatnonzero(~np.isfinite(z))
+    if bad.size:
+        raise ValueError(
+            f"redshift is not finite (NaN or inf) for row(s) {bad.tolist()}; a redshift "
+            "table cannot cover it. Fix or drop those rows before fitting."
+        )
+
+
+def require_redshifts_in_range(redshifts, z_range) -> None:
+    """Refuse redshifts that a ``catalog_z_range`` table cannot cover, naming their rows.
+
+    The one range rule of the runtime-redshift path. The catalog fit and the batched
+    build both call it, so a galaxy outside the model's range is refused with the same
+    message and the same two remedies.
+
+    Parameters
+    ----------
+    redshifts : array_like, shape (n,)
+        Redshifts [dimensionless] of the catalog or of the galaxies.
+    z_range : tuple of float
+        ``(z_lo, z_hi)`` [dimensionless] of the model's ``catalog_z_range``.
+
+    Raises
+    ------
+    ValueError
+        If a redshift is NaN or infinite (the message names its rows, as
+        :func:`catalog_redshift_span` does), or lies outside ``[z_lo, z_hi]`` (the
+        message names the rows, their redshifts and the range).
+
+    Notes
+    -----
+    Build-time NumPy check, not JIT-compatible.
+    """
+    z = np.asarray(redshifts, dtype=float).ravel()
+    _refuse_non_finite(z)
+    z_lo, z_hi = float(z_range[0]), float(z_range[1])
+    outside = np.flatnonzero((z < z_lo) | (z > z_hi))
+    if outside.size:
+        raise ValueError(
+            f"redshift outside the model's catalog_z_range=[{z_lo:.3f}, {z_hi:.3f}] for "
+            f"row(s) {outside.tolist()} (z={np.round(z[outside], 6).tolist()}). "
+            "Widen catalog_z_range at model build time or filter the table."
+        )
+
+
+def _is_runtime_redshift(model) -> bool:
+    """Whether ``model`` already reads redshift at call time (#3505)."""
+    return _model_catalog_z_range(model) is not None or bool(getattr(model, "_z_runtime", False))
+
+
+def _is_tabulated(model) -> bool:
+    """Whether any SED behind ``model`` carries a redshift table (``WavePrecomp``)."""
+    sed = (p.sed for p in model.populations) if hasattr(model, "populations") else (model,)
+    return any(getattr(getattr(s, "sed", s), "_approx", {}).get("wave_precomp") for s in sed)
+
+
+def promote_to_runtime_redshift(model, redshifts):
+    """``model`` promoted once to read redshift at call time, covering ``redshifts``.
+
+    The one promotion path of the runtime-redshift mechanism (#3505): a single
+    override redshift and a whole catalog both land here. A model that already reads
+    redshift at runtime (a declared ``catalog_z_range`` is used as it is, a free
+    redshift) is returned unchanged. An exact model is promoted without a table; a
+    tabulated one gets a table over :func:`catalog_redshift_span`. The result is
+    cached per model and span, so the same inputs return the same object.
+
+    Parameters
+    ----------
+    model : SEDModel or ForwardModel
+        A fit model after ``approx`` resolution. Never mutated.
+    redshifts : array_like, shape (n,)
+        The redshifts [dimensionless] the fit will evaluate.
+
+    Returns
+    -------
+    SEDModel or ForwardModel
+        The promoted model, or ``model`` when it cannot or need not be promoted.
+
+    Raises
+    ------
+    ValueError
+        If a redshift is not finite.
+    """
+    span = catalog_redshift_span(redshifts)
+    if _is_runtime_redshift(model):
+        return model
+    promote = getattr(model, "with_runtime_redshift", None)
+    spec = getattr(model, "spec", None)
+    if not callable(promote) or spec is None or not spec.is_fixed("redshift"):
+        return model
+    key = span if _is_tabulated(model) else None
+    try:
+        bucket = _RUNTIME_REDSHIFT_PROMOTIONS.setdefault(model, {})
+    except TypeError:
+        return promote(key)
+    promoted = bucket.get(key)
+    if promoted is None:
+        promoted = promote(key)
+        bucket[key] = promoted
+    return promoted
 
 
 def _model_at_override_redshift(model, params_override):
     """The model to evaluate under a ``params_override`` redshift.
 
-    On a model without ``catalog_z_range`` the redshift is a compile constant,
-    and so is every table built from it at construction (fixed-z stellar LUT,
-    IGM band factors, nebular grid reference, dust-IR band response,
-    energy-balance LUT, radio/X-ray term responses, ``_dl_cm_fixed``,
-    ``_z_fixed``, line-catalog snapping). Merging the override into the loss's
-    fixed values alone leaves all of them at the model's own redshift. The
-    override is therefore made exactly equivalent to building the model at that
-    redshift: the model is rebuilt there once per (source, z) and reused.
+    On a fixed-z model the redshift is a compile constant, and so is every table
+    built from it at construction (stellar LUT, IGM band factors, nebular grid
+    reference, dust-IR band response, energy-balance LUT, radio/X-ray term
+    responses, ``_dl_cm_fixed``, line-catalog snapping). The source is therefore
+    promoted with :func:`promote_to_runtime_redshift`: the promoted model takes
+    redshift as a runtime input and the fit passes the override as data
+    (``_runtime_redshift``).
 
     Parameters
     ----------
@@ -621,31 +764,13 @@ def _model_at_override_redshift(model, params_override):
     Returns
     -------
     SEDModel or ForwardModel
-        ``model`` itself when there is nothing to rebuild (no redshift
-        override, a ``catalog_z_range`` model whose redshift is a runtime
-        input, a free redshift which the Fitter refuses, an override equal to
-        the model's own redshift, or a model type without the rebuild seam);
-        otherwise the model built at the override redshift.
+        ``model`` itself when there is nothing to promote (no redshift override,
+        a model already reading redshift at runtime, a free redshift, or a model
+        type without the promotion seam); otherwise the promoted source.
     """
     if not params_override or "redshift" not in params_override:
         return model
-    if _model_catalog_z_range(model) is not None:
-        return model
-    rebuild = getattr(model, "with_fixed_redshift", None)
-    spec = getattr(model, "spec", None)
-    if not callable(rebuild) or spec is None or not spec.is_fixed("redshift"):
-        return model
-    z = float(params_override["redshift"])
-    try:
-        bucket = _REDSHIFT_CLONE_CACHE.setdefault(model, {})
-    except TypeError:
-        return rebuild(z)
-    key = round(z, 12)
-    clone = bucket.get(key)
-    if clone is None:
-        clone = rebuild(z)
-        bucket[key] = clone
-    return clone
+    return promote_to_runtime_redshift(model, [float(params_override["redshift"])])
 
 
 def _component_chains(model) -> tuple:
@@ -928,37 +1053,6 @@ def _observation_serves_line_channel(model) -> bool:
     return obs is not None and getattr(obs, "line_fluxes", None) is not None
 
 
-def _feature_precomp_line_source_decline(model) -> str | None:
-    """Reason a bare ``FeaturePrecomp()`` has no lines to tabulate, or ``None`` if it has.
-
-    Mirrors the line resolution of ``SEDModel._resolve_feature_precomp``: a Q_H-linear
-    (Cue-like) backend tabulates its own lines, any other backend needs the lines of the
-    observation's ``line_fluxes``. Line treatments that live on the spectroscopy
-    (``eline_mode`` fitted or marginalized) name no lines to this table, so ``approx='auto'``
-    must decline it and keep the exact path rather than build a config that refuses (#3505).
-
-    Parameters
-    ----------
-    model : SEDModel
-        The model about to be topped up.
-
-    Returns
-    -------
-    str or None
-        The decline reason, or ``None`` when ``FeaturePrecomp()`` can resolve its lines.
-    """
-    from tengri.forward.sed_model import _is_q_h_linear_backend
-
-    if _is_q_h_linear_backend(getattr(model, "_nebular_backend", None)):
-        return None
-    if _observation_serves_line_channel(model):
-        return None
-    return (
-        "FeaturePrecomp has no lines to tabulate: the nebular backend is not linear in Q_H "
-        "and the Observation carries no line_fluxes"
-    )
-
-
 def _has_line_adjacent_channel(model) -> bool:
     """Whether the observation carries a channel that reads line internals.
 
@@ -1099,7 +1193,15 @@ def _lut_forward_bias(exact_model, lut_model, data_type, *, redshift=None):
 
 
 def _warn_if_lut_bias_amplified(
-    exact_model, lut_model, data, noise, data_type, *, surface, user_likelihood=False
+    exact_model,
+    lut_model,
+    data,
+    noise,
+    data_type,
+    *,
+    surface,
+    user_likelihood=False,
+    runtime_redshift=None,
 ):
     """#1671's measurement made operational: warn when ``bias x SNR`` is material.
 
@@ -1200,7 +1302,8 @@ def _warn_if_lut_bias_amplified(
             z_peak = float(eval_z_values[worst_idx])
             bias = biases_at_z[worst_idx]
         else:
-            bias = _lut_forward_bias(exact_model, lut_model, data_type)
+            # A runtime redshift is read from params at call time: the fit's override.
+            bias = _lut_forward_bias(exact_model, lut_model, data_type, redshift=runtime_redshift)
         if bias.size == 0:
             return
         flat_data = np.asarray(data, dtype=float).reshape(-1)
@@ -1680,7 +1783,7 @@ def _model_sed(model):
     return inner() if callable(inner) else model
 
 
-def _refuse_uncovered_bands(model, data, noise, presence, data_type=None) -> None:
+def _refuse_uncovered_bands(model, data, noise, presence, data_type=None, redshifts=None) -> None:
     """Refuse an unmasked band whose transmission runs past the model's axis (#2620).
 
     A band beyond the model's observed-frame wavelength axis returns its covered
@@ -1702,6 +1805,11 @@ def _refuse_uncovered_bands(model, data, noise, presence, data_type=None) -> Non
         Per-datum presence weights, same shape as ``data``; zero marks absent.
     data_type : str or None
         Only ``None`` or ``"photometry"`` is checked; other data kinds are skipped.
+    redshifts : array_like or None, optional
+        The redshifts [dimensionless] the fit evaluates (a per-fit override or a
+        catalog's per-galaxy values). When given they replace the model's declared
+        set: the ends of a table span promoted for those redshifts are an artifact
+        of the table, not a redshift the fit visits.
 
     Raises
     ------
@@ -1732,7 +1840,12 @@ def _refuse_uncovered_bands(model, data, noise, presence, data_type=None) -> Non
     if unmasked.shape != (len(phot.filters),):
         return  # not a per-band data vector for this model
     names = [getattr(f, "name", f"band {k}") for k, f in enumerate(phot.filters)]
-    for z in sed.filter_coverage_redshifts():
+    zs = (
+        sed.filter_coverage_redshifts()
+        if redshifts is None
+        else sorted(set(map(float, redshifts)))
+    )
+    for z in zs:
         frac = sed.filter_coverage_at(z)
         bad = np.flatnonzero((frac > FILTER_COVERAGE_TOLERANCE) & unmasked)
         if bad.size == 0:
@@ -2060,7 +2173,16 @@ class Fitter:
         self.data = jnp.asarray(data)
         self.noise = jnp.asarray(noise)
         _reject_non_finite_data(self.data, self.noise, presence)
-        _refuse_uncovered_bands(model, self.data, self.noise, presence, data_type)
+        _refuse_uncovered_bands(
+            model,
+            self.data,
+            self.noise,
+            presence,
+            data_type,
+            redshifts=None
+            if not params_override or "redshift" not in params_override
+            else [params_override["redshift"]],
+        )
         # An absent datum's value is never *used*, but IEEE still propagates
         # it: 0 * NaN is NaN, so a masked NaN poisons the likelihood exactly
         # as an unmasked one does, and the guard above would be telling users
@@ -2248,7 +2370,7 @@ class Fitter:
         if (
             self._params_override is not None
             and "redshift" in self._params_override
-            and _model_catalog_z_range(model) is not None
+            and _is_runtime_redshift(self.model)
         ):
             self._runtime_redshift = float(self._params_override["redshift"])
 
@@ -2459,6 +2581,21 @@ class Fitter:
             or self._fits_line_fluxes(model)
         )
 
+    def _feature_precomp_has_lines(self, model) -> bool:
+        """Whether ``FeaturePrecomp`` has emission lines to tabulate for this fit.
+
+        It tabulates the lines of a measured line-flux channel, or of a nebular
+        backend whose line luminosities scale with the ionizing photon rate. A
+        spectrum whose line amplitudes are nuisance parameters (marginalized or
+        fitted) on a model with neither has nothing to tabulate, and the build
+        refuses: the automatic policy then attaches no line table (#3374).
+        """
+        from tengri.forward.sed_model import _is_q_h_linear_backend
+
+        return self._fits_line_fluxes(model) or _is_q_h_linear_backend(
+            getattr(model, "_nebular_backend", None)
+        )
+
     def _auto_approx_config(self, model):
         """Precompute config auto-selected for this fit's data type.
 
@@ -2524,11 +2661,17 @@ class Fitter:
         # likelihood. A dust component that CAN take the nebular from the grid does
         # not touch that line service. Gating it on photometry-engagement cost a
         # measured 4.77x on every dusty line-flux fit.
+        fits_lines = self._fits_lines(model) and not _has_line_adjacent_channel(model)
+        has_lines = self._feature_precomp_has_lines(model)
+        if fits_lines and not has_lines:
+            model.record_decline(
+                "approx",
+                "feature_precomp",
+                "FeaturePrecomp has no lines to tabulate: the nebular backend is not linear "
+                "in Q_H and the fit carries no line_fluxes",
+            )
         wants_lut = (
-            self._fits_lines(model)
-            and not _has_line_adjacent_channel(model)
-            and _feature_precomp_line_source_decline(model) is None
-            and _feature_precomp_can_pay(model, serves_line_channel=True)
+            fits_lines and has_lines and _feature_precomp_can_pay(model, serves_line_channel=True)
         )
         configs = (*base, FeaturePrecomp()) if wants_lut else base
         if not configs:
@@ -2723,7 +2866,7 @@ class Fitter:
                 if topped_up is not None:
                     return topped_up
                 return _carry_approx_declines(model, _memoized_approx_clone(model, cfg))
-            return _memoized_approx_clone(model, cfg)
+            return _carry_approx_declines(model, _memoized_approx_clone(model, cfg))
 
         resolved = _memoized_approx_clone(model, approx)
         self._warn_lines_without_lut(resolved)
@@ -2783,21 +2926,6 @@ class Fitter:
             ),
         )
         self._init_eline_arrays(resolved)
-
-        obs = model.observation
-        _spec_config = obs.spectroscopy if obs is not None else None
-        # The broad component is not evaluated by any emission-line likelihood
-        # (no broad design-matrix columns are built), so its parameter would be
-        # sampled and change nothing (#3332). Refuse rather than run inert.
-        spec_broad = bool(getattr(_spec_config, "eline_broad", False))
-        params_broad = bool(getattr(self.spec, "eline_broad", False))
-        if spec_broad or params_broad:
-            raise ValueError(
-                "The broad emission-line component (eline_broad=True) is not implemented: "
-                "no likelihood builds its design-matrix columns, so 'eline_broad_sigma_kms' "
-                "would be sampled and change nothing. Set eline_broad=False on both "
-                "Spectroscopy and Parameters (tracked in #3332)."
-            )
 
     def _init_eline_arrays(self, resolved):
         """Assign the resolved emission-line state; merge fitted amplitude priors into the spec."""
@@ -4312,6 +4440,7 @@ class Fitter:
                 self.data_type,
                 surface="Fitter",
                 user_likelihood=self._likelihood_is_user_supplied,
+                runtime_redshift=self._runtime_redshift,
             )
 
         # --- Smart lean: drop only stale L3 entries before this run ---

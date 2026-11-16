@@ -16,6 +16,7 @@ import pytest
 from tengri import DEFAULT, Fitter, Fixed, Observation, SEDModel, Uniform
 from tengri.observation.line_list import LineList
 from tengri.observation.spectroscopy import Spectroscopy
+from tests.contract._engagement import assert_declined
 from tests.contract.test_inference_cache_keys import _base_spec, _small_ssp
 
 pytestmark = pytest.mark.contract
@@ -79,7 +80,11 @@ def test_auto_approx_builds_on_the_baked_in_backend(treatment):
         with pytest.raises(ValueError, match="eline_prior_type="):
             _fit(_baked_in_model(spectroscopy))
         return
-    assert _fit(_baked_in_model(spectroscopy)).model is not None
+    fitter = _fit(_baked_in_model(spectroscopy))
+    assert fitter.model is not None
+    if treatment["eline_mode"] != "off":
+        # Auto declined the line table and says why, in the one decline store.
+        assert_declined(fitter, "feature_precomp", "no lines to tabulate")
 
 
 @pytest.mark.xfail(
