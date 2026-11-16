@@ -327,7 +327,7 @@ class SpectroBatchSpec:
         :func:`build_spectro_batches` call that built the bucket, set only for a
         fixed-z template with ``WavePrecomp``. All buckets of one call share it, so
         they share one twin and one compile per bucket. The batched entry points evaluate
-        the bucket on :meth:`~tengri.forward.sed_model.SEDModel.with_catalog_z_range`
+        the bucket on :func:`~tengri.inference.fitter.promote_to_runtime_redshift`
         of this span, so each galaxy's photometry is projected at its own ``obs.z``.
         ``None`` (default) when the template needs no such twin.
 
@@ -1134,48 +1134,17 @@ def _require_common_covariance_offsets(galaxies: Sequence[GalaxySpectrum]) -> No
 def _needs_z_twin(model) -> bool:
     """Whether the template's photometry LUT bakes its fixed redshift.
 
-    A fixed-z model with ``WavePrecomp`` and no ``catalog_z_range`` builds its
-    stellar photometry LUT at the fixed value. The batched path then needs the
-    catalog twin (:meth:`~tengri.forward.sed_model.SEDModel.with_catalog_z_range`)
-    over the bucket's galaxies. Every other template reads each galaxy's ``obs.z``
-    directly, or is exact.
+    A template with ``WavePrecomp`` whose redshift is not runtime (a fixed value, no
+    ``catalog_z_range``) builds its stellar photometry LUT at that value. The batched
+    path then evaluates the bucket on the runtime-redshift model of
+    :func:`~tengri.inference.fitter.promote_to_runtime_redshift`. Every other template
+    reads each galaxy's ``obs.z`` directly, or is exact.
     """
-    return (
-        model.z_fixed is not None
-        and bool(model._approx.get("wave_precomp"))
-        and model._catalog_z_range is None
+    from tengri.forward.sed_model import redshift_is_runtime
+
+    return bool(model._approx.get("wave_precomp")) and not redshift_is_runtime(
+        model.spec.get_distribution("redshift"), model._catalog_z_range, model._z_runtime
     )
-
-
-def _require_z_in_window(galaxies: Sequence[GalaxySpectrum], z_window: tuple) -> None:
-    """Refuse any galaxy whose redshift lies outside the template's ``catalog_z_range``.
-
-    Parameters
-    ----------
-    galaxies : sequence of GalaxySpectrum
-        Per-galaxy observations, in catalog order.
-    z_window : tuple of float
-        ``(z_min, z_max)`` [dimensionless] of the template's ``catalog_z_range``.
-
-    Raises
-    ------
-    ValueError
-        If a galaxy's ``z`` is not finite or lies outside ``[z_min, z_max]``; the message
-        names the galaxy index, its ``z`` and the range.
-
-    Notes
-    -----
-    Build-time check. The template's per-galaxy redshift table covers only its window, so
-    a galaxy outside it would be evaluated on the table's edge without warning.
-    """
-    z_min, z_max = z_window
-    for index, galaxy in enumerate(galaxies):
-        z = float(galaxy.z)
-        if not z_min <= z <= z_max:
-            raise ValueError(
-                f"galaxy {index} has z={z} outside the template's catalog_z_range "
-                f"[{z_min}, {z_max}]; widen catalog_z_range or drop the galaxy"
-            )
 
 
 def _require_banded_records(model, galaxies: Sequence[GalaxySpectrum]) -> None:
@@ -1307,7 +1276,11 @@ def build_spectro_batches(
         _require_banded_records(model, galaxies)
         z_window = getattr(model, "_catalog_z_range", None)
         if z_window is not None:
-            _require_z_in_window(galaxies, z_window)
+            # Local import: inference.fitter imports observation, so a module-level
+            # import would be circular.
+            from tengri.inference.fitter import require_redshifts_in_range
+
+            require_redshifts_in_range([float(g.z) for g in galaxies], z_window)
         if model.spec.foreground_ebmv_mw > 0.0:
             missing = [i for i, g in enumerate(galaxies) if g.ebmv_mw is None]
             if missing:
@@ -1347,8 +1320,10 @@ def build_spectro_batches(
 
     call_span = None
     if model is not None and _needs_z_twin(model):
-        zs = [float(g.z) for g in galaxies]
-        call_span = (min(zs), max(zs))
+        # Local import for the same cycle reason as the range check above.
+        from tengri.inference.fitter import catalog_redshift_span
+
+        call_span = catalog_redshift_span([g.z for g in galaxies])
     out = []
     for spec, members in buckets.items():
         rows = [row for _, row, _, _ in members]

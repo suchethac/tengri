@@ -32,6 +32,7 @@ from tengri import (
 )
 from tengri.forward.batched_spectrum import batched_template, make_batched_predict
 from tengri.inference.batched_spectro import batched_log_likelihood
+from tengri.inference.fitter import catalog_redshift_span, promote_to_runtime_redshift
 from tengri.observation.banded import gaussian_resolution_bands
 from tengri.observation.batched import GalaxySpectrum, build_spectro_batches
 from tengri.observation.photometry import FilterCurve
@@ -164,7 +165,7 @@ def test_fixed_z_template_uses_each_galaxys_z(synthetic_ssp, grid, window_model,
 def test_galaxy_z_outside_catalog_range_raises_at_build(window_model, grid):
     records = _records(grid, [0.2], window_model)
     bad = [records[0], _records(grid, [0.7], window_model)[0]]
-    with pytest.raises(ValueError, match=r"galaxy 1.*z=0\.7.*0\.02.*0\.4"):
+    with pytest.raises(ValueError, match=r"row\(s\) \[1\].*z=\[0\.7\]"):
         build_spectro_batches(bad, model=window_model)
 
 
@@ -255,7 +256,6 @@ def test_fixed_z_exact_photometry_uses_obs_z(synthetic_ssp, grid):
 
 
 _PHOT_ZS = (0.05, 0.2)
-_PHOT_SPAN = (min(_PHOT_ZS), max(_PHOT_ZS))
 # Documented worst-case error of the photometric LUT (predict_via_precomp), as in
 # tests/contract/test_batched_wave_precomp_photometry.py.
 _LUT_RTOL = 6e-3
@@ -278,32 +278,13 @@ def test_fixed_z_wave_precomp_photometry_uses_each_galaxys_z(synthetic_ssp, grid
     """
     template = _phot_model(synthetic_ssp, grid, redshift=Fixed(0.05), approx=_PHOT_LUT)
     batched = _batched_phot_many(template, grid, _PHOT_ZS)
-    twin = _phot_model(
-        synthetic_ssp,
-        grid,
-        redshift=Uniform(*_PHOT_SPAN),
-        approx=WavePrecomp(z_min=0.0, z_max=0.6, n_z=_N_Z, catalog_z_range=_PHOT_SPAN),
-    )
+    twin = promote_to_runtime_redshift(template, catalog_redshift_span(_PHOT_ZS))
     for i, z in enumerate(_PHOT_ZS):
         reference = np.asarray(twin.predict_photometry({_MASS: _MASS_VALUE, "redshift": z}))
         np.testing.assert_allclose(batched[i], reference, rtol=1e-10, atol=0.0)
         exact = _phot_model(synthetic_ssp, grid, redshift=Fixed(z))
         exact_ref = np.asarray(exact.predict_photometry({_MASS: _MASS_VALUE}))
         np.testing.assert_allclose(batched[i], exact_ref, rtol=_LUT_RTOL, atol=0.0)
-
-
-def test_with_catalog_z_range_is_the_catalog_twin(synthetic_ssp, grid):
-    """with_catalog_z_range keeps the model, drops the fixed-z LUT and is idempotent."""
-    template = _phot_model(synthetic_ssp, grid, redshift=Fixed(0.05), approx=_PHOT_LUT)
-    twin = template.with_catalog_z_range(_PHOT_SPAN)
-    assert twin._catalog_z_range == _PHOT_SPAN
-    assert twin.z_fixed is None
-    assert twin.with_catalog_z_range((0.1, 0.15)) is twin
-    with pytest.raises(ValueError, match="ordered"):
-        template.with_catalog_z_range((0.3, 0.1))
-    exact = _phot_model(synthetic_ssp, grid, redshift=Fixed(0.05))
-    with pytest.raises(ValueError, match="WavePrecomp"):
-        exact.with_catalog_z_range(_PHOT_SPAN)
 
 
 def test_fixed_z_wave_precomp_batches_compile_once(synthetic_ssp, grid):
@@ -351,3 +332,32 @@ def test_catalog_z_range_photometry_uses_obs_z(synthetic_ssp, grid, z):
     batched = _batched_phot(template, grid, z)
     reference = np.asarray(template.predict_photometry({_MASS: _MASS_VALUE, "redshift": z}))
     np.testing.assert_allclose(batched, reference, rtol=1e-10, atol=0.0)
+
+
+# Bounds on the max relative photometry error of the LUT twin against exact per-galaxy
+# photometry at five interior redshifts. Measured: span 0.0-0.6 with n_z=40 1.725e-2,
+# with the default n_z=250 3.274e-4; span 0.0-0.15 with n_z=40 7.400e-4,
+# with n_z=250 5.511e-5.
+@pytest.mark.parametrize(
+    ("span", "n_z", "bound"),
+    [
+        ((0.0, 0.6), 40, 2.5e-2),
+        ((0.0, 0.15), 40, 1e-3),
+        ((0.0, 0.6), 250, 1e-3),
+        ((0.0, 0.15), 250, 1e-4),
+    ],
+    ids=["wide_nz40", "dwarf_nz40", "wide_nz250", "dwarf_nz250"],
+)
+def test_fixed_z_wave_precomp_photometry_accuracy(synthetic_ssp, grid, span, n_z, bound):
+    """The LUT twin's photometry stays within a measured bound of exact per-galaxy photometry."""
+    lut = WavePrecomp(z_min=0.0, z_max=0.6, n_z=n_z)
+    template = _phot_model(synthetic_ssp, grid, redshift=Fixed(0.05), approx=lut)
+    twin = template.with_runtime_redshift(span)
+    worst = 0.0
+    for z in np.linspace(span[0], span[1], 7)[1:-1]:
+        exact = _phot_model(synthetic_ssp, grid, redshift=Fixed(float(z)))
+        exact_flux = np.asarray(exact.predict_photometry({_MASS: _MASS_VALUE}))
+        lut_flux = np.asarray(twin.predict_photometry({_MASS: _MASS_VALUE, "redshift": float(z)}))
+        worst = max(worst, float(np.max(np.abs(lut_flux - exact_flux) / np.abs(exact_flux))))
+    print(f"MEASURED span={span} n_z={n_z} max_rel_err={worst:.6e}")
+    assert worst < bound

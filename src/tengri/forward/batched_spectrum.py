@@ -247,7 +247,7 @@ def batched_template(model, spec):
     """Return the template that the batch of ``spec`` is evaluated on.
 
     A fixed-z template with ``WavePrecomp`` bakes its photometry LUT at the fixed
-    value (see :meth:`~tengri.forward.sed_model.SEDModel.with_catalog_z_range`).
+    value (see :func:`~tengri.inference.fitter.promote_to_runtime_redshift`).
     For such a bucket, ``spec.z_span`` names the span of its galaxies, and the
     evaluation uses the catalog twin over that span, so each galaxy's photometry is
     projected at its own ``obs.z``. Every other bucket gets ``model`` back.
@@ -266,18 +266,19 @@ def batched_template(model, spec):
 
     Notes
     -----
-    Build-time Python, not JIT-compatible. The twins are cached on the template
-    itself, keyed by span, so the template and its twins are freed together, and
-    every entry point that takes the same template and bucket evaluates the same
-    model object and compiles once.
+    Build-time Python, not JIT-compatible. The promotion is delegated to
+    :func:`~tengri.inference.fitter.promote_to_runtime_redshift`, which caches it per
+    model and span, so every entry point that takes the same template and bucket
+    evaluates the same model object and compiles once.
     """
     span = getattr(spec, "z_span", None)
-    if span is None or model._catalog_z_range is not None:
+    if span is None:
         return model
-    twins = vars(model).setdefault("_batched_twins", {})
-    if span not in twins:
-        twins[span] = model.with_catalog_z_range(span)
-    return twins[span]
+    # Local import: inference.fitter imports observation, and this module is loaded
+    # before fitter by the batched entry points.
+    from tengri.inference.fitter import promote_to_runtime_redshift
+
+    return promote_to_runtime_redshift(model, span)
 
 
 def batched_template_for_batches(model, batches):
