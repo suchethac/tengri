@@ -32,9 +32,6 @@
 # fit timings of the batched stack. The stack compiles the forward model once per bucket of galaxies.
 # Each galaxy's data enters the compiled function as traced arrays, and its redshift comes from the
 # record rather than from the sampler.
-#
-# This notebook is experimental: the batched spectroscopic stack and its options are still open to
-# change, and the interface shown here is the one this notebook was written against.
 
 # %%
 import time
@@ -59,6 +56,7 @@ from tengri import (
     SEDModel,
     Spectroscopy,
     Uniform,
+    WavePrecomp,
     make_agebins_from_zred,
     plot,
 )
@@ -214,7 +212,9 @@ def make_record(lo, hi, z, edges, mask, flux, ivar, phot, perr, ebmv, covariance
 # Balmer decrement constrains the dust as the model predicts it.
 #
 # The redshift is free in the template. A batch carries each galaxy's redshift, so `Fixed(z)` is
-# refused here.
+# refused here. The template is built with `WavePrecomp(catalog_z_range=Z_RANGE)`: the stellar
+# photometry is a lookup table over the redshift window of the catalog, and each galaxy's photometry
+# reads the table at its own redshift. The band integrals are computed once at build, not per fit.
 
 
 # %%
@@ -256,6 +256,7 @@ def build_template():
         neb={"type": "cue", "all_params": Fixed(DEFAULT)},
         foreground={"ebmv_mw": 0.02},
         redshift=Uniform(0.0, Z_TEMPLATE_MAX),
+        approx=WavePrecomp(catalog_z_range=Z_RANGE),
     )
     spec = model.spec.with_fixed_value("eline_sigma_kms", 100.0)
     return SEDModel(spec, model.ssp_data, observation=model.observation)
@@ -433,7 +434,7 @@ for i in range(N_GAL):
     )
 
 # %% [markdown]
-# The MAP is a starting point, not the estimate: for galaxy 2 it sits 0.47 dex above the truth
+# The MAP is a starting point, not the estimate: for galaxy 2 it sits 0.42 dex above the truth
 # because the continuity history trades stellar mass against the age of the old bins (the MAP's
 # SFH ratios are far from the truth's), and the posterior below is the estimate.
 
