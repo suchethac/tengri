@@ -118,7 +118,7 @@
     const hub = g.append("g").attr("class", "hub").on("click", () => zoomTo(root)); // the hub always returns to the full wheel
     const hubC = hub.append("circle").attr("fill", "#E6EDF3").attr("stroke", "#2C4E74").attr("stroke-width", 2);
     const hubL = hub.append("image").attr("href", STATIC_BASE + "tengri-logo.png").attr("preserveAspectRatio", "xMidYMid meet");
-    const hubTxt = hub.append("g");
+    const hubTxt = hub.append("g").attr("class", "hubtxt");
     const hubT = hubTxt.append("text").attr("text-anchor", "middle").attr("fill", "#2b2b2b").style("font-weight", 400).style("letter-spacing", "0");
     const hubB = hubTxt.append("text").attr("text-anchor", "middle").attr("fill", "#2C4E74").style("font-weight", 500);
 
@@ -402,6 +402,8 @@
 
     // ---- zoom -----------------------------------------------------------------
     const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const ZOOM_MS = 750;
+    let zoomSeq = 0, zoomGuard = 0;
     const slug = d => d.ancestors().reverse().slice(1).map(a => a.data.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")).join("--");
     const bySlug = h => nodes.find(d => d.depth < 3 && slug(d) === h);
     function zoomTo(d, quiet) {
@@ -412,14 +414,29 @@
       const iv = d3.interpolate({ ...view }, target), ig = d3.interpolate(grow, growFor(d)), ih = d3.interpolate(hubMix, d === root ? 1 : 0);
       try { if (!quiet) history.replaceState(null, "", d === root ? location.pathname + location.search : "#" + slug(d)); } catch (e) { /* file:// or sandboxed */ }
       hideCard();
-      if (reduce) { view = target; grow = growFor(d); hubMix = d === root ? 1 : 0; render(); return; }
-      moving = true;
-      labG.interrupt().transition().duration(140).style("opacity", 0);
-      hubTxt.interrupt().transition().duration(140).style("opacity", 0);
-      const restore = ms => { moving = false; render(); labG.transition().duration(ms).style("opacity", 1); hubTxt.transition().duration(ms).style("opacity", 1); };
-      svg.transition("z").duration(750).ease(d3.easeCubicInOut)
-        .tween("z", () => t => { view = iv(t); grow = ig(t); hubMix = ih(t); render(); })
-        .on("end", () => restore(260)).on("interrupt", () => restore(200));
+      // Only the latest zoom owns the wheel's state. Each zoom finishes exactly once: on its
+      // transition's end, or from a guard timer if the transition is slow, stalls or is lost
+      // (a busy or throttled tab). An older zoom pre-empted by a newer one does nothing, so
+      // the newer zoom keeps the cheap per-frame path and restores the labels itself.
+      // Labels fade out and back in by CSS on the "moving" class, not by JS animation, so
+      // they always reach full opacity even when the browser throttles animation frames.
+      const seq = ++zoomSeq;
+      clearTimeout(zoomGuard);
+      const settle = { view: target, grow: growFor(d), hubMix: d === root ? 1 : 0 };
+      const finish = () => {
+        if (seq !== zoomSeq || !moving) return;
+        clearTimeout(zoomGuard);
+        svg.interrupt("z");
+        view = settle.view; grow = settle.grow; hubMix = settle.hubMix;
+        moving = false; host.classList.remove("moving");
+        render();
+      };
+      if (reduce) { view = settle.view; grow = settle.grow; hubMix = settle.hubMix; moving = false; host.classList.remove("moving"); render(); return; }
+      moving = true; host.classList.add("moving");
+      svg.transition("z").duration(ZOOM_MS).ease(d3.easeCubicInOut)
+        .tween("z", () => t => { if (seq === zoomSeq) { view = iv(t); grow = ig(t); hubMix = ih(t); render(); } })
+        .on("end", finish);
+      zoomGuard = setTimeout(finish, ZOOM_MS + 350);
     }
 
     // ---- model card -------------------------------------------------------------

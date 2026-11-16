@@ -57,6 +57,10 @@ body[data-theme="light"] .tg-wheel {
 .tg-wheel .arc:hover { filter: brightness(1.18); }
 .tg-wheel .arc:focus { outline: none; }
 .tg-wheel .arc:focus-visible { filter: brightness(1.3); stroke: var(--w-ink); stroke-width: 2px; }
+/* While a zoom animates, wedges slide under a resting pointer: switch hover effects off,
+   since a filter on many SVG shapes repainting every frame stalls WebKit. */
+.tg-wheel.moving .arc { transition: none; }
+.tg-wheel.moving .arc:hover { filter: none; }
 .tg-wheel .arc.sel { filter: brightness(1.6); }
 /* On a light ground brightening washes a pale wedge to white; deepen it instead. */
 body[data-theme="light"] .tg-wheel .arc.sel { filter: brightness(.82) saturate(1.6); }
@@ -64,7 +68,9 @@ body[data-theme="light"] .tg-wheel .arc.sel { filter: brightness(.82) saturate(1
 .tg-wheel .sub-t { font-family: "IBM Plex Sans", sans-serif; font-weight: 500; pointer-events: none; }
 .tg-wheel .leaf-t { font-family: "IBM Plex Sans", sans-serif; pointer-events: none; }
 .tg-wheel .hub { cursor: pointer; }
-.tg-wheel .labs { will-change: opacity; }
+.tg-wheel .labs, .tg-wheel .hubtxt { opacity: 1; transition: opacity .26s ease-out; will-change: opacity; }
+/* During a zoom the labels are faded out quickly; they are recomputed once at the end. */
+.tg-wheel.moving .labs, .tg-wheel.moving .hubtxt { opacity: 0; transition: opacity .14s ease-in; }
 
 .tg-wheel .key { position: absolute; left: 16px; bottom: 10px; right: 16px; font-size: 13px; color: var(--w-mute); transition: opacity .3s; pointer-events: none; }
 .tg-wheel .key b { color: var(--w-ink); font-weight: 600; }
