@@ -731,13 +731,26 @@ class TestElineModeExposure:
         assert "eline_sigma_kms" in params.all_params
         assert "eline_delta_v_kms" in params.all_params
 
-    def test_off_registers_nothing(self):
-        params = parse_groups(
+    def test_off_registers_the_default_pair_only_when_lines_are_rendered(self):
+        """eline_mode='off': the default pair is declared (Fixed) when a backend renders lines.
+
+        It is the one source of a rendered line's width and offset (owner ruling
+        2026-11-16, read through ``line_kinematics_at``); with no nebular backend
+        nothing registers.
+        """
+        rendered = parse_groups(
             sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
             neb={"type": "cue", "all_params": Fixed(DEFAULT)},
             redshift=Fixed(0.05),
         )
-        assert "eline_sigma_kms" not in params.all_params
+        assert "eline_sigma_kms" in rendered.all_params
+        assert "eline_sigma_kms" not in rendered.free_params
+        none = parse_groups(
+            sfh={"type": "dpl", "all_params": Fixed(DEFAULT)},
+            neb={"type": "none"},
+            redshift=Fixed(0.05),
+        )
+        assert "eline_sigma_kms" not in none.all_params
 
 
 class TestAllParamsAlias:
