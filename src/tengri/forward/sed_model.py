@@ -1196,20 +1196,20 @@ _ALPHA_FE_MIN_RESOLVING_POWER = 1000.0
 _ALPHA_FE_REST_WINDOW_AA = (4800.0, 5400.0)
 
 
-def _alpha_fe_redshift_ends(spec, catalog_z_range=None) -> list[float]:
-    """Redshifts at which the model's [alpha/Fe] constraint is checked (#3487).
+def _redshift_ends(spec, catalog_z_range=None) -> list[float]:
+    """The redshifts a model can take, as the ends of their range (#3487, #3436).
 
     A catalog model's redshift is runtime (its Fixed spec value is a placeholder), so
-    both ends of the catalog range are checked. Otherwise a fixed redshift gives one
-    value and a free redshift both ends of its prior bounds, since a spectrum can cover
-    the window at one end and not the other.
+    both ends of the catalog range are returned. Otherwise a fixed redshift gives one
+    value and a free redshift the declared ends of its prior bounds, which may be
+    infinite.
     """
     if catalog_z_range is not None:
         return [float(catalog_z_range[0]), float(catalog_z_range[1])]
     dist = spec.get_distribution("redshift")
     if dist.is_fixed:
-        return [float(dist.value)]
-    return [float(bound) for bound in dist.bounds if bound is not None]
+        return [float(dist.bounds[0])]
+    return [float(bound) for bound in (getattr(dist, "bounds", None) or ()) if bound is not None]
 
 
 def _alpha_fe_observation_findings(
@@ -1253,7 +1253,7 @@ def _alpha_fe_observation_findings(
             measurements["resolving_power"] = resolving_power
     lo, hi = _ALPHA_FE_REST_WINDOW_AA
     wave_obs = np.asarray(spectroscopy.wave_obs, dtype=float)
-    for z in _alpha_fe_redshift_ends(spec, catalog_z_range):
+    for z in _redshift_ends(spec, catalog_z_range):
         rest = wave_obs / (1.0 + z)
         if rest.min() > lo or rest.max() < hi:
             findings.append(f"rest coverage {rest.min():.0f}-{rest.max():.0f} A at z = {z:g}")
@@ -3289,6 +3289,22 @@ class SEDModel:
             return None
         return self._fixed_sigma_v_kms()
 
+    def _lattice_window_static(self, wave_obs_np):
+        """Static ln-lambda lattice for the velocity dispersion on this spectrum (#3436).
+
+        The redshift range is the fixed value, the catalog range, or the finite bounds of
+        the redshift prior. Returns ``None`` when the range is not static, so the projection
+        raises a clear error instead of spanning an unbounded lattice.
+        """
+        from tengri.observation.spectrum import lattice_span
+
+        if wave_obs_np is None:
+            return None
+        ends = _redshift_ends(self.spec, self._catalog_z_range)
+        if not ends or len(ends) > 2 or not np.all(np.isfinite(ends)):
+            return None
+        return lattice_span(np.asarray(wave_obs_np, dtype=np.float64), min(ends), max(ends))
+
     def _spectrum_lut_serves_exactly(self, observation) -> bool:
         """Whether the spectrum LUT can serve this spectrum channel exactly (#2958).
 
@@ -3807,6 +3823,9 @@ class SEDModel:
         # register plain identity mappings here (#1031: previously the auto-merged
         # ``cal_c*`` were free in the spec with no map entry → ParameterMapError).
         param_map_deltas.append(self._calibration_param_map(observation))
+        # The widths and offsets of named emission-line kinematic groups are
+        # dynamic in the same way: their names come from the observation (#3332).
+        param_map_deltas.append(self._eline_group_param_map(spec))
 
         # ── Cosmology (luminosity distance) ───────────────────────
         self._init_cosmology(spec)
@@ -5880,6 +5899,23 @@ class SEDModel:
         cal_params = observation.spectroscopy.get_calibration_params()
         return {name: (name, 1.0, 0.0) for name in cal_params}
 
+    @staticmethod
+    def _eline_group_param_map(spec):
+        """Identity param-map entries for the named emission-line kinematic groups.
+
+        Returns ``{name: (name, 1.0, 0.0)}`` for ``eline_sigma_kms_<group>`` and
+        ``eline_delta_v_kms_<group>`` of each group in ``spec.eline_groups``; empty
+        without named groups. The line design matrix reads the values directly.
+        """
+        from tengri.observation.eline_marginalization import kinematic_param_names
+
+        names = [
+            name
+            for group in getattr(spec, "eline_groups", ())
+            for name in kinematic_param_names(group)
+        ]
+        return {name: (name, 1.0, 0.0) for name in names}
+
     def _init_instrument(self, spec, observation):
         """Configure velocity dispersion and LSF settings."""
         self._has_sigma_v = spec.has_param("sigma_v") if hasattr(spec, "has_param") else False
@@ -6330,14 +6366,18 @@ class SEDModel:
         ``apply_lsf`` clamps via ``jnp.maximum`` so traced values flow
         through without breaking JIT.
         """
-        if "sigma_v_kms" in params:
-            return params["sigma_v_kms"]
         try:
             dist = self.spec.get_distribution("sigma_v_kms")
         except KeyError:
-            return 0.0
-        if dist.is_fixed:
+            dist = None
+        # A declared Fixed value is static even when the merged params carry it as a traced
+        # value, so the projection routes on a concrete sigma_v (#3512).
+        if dist is not None and dist.is_fixed:
             return float(dist.bounds[0])
+        if "sigma_v_kms" in params:
+            return params["sigma_v_kms"]
+        if dist is None:
+            return 0.0
         raise ValueError(_free_lsf_param_missing("sigma_v_kms"))
 
     def _get_lsf_scale(self, params):
@@ -7505,6 +7545,12 @@ class SEDModel:
         lut_sigma_v_kms = self._spectrum_lut_sigma_v_kms()
         if lut_sigma_v_kms is not None:
             tail = (*tail, ("spec_lut_sigma_v_kms", lut_sigma_v_kms))
+        # The projection takes a Fixed sigma_v as a static Python value (#3512), so a nonzero one
+        # is part of the compiled structure. Zero (undeclared or Fixed(0)) takes the same
+        # unbroadened path and keeps the signature unchanged; a free sigma_v is traced.
+        static_sigma_v_kms = self._fixed_sigma_v_kms()
+        if static_sigma_v_kms:
+            tail = (*tail, ("spec_static_sigma_v_kms", static_sigma_v_kms))
         signature = derive_key(
             self,
             SIGNATURE_POLICY,
@@ -7964,6 +8010,10 @@ class SEDModel:
         # routines that cannot be traced.
         self._warm_component_chain()
 
+        lattice_window = self._lattice_window_static(
+            w_np if w_np is not None else getattr(spectroscopy, "wave_obs", None)
+        )
+
         def _impl(params, fixed_values, wave_obs, ssp_data, template_data, ztable_data):
             from tengri.cosmology import luminosity_distance
             from tengri.observation.observation import project_spectrum_kernel_split
@@ -8005,6 +8055,7 @@ class SEDModel:
                 conserving=conserving,
                 resolution_matrix=resolution_matrix,
                 nebular_lines=nebular_lines,
+                lattice_window=lattice_window,
             )
 
         if traced_grid:
@@ -11561,6 +11612,12 @@ class SEDModel:
         # ``predict_state`` inside the JIT reuses the cached chain.
         self._warm_component_chain()
 
+        lattice_window = self._lattice_window_static(
+            None
+            if observation is None or not observation.can_do_spectroscopy
+            else observation.spectroscopy.wave_obs
+        )
+
         def _forward(params, fixed_values, ssp_data, template_data, ztable_data):
             # The one caller that may take the publication shortcuts: this
             # kernel returns projected observables and never exposes the state,
@@ -11633,6 +11690,7 @@ class SEDModel:
                     lsf_scale=lsf_scale_getter(full),
                     resample_z_ref=resample_z_ref,
                     window_z=window_z,
+                    lattice_window=lattice_window,
                     observables_type=None if mixed_phot_lut else observables_type,
                 )
                 if mixed_phot_lut:
@@ -13964,6 +14022,14 @@ class SEDModel:
             _obs_eline = getattr(_spec_obs, "eline_mode", None)
             if _obs_eline is not None and _obs_eline != "off":
                 groups["eline_mode"] = _obs_eline
+        # Named kinematic groups of the observation register their width and
+        # offset parameters the same way (#3332).
+        if "eline_groups" not in groups and observation is not None:
+            _spec_obs = getattr(observation, "spectroscopy", None)
+            if getattr(_spec_obs, "eline_kinematics", None):
+                groups["eline_groups"] = tuple(
+                    g for g in _spec_obs.effective_catalog.kinematic_groups if g
+                )
 
         spec = parse_groups(ssp_data=ssp_data, **groups)
         _validate_dust_emission_is_energy_balanced(spec)
