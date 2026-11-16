@@ -5,10 +5,16 @@ from __future__ import annotations
 
 import pytest
 
-from tengri import FREE, Fixed, SEDModel
+from tengri import DEFAULT, FREE, Fixed, SEDModel
 from tests._cb19_grid import write_synthetic_cb19_grid
 
 pytestmark = pytest.mark.regression_bug
+
+# These tests are about the baked CB19 optional axes, not the ionizing shape. A free
+# parametric SFH (the default) makes FeaturePrecomp run its shape probe (#3526), which the
+# synthetic grid fails for reasons unrelated to what is tested here. A fixed SFH has nothing
+# to probe, so the refusal under test is the one reached.
+_FIXED_SFH = {"type": "dpl", "all_params": Fixed(DEFAULT)}
 
 
 @pytest.mark.parametrize("axis_name", ["neb_hbfrac", "neb_log_nH", "neb_co", "neb_dno"])
@@ -25,6 +31,7 @@ def test_enable_fast_nebular_refuses_freed_optional_axes(tmp_path, synthetic_ssp
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
         observation=None,
+        sfh=_FIXED_SFH,
         neb=neb_config,
         redshift=Fixed(0.0),
     )
@@ -50,6 +57,7 @@ def test_enable_fast_nebular_allows_pinned_optional_axes(tmp_path, synthetic_ssp
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
         observation=None,
+        sfh=_FIXED_SFH,
         neb=neb_config,
         redshift=Fixed(0.0),
     )
@@ -75,6 +83,7 @@ def test_enable_fast_nebular_allows_freed_table_axes(tmp_path, synthetic_ssp_wid
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
         observation=None,
+        sfh=_FIXED_SFH,
         neb=neb_config,
         redshift=Fixed(0.0),
     )

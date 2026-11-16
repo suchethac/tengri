@@ -708,13 +708,15 @@ class TestSEDModelInitNebularDispatch:
     ``Prediction.lines.*`` accessor returned NaN.  See issue #361.
     """
 
-    def test_cb19_mode_uses_cb19_backend(self, ssp_data_wne):
+    def test_cb19_mode_uses_cb19_backend(self, ssp_data_bc03):
         """Building a model with neb='cb19' should wire CB19Backend, not BakedInBackend."""
+        # Bare grid on purpose (#3465): this is a dispatch check. An explicit wNE grid with
+        # no bare twin is refused by CB19 (CB19WNESSPError), which is tested on its own.
         import tengri
         from tengri.components.nebular import BakedInBackend, CB19Backend
 
         model = tengri.SEDModel.build(
-            ssp_data_wne,
+            ssp_data_bc03,
             sfh={
                 "type": "tsnorm",
                 "all_params": tengri.Fixed(tengri.DEFAULT),

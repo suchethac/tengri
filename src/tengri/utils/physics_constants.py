@@ -89,7 +89,7 @@ Used for ν = c/λ when λ is in Ångström.
 C_NM_PER_S: float = C_AA / 10.0
 """Speed of light c [nm s⁻¹], defined from ``C_AA`` so the value has one source.
 
-Equal to 2.99792458e17 exactly in float64. Used for ν = c/λ when λ is in nanometres.
+Equal to 2.99792458e17 exactly in float64. Used for ν = c/λ when λ is in nanometers.
 """
 
 GAUSSIAN_FWHM_PER_SIGMA: float = 2.3548200450309493

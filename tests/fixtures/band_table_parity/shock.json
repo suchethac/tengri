@@ -6,8 +6,8 @@
   "shock_velocity": 782.0199742671562
  },
  "platform": "darwin-arm64",
- "repin_note": "Re-pinned 2026-11-15: monotone PCHIP metallicity read (#3434, owner ruling 'True PCHIP on the spectra'). Against real main: the PCHIP move is up to 4.1e-4 relative (dust_fixed_z, exact, shock) and 3.3e-5 (free_z_radio_xray); the re-pinned arrays also carry 1-6 ulp (max 1.3e-15 relative) from the restructured contraction order, measured on a Hermite control.",
- "signature_sha256": "040f1357881045f68ed92121dd476386a1a34a20e3f95ace76454c688543e29f",
+ "repin_note": "Re-captured 2026-11-16 on main 45e59ac86 + #3560 (native-slope table reads, #3541), twice, bit-identical. Against 45e59ac86's golden, matched by leaf path: 6 new native-slope sibling leaves; 0 existing leaves moved, max rel 0 (none); photometry max rel 2.66e-05; compile signature unchanged. ",
+ "signature_sha256": "ead6949d2ad44a5a67e29a1b80b0b404310235bd48bce6dfbeb34f78cce5563a",
  "summary": "Precompute Engagement Summary\n===========================\n\n\u2022 Energy-balance LUT: DECLINED\n  Reason: no dust attenuation component in the chain\n\u2022 Dust band response: DECLINED\n  Reason: no dust emission component configured\n\n\u2022 Observed facts:\n  components: stellar, nebular, shock\n  dust_emission_configured: False\n  free_params: sfh_dpl_log_total_mass, shock_log_density, shock_log_lhalpha, shock_velocity\n  igm_fold: declared=auto, resolved=None\n  redshift_fixed: 0.1\n  wave_precomp_enabled: True\n  ztable_enabled: False",
  "tree": [
   {
@@ -75,8 +75,70 @@
   {
    "dtype": "float64",
    "kind": "array",
+   "path": "/stellar/ssp_phot_lut/slopes/ssp_phot",
+   "sha256": "083a2d58030dd000b7ed60b3c80d0c4043041fbf9233d350f493eb369213442c",
+   "shape": [
+    15,
+    93,
+    4
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/stellar/ssp_phot_lut/slopes/effective_wavelengths",
+   "sha256": "3ae9c8097d2b49686c915477a8997e404ec57f158bae5690140496b4f5832b9a",
+   "shape": [
+    4
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/stellar/ssp_phot_lut/slopes/effective_wavelengths_rest",
+   "sha256": "5143429e112f21fc87f8ab17d869381fd566c3921c86f23dd2ab210a24802f62",
+   "shape": [
+    4
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/stellar/ssp_phot_lut/slopes/log10_flux_scale",
+   "sha256": "5490a4173a02c5980b25017f486d3f899d9e9c205290ca9d9b47b12605271091",
+   "shape": [
+    1
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/stellar/ssp_phot_lut/slopes/ssp_subband_phot",
+   "sha256": "a6fe9c177916d0049c280fb1665adb8753061ede497b264c5dec255c96107aaa",
+   "shape": [
+    15,
+    93,
+    4,
+    5
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
+   "path": "/stellar/ssp_phot_lut/slopes/ssp_subband_waves_rest",
+   "sha256": "58a0a4e2b3d7825a27ef0ed3f0e5e0dc91a6a650844742e4181bcf20b36c0b48",
+   "shape": [
+    15,
+    93,
+    4,
+    5
+   ]
+  },
+  {
+   "dtype": "float64",
+   "kind": "array",
    "path": "/shock_band_table",
-   "sha256": "6ce7d60ea13b05ef810add2f78cfeba139a5c5b6d51ae0716e2ce7b4a1edaed2",
+   "sha256": "c7adfc0404d118acb4fbc388d15c583ad1f589b77199a078132225825b002366",
    "shape": [
     24,
     2,

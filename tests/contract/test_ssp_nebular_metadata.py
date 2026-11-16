@@ -209,7 +209,7 @@ def test_known_catalog_autodownload_is_reachable(tmp_path, monkeypatch):
         calls.append(short)
         from tengri._data_setup import _KNOWN_SSPS
 
-        _write_tiny_ssp(Path(dest) / _KNOWN_SSPS[short])
+        _write_tiny_ssp(Path(dest) / _KNOWN_SSPS[short].filename)
 
     import tengri._data_setup as data_setup
 

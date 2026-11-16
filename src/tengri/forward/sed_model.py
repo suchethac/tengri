@@ -2513,42 +2513,69 @@ def _fold_igm_exact_into_subbands(
             "convention": convention,
         }
 
+    from tengri.components.stellar.sps.met_pchip import native_slope_flux
+
+    def _slope_ssp(ssp):
+        """The SSP grid whose flux is the native PCHIP slopes across Z (#3541)."""
+        return ssp._replace(ssp_flux=native_slope_flux(ssp.ssp_flux, ssp.ssp_lgmet))
+
+    def _folded(fold, bare_phi, bare_num):
+        """The folded integrals, with the bare ones where the IGM does not reach (#3541)."""
+        phi = np.where(np.isnan(fold.phi), bare_phi, fold.phi)
+        num = np.where(np.isnan(fold.num_rest), bare_num, fold.num_rest)
+        return phi, num
+
+    def _bare_num(waves, phot):
+        """The bare rest-frame numerator, node times integral, as the stellar read forms it."""
+        return np.asarray(waves) * np.asarray(phot)
+
     lut = getattr(stellar_state, "ssp_phot_lut", None)
     if lut is not None and lut.ssp_subband_phot is not None:
         subband = np.asarray(lut.ssp_subband_phot)
         if subband.shape[-1] <= 0:
             return stellar_state
         z = _fixed_redshift_value(redshift_spec) if redshift_spec else float(lut.redshift)
+        # The folded integrals are the linear objects (#3541): the table and its native-slope
+        # sibling are the same quadrature on F and on S, and the ratio is formed after the read.
         fold = exact_fold.subband_fold(ssp_data, filters, z, **_partition(subband))
-        bare_nodes = np.asarray(lut.ssp_subband_waves_rest)
-        return _replace(
-            stellar_state,
-            ssp_phot_lut=lut._replace(
-                ssp_subband_phot_igm=subband * fold.ratio,
-                ssp_subband_waves_rest_igm=np.where(
-                    np.isnan(fold.nodes_rest), bare_nodes, fold.nodes_rest
-                ),
-            ),
-        )
+        phi, num = _folded(fold, subband, _bare_num(lut.ssp_subband_waves_rest, subband))
+        new = lut._replace(ssp_subband_phot_igm=phi, ssp_subband_num_igm=num)
+        if lut.slopes is not None:
+            sib = lut.slopes
+            sib_phot = np.asarray(sib.ssp_subband_phot)
+            fold_s = exact_fold.subband_fold(
+                _slope_ssp(ssp_data), filters, z, **_partition(subband)
+            )
+            phi_s, num_s = _folded(
+                fold_s, sib_phot, _bare_num(sib.ssp_subband_waves_rest, sib_phot)
+            )
+            new = new._replace(
+                slopes=sib._replace(ssp_subband_phot_igm=phi_s, ssp_subband_num_igm=num_s)
+            )
+        return _replace(stellar_state, ssp_phot_lut=new)
 
     ztable = getattr(stellar_state, "ssp_phot_ztable", None)
     if ztable is not None and ztable.ssp_subband_phot_table is not None:
         table = np.asarray(ztable.ssp_subband_phot_table)
         if table.shape[-1] <= 0:
             return stellar_state
-        fold = exact_fold.subband_fold_table(
-            ssp_data, filters, np.asarray(ztable.z_grid), **_partition(table)
-        )
-        bare_nodes = np.asarray(ztable.subband_waves_rest_table)
-        return _replace(
-            stellar_state,
-            ssp_phot_ztable=ztable._replace(
-                ssp_subband_phot_igm_table=table * fold.ratio,
-                subband_waves_rest_igm_table=np.where(
-                    np.isnan(fold.nodes_rest), bare_nodes, fold.nodes_rest
-                ),
-            ),
-        )
+        z_grid = np.asarray(ztable.z_grid)
+        fold = exact_fold.subband_fold_table(ssp_data, filters, z_grid, **_partition(table))
+        phi, num = _folded(fold, table, _bare_num(ztable.subband_waves_rest_table, table))
+        new = ztable._replace(ssp_subband_phot_igm_table=phi, subband_num_igm_table=num)
+        if ztable.slopes is not None:
+            sib = ztable.slopes
+            sib_table = np.asarray(sib.ssp_subband_phot_table)
+            fold_s = exact_fold.subband_fold_table(
+                _slope_ssp(ssp_data), filters, z_grid, **_partition(table)
+            )
+            phi_s, num_s = _folded(
+                fold_s, sib_table, _bare_num(sib.subband_waves_rest_table, sib_table)
+            )
+            new = new._replace(
+                slopes=sib._replace(ssp_subband_phot_igm_table=phi_s, subband_num_igm_table=num_s)
+            )
+        return _replace(stellar_state, ssp_phot_ztable=new)
 
     return stellar_state
 
@@ -2774,9 +2801,18 @@ def _fold_igm_into_subbands(
             # live on the sub-band nodes at every call (#1149).
             note(patchy_reason)
             return _replace(stellar_state, igm_fold_resolved=igm_fold)
+        # The node is flux-free, so the folded table is linear in F and its native-slope
+        # sibling is the same product on S (#3541): read by Hermite like the exact fold.
+        new_lut = lut._replace(ssp_subband_phot_igm=lut.ssp_subband_phot * trans)
+        if lut.slopes is not None and lut.slopes.ssp_subband_phot is not None:
+            new_lut = new_lut._replace(
+                slopes=lut.slopes._replace(
+                    ssp_subband_phot_igm=lut.slopes.ssp_subband_phot * trans
+                )
+            )
         return _replace(
             stellar_state,
-            ssp_phot_lut=lut._replace(ssp_subband_phot_igm=lut.ssp_subband_phot * trans),
+            ssp_phot_lut=new_lut,
             igm_fold_resolved=igm_fold,
         )
 
@@ -2788,11 +2824,18 @@ def _fold_igm_into_subbands(
             # live on the sub-band nodes at every call (#1149).
             note(patchy_reason)
             return _replace(stellar_state, igm_fold_resolved=igm_fold)
+        new_ztable = ztable._replace(
+            ssp_subband_phot_igm_table=ztable.ssp_subband_phot_table * trans
+        )
+        if ztable.slopes is not None and ztable.slopes.ssp_subband_phot_table is not None:
+            new_ztable = new_ztable._replace(
+                slopes=ztable.slopes._replace(
+                    ssp_subband_phot_igm_table=ztable.slopes.ssp_subband_phot_table * trans
+                )
+            )
         return _replace(
             stellar_state,
-            ssp_phot_ztable=ztable._replace(
-                ssp_subband_phot_igm_table=ztable.ssp_subband_phot_table * trans
-            ),
+            ssp_phot_ztable=new_ztable,
             igm_fold_resolved=igm_fold,
         )
 
@@ -3987,8 +4030,13 @@ class SEDModel:
             # here. Falling back to the exact per-call path would produce correct
             # numbers while hiding the defect (#2826 was a KeyError swallowed
             # this way).
-            chain = self._cached_component_chain = self._build_component_chain()
-            self._energy_balance_lut(chain)
+            # One slope scope for the chain and the energy-balance LUT: each grid's native
+            # tangents are computed once for the whole build (#3541).
+            from tengri.components.stellar.sps.met_pchip import native_slope_scope
+
+            with native_slope_scope():
+                chain = self._cached_component_chain = self._build_component_chain()
+                self._energy_balance_lut(chain)
             # Every band table is filled into the memo here, eagerly, from chain0: a
             # build inside a jit trace would see tracers, and the grid chain attached
             # below must not be the one a table is built from.
@@ -12459,6 +12507,7 @@ class SEDModel:
         from tengri.components.dust.energy_balance_precompute import (
             build_energy_balance_lut,
             build_energy_balance_lut_over_z,
+            build_energy_balance_lut_with_slopes,
         )
         from tengri.components.dust.two_component import DustSEDComponent
         from tengri.components.nebular.component import NebularSEDComponent
@@ -12565,17 +12614,17 @@ class SEDModel:
                     tau_diff_grid=tau_v_grid,
                 )
                 if z_nodes is None:
-                    lut = build_energy_balance_lut(
-                        jnp.asarray(self.ssp_data.ssp_flux),
-                        jnp.asarray(self.ssp_data.ssp_wave),
+                    lut = build_energy_balance_lut_with_slopes(
+                        build_energy_balance_lut,
+                        self.ssp_data,
                         bc_params={k: float(v) for k, v in dust_params.items()},
                         diff_params={k: float(v) for k, v in dust_params.items()},
                         **single_kwargs,
                     )
                 else:
-                    lut = build_energy_balance_lut_over_z(
-                        jnp.asarray(self.ssp_data.ssp_flux),
-                        jnp.asarray(self.ssp_data.ssp_wave),
+                    lut = build_energy_balance_lut_with_slopes(
+                        build_energy_balance_lut_over_z,
+                        self.ssp_data,
                         ln1pz=z_nodes,
                         params_at_z=lambda z: (_single_params(z), _single_params(z)),
                         **single_kwargs,
@@ -12660,9 +12709,9 @@ class SEDModel:
                 )
 
             if not is_single_component and z_nodes is not None:
-                lut = build_energy_balance_lut_over_z(
-                    jnp.asarray(self.ssp_data.ssp_flux),
-                    jnp.asarray(self.ssp_data.ssp_wave),
+                lut = build_energy_balance_lut_with_slopes(
+                    build_energy_balance_lut_over_z,
+                    self.ssp_data,
                     ln1pz=z_nodes,
                     params_at_z=_two_params,
                     law_bc=law_bc,
@@ -12680,9 +12729,9 @@ class SEDModel:
                 )
             elif not is_single_component:
                 # Two-component: use the standard LUT builder
-                lut = build_energy_balance_lut(
-                    jnp.asarray(self.ssp_data.ssp_flux),
-                    jnp.asarray(self.ssp_data.ssp_wave),
+                lut = build_energy_balance_lut_with_slopes(
+                    build_energy_balance_lut,
+                    self.ssp_data,
                     law_bc=law_bc,
                     law_diff=law_diff,
                     f_obscuration=float(
@@ -13294,8 +13343,16 @@ class SEDModel:
 
         Builds on :meth:`_build_chain_configs` (structural-only) with the
         per-component ``precompute()`` pass that resolves template data and,
-        when active, the ``WavePrecomp``/``SpectrumPrecomp`` LUTs.
+        when active, the ``WavePrecomp``/``SpectrumPrecomp`` LUTs. The pass runs
+        inside a native-slope scope, so each grid's PCHIP tangents are taken once (#3541).
         """
+        from tengri.components.stellar.sps.met_pchip import native_slope_scope
+
+        with native_slope_scope():
+            return self._build_component_chain_in_scope()
+
+    def _build_component_chain_in_scope(self):
+        """The chain build of :meth:`_build_component_chain`, run inside its slope scope."""
         chain = self._build_chain_configs()
 
         # SINGLE BUILD-TIME PRECOMPUTATION PASS: resolve all component data before
@@ -13557,6 +13614,7 @@ class SEDModel:
                             spec_lsf_n_bins=spec_state.spec_lsf_n_bins,
                             spec_rest_window=spec_state.spec_rest_window,
                             spec_ssp_broadened=spec_state.spec_ssp_broadened,
+                            spec_ssp_broadened_slope=spec_state.spec_ssp_broadened_slope,
                         )
                     else:
                         state = spec_state
@@ -14119,6 +14177,11 @@ class SEDModel:
                     g for g in _spec_obs.effective_catalog.kinematic_groups if g
                 )
 
+        # One place where the grid is chosen for the nebular backend (#3465): a default
+        # wNE grid is swapped for its bare twin unless the backend is baked-in.
+        from tengri.components.stellar.sps.nebular_pairing import resolve_nebular_grid
+
+        ssp_data = resolve_nebular_grid(ssp_data, groups.get("neb"))
         spec = parse_groups(ssp_data=ssp_data, **groups)
         _validate_dust_emission_is_energy_balanced(spec)
         _validate_torus_frac_fracagn_conflict(spec)

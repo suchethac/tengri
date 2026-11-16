@@ -436,11 +436,10 @@ def load_ssp(
     name : str or None, optional
         Short alias from ``_LOAD_SSP_PRESETS``, a key from
         ``tengri.list_known_ssps()``, or a literal filename (with or
-        without ``.h5``). ``None`` (default) loads ``tengri._data_setup.DEFAULT_SSP``
-        the bare-stellar PRSC/MILES Chabrier grid, the same one
-        ``tengri.download_ssp()`` fetches and the one the Cue/CloudyGrid nebular
-        backends require. For the nebular-baked demo grid pass the alias
-        explicitly: ``load_ssp("prsc_miles_chabrier_wNE")``.
+        without ``.h5``). ``None`` (default) loads ``tengri._data_setup.DEFAULT_SSP``,
+        the nebular-baked MIST/C3K HR Chabrier grid, the same one
+        ``tengri.download_ssp()`` fetches. A model built on it with a nebular backend
+        other than baked-in is paired with the bare twin (#3465).
     download : bool, optional
         Fetch the grid from the hosted catalog if it is not found locally.
         Default ``False``, which raises instead; a default-on fetch would
@@ -489,27 +488,33 @@ def load_ssp(
     Examples
     --------
     >>> from tengri import load_ssp
-    >>> ssp = load_ssp()  # default bare-stellar grid (== download_ssp())
-    >>> ssp = load_ssp("prsc_miles_chabrier_wNE")  # nebular-baked demo grid
+    >>> ssp = load_ssp()  # default nebular-baked grid (== download_ssp())
+    >>> ssp = load_ssp("mist_c3k_hr_chabrier_noNE")  # bare-stellar twin
     >>> ssp = load_ssp(download=True)  # fetch it if this checkout lacks it
     """
     from pathlib import Path
 
-    from tengri._data_setup import _KNOWN_SSPS, DEFAULT_SSP
+    from tengri._data_setup import _KNOWN_SSPS, DEFAULT_SSP, catalog_short_name
 
     if mass_remaining is None:
         mass_remaining = _default_mass_remaining(name)
 
     if name is None:
-        catalog_key = DEFAULT_SSP
-        filename = _KNOWN_SSPS[DEFAULT_SSP]
-    elif name in _LOAD_SSP_PRESETS:
+        # The default is the named grid DEFAULT_SSP (#3465).
+        return load_ssp(
+            DEFAULT_SSP,
+            download=download,
+            mass_remaining=mass_remaining,
+            top_z=top_z,
+            imf=imf,
+        )
+    if name in _LOAD_SSP_PRESETS:
         # Produced locally, not hosted; so there is nothing to fall back to.
         catalog_key = None
         filename = _LOAD_SSP_PRESETS[name]
     elif name in _KNOWN_SSPS:
         catalog_key = name
-        filename = _KNOWN_SSPS[name]
+        filename = _KNOWN_SSPS[name].filename
     else:
         # Accept an explicit absolute/relative path to an .h5 file directly
         # (closes #496: reproduction notebooks ship SSPs under
@@ -518,7 +523,7 @@ def load_ssp(
         if as_path.suffix == ".h5" and as_path.exists():
             return load_ssp_data(str(as_path), mass_remaining=mass_remaining, top_z=top_z, imf=imf)
         filename = name if name.endswith(".h5") else name + ".h5"
-        catalog_key = next((k for k, v in _KNOWN_SSPS.items() if v == filename), None)
+        catalog_key = catalog_short_name(filename)
 
     from tengri._data_setup import TENGRI_DATA_ENV, data_dirs
 
@@ -854,10 +859,11 @@ def load_ssp_data(
     import warnings
     from pathlib import Path
 
-    from tengri._data_setup import KNOWN_SSP_FILENAMES, TENGRI_DATA_ENV
+    from tengri._data_setup import TENGRI_DATA_ENV, catalog_short_name
 
     fp = Path(filepath)
-    in_catalog = fp.name in KNOWN_SSP_FILENAMES
+    short = catalog_short_name(fp.name)
+    in_catalog = short is not None
 
     if not fp.exists() and download and in_catalog:
         # Must run BEFORE the existence check below: #1015 placed the raise
@@ -865,9 +871,8 @@ def load_ssp_data(
         # ``download`` since v0.9: the match is on the basename only, so an
         # unconditional fetch answers a wrong *directory* by writing the grid
         # into it (#1548).
-        from tengri._data_setup import _KNOWN_SSPS, download_ssp
+        from tengri._data_setup import download_ssp
 
-        short = next(k for k, v in _KNOWN_SSPS.items() if v == fp.name)
         print(f"[tengri] {fp} not found: fetching '{short}' from public catalog...")
         download_ssp(short, dest=fp.parent if fp.parent != Path("") else "data")
 

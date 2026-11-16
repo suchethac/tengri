@@ -489,7 +489,7 @@ def _spectrum_lut_for_auto(model):
 _APPROX_CLONE_CACHE: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 
 
-def _try_feature_top_up(model, configs):
+def _try_feature_top_up(model, configs, *, stacklevel=4, on_refusal=None):
     """Clone ``model`` with a ``FeaturePrecomp`` top-up, or ``None`` if the table refuses.
 
     A table's refusal is a :class:`~tengri.config.exceptions.PrecomputeRefusal`, raised only at
@@ -497,6 +497,8 @@ def _try_feature_top_up(model, configs):
     Only that is caught; any other exception, a ``ValueError`` from a bug included, propagates.
     The reason is recorded on ``model`` as a ``Decline`` in the model's one memo,
     ``_band_tables['approx']['feature_precomp']``, which the engagement report reads (#3505 X1).
+    A :class:`~tengri.components.nebular.nebular_grid_precompute.NebularShapeDriftError` is a
+    refusal too; it keeps its own specific warning (#3526).
 
     Parameters
     ----------
@@ -504,16 +506,30 @@ def _try_feature_top_up(model, configs):
         Source model, which receives the recorded decline.
     configs : tuple
         The full resolved precompute configuration including ``FeaturePrecomp``.
+    stacklevel : int, default 4
+        Stack level of the caller's frame for the drift warning.
+    on_refusal : callable, optional
+        Called with the reason after an ordinary (non-drift) refusal is recorded, for the
+        caller's own warning.
 
     Returns
     -------
     SEDModel, ForwardModel or None
         The memoized clone, or ``None`` after the decline was recorded.
     """
+    from tengri.components.nebular.nebular_grid_precompute import NebularShapeDriftError
+
     try:
         return _memoized_approx_clone(model, configs)
+    except NebularShapeDriftError as drift:
+        model.record_decline("approx", "feature_precomp", str(drift))
+        _warn_shape_fallback(drift, stacklevel=stacklevel + 1)
+        return None
     except PrecomputeRefusal as refusal:
-        model.record_decline("approx", "feature_precomp", str(refusal))
+        reason = str(refusal)
+        model.record_decline("approx", "feature_precomp", reason)
+        if on_refusal is not None:
+            on_refusal(reason)
         return None
 
 
@@ -571,6 +587,30 @@ def _memoized_approx_clone(model, cfg):
 def _approx_clone_key(cfg) -> tuple[str, str]:
     """Memo key of one resolved precompute config, shared by store and forget."""
     return (type(cfg).__name__, repr(cfg))
+
+
+def _warn_shape_fallback(exc, *, stacklevel: int) -> None:
+    """Announce that ``approx="auto"`` kept the exact line path (#3526).
+
+    Raised only for a :class:`NebularShapeDriftError`: the table's per-photon lines
+    move with a quenched history by more than the tolerance, so the auto policy
+    serves the lines exactly. Photometry keeps its ``WavePrecomp`` table.
+    """
+    from tengri.components.nebular.nebular_grid_precompute import _SHAPE_DRIFT_TOL
+    from tengri.config.exceptions import warn_measured
+
+    warn_measured(
+        f"approx='auto' keeps the exact line path for this model: FeaturePrecomp would "
+        f"serve a table whose ionizing shape departs from its constant-SFR stand-in "
+        f"(#3526). Line {exc.line}: the per-photon luminosity of a quenched history is "
+        f"{exc.ratio:.3f}x the stand-in's, a {exc.departure:.1%} departure, above the "
+        f"{_SHAPE_DRIFT_TOL:.0%} tolerance. The fit is correct, only slower; photometry "
+        f"keeps its WavePrecomp table. Pass approx=None to silence this, or see #3526.",
+        UserWarning,
+        stacklevel=stacklevel + 1,
+        ratio=exc.ratio,
+        departure=exc.departure,
+    )
 
 
 def _forget_memoized_approx_clone(model, cfg) -> None:
@@ -727,7 +767,9 @@ def promote_to_runtime_redshift(model, redshifts):
     span = catalog_redshift_span(redshifts)
     if _is_runtime_redshift(model):
         return model
-    promote = getattr(model, "with_runtime_redshift", None)
+    promote: Callable[[tuple[float, float] | None], Any] | None = getattr(
+        model, "with_runtime_redshift", None
+    )
     spec = getattr(model, "spec", None)
     if not callable(promote) or spec is None or not spec.is_fixed("redshift"):
         return model
@@ -979,7 +1021,16 @@ def _photometry_grid_engages(model) -> bool:
     # resolvers attach, so a positive answer reuses the memoized clone. A negative
     # one is forgotten, so the probe is not kept alive by the memo.
     pair = (WavePrecomp(), FeaturePrecomp())
-    engages = fast_nebular_can_engage(_memoized_approx_clone(model, pair))
+    from tengri.components.nebular.nebular_grid_precompute import NebularShapeDriftError
+
+    try:
+        engages = fast_nebular_can_engage(_memoized_approx_clone(model, pair))
+    except NebularShapeDriftError as exc:
+        # #3526: the table would drift for this model's ionizing shape, so the auto
+        # policy stays on the exact photometry path too, with a specific warning.
+        model.record_decline("approx", "feature_precomp", str(exc))
+        _warn_shape_fallback(exc, stacklevel=4)
+        return False
     if not engages:
         _forget_memoized_approx_clone(model, pair)
     return engages
@@ -1558,7 +1609,7 @@ def _resolve_batch_fit_approx(model, approx, data_type):
             ):
                 existing = tuple(getattr(model, "approx_configs", ()))
                 extra = (FeaturePrecomp(),) if has_wave else (cfg, FeaturePrecomp())
-                topped_up = _try_feature_top_up(model, (*existing, *extra))
+                topped_up = _try_feature_top_up(model, (*existing, *extra), stacklevel=4)
                 if topped_up is not None:
                     return topped_up
             if has_wave:
@@ -1582,8 +1633,14 @@ def _resolve_batch_fit_approx(model, approx, data_type):
     else:
         resolved = approx
 
+    from tengri.components.nebular.nebular_grid_precompute import NebularShapeDriftError
+
     try:
         return _memoized_approx_clone(model, resolved)
+    except NebularShapeDriftError:
+        # #3526: an explicit FeaturePrecomp on a drifting table is refused, never
+        # quietly turned into a slower fit. The auto top-up above handles its own.
+        raise
     except PrecomputeRefusal as refusal:
         # Only a table's own refusal keeps the exact path; a bug propagates (#3505 X1).
         reason = str(refusal)
@@ -2747,24 +2804,27 @@ class Fitter:
         if not _feature_precomp_can_pay(model, serves_line_channel=serves_line_channel):
             return model
         existing = tuple(getattr(model, "approx_configs", ()))
-        topped_up = _try_feature_top_up(model, (*existing, FeaturePrecomp()))
-        if topped_up is not None:
-            return topped_up
-        if not warn_on_failure:
-            return model
-        import warnings
 
-        warnings.warn(
-            f"Fitting an emission-line channel, but the line look-up table "
-            f"could not be enabled for this model "
-            f"({_recorded_feature_decline(model)}). Every likelihood "
-            f"evaluation will reconstruct the full-wavelength SED to obtain "
-            f"the line fluxes, measured at ~21x the per-gradient cost. The "
-            f"fit is correct, only slow.",
-            UserWarning,
+        def _warn_unavailable(reason: str) -> None:
+            import warnings
+
+            warnings.warn(
+                f"Fitting an emission-line channel, but the line look-up table "
+                f"could not be enabled for this model ({reason}). Every likelihood "
+                f"evaluation will reconstruct the full-wavelength SED to obtain "
+                f"the line fluxes, measured at ~21x the per-gradient cost. The "
+                f"fit is correct, only slow.",
+                UserWarning,
+                stacklevel=6,
+            )
+
+        topped_up = _try_feature_top_up(
+            model,
+            (*existing, FeaturePrecomp()),
             stacklevel=4,
+            on_refusal=_warn_unavailable if warn_on_failure else None,
         )
-        return model
+        return model if topped_up is None else topped_up
 
     def _resolve_fit_approx(self, model: Any, approx):
         """Select the fit-time forward model per the ``approx`` policy.
@@ -2862,10 +2922,9 @@ class Fitter:
                 from tengri.forward.sed_model import FeaturePrecomp
 
                 base = cfg if isinstance(cfg, tuple) else (cfg,)
-                topped_up = _try_feature_top_up(model, (*base, FeaturePrecomp()))
+                topped_up = _try_feature_top_up(model, (*base, FeaturePrecomp()), stacklevel=4)
                 if topped_up is not None:
                     return topped_up
-                return _carry_approx_declines(model, _memoized_approx_clone(model, cfg))
             return _carry_approx_declines(model, _memoized_approx_clone(model, cfg))
 
         resolved = _memoized_approx_clone(model, approx)

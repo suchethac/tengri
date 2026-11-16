@@ -162,12 +162,36 @@ def line_obs():
 
 @requires_cue
 def test_feature_precomp_builds_against_a_tabulated_sfh(line_obs):
-    """The defect: this raised the #996 guard before building a single row."""
+    """The defect: this raised the #996 guard before building a single row.
+
+    Padova here: on the MIST default the same build is refused by the shape probe
+    (#3526, see test_issue_3526_feature_precomp_shape_guard.py), so the #996 fix is
+    pinned on a grid whose stand-in holds.
+    """
     import tengri
     from tengri import FeaturePrecomp, WavePrecomp
 
     obs, _ = line_obs
-    _build(tengri.load_ssp(), obs, met_mode="delta", approx=(WavePrecomp(), FeaturePrecomp()))
+    ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
+    _build(ssp, obs, met_mode="delta", approx=(WavePrecomp(), FeaturePrecomp()))
+
+
+@requires_cue
+def test_feature_precomp_refuses_a_tabulated_sfh_on_the_mist_default(line_obs):
+    """#3526: the MIST default's stand-in does not hold, so the explicit table is refused.
+
+    Measured with a quenched delayed-tau = 0.5 Gyr history at the grid center: OIII_5007
+    is 3.16x the stand-in on MIST C3K hr noNE (the issue's 3.2x), against 0.27 % on
+    fsps_prsc_miles_chabrier. The refusal names the line and ratio; approx="auto" falls
+    back instead (see the #3526 module).
+    """
+    import tengri
+    from tengri import FeaturePrecomp, WavePrecomp
+    from tengri.components.nebular.nebular_grid_precompute import NebularShapeDriftError
+
+    obs, _ = line_obs
+    with pytest.raises(NebularShapeDriftError, match="#3526"):
+        _build(tengri.load_ssp(), obs, met_mode="delta", approx=(WavePrecomp(), FeaturePrecomp()))
 
 
 @requires_cue
@@ -184,7 +208,9 @@ def test_the_lut_agrees_with_the_exact_line_path_on_a_tabulated_sfh(line_obs):
     from tengri import FeaturePrecomp, WavePrecomp
 
     obs, waves = line_obs
-    ssp = tengri.load_ssp()
+    # Padova: the stand-in holds there (the shape probe passes, #3526). The MIST default
+    # refuses this table; see test_feature_precomp_refuses_a_tabulated_sfh_on_the_mist_default.
+    ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
     exact = _build(ssp, obs, met_mode="delta", approx=(WavePrecomp(),))
     lut = _build(ssp, obs, met_mode="delta", approx=(WavePrecomp(), FeaturePrecomp()))
 
@@ -201,7 +227,9 @@ def test_the_lut_agrees_with_the_exact_line_path_on_a_tabulated_sfh(line_obs):
         a = np.asarray(exact.predict_line_fluxes(p, target_wavelengths=waves))
         b = np.asarray(lut.predict_line_fluxes(p, target_wavelengths=waves))
         worst = max(worst, float(np.abs(b / a - 1).max()))
-    assert worst < 0.01, f"LUT departs from exact by {worst:.2%} (measured 0.35%)"
+    assert worst < 0.01, (
+        f"LUT departs from exact by {worst:.2%} (measured 0.35% on the MIST default before #3526)"
+    )
 
 
 @requires_cue
