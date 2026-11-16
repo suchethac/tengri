@@ -445,7 +445,9 @@ def throughput(model, n=256, chunk=128, reps=5, gas=False):
     return min(ts) / n
 
 
-ssp_bare = tengri.load_ssp(download=True)  # bare-stellar, required by Cloudy
+ssp_bare = tengri.load_ssp(
+    "mist_c3k_hr_chabrier_noNE", download=True
+)  # bare twin: Cloudy needs bare (#3465)
 
 
 def build_cloudy():

@@ -73,10 +73,10 @@ C_POST, C_TRUTH, C_DATA = "#3a76d9", "0.15", "#c3372a"
 # %% [markdown]
 # ## Stellar library and observation
 #
-# We use an FSPS-generated SSP grid with nebular emission baked in at log(U) = −3.0 and solar gas-phase metallicity (Z_gas/Z☉ = 1.0). Stellar metallicity is free to vary; gas-phase metallicity is fixed by the grid. These are independent parameters, so the nebular contribution does not respond to fitted stellar metallicity. The code marks this assumption by emitting a `BakedInNebularWarning` on fit start.
+# We use an FSPS-generated SSP grid built on MIST isochrones with the C3K high-resolution spectral library (λ/Δλ ≈ 6000 over 3000–9000 Å), with nebular emission baked in at log(U) = −3.0 and solar gas-phase metallicity (Z_gas/Z☉ = 1.0). Stellar metallicity is free to vary; gas-phase metallicity is fixed by the grid. These are independent parameters, so the nebular contribution does not respond to fitted stellar metallicity. The code marks this assumption by emitting a `BakedInNebularWarning` on fit start.
 
 # %%
-SSP_NAME = "prsc_miles_chabrier_wNE"
+SSP_NAME = "mist_c3k_hr_chabrier_wNE"
 ssp = tengri.load_ssp(SSP_NAME, download=True)
 
 FILTERS = [

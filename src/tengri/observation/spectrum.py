@@ -28,6 +28,7 @@ from tengri.utils.gaussian_segments import (
     gaussian_exp_moments,
     gaussian_exp_moments_between_edges,
 )
+from tengri.utils.physics_constants import C_KM_S as _C_KM_S, GAUSSIAN_FWHM_PER_SIGMA
 
 # ── SSP library spectral resolutions (velocity dispersion in km/s) ──
 # Flat fallback used only when the loaded SSP grid has no per-wavelength
@@ -74,8 +75,7 @@ def first_invalid_wavelength(
 
 
 # ── Speed of light ────────────────────────────────────────────────
-_C_KM_S = 299792.458  # km/s
-_FWHM_TO_SIGMA = 2.354820045030949  # 2*sqrt(2*ln(2))
+_FWHM_TO_SIGMA = GAUSSIAN_FWHM_PER_SIGMA
 
 
 # ── Instrument resolution profiles ────────────────────────────────

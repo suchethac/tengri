@@ -401,7 +401,7 @@ def test_hand_built_ssp_declares_no_source_and_keeps_it_through_pytrees():
 #: hosted catalog is larger; a grid outside this set is refused, never fitted
 #: silently (see the two tests below). A row removed by mistake would move its
 #: grid into the refused class without failing anything else, so the count is pinned.
-_N_HOSTED_WITH_METADATA = 38
+_N_REGISTRY_WITH_METADATA = 38
 
 
 def _hosted_split():
@@ -419,7 +419,7 @@ def test_every_hosted_grid_with_metadata_has_a_table_or_is_pending():
     from tengri.components.stellar.sps import mass_remaining_tables as mrt
 
     with_row, _ = _hosted_split()
-    assert len(with_row) == _N_HOSTED_WITH_METADATA
+    assert len(with_row) == _N_REGISTRY_WITH_METADATA
     for name in with_row:
         entry = mrt.MASS_REMAINING_REGISTRY[mrt.canonical_grid_name(name)]
         assert entry.imf in ("chabrier", "kroupa", "salpeter")

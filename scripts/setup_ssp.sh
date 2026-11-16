@@ -3,12 +3,12 @@
 # Usage: bash scripts/setup_ssp.sh [name] [dest]
 # Names are the short keys from tengri.list_known_ssps().
 # Examples:
-#   bash scripts/setup_ssp.sh                    # default grid → $TENGRI_DATA_DIR or data/
+#   bash scripts/setup_ssp.sh                    # default grid (MIST + C3K) → $TENGRI_DATA_DIR or data/
 #   bash scripts/setup_ssp.sh bc03_pdva_stelib_chabrier /scratch/ssp
 
 set -euo pipefail
 
-NAME="${1:-fsps_prsc_miles_chabrier}"
+NAME="${1:-fsps_mist_c3k_a_chabrier}"
 DEST="${2:-${TENGRI_DATA_DIR:-data}}"
 
 mkdir -p "$DEST"

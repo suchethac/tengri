@@ -30,10 +30,10 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
+from tengri.utils.physics_constants import C_AA as _C_AA_PER_S
 from tengri.utils.scale import representable_floor
 
 #: Speed of light [Angstrom/s]; enters once, through the dust luminosity ``D``.
-_C_AA_PER_S = 2.99792458e18
 
 #: Floor for a luminosity integral before its logarithm (dtype-safe).
 _FLOOR = representable_floor(1.0e-30)

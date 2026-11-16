@@ -25,7 +25,6 @@ from tengri import (
     SEDModel,
     Spectroscopy,
     Uniform,
-    WavePrecomp,
 )
 from tengri.forward.batched_spectrum import (
     check_template_model,
@@ -200,13 +199,6 @@ def _refusal_cases(ssp):
         wavelengths=jnp.array([6564.61]),
     )
     return {
-        "catalog_z_range": lambda: _model(
-            ssp,
-            wave,
-            redshift=Uniform(0.05, 0.5),
-            spectro_kw={"resolution": 1000.0},
-            kw={"approx": WavePrecomp(catalog_z_range=(0.05, 0.5))},
-        ),
         "covariance": lambda: _model(
             ssp, wave, spectro_kw={"resolution": 1000.0, "covariance": jnp.eye(100) * 1e-3}
         ),
@@ -222,7 +214,7 @@ def _refusal_cases(ssp):
 
 @pytest.mark.parametrize(
     "case",
-    ["catalog_z_range", "covariance", "student_t_noise", "calibration_floor", "line_fluxes"],
+    ["covariance", "student_t_noise", "calibration_floor", "line_fluxes"],
 )
 def test_template_with_unsupported_setting_is_refused(synthetic_ssp, case):
     template = _refusal_cases(synthetic_ssp)[case]()

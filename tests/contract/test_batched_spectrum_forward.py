@@ -226,12 +226,11 @@ def test_gradient_matches_per_galaxy_reference(synthetic_ssp, galaxies):
         np.testing.assert_allclose(grad_batched[i], grad_ref, rtol=1e-9, atol=0.0)
 
 
-def test_check_template_model_rejects_fixed_redshift(synthetic_ssp):
-    """(e) A model with redshift baked in is refused before any batched compile."""
+def test_check_template_model_accepts_fixed_redshift(synthetic_ssp):
+    """A fixed-z template is accepted: each galaxy's obs.z overrides the fixed value."""
     wave = _grid(100, 4000.0, 7000.0)
     fixed_z = _template(synthetic_ssp, wave, _banded(wave), redshift=Fixed(0.05))
-    with pytest.raises(ValueError, match="redshift"):
-        check_template_model(fixed_z)
+    check_template_model(fixed_z)
 
 
 def test_check_template_model_accepts_free_redshift(single_model):

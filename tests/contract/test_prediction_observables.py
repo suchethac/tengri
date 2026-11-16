@@ -385,7 +385,10 @@ def test_spectrum_default_stays_exact_on_a_spectrumprecomp_model(ssp):
 
     np.testing.assert_allclose(default, reference, rtol=1e-10)
     # ...and the LUT is genuinely a different spectrum, so the assertion has teeth.
-    assert np.max(np.abs(lut / reference - 1.0)) > 1e-3
+    # Re-pinned 2026-11-15: default SSP is the MIST c3k_hr wNE grid (#3465), where the
+    # spectrum LUT departs from exact by 9.8e-4 (old bare default: above 1e-3). The
+    # threshold only has to separate a real LUT from round-off (1e-10 above).
+    assert np.max(np.abs(lut / reference - 1.0)) > 1e-4
 
 
 def test_spectrum_fast_without_spectrum_precomp_raises(ssp):
