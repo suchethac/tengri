@@ -38,6 +38,7 @@ Naming conventions
 - ``M_ELECTRON``: electron mass m_e
 - ``M_SUN``: solar mass M_⊙
 - ``L_SUN``: solar luminosity L_⊙ (IAU 2015 nominal)
+- ``C_NM_PER_S``: speed of light in nm/s
 - ``PC_CM``: parsec in cm
 - ``GAUSSIAN_FWHM_PER_SIGMA``: 2 sqrt(2 ln 2), Gaussian FWHM per sigma
 - ``AA_TO_CM``: Ångström → cm conversion factor
@@ -83,6 +84,12 @@ Derivation: c = 2.99792458e8 m/s (exact)
             = 2.99792458e18 Å/s
 
 Used for ν = c/λ when λ is in Ångström.
+"""
+
+C_NM_PER_S: float = C_AA / 10.0
+"""Speed of light c [nm s⁻¹], defined from ``C_AA`` so the value has one source.
+
+Equal to 2.99792458e17 exactly in float64. Used for ν = c/λ when λ is in nanometers.
 """
 
 GAUSSIAN_FWHM_PER_SIGMA: float = 2.3548200450309493

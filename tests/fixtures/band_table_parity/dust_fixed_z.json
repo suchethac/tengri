@@ -3,8 +3,7 @@
   "sfh_dpl_log_total_mass": 8.444870947551594
  },
  "platform": "darwin-arm64",
- "repin_note": "Re-pinned 2026-11-15: monotone PCHIP metallicity read (#3434, owner ruling 'True PCHIP on the spectra'). Against real main: the PCHIP move is up to 4.1e-4 relative (dust_fixed_z, exact, shock) and 3.3e-5 (free_z_radio_xray); the re-pinned arrays also carry 1-6 ulp (max 1.3e-15 relative) from the restructured contraction order, measured on a Hermite control. | Re-captured 2026-11-16 for #3541 (native-slope read of the SSP metallicity axis). Structure: the only added leaves are the native-slope siblings (the nested 'slopes' arrays of the stellar photometry LUT, and of the energy-balance and dust tables when present), threaded through the same channel; no existing leaf changed beyond round-off. Measured moves: photometry max rel 1.09e-5. The move is the undeclared metallicity read: PCHIP of stored values before, the Hermite of native PCHIP slopes now. | Re-pinned 2026-11-16 (merge of origin/main 68243016c into #3541): signature_sha256 only. compile_signature() gained the '_z_runtime' entry with the runtime-redshift flag (#3531, _signature_policy.py); the key set at 40a20916a^ and 40a20916a differs by that one name, and every build's digest moves by that entry. Array leaves, photometry, params and summary are unchanged on the merged tree (they match this golden, captured before the merge).",
- "signature_sha256": "cf91ea2652810754cb1498be9c8f1ec6b13fdc819ac6ad16b9830d10da880a1b",
+ "signature_sha256": "c3d1e86a06529cb1a037cc9fa7bca1e42339fcbc8fc0d39aa7caf38302df1b26",
  "summary": "Precompute Engagement Summary\n===========================\n\n\u2022 Energy-balance LUT: ENGAGED\n\u2022 Dust band response: ENGAGED\n\n\u2022 Observed facts:\n  components: stellar, nebular, dust, dust_emission\n  dust_emission_configured: True\n  free_params: sfh_dpl_log_total_mass\n  igm_fold: declared=auto, resolved=None\n  redshift_fixed: 0.1\n  wave_precomp_enabled: True\n  ztable_enabled: False",
  "tree": [
   {
@@ -62,68 +61,6 @@
    "kind": "array",
    "path": "/stellar/ssp_phot_lut/ssp_subband_waves_rest",
    "sha256": "654b46a87d32086f2318fee7f2dd9f50b53c3e5d9fde749c75990e88d674ec99",
-   "shape": [
-    15,
-    93,
-    4,
-    5
-   ]
-  },
-  {
-   "dtype": "float64",
-   "kind": "array",
-   "path": "/stellar/ssp_phot_lut/slopes/ssp_phot",
-   "sha256": "083a2d58030dd000b7ed60b3c80d0c4043041fbf9233d350f493eb369213442c",
-   "shape": [
-    15,
-    93,
-    4
-   ]
-  },
-  {
-   "dtype": "float64",
-   "kind": "array",
-   "path": "/stellar/ssp_phot_lut/slopes/effective_wavelengths",
-   "sha256": "3ae9c8097d2b49686c915477a8997e404ec57f158bae5690140496b4f5832b9a",
-   "shape": [
-    4
-   ]
-  },
-  {
-   "dtype": "float64",
-   "kind": "array",
-   "path": "/stellar/ssp_phot_lut/slopes/effective_wavelengths_rest",
-   "sha256": "5143429e112f21fc87f8ab17d869381fd566c3921c86f23dd2ab210a24802f62",
-   "shape": [
-    4
-   ]
-  },
-  {
-   "dtype": "float64",
-   "kind": "array",
-   "path": "/stellar/ssp_phot_lut/slopes/log10_flux_scale",
-   "sha256": "5490a4173a02c5980b25017f486d3f899d9e9c205290ca9d9b47b12605271091",
-   "shape": [
-    1
-   ]
-  },
-  {
-   "dtype": "float64",
-   "kind": "array",
-   "path": "/stellar/ssp_phot_lut/slopes/ssp_subband_phot",
-   "sha256": "a6fe9c177916d0049c280fb1665adb8753061ede497b264c5dec255c96107aaa",
-   "shape": [
-    15,
-    93,
-    4,
-    5
-   ]
-  },
-  {
-   "dtype": "float64",
-   "kind": "array",
-   "path": "/stellar/ssp_phot_lut/slopes/ssp_subband_waves_rest",
-   "sha256": "58a0a4e2b3d7825a27ef0ed3f0e5e0dc91a6a650844742e4181bcf20b36c0b48",
    "shape": [
     15,
     93,
@@ -216,98 +153,6 @@
   {
    "kind": "scalar",
    "path": "/dust_ir/energy_balance_lut/10",
-   "repr": "None"
-  },
-  {
-   "dtype": "float64",
-   "kind": "array",
-   "path": "/dust_ir/energy_balance_lut/11/0",
-   "sha256": "b3d16eafec7b297b650b895f7166ccad810cc4916b63df83dbd5d28dd9ad2592",
-   "shape": [
-    15,
-    93
-   ]
-  },
-  {
-   "dtype": "float64",
-   "kind": "array",
-   "path": "/dust_ir/energy_balance_lut/11/1",
-   "sha256": "111edb1901d129b62437aa4fe0ee5ef4bfbaa786df6802aea24f83dfabb73a88",
-   "shape": [
-    15,
-    93,
-    1,
-    1
-   ]
-  },
-  {
-   "dtype": "float64",
-   "kind": "array",
-   "path": "/dust_ir/energy_balance_lut/11/2",
-   "sha256": "6c3c396ed6b5c36dcae172271f462051b1266b851e92df3deea8ac65478fd712",
-   "shape": [
-    1
-   ]
-  },
-  {
-   "dtype": "float64",
-   "kind": "array",
-   "path": "/dust_ir/energy_balance_lut/11/3",
-   "sha256": "785532c46fac2acf9272cc7399f550747206622e1d56fc7379f34628e071c80a",
-   "shape": [
-    1
-   ]
-  },
-  {
-   "kind": "scalar",
-   "path": "/dust_ir/energy_balance_lut/11/4",
-   "repr": "None"
-  },
-  {
-   "kind": "scalar",
-   "path": "/dust_ir/energy_balance_lut/11/5",
-   "repr": "None"
-  },
-  {
-   "dtype": "float64",
-   "kind": "array",
-   "path": "/dust_ir/energy_balance_lut/11/6",
-   "sha256": "b3d16eafec7b297b650b895f7166ccad810cc4916b63df83dbd5d28dd9ad2592",
-   "shape": [
-    15,
-    93
-   ]
-  },
-  {
-   "dtype": "float64",
-   "kind": "array",
-   "path": "/dust_ir/energy_balance_lut/11/7",
-   "sha256": "2f045a8cc663d723af545f99460c598069307771e1f562ded7dc5fdf652af369",
-   "shape": [
-    15,
-    93,
-    1,
-    1
-   ]
-  },
-  {
-   "kind": "scalar",
-   "path": "/dust_ir/energy_balance_lut/11/8",
-   "repr": "None"
-  },
-  {
-   "kind": "scalar",
-   "path": "/dust_ir/energy_balance_lut/11/9",
-   "repr": "None"
-  },
-  {
-   "kind": "scalar",
-   "path": "/dust_ir/energy_balance_lut/11/10",
-   "repr": "None"
-  },
-  {
-   "kind": "scalar",
-   "path": "/dust_ir/energy_balance_lut/11/11",
    "repr": "None"
   },
   {
