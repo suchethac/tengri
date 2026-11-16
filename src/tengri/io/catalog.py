@@ -16,12 +16,12 @@ the dict.
 Examples
 --------
 >>> from tengri.io import load_catalog
->>> cat = load_catalog("3dhst_photoz.csv")
->>> cat["redshift"].shape
+>>> table = load_catalog("3dhst_photoz.csv")
+>>> table["redshift"].shape
 (1234,)
->>> sorted(cat["bands"])
-['acs_f435w', 'acs_f606w', 'acs_f814w', 'wfc3_f160w']
->>> cat["bands"]["wfc3_f160w"]["flux"].shape
+>>> sorted(k for k in table if not k.endswith("_err"))
+['acs_f435w', 'acs_f606w', 'acs_f814w', 'id', 'redshift', 'wfc3_f160w']
+>>> table["wfc3_f160w"].shape
 (1234,)
 """
 
@@ -317,7 +317,7 @@ def load_catalog(
     allow_unpaired_bands : bool, optional
         If ``False`` (default), a ``flux_<band>`` column with no error
         column raises ``ValueError``. If ``True``, such bands are dropped
-        with a ``UserWarning`` and listed under ``"dropped_bands"``.
+        with a ``UserWarning`` naming them; they are absent from the table.
     filter_mapping : dict, optional
         Maps a catalog flux column name to a tengri band name, for catalogs whose
         columns are not named ``flux_<band>``. The error column is the same name
@@ -335,10 +335,12 @@ def load_catalog(
     sentinels : Mapping[float, str or tuple[str, float]], optional
         Sentinel flux values declared at read time, keyed by the exact value found in a
         band's flux column (compared with ``==``, no tolerance). Each band gains a
-        ``"censor"`` array, shape ``(n_rows,)``, dtype int, when this is given. Statuses:
+        ``<band>_censor`` column, shape ``(n_rows,)``, dtype int, when this is given.
+        Statuses:
 
         - ``"nodata"``: the cell is absent. Its flux and error become NaN, so
-          ``ingest_catalog(..., missing="mask")`` excludes it. This is no
+          ``Catalog(..., missing="mask")`` excludes it; the default ``missing="error"``
+          raises on NaN flux. This is no
           information, not a limit.
         - ``("upper_limit", n_sigma)`` or ``("lower_limit", n_sigma)``: the cell is a
           censored limit. Its flux becomes ``n_sigma * err`` [flux unit], its error
@@ -350,25 +352,33 @@ def load_catalog(
 
     Returns
     -------
-    dict
-        Always contains:
+    dict of str to ndarray
+        A flat column table: every value is an array of shape ``(n_rows,)``, so it
+        can be passed straight to :class:`tengri.Catalog` as its ``table``. Columns:
 
-        - ``"path"`` : ``Path`` of the source file.
-        - ``"n_rows"`` : int.
-        - ``"bands"`` : dict mapping each detected band (e.g.
-          ``"sdss_g"``) to ``{"flux": ndarray, "err": ndarray}``,
-          one ndarray per row.
-        - ``"dropped_bands"`` : sorted list of band names dropped for
-          lacking an error column; empty unless ``allow_unpaired_bands``.
+        - ``<band>``: the flux of each band [file flux unit], float.
+        - ``<band>_err``: its 1-sigma error [file flux unit], float.
+        - ``<band>_censor``: present only when ``sentinels`` is given. Int flags:
+          0 detected, +1 upper limit, -1 lower limit, for ``Catalog(censor_cols=...)``.
+        - ``"redshift"``: when a redshift column is detected (or named), float.
+        - ``"id"``: when an identifier column is detected (or named), str.
 
-        When a redshift column is detected:
+        A band named ``redshift`` or ``id``, or one whose ``<band>_err`` collides with
+        another column, raises ``ValueError``; rename the band with ``filter_mapping``.
 
-        - ``"redshift"`` : ndarray of shape ``(n_rows,)``.
-        - ``"redshift_col"`` : str. Name of the column used.
+        To fit it, pass the table to ``Catalog`` with the arguments that name what
+        ``load_catalog`` wrote:
 
-        When an identifier column is detected:
+        .. code-block:: python
 
-        - ``"ids"`` : ndarray of str, shape ``(n_rows,)``.
+            table = load_catalog("survey.csv", filter_mapping=mapping)
+            cat = Catalog(fwd, table, flux_unit="mJy", redshift_col="redshift")
+
+        ``flux_cols`` and ``err_cols`` need no argument: ``Catalog`` already reads
+        the band name and ``<band>_err``. With ``sentinels``, pass
+        ``censor_cols={band: f"{band}_censor" for band in bands}``, and with a
+        ``"nodata"`` cell pass ``missing="mask"``, since that cell's flux is NaN.
+        Drop ``redshift_col`` when the model has a free redshift.
 
     Raises
     ------
@@ -395,7 +405,7 @@ def load_catalog(
     convention. A band without a matching error column cannot enter an SED fit,
     so it raises ``ValueError`` naming every such band. Pass
     ``allow_unpaired_bands=True`` to drop them instead; the drop is then
-    announced with a ``UserWarning`` and listed under ``"dropped_bands"``.
+    announced with a ``UserWarning`` naming them; they are absent from the table.
     If a catalog uses a different convention, pass ``filter_mapping`` or rename
     columns before calling.
 
@@ -406,20 +416,20 @@ def load_catalog(
     Examples
     --------
     >>> from tengri.io import load_catalog
-    >>> cat = load_catalog("3dhst_v4.1.5_photometry.csv")
-    >>> cat["redshift"].shape
+    >>> table = load_catalog("3dhst_v4.1.5_photometry.csv")
+    >>> table["redshift"].shape
     (50000,)
-    >>> cat["bands"]["wfc3_f160w"]["flux"].shape
-    (50000,)
+    >>> table["wfc3_f160w"].shape, table["wfc3_f160w_err"].shape
+    ((50000,), (50000,))
 
-    A table that marks its non-detections with -99 declares what each means, and the
-    result goes to ``ingest_catalog`` with ``missing="mask"`` and the censor columns:
+    A table that marks non-detections with -99 declares what each means. The censor
+    flags come back as ``<band>_censor``; pass them to ``Catalog`` as ``censor_cols``:
 
-    >>> cat = load_catalog(
+    >>> table = load_catalog(
     ...     "survey.csv",
     ...     sentinels={-99.0: ("upper_limit", 3.0)},  # flux -99 -> 3 sigma upper limit
     ... )  # doctest: +SKIP
-    >>> cat["bands"]["sdss_g"]["censor"]  # doctest: +SKIP
+    >>> table["sdss_g_censor"]  # doctest: +SKIP
     array([0, 1, 0])
     """
     path = Path(path)
@@ -432,22 +442,21 @@ def load_catalog(
     if n_rows == 0:
         raise ValueError(f"Empty catalog: {path}")
 
-    out: dict[str, Any] = {"path": path, "n_rows": int(n_rows)}
+    out: dict[str, np.ndarray] = {}
 
     # Redshift column.
     z_col = redshift_col if redshift_col is not None else _detect_redshift_column(columns)
     if z_col is not None:
         if z_col not in by_name:
             raise KeyError(f"redshift_col {z_col!r} not in catalog columns")
-        out["redshift"] = np.asarray(by_name[z_col], dtype=float)
-        out["redshift_col"] = z_col
+        _put_column(out, "redshift", np.asarray(by_name[z_col], dtype=float))
 
     # Identifier column: explicit, or the conventional ``id`` when present.
     id_name = id_col if id_col is not None else ("id" if "id" in by_name else None)
     if id_name is not None:
         if id_name not in by_name:
             raise KeyError(f"id_col {id_name!r} not in catalog columns")
-        out["ids"] = np.asarray(by_name[id_name]).astype(str)
+        _put_column(out, "id", np.asarray(by_name[id_name]).astype(str))
 
     # Flux/err pairs. A flux column with no error column is a band the fit
     # would silently lose, so it is an error unless the caller opted in (#3285).
@@ -484,15 +493,29 @@ def load_catalog(
             stacklevel=2,
         )
 
-    bands: dict[str, dict[str, np.ndarray]] = {}
+    # One flat column per quantity, named as ``Catalog`` reads them by default: the
+    # flux under the band name, its error under ``<band>_err``, and (when sentinels
+    # are declared) the censor flags under ``<band>_censor``.
     for band, cols in band_cols.items():
         flux = np.array(by_name[cols["flux"]], dtype=float)
         err = np.array(by_name[cols["err"]], dtype=float)
         if sentinels is None:
-            bands[band] = {"flux": flux, "err": err}
+            _put_column(out, band, flux)
+            _put_column(out, f"{band}_err", err)
         else:
             flux, err, censor = _apply_sentinels(band, flux, err, sentinels)
-            bands[band] = {"flux": flux, "err": err, "censor": censor}
-    out["bands"] = bands
-    out["dropped_bands"] = unpaired
+            _put_column(out, band, flux)
+            _put_column(out, f"{band}_err", err)
+            _put_column(out, f"{band}_censor", censor)
     return out
+
+
+def _put_column(table: dict[str, np.ndarray], key: str, values: np.ndarray) -> None:
+    """Add one column to the output table; refuse a name another column already holds."""
+    if key in table:
+        raise ValueError(
+            f"load_catalog would write two columns named {key!r} (a band name collides "
+            f"with the redshift, id or another band's error or censor column). Rename "
+            f"the band with filter_mapping."
+        )
+    table[key] = values

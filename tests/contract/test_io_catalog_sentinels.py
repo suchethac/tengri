@@ -31,23 +31,26 @@ def _write(tmp_path: Path, text: str) -> Path:
     return p
 
 
+def _bands(table):
+    """Band names of a load_catalog table: the flux columns, not the error or censor ones."""
+    return sorted(
+        k for k in table if not k.endswith(("_err", "_censor")) and k not in ("redshift", "id")
+    )
+
+
 def _ingest(cat, *, lim_flag=None, missing="mask"):
-    """Feed load_catalog bands (with their censor arrays) through ingest_catalog."""
+    """Feed the load_catalog column table through ingest_catalog, censor columns named."""
     from tengri.inference.catalog_ingest import ingest_catalog
     from tengri.observation import Photometry
 
-    table, censor_cols = {}, {}
-    for band, cols in cat["bands"].items():
-        table[band] = cols["flux"]
-        table[f"{band}_err"] = cols["err"]
-        if "censor" in cols:
-            table[f"{band}_censor"] = cols["censor"]
-            censor_cols[band] = f"{band}_censor"
+    bands = _bands(cat)
+    has_censor = f"{bands[0]}_censor" in cat
+    censor_cols = {b: f"{b}_censor" for b in bands} if has_censor else None
     return ingest_catalog(
-        table,
-        photometry=Photometry.from_names(list(cat["bands"])),
+        cat,
+        photometry=Photometry.from_names(bands),
         flux_unit="cgs_fnu",
-        censor_cols=censor_cols or None,
+        censor_cols=censor_cols,
         missing=missing,
         lim_flag=lim_flag,
     )
@@ -58,8 +61,8 @@ def test_nodata_cell_is_absent_not_a_limit(tmp_path):
         tmp_path, "id,redshift,flux_sdss_g,flux_err_sdss_g\na,0.1,1.0,0.1\nb,0.2,-9999,0.2\n"
     )
     cat = load_catalog(p, sentinels={SENTINEL: "nodata"})
-    assert np.isnan(cat["bands"]["sdss_g"]["flux"][1])
-    assert np.isnan(cat["bands"]["sdss_g"]["err"][1])
+    assert np.isnan(cat["sdss_g"][1])
+    assert np.isnan(cat["sdss_g_err"][1])
     ca = _ingest(cat)
     assert ca.presence[:, 0].tolist() == [True, False]
     assert ca.censor[:, 0].tolist() == [0, 0]
@@ -120,7 +123,7 @@ def test_limit_row_with_non_positive_error_is_refused(tmp_path):
 def test_match_is_exact_not_within_a_tolerance(tmp_path):
     p = _write(tmp_path, "id,redshift,flux_sdss_g,flux_err_sdss_g\na,0.1,-9998.9999,0.2\n")
     cat = load_catalog(p, sentinels={SENTINEL: "nodata"})
-    assert cat["bands"]["sdss_g"]["flux"][0] == -9998.9999
+    assert cat["sdss_g"][0] == -9998.9999
 
 
 def test_undeclared_sentinel_is_still_refused_at_ingest(tmp_path):

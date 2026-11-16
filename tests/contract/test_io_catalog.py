@@ -10,6 +10,14 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
+
+def _bands(table):
+    """Band names of a load_catalog table: the flux columns, not the error or censor ones."""
+    return sorted(
+        k for k in table if not k.endswith(("_err", "_censor")) and k not in ("redshift", "id")
+    )
+
+
 # load_catalog needs pandas for CSV/TSV ingestion. Skip the whole module
 # when pandas is unavailable (e.g. minimal CI dependency closures) rather
 # than failing every test with ImportError.
@@ -32,12 +40,11 @@ def small_csv(tmp_path: Path) -> Path:
 
 def test_csv_round_trip(small_csv: Path) -> None:
     cat = load_catalog(small_csv)
-    assert cat["n_rows"] == 3
-    assert cat["redshift_col"] == "redshift"
+    assert len(cat["redshift"]) == 3
     np.testing.assert_allclose(cat["redshift"], [0.10, 0.55, 1.20])
-    assert sorted(cat["bands"]) == ["sdss_g", "sdss_r"]
-    np.testing.assert_allclose(cat["bands"]["sdss_g"]["flux"], [1.2, 0.8, 0.4])
-    np.testing.assert_allclose(cat["bands"]["sdss_r"]["err"], [0.15, 0.12, 0.10])
+    assert sorted(_bands(cat)) == ["sdss_g", "sdss_r"]
+    np.testing.assert_allclose(cat["sdss_g"], [1.2, 0.8, 0.4])
+    np.testing.assert_allclose(cat["sdss_r_err"], [0.15, 0.12, 0.10])
 
 
 def test_alternate_err_convention(tmp_path: Path) -> None:
@@ -45,9 +52,8 @@ def test_alternate_err_convention(tmp_path: Path) -> None:
     p = tmp_path / "alt.csv"
     p.write_text("id,z,flux_jwst_f200w,jwst_f200w_err\n1,3.5,12.3,0.6\n2,4.0,9.1,0.5\n")
     cat = load_catalog(p)
-    assert cat["redshift_col"] == "z"
-    assert "jwst_f200w" in cat["bands"]
-    np.testing.assert_allclose(cat["bands"]["jwst_f200w"]["err"], [0.6, 0.5])
+    assert "jwst_f200w" in _bands(cat)
+    np.testing.assert_allclose(cat["jwst_f200w_err"], [0.6, 0.5])
 
 
 def test_missing_err_columns_are_dropped_on_opt_in(tmp_path: Path) -> None:
@@ -56,8 +62,8 @@ def test_missing_err_columns_are_dropped_on_opt_in(tmp_path: Path) -> None:
     p.write_text("z,flux_a,flux_err_a,flux_b\n0.1,1.0,0.1,2.0\n0.2,0.9,0.1,1.8\n")
     with pytest.warns(UserWarning, match="'b'"):
         cat = load_catalog(p, allow_unpaired_bands=True)
-    assert "a" in cat["bands"]
-    assert "b" not in cat["bands"]
+    assert "a" in _bands(cat)
+    assert "b" not in _bands(cat)
 
 
 def test_no_flux_columns_raises(tmp_path: Path) -> None:

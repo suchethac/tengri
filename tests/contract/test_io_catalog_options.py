@@ -10,6 +10,14 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
+
+def _bands(table):
+    """Band names of a load_catalog table: the flux columns, not the error or censor ones."""
+    return sorted(
+        k for k in table if not k.endswith(("_err", "_censor")) and k not in ("redshift", "id")
+    )
+
+
 pytest.importorskip("pandas")
 
 from tengri.io import load_catalog
@@ -24,9 +32,9 @@ def test_filter_mapping_names_a_cigale_style_catalog(tmp_path: Path) -> None:
         "obj1,0.3,0.01,0.001,0.02,0.002\n"
     )
     cat = load_catalog(p, filter_mapping=CIGALE_TO_TENGRI)
-    assert sorted(cat["bands"]) == ["galex_fuv", "galex_nuv"]
-    np.testing.assert_allclose(cat["bands"]["galex_nuv"]["flux"], [0.02])
-    np.testing.assert_allclose(cat["bands"]["galex_nuv"]["err"], [0.002])
+    assert sorted(_bands(cat)) == ["galex_fuv", "galex_nuv"]
+    np.testing.assert_allclose(cat["galex_nuv"], [0.02])
+    np.testing.assert_allclose(cat["galex_nuv_err"], [0.002])
 
 
 def test_filter_mapping_candels_map_is_a_superset(tmp_path: Path) -> None:
@@ -38,7 +46,7 @@ def test_filter_mapping_candels_map_is_a_superset(tmp_path: Path) -> None:
         "obj1,1.2,0.05,0.005,0.10,0.01\n"
     )
     cat = load_catalog(p, filter_mapping=CANDELS_TO_TENGRI)
-    assert sorted(cat["bands"]) == ["hst_f160w", "hst_f814w"]
+    assert sorted(_bands(cat)) == ["hst_f160w", "hst_f814w"]
 
 
 def test_filter_mapping_key_without_error_column_follows_unpaired_policy(tmp_path: Path) -> None:
@@ -48,8 +56,8 @@ def test_filter_mapping_key_without_error_column_follows_unpaired_policy(tmp_pat
     with pytest.raises(ValueError, match="sdss_u"):
         load_catalog(p, filter_mapping=mapping)
     cat = load_catalog(p, filter_mapping=mapping, allow_unpaired_bands=True)
-    assert sorted(cat["bands"]) == ["sdss_g"]
-    assert cat["dropped_bands"] == ["sdss_u"]
+    assert sorted(_bands(cat)) == ["sdss_g"]
+    assert "sdss_u" not in cat
 
 
 def test_filter_mapping_two_columns_onto_one_band_is_refused(tmp_path: Path) -> None:
@@ -64,14 +72,14 @@ def test_delimiter_reads_a_non_comma_file(tmp_path: Path) -> None:
     p.write_text("id;redshift;sdss_r;sdss_r_err\ngal1;0.5;0.30;0.03\n")
     cat = load_catalog(p, delimiter=";", filter_mapping={"sdss_r": "sdss_r"})
     np.testing.assert_allclose(cat["redshift"], [0.5])
-    np.testing.assert_allclose(cat["bands"]["sdss_r"]["flux"], [0.30])
+    np.testing.assert_allclose(cat["sdss_r"], [0.30])
 
 
 def test_id_col_names_the_galaxies(tmp_path: Path) -> None:
     p = tmp_path / "objname.csv"
     p.write_text("objname,redshift,flux_sdss_r,flux_err_sdss_r\nNGC1234,0.5,0.30,0.03\n")
     cat = load_catalog(p, id_col="objname")
-    assert list(cat["ids"]) == ["NGC1234"]
+    assert list(cat["id"]) == ["NGC1234"]
 
 
 def test_explicit_id_col_absent_is_refused(tmp_path: Path) -> None:

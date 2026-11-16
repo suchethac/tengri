@@ -21,17 +21,20 @@ from tengri.observation.noise import DETECTED, UPPER_LIMIT
 pytestmark = pytest.mark.contract
 
 
+def _bands(table):
+    """Band names of a load_catalog table: the flux columns, not the error or censor ones."""
+    return sorted(
+        k for k in table if not k.endswith(("_err", "_censor")) and k not in ("redshift", "id")
+    )
+
+
 def _ingest_bands(cat, *, flux_unit="mJy", **kw):
     """Feed ``load_catalog`` bands through the kept path: a flat table into ``ingest_catalog``."""
     from tengri.inference.catalog_ingest import ingest_catalog
     from tengri.observation import Photometry
 
-    table = {}
-    for band, cols in cat["bands"].items():
-        table[band] = cols["flux"]
-        table[f"{band}_err"] = cols["err"]
-    phot = Photometry.from_names(list(cat["bands"]))
-    return ingest_catalog(table, photometry=phot, flux_unit=flux_unit, **kw)
+    phot = Photometry.from_names(_bands(cat))
+    return ingest_catalog(cat, photometry=phot, flux_unit=flux_unit, **kw)
 
 
 _SDSS = {"sdss_u": "sdss_u", "sdss_g": "sdss_g", "sdss_r": "sdss_r"}
@@ -91,18 +94,18 @@ class TestCatalogParsing:
 
     def test_correct_dimensions(self, basic_csv):
         cat = load_catalog(basic_csv, filter_mapping=_SDSS)
-        assert cat["n_rows"] == 3
-        assert len(cat["bands"]) == 3
+        assert len(cat["redshift"]) == 3
+        assert len(_bands(cat)) == 3
 
     def test_flux_and_noise_shape(self, basic_csv):
         cat = load_catalog(basic_csv, filter_mapping=_SDSS)
-        for cols in cat["bands"].values():
-            assert cols["flux"].shape == (3,)
-            assert cols["err"].shape == (3,)
+        for band in _bands(cat):
+            assert cat[band].shape == (3,)
+            assert cat[f"{band}_err"].shape == (3,)
 
     def test_ids_correct(self, basic_csv):
         cat = load_catalog(basic_csv, filter_mapping=_SDSS)
-        npt.assert_array_equal(cat["ids"], ["gal1", "gal2", "gal3"])
+        npt.assert_array_equal(cat["id"], ["gal1", "gal2", "gal3"])
 
     def test_redshifts_correct(self, basic_csv):
         cat = load_catalog(basic_csv, filter_mapping=_SDSS)
@@ -110,17 +113,17 @@ class TestCatalogParsing:
 
     def test_filter_names(self, basic_csv):
         cat = load_catalog(basic_csv, filter_mapping=_SDSS)
-        assert set(cat["bands"]) == {"sdss_u", "sdss_g", "sdss_r"}
+        assert set(_bands(cat)) == {"sdss_u", "sdss_g", "sdss_r"}
 
     def test_flux_values(self, basic_csv):
         cat = load_catalog(basic_csv, filter_mapping=_SDSS)
-        npt.assert_allclose(cat["bands"]["sdss_u"]["flux"][0], 0.10)
-        npt.assert_allclose(cat["bands"]["sdss_g"]["flux"][0], 0.20)
-        npt.assert_allclose(cat["bands"]["sdss_r"]["flux"][0], 0.30)
+        npt.assert_allclose(cat["sdss_u"][0], 0.10)
+        npt.assert_allclose(cat["sdss_g"][0], 0.20)
+        npt.assert_allclose(cat["sdss_r"][0], 0.30)
 
     def test_noise_values(self, basic_csv):
         cat = load_catalog(basic_csv, filter_mapping=_SDSS)
-        npt.assert_allclose(cat["bands"]["sdss_u"]["err"][0], 0.01)
+        npt.assert_allclose(cat["sdss_u_err"][0], 0.01)
 
     def test_detected_values_through_ingest(self, mixed_csv):
         """Positive flux + positive error is a detection with its own flux and error."""
@@ -221,9 +224,9 @@ class TestFilterMapping:
     def test_custom_mapping(self, custom_mapping_csv):
         mapping = {"band_u": "sdss_u", "band_g": "sdss_g"}
         cat = load_catalog(custom_mapping_csv, filter_mapping=mapping)
-        assert len(cat["bands"]) == 2
-        assert "sdss_u" in cat["bands"]
-        assert "sdss_g" in cat["bands"]
+        assert len(_bands(cat)) == 2
+        assert "sdss_u" in _bands(cat)
+        assert "sdss_g" in _bands(cat)
 
     def test_no_mapping_unrecognized_cols_ignored(self, custom_mapping_csv):
         """Without mapping, unrecognized column names yield no bands."""
@@ -233,7 +236,7 @@ class TestFilterMapping:
     def test_partial_mapping(self, custom_mapping_csv):
         """Mapping only one of two columns -> only that band."""
         cat = load_catalog(custom_mapping_csv, filter_mapping={"band_u": "sdss_u"})
-        assert tuple(cat["bands"]) == ("sdss_u",)
+        assert tuple(_bands(cat)) == ("sdss_u",)
 
 
 # ── Pre-built mappings ────────────────────────────────────────────
@@ -282,8 +285,8 @@ class TestPrebuiltMappings:
             "obj1,0.3,0.01,0.001,0.02,0.002\n"
         )
         cat = load_catalog(path, filter_mapping=CIGALE_TO_TENGRI)
-        assert "galex_fuv" in cat["bands"]
-        assert "galex_nuv" in cat["bands"]
+        assert "galex_fuv" in _bands(cat)
+        assert "galex_nuv" in _bands(cat)
 
     def test_candels_mapping_with_csv(self, tmp_path):
         """Use CANDELS_TO_TENGRI mapping to read a CANDELS-style catalog."""
@@ -295,8 +298,8 @@ class TestPrebuiltMappings:
             "obj1,1.2,0.05,0.005,0.10,0.01\n"
         )
         cat = load_catalog(path, filter_mapping=CANDELS_TO_TENGRI)
-        assert "hst_f814w" in cat["bands"]
-        assert "hst_f160w" in cat["bands"]
+        assert "hst_f814w" in _bands(cat)
+        assert "hst_f160w" in _bands(cat)
 
 
 # ── Custom columns ────────────────────────────────────────────────
@@ -309,7 +312,7 @@ class TestCustomColumns:
         path = tmp_path / "custom_id.csv"
         path.write_text("objname,redshift,sdss_r,sdss_r_err\nNGC1234,0.5,0.30,0.03\n")
         cat = load_catalog(path, id_col="objname", filter_mapping={"sdss_r": "sdss_r"})
-        assert cat["ids"][0] == "NGC1234"
+        assert cat["id"][0] == "NGC1234"
 
     def test_custom_redshift_col(self, tmp_path):
         path = tmp_path / "custom_z.csv"
@@ -319,8 +322,8 @@ class TestCustomColumns:
 
     def test_tab_delimiter(self, tsv_file):
         cat = load_catalog(tsv_file, delimiter="\t", filter_mapping={"sdss_r": "sdss_r"})
-        assert cat["n_rows"] == 1
-        assert "sdss_r" in cat["bands"]
+        assert len(cat["redshift"]) == 1
+        assert "sdss_r" in _bands(cat)
 
 
 # ── Error handling ────────────────────────────────────────────────
@@ -349,9 +352,7 @@ class TestCatalogErrors:
         """Works with pathlib.Path and str."""
         cat_path = load_catalog(basic_csv, filter_mapping=_SDSS)
         cat_str = load_catalog(str(basic_csv), filter_mapping=_SDSS)
-        npt.assert_array_equal(
-            cat_path["bands"]["sdss_r"]["flux"], cat_str["bands"]["sdss_r"]["flux"]
-        )
+        npt.assert_array_equal(cat_path["sdss_r"], cat_str["sdss_r"])
 
     def test_no_headers_in_file(self, tmp_path):
         """File without proper CSV headers."""

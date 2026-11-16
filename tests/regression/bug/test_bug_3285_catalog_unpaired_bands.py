@@ -24,6 +24,13 @@ from tengri.io import load_catalog
 pytestmark = pytest.mark.regression_bug
 
 
+def _bands(table):
+    """Band names of a load_catalog table: the flux columns, not the error or censor ones."""
+    return sorted(
+        k for k in table if not k.endswith(("_err", "_censor")) and k not in ("redshift", "id")
+    )
+
+
 @pytest.fixture
 def partly_paired_csv(tmp_path: Path) -> Path:
     # ``flux_sdss_r`` has no error column; ``flux_wise_w1`` has a mistyped one.
@@ -45,8 +52,8 @@ def test_unpaired_band_raises_by_default_and_names_it(partly_paired_csv: Path) -
 def test_opt_in_drops_unpaired_bands_with_a_warning(partly_paired_csv: Path) -> None:
     with pytest.warns(UserWarning, match="sdss_r"):
         cat = load_catalog(partly_paired_csv, allow_unpaired_bands=True)
-    assert sorted(cat["bands"]) == ["sdss_g"]
-    assert sorted(cat["dropped_bands"]) == ["sdss_r", "wise_w1"]
+    assert sorted(_bands(cat)) == ["sdss_g"]
+    assert "sdss_r" not in cat and "wise_w1" not in cat
 
 
 def test_fully_paired_catalog_is_unaffected(tmp_path: Path) -> None:
@@ -55,9 +62,8 @@ def test_fully_paired_catalog_is_unaffected(tmp_path: Path) -> None:
     with warnings.catch_warnings():
         warnings.simplefilter("error")  # no warning on the clean path
         cat = load_catalog(p)
-    assert sorted(cat["bands"]) == ["a"]
-    assert cat["dropped_bands"] == []
-    np.testing.assert_allclose(cat["bands"]["a"]["err"], [0.1, 0.1])
+    assert sorted(_bands(cat)) == ["a"]
+    np.testing.assert_allclose(cat["a_err"], [0.1, 0.1])
 
 
 def test_no_pairs_at_all_still_raises_no_flux_error(tmp_path: Path) -> None:
