@@ -57,9 +57,8 @@ class TestShockAttenuationEquivalence:
         Precondition: shock contribution > noise floor (non-vacuity check—
         verifies shock is resolved and contributes measurably to photometry).
         """
-        from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel
+        from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel, download_ssp
         from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
-        from tengri.data import download_ssp
 
         # Use a real SSP for realistic shock contribution (bare stellar only)
         # wNE versions aren't in the downloadable catalog; use bare + nebular backend
