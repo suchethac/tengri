@@ -17,7 +17,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.inference.likelihoods.gaussian import LOG_2PI, diag_gaussian_chi2
+from tengri.inference.likelihoods.gaussian import diag_gaussian_chi2
 from tengri.observation.banded import BandedMatrix, banded_forward_substitution
 from tengri.observation.calibration import (
     _ERR_FLOOR,
@@ -38,7 +38,7 @@ from tengri.observation.noise import (
     multivariate_student_t_log_density,
     variable_noise_hamiltonian,
 )
-from tengri.utils.scale import representable_floor as _representable_floor
+from tengri.utils.scale import LOG_2PI, representable_floor as _representable_floor
 
 __all__ = [
     "calibration_eline_marginal_term",

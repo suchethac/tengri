@@ -37,12 +37,10 @@ from jax.tree_util import Partial
 # without importing ``inference/``, the layering runs
 # observation -> inference, never back (#1588). Re-exported here because every
 # likelihood in this module is written in terms of it.
-from tengri.utils.scale import LOG_2PI, diag_gaussian_log_normalization, present_noise, whiten
+from tengri.utils.scale import present_noise, whiten
 
 __all__ = [
-    "LOG_2PI",
     "diag_gaussian_chi2",
-    "diag_gaussian_log_normalization",
     "diag_gaussian_log_prob",
     "diag_noise_operators",
     "inv_noise_std",
@@ -234,8 +232,8 @@ def diag_gaussian_log_prob(
 
     The Gaussian normalization constant
     :math:`-\tfrac{1}{2} n \log(2\pi) - \sum_i \log\sigma_i` is dropped here, because
-    the posterior does not need it. :func:`diag_gaussian_log_normalization` returns it;
-    the published ``log_evidence`` adds it back (#3427).
+    the posterior does not need it. :func:`tengri.utils.scale.diag_gaussian_log_normalization`
+    returns it; the published ``log_evidence`` adds it back (#3427).
 
     Parameters
     ----------

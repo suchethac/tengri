@@ -31,8 +31,6 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.inference.likelihoods.gaussian import (
-    LOG_2PI,
-    diag_gaussian_log_normalization,
     diag_gaussian_log_prob,
     student_t_log_norm_per_point,
 )
@@ -50,6 +48,7 @@ from tengri.inference.likelihoods.terms import (
     student_t_term,
 )
 from tengri.observation.noise import student_t_log_density
+from tengri.utils.scale import LOG_2PI, diag_gaussian_log_normalization
 
 __all__ = [
     "BOOKKEEPING_KEYS",

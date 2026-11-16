@@ -45,10 +45,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, shape
-from tengri.inference.likelihoods.gaussian import (
-    diag_gaussian_log_normalization,
-    diag_gaussian_log_prob,
-)
+from tengri.inference.likelihoods.gaussian import diag_gaussian_log_prob
 from tengri.inference.likelihoods.terms import (
     censored_term,
     correlated_noise_term,
@@ -56,6 +53,7 @@ from tengri.inference.likelihoods.terms import (
     floor_value,
     student_t_term,
 )
+from tengri.utils.scale import diag_gaussian_log_normalization
 
 __all__ = [
     "CensoredLikelihood",
