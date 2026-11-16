@@ -241,10 +241,17 @@ def marginalize_linear_nuisance(
     started from the Gaussian solution (:math:`w_i = 1`) and run for a fixed number of steps.
     With ``chol_lower`` the noise is one multivariate Student-t of scale matrix :math:`C`: a
     single weight :math:`w = (\nu+n)/(\nu+r^\mathsf{T}C^{-1}r)` rescales :math:`C`, and the
-    curvature below has :math:`(\nu+n)/(\nu+n+2)` in place of :math:`(\nu+1)/(\nu+3)`. The
-    value reuses the Gaussian solve at the final weights (prior terms, flat-column Jacobians
-    and masks included), replaces its data term by the Student-t density, and replaces its
-    determinant by the one of the expected (Fisher) information :math:`H` above.
+    curvature is the mixing-weight one, :math:`H = w\,X^\mathsf{T}C^{-1}X + \Lambda^{-1}`, the
+    Gaussian solve at the final weight. An expected-information factor is not used there: under
+    an outlier :math:`w` falls while the expected information assumes
+    :math:`r^\mathsf{T}C^{-1}r \approx n`, and the error then grows to several nat and does not
+    shrink with :math:`n`. The value reuses the Gaussian solve at the final weights (prior terms,
+    flat-column Jacobians and masks included), replaces its data term by the Student-t density,
+    and, for independent data, replaces its determinant by the one of the expected (Fisher)
+    information :math:`H` above. Fisher is kept for independent data because it is closer to
+    quadrature than the per-datum mixing-weight curvature
+    :math:`X^\mathsf{T}\mathrm{diag}(w_i/\sigma_i^2)X + \Lambda^{-1}` on every cell of the
+    quadrature tests (worst 0.46 against 0.73 nat).
 
     This is an approximation. The Laplace integral treats the posterior of :math:`\beta` as
     Gaussian about its mode, and :math:`H` is the expected rather than the observed curvature
@@ -403,7 +410,6 @@ def _student_t_marginal(data, model0, design, *, dof, sigma, chol_lower, pix_mas
         density = multivariate_student_t_log_density(
             stat, 2.0 * jnp.sum(jnp.log(diagonal)), n_eff, dof
         )
-        block = n_eff
     else:
         weighted = diag_gaussian_log_normalization(sigma / jnp.sqrt(w), weight) - 0.5 * jnp.sum(
             w * stat * stat
@@ -415,13 +421,17 @@ def _student_t_marginal(data, model0, design, *, dof, sigma, chol_lower, pix_mas
             dof,
             present=None if pix_mask is None else weight > 0,
         )
-        block = 1.0
-    fisher = gaussian_at((dof + block + 2.0) / (dof + block))
-    logdet_change = jnp.linalg.slogdet(fisher.coef_cov)[1] - jnp.linalg.slogdet(final.coef_cov)[1]
+    if joint:
+        curvature = final
+    else:
+        curvature = gaussian_at((dof + 3.0) / (dof + 1.0))
+    logdet_change = (
+        jnp.linalg.slogdet(curvature.coef_cov)[1] - jnp.linalg.slogdet(final.coef_cov)[1]
+    )
     next_w = weights(final.coef_hat)
     return MarginalResult(
         log_like=final.log_like + density - weighted + 0.5 * logdet_change,
         coef_hat=beta,
-        coef_cov=fisher.coef_cov,
+        coef_cov=curvature.coef_cov,
         weight_change=jax.lax.stop_gradient(jnp.max(jnp.abs(next_w - w))),
     )
