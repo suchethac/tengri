@@ -51,6 +51,7 @@ from tengri.utils.grid_interp import (
     transpose_templates,
 )
 from tengri.utils.physics_constants import LYMAN_LIMIT_AA, TEN_PC_CM
+from tengri.utils.resident_bytes import resident_nbytes
 from tengri.utils.scale import (
     apply_log10_scale,
     log10_flux_scale as _log10_flux_scale,
@@ -213,6 +214,24 @@ class PhotometricPrecomputation(NamedTuple):
     #: fields above; ``None`` on a table built without them.
     slopes: "PhotometricPrecomputation | None" = None
 
+    @property
+    def nbytes(self) -> int:
+        """Resident bytes of the stored arrays, the native-slope sibling included (#3541)."""
+        return resident_nbytes(
+            self.ssp_phot,
+            self.ssp_phot_moment,
+            self.effective_wavelengths,
+            self.effective_wavelengths_rest,
+            self.log10_flux_scale,
+            self.ssp_subband_phot,
+            self.ssp_subband_waves_rest,
+            self.ssp_subband_phot_igm,
+            self.ssp_phot_lyc,
+            self.ssp_phot_nolyc,
+            self.ssp_subband_num_igm,
+            self.slopes,
+        )
+
 
 class SpectroscopicPrecomputation(NamedTuple):
     """Pre-rebinned SSP templates for fast spectroscopy.
@@ -260,6 +279,17 @@ class SpectroscopicPrecomputation(NamedTuple):
     #: cubic Hermite of (values, slopes), which is exact at undeclared scatter. ``None``
     #: only on a table built without the native slopes, which the stellar read refuses.
     ssp_on_pixels_slope: "jnp.ndarray | None" = None
+
+    @property
+    def nbytes(self) -> int:
+        """Resident bytes of the stored arrays, the native-slope sibling included (#3541)."""
+        return resident_nbytes(
+            self.ssp_on_pixels,
+            self.wave_rest_pixels,
+            self.wave_obs_pixels,
+            self.log10_flux_scale,
+            self.ssp_on_pixels_slope,
+        )
 
 
 def precompute_photometry(
@@ -406,6 +436,17 @@ class RestBandPrecomputation(NamedTuple):
     #: The same build on the native PCHIP slopes across metallicity (#3541), as a whole table
     #: of this type. ``None`` on a table built without them; the metallicity read refuses that.
     slopes: "RestBandPrecomputation | None" = None
+
+    @property
+    def nbytes(self) -> int:
+        """Resident bytes of the stored arrays, the native-slope sibling included (#3541)."""
+        return resident_nbytes(
+            self.ssp_restband_phot,
+            self.ssp_restband_subband_phot,
+            self.ssp_restband_subband_waves,
+            self.restband_eff_waves,
+            self.slopes,
+        )
 
 
 def precompute_restband_photometry(
@@ -773,6 +814,25 @@ class PhotometricZTable(NamedTuple):
     #: The same z-table build on the native PCHIP slopes across metallicity (#3541), a
     #: whole table of this type. ``None`` on a table built without it.
     slopes: "PhotometricZTable | None" = None
+
+    @property
+    def nbytes(self) -> int:
+        """Resident bytes of the stored arrays, the native-slope sibling included (#3541)."""
+        return resident_nbytes(
+            self.ssp_phot_table,
+            self.eff_waves_rest_table,
+            self.log10_flux_scale_table,
+            self.z_grid,
+            self.igm_trans_table,
+            self.ssp_phot_moment_table,
+            self.ssp_subband_phot_table,
+            self.subband_waves_rest_table,
+            self.ssp_subband_phot_igm_table,
+            self.ssp_phot_lyc_table,
+            self.ssp_phot_nolyc_table,
+            self.subband_num_igm_table,
+            self.slopes,
+        )
 
 
 @dataclasses.dataclass(frozen=True)
