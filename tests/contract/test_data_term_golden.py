@@ -7,7 +7,7 @@ normalized log-density of the data: the diagonal, censored and correlated terms 
 Gaussian constant from ``log_prob`` and return it in ``log_normalization``, and the
 marginalized terms (``spec_cal``, ``spec_lines``, ``spec_cal_lines``) return it inside
 ``log_prob`` with ``log_normalization`` zero. ``spec_lines_fitted`` returns the diagonal
-constant of its spectrum, 971.9137446159697 on these data. The independent dense-Gaussian
+constant of its spectrum, 971.9605764020663 on these data. The independent dense-Gaussian
 references of ``test_channel_engine_sweep.py`` check the same structures against scipy.
 Regenerate with ``python -m tests.contract.test_data_term_golden OUT.npy`` only from a build
 that is known to be right.
