@@ -2,10 +2,11 @@
 """Catalog cell status: the one home of flux-unit conversion and per-cell status (#3547 D4).
 
 A catalog cell (one galaxy in one band) is detected, an upper or lower limit, or absent
-(``nodata``). Several entry points declare that status: a sentinel flux value
-(``sentinels=`` in :func:`tengri.io.load_catalog`), CIGALE's ``lim_flag`` convention,
-a censor column (``censor_cols`` of :class:`tengri.Catalog`), and the refusal of an
-undeclared encoding. They all end in :func:`assign_cell_status`.
+(``nodata``). Several entry points declare that status: sentinel flux values
+(``sentinels=`` in :func:`tengri.io.load_catalog`), flag columns (``flag_cols=`` and
+``flag_map=``), CIGALE's ``lim_flag`` convention, a censor column (``censor_cols`` of
+:class:`tengri.Catalog`), and the refusal of an undeclared encoding. Each decodes its
+declaration into one status per cell, and :func:`assign_cell_status` applies those.
 
 This module imports only numpy and :mod:`tengri.utils.conversions`, so both the catalog
 reader (:mod:`tengri.io.catalog`) and the ingest (:mod:`tengri.inference.catalog_ingest`)
@@ -14,6 +15,8 @@ can import it without a cycle.
 
 from __future__ import annotations
 
+import math
+from collections.abc import Mapping
 from typing import NamedTuple
 
 import numpy as np
@@ -22,12 +25,16 @@ from tengri.utils.conversions import maggies_to_fnu, ujy_to_fnu
 
 __all__ = [
     "CIGALE_INVALID_FLUX",
+    "EMPTY_FLAG",
     "FLUX_UNITS",
     "LIMIT_STATUSES",
     "LIM_FLAGS",
     "CellStatus",
     "assign_cell_status",
     "convert_flux_to_cgs",
+    "flag_specs",
+    "normalize_sentinels",
+    "sentinel_specs",
 ]
 
 #: Flux units a catalog may be read in (the one unit system: the caller names it).
@@ -37,8 +44,12 @@ LIM_FLAGS = ("none", "noscaling", "full")
 #: Sentinel below which CIGALE's ``_check_invalid`` treats a flux as invalid (in the
 #: table's own flux unit).
 CIGALE_INVALID_FLUX = -9990.0
-#: Limit statuses a sentinel or a flag may declare; the depth is the tuple's second item.
+#: Limit statuses. A sentinel or a flag may give one as a tuple with its depth
+#: ``(kind, n_sigma)``; a flag may also give the bare name, meaning the flux is the limit.
 LIMIT_STATUSES = ("upper_limit", "lower_limit")
+#: The flag key that matches an empty cell: an empty string after ``strip()``, or NaN/None.
+EMPTY_FLAG = ""
+_SENTINEL_DEFAULT = "*"
 
 
 def convert_flux_to_cgs(
@@ -111,6 +122,240 @@ class CellStatus(NamedTuple):
     censor: np.ndarray | None
 
 
+# ── decoding: each declaration becomes one status per cell ──────────────────
+#
+# A status spec is one of:
+#   None                      detected (the cell as read)
+#   "nodata"                  absent: flux and error become NaN
+#   "upper_limit"/"lower_limit"  bare limit: the cell's FLUX is the limit, its ERR the sigma
+#   (kind, n_sigma)           tuple limit: the cell's ERR is the 1-sigma depth and the limit
+#                             flux is n_sigma * err (the flux cell is ignored)
+
+
+def _check_depth(where, status):
+    """Return ``(kind, n_sigma)`` for a tuple limit; refuse a non-finite or non-positive depth."""
+    kind, depth = status[0], status[1]
+    n_sigma = float(depth)
+    if not (math.isfinite(n_sigma) and n_sigma > 0.0):
+        raise ValueError(
+            f"{where} = {tuple(status)!r}: n_sigma must be finite and > 0; got {depth!r}."
+        )
+    return kind, n_sigma
+
+
+def sentinel_specs(flux, err, mapping, band):
+    """Decode the sentinel flux values of one band into a status spec per row.
+
+    Parameters
+    ----------
+    flux, err : array_like, shape (N,)
+        Raw flux and error of the band, in the file's unit.
+    mapping : Mapping of float to status, or None
+        A sentinel value (matched with exact ``==``) and its status: ``"nodata"`` or
+        ``("upper_limit", n_sigma)`` / ``("lower_limit", n_sigma)``. A bare limit name
+        is refused: a sentinel's limit needs its depth.
+    band : str
+        Band name, used in messages.
+
+    Returns
+    -------
+    ndarray, shape (N,), dtype=object
+        The status spec of each row (see the module notes); None for a detected row.
+
+    Raises
+    ------
+    ValueError
+        For a bare limit or an unknown status, or when a declared sentinel appears in the
+        error column.
+    """
+    flux = np.asarray(flux, dtype=float)
+    err = np.asarray(err, dtype=float)
+    specs = np.full(flux.shape, None, dtype=object)
+    for key, status in (mapping or {}).items():
+        value = float(key)
+        if np.any(err == value):
+            raise ValueError(
+                f"band {band!r}: declared sentinel {key!r} appears in the error column. "
+                f"A sentinel marks a flux cell; an error cannot be a sentinel."
+            )
+        hit = flux == value
+        if isinstance(status, str):
+            if status == "nodata":
+                specs[hit] = "nodata"
+                continue
+            if status in LIMIT_STATUSES:
+                raise ValueError(
+                    f"sentinels[{key!r}] = {status!r} gives no depth. Declare it as "
+                    f"({status!r}, n_sigma), e.g. ({status!r}, 3.0): the limit flux is "
+                    f"n_sigma times the error."
+                )
+            raise ValueError(
+                f"sentinels[{key!r}] = {status!r} is not a status; allowed: "
+                f"'nodata', ('upper_limit', n_sigma), ('lower_limit', n_sigma)."
+            )
+        if isinstance(status, tuple | list) and len(status) == 2 and status[0] in LIMIT_STATUSES:
+            spec = _check_depth(f"sentinels[{key!r}]", status)
+            for i in np.flatnonzero(hit):  # a tuple cannot be broadcast into a masked slice
+                specs[i] = spec
+            continue
+        raise ValueError(
+            f"sentinels[{key!r}] = {status!r} is not a status; allowed: "
+            f"'nodata', ('upper_limit', n_sigma), ('lower_limit', n_sigma)."
+        )
+    return specs
+
+
+def normalize_sentinels(sentinels, names):
+    """Return the sentinel mapping of each band: the flat form, or ``{"*": ..., band: ...}``.
+
+    The flat form (values are statuses) applies to every band, the same as ``"*"``. The
+    nested form (values are mappings) gives a default under ``"*"``; a band key overrides it
+    value by value. The two forms cannot be mixed. A flux column named ``"*"`` is refused,
+    because ``"*"`` is the default key.
+
+    Parameters
+    ----------
+    sentinels : Mapping or None
+        The declaration, as above.
+    names : sequence of str
+        The band (flux column) names of the table.
+
+    Returns
+    -------
+    dict of str to dict, or None
+        For each band, the flat mapping of sentinel values to statuses that applies to it.
+    """
+    if sentinels is None:
+        return None
+    names = tuple(names)
+    if _SENTINEL_DEFAULT in names:
+        raise ValueError(
+            f'a flux column named "{_SENTINEL_DEFAULT}" is not allowed: "{_SENTINEL_DEFAULT}" is '
+            f"the default key of a nested sentinels mapping. Rename the column."
+        )
+    values = list(sentinels.values())
+    nested = [isinstance(v, Mapping) for v in values]
+    if values and any(nested) and not all(nested):
+        raise ValueError(
+            "sentinels mixes statuses with per-band mappings. Use the flat form (statuses), "
+            f'or the nested form (each value a mapping, with "{_SENTINEL_DEFAULT}" for every '
+            f"band)."
+        )
+    if not (values and all(nested)):
+        return {band: dict(sentinels) for band in names}
+    default = dict(sentinels.get(_SENTINEL_DEFAULT, {}))
+    per_band = {k: v for k, v in sentinels.items() if k != _SENTINEL_DEFAULT}
+    unknown = sorted(set(per_band) - set(names))
+    if unknown:
+        raise ValueError(f"sentinels names band(s) {unknown} that the table does not have.")
+    return {band: {**default, **dict(per_band.get(band, {}))} for band in names}
+
+
+def _flag_key(value):
+    """Normalize one flag cell or flag-map key; see :data:`EMPTY_FLAG`.
+
+    None and NaN (and any string that is empty after ``strip()``) map to :data:`EMPTY_FLAG`.
+    Numbers, and strings that read as a number, map to a float; other strings map to their
+    stripped text. Numeric flags match by ``==``.
+    """
+    if value is None:
+        return EMPTY_FLAG
+    if isinstance(value, bool | np.bool_):
+        return float(value)
+    if isinstance(value, int | float | np.integer | np.floating):
+        number = float(value)
+        return EMPTY_FLAG if math.isnan(number) else number
+    text = str(value).strip()
+    if text == "":
+        return EMPTY_FLAG
+    try:
+        number = float(text)
+    except ValueError:
+        return text
+    return EMPTY_FLAG if math.isnan(number) else number
+
+
+def _parse_flag_status(key, status):
+    """Validate one ``flag_map`` status; return the spec the applier reads."""
+    if isinstance(status, str):
+        if status in ("detected", "nodata") or status in LIMIT_STATUSES:
+            return None if status == "detected" else status
+    elif isinstance(status, tuple | list) and len(status) == 2 and status[0] in LIMIT_STATUSES:
+        return _check_depth(f"flag_map[{key!r}]", status)
+    raise ValueError(
+        f"flag_map[{key!r}] = {status!r} is not a status; allowed: 'detected', 'nodata', "
+        f"'upper_limit', 'lower_limit', or ('upper_limit' | 'lower_limit', n_sigma)."
+    )
+
+
+def flag_specs(values, flag_map, column):
+    """Decode one flag column into a status spec per row, through ``flag_map``.
+
+    Parameters
+    ----------
+    values : array_like, shape (N,)
+        The raw flag cells. Strings are compared after ``strip()``; an empty or NaN cell
+        matches the explicit key ``""``; numbers match by ``==``.
+    flag_map : Mapping
+        Flag value to status: ``"detected"``, ``"nodata"``, a bare limit name (the flux is
+        the limit, the error its sigma), or ``("upper_limit"|"lower_limit", n_sigma)`` (the
+        error is the depth, the flux is ignored).
+    column : str
+        The flag column name, used in messages.
+
+    Returns
+    -------
+    ndarray, shape (N,), dtype=object
+        The status spec of each row (see the module notes).
+
+    Raises
+    ------
+    ValueError
+        For an unmapped flag value (listing the values and the first rows) or an invalid
+        status in ``flag_map``.
+    """
+    table = {}
+    for key, status in flag_map.items():
+        norm = _flag_key(key)
+        if norm in table:
+            raise ValueError(f"flag_map has two keys that match the same flag value: {key!r}.")
+        table[norm] = _parse_flag_status(key, status)
+    values = list(values)
+    specs = np.empty(len(values), dtype=object)
+    unmapped_rows, unmapped_values = [], []
+    for i, raw in enumerate(values):
+        norm = _flag_key(raw)
+        if norm in table:
+            specs[i] = table[norm]
+        else:
+            unmapped_rows.append(i)
+            if raw not in unmapped_values:
+                unmapped_values.append(raw)
+    if unmapped_rows:
+        raise ValueError(
+            f"flag column {column!r}: value(s) {unmapped_values} have no entry in flag_map; "
+            f'first row(s) {unmapped_rows[:5]}. Map every flag value (use "" for an empty cell).'
+        )
+    return specs
+
+
+# ── the one applier ─────────────────────────────────────────────────────────
+
+
+class _Cell(NamedTuple):
+    kind: str
+    depth: float | None
+
+
+def _split(spec) -> _Cell:
+    """Read a status spec as ``(kind, depth)``: depth is set only for a tuple limit."""
+    if spec is None or spec == "detected":
+        return _Cell("detected", None)
+    if isinstance(spec, tuple):
+        return _Cell(spec[0], spec[1])
+    return _Cell(spec, None)
+
+
 def assign_cell_status(
     flux,
     err,
@@ -119,7 +364,7 @@ def assign_cell_status(
     flux_unit,
     err_names=None,
     presence=None,
-    sentinels=None,
+    cell_status=None,
     lim_flag=None,
     censor_flags=None,
     flag_names=None,
@@ -127,8 +372,9 @@ def assign_cell_status(
 ) -> CellStatus:
     """Assign every cell's status from the declarations given, in the table's own units.
 
-    This is the one place a cell's status is decided. Every entry point calls it:
-    :func:`tengri.io.load_catalog` (``sentinels``) and ``ingest_catalog`` in
+    This is the one place a cell's status is applied. Every entry point decodes its
+    declaration into a status spec per cell and calls it: :func:`tengri.io.load_catalog`
+    (``sentinels``, ``flag_cols``) and ``ingest_catalog`` in
     :mod:`tengri.inference.catalog_ingest` (``lim_flag``, ``censor_cols`` as
     ``censor_flags``, and ``refuse_undeclared``).
 
@@ -139,18 +385,15 @@ def assign_cell_status(
     names : tuple of str, length n_bands
         Flux column names, used in messages.
     flux_unit : str
-        One of :data:`FLUX_UNITS`. A limit declared by ``sentinels`` in ``ab_mag`` is not
-        yet supported (its depth is applied in flux space, not in magnitudes).
+        One of :data:`FLUX_UNITS`. A limit in ``ab_mag`` is not supported yet: its depth
+        must be applied in flux space, and that conversion is not written here.
     err_names : tuple of str, optional
         Error column names for messages. Default ``"<name>_err"``.
     presence : array_like of bool, optional
         Cells already absent before this call (default: finite flux).
-    sentinels : Mapping of float to status, optional
-        A sentinel flux value (exact ``==``) and its status: ``"nodata"`` (the cell is
-        absent, flux and error become NaN), ``("upper_limit", n_sigma)`` or
-        ``("lower_limit", n_sigma)`` (the limit flux is ``n_sigma * err``, sigma is
-        ``err``, censor is +1 or -1). A sentinel in an error column, or a limit cell whose
-        error is not positive and finite, raises.
+    cell_status : sequence of ndarray, optional
+        One object array of status specs per band, each of length N (see
+        :func:`sentinel_specs` and :func:`flag_specs`); None entries are detected.
     lim_flag : {"none", "noscaling", "full"}, optional
         CIGALE's ``lim_flag`` rule (pcigale ``_check_invalid``). ``"none"``: a cell with
         ``err <= 0`` or a flux below -9990 is dropped. ``"noscaling"`` / ``"full"``: a
@@ -173,12 +416,12 @@ def assign_cell_status(
     ------
     ValueError
         For an invalid or conflicting declaration, an undeclared encoding when
-        ``refuse_undeclared`` is set, a sentinel in an error column, an invalid flag value,
-        or a limit whose error is not positive.
+        ``refuse_undeclared`` is set, a limit in ``ab_mag``, or a limit cell whose error is
+        not positive and finite (the row count and first rows are named).
 
     Notes
     -----
-    ``sentinels``, ``lim_flag`` and ``censor_flags`` are mutually exclusive, except that
+    ``cell_status``, ``lim_flag`` and ``censor_flags`` are mutually exclusive, except that
     ``censor_flags`` may accompany ``lim_flag="none"`` (the flags then take precedence for
     the censor column, as in CIGALE's table reader). Not JIT-traced: runs once on host
     arrays during the read or the ingest.
@@ -192,18 +435,18 @@ def assign_cell_status(
         raise ValueError(f"names/err_names must name the {n_bands} band column(s)")
     present = np.isfinite(flux_arr) if presence is None else np.array(presence, dtype=bool)
 
-    if sentinels is not None and (lim_flag is not None or censor_flags is not None):
+    if cell_status is not None and (lim_flag is not None or censor_flags is not None):
         raise ValueError(
-            "sentinels, lim_flag and censor_cols declare the same cell status in three "
-            "ways; give one of them."
+            "a per-cell status (sentinels, flag columns), lim_flag and censor_cols declare "
+            "the same cell status in different ways; give one of them."
         )
-    if sentinels is None and lim_flag is None and censor_flags is None and refuse_undeclared:
+    if cell_status is None and lim_flag is None and censor_flags is None and refuse_undeclared:
         _refuse_undeclared(flux_arr, err_arr, names, err_names)
 
     censor = None
-    if sentinels is not None:
-        flux_arr, err_arr, present, censor = _apply_sentinels(
-            flux_arr, err_arr, present, sentinels, names, err_names, flux_unit
+    if cell_status is not None:
+        flux_arr, err_arr, present, censor = _apply_cell_status(
+            flux_arr, err_arr, present, cell_status, names, flux_unit
         )
     if lim_flag is not None:
         if lim_flag not in LIM_FLAGS:
@@ -212,6 +455,49 @@ def assign_cell_status(
     if censor_flags is not None:
         censor = _checked_flags(censor_flags, flag_names or names, n_bands, flux_arr.shape[0])
     return CellStatus(flux_arr, err_arr, present, censor)
+
+
+def _apply_cell_status(flux, err, present, cell_status, names, flux_unit):
+    """Apply one status spec per cell (the one applier); return new arrays and the censor."""
+    flux = flux.copy()
+    err = err.copy()
+    present = present.copy()
+    censor = np.zeros(flux.shape, dtype=int)
+    for j, band in enumerate(names):
+        specs = cell_status[j]
+        if specs is None:
+            continue
+        bad_rows = []
+        for i, spec in enumerate(specs):
+            cell = _split(spec)
+            if cell.kind == "detected":
+                continue
+            if cell.kind == "nodata":
+                flux[i, j] = np.nan
+                err[i, j] = np.nan
+                present[i, j] = False
+                continue
+            if cell.kind not in LIMIT_STATUSES:
+                raise ValueError(f"band {band!r}: unknown status {cell.kind!r} at row {i}.")
+            if flux_unit == "ab_mag":
+                raise ValueError(
+                    f"band {band!r}: a {cell.kind} limit in flux_unit='ab_mag' is not "
+                    f"supported yet; the depth must be applied in flux space, not in "
+                    f"magnitudes."
+                )
+            sigma = err[i, j]
+            if not (sigma > 0.0 and math.isfinite(sigma)):
+                bad_rows.append(i)
+                continue
+            if cell.depth is not None:
+                flux[i, j] = cell.depth * sigma
+            censor[i, j] = 1 if cell.kind == "upper_limit" else -1
+        if bad_rows:
+            raise ValueError(
+                f"band {band!r}: {len(bad_rows)} row(s) {bad_rows[:5]} declared as a limit with "
+                f"a non-positive or non-finite error; a limit needs a positive error as its sigma."
+            )
+    return flux, err, present, censor
 
 
 def _describe_offending(kind, offending, columns):
@@ -241,9 +527,9 @@ def _refuse_undeclared(flux, err, names, err_names):
         parts.append(_describe_offending("negative error", negative, err_names))
     raise ValueError(
         "; ".join(parts) + ". Without a declaration these would be read as a detection or "
-        "as noise. Declare the convention: pass sentinels= to load_catalog for sentinel "
-        'flux values (nodata or limits), or lim_flag="full" for a CIGALE table (a sentinel '
-        "flux is dropped and a negative error becomes an upper limit)."
+        "as noise. Declare the convention: pass sentinels= or flag_cols= to load_catalog, or "
+        'lim_flag="full" for a CIGALE table (a sentinel flux is dropped and a negative error '
+        "becomes an upper limit)."
     )
 
 
@@ -260,76 +546,6 @@ def _apply_lim_flag(flux, err, present, lim_flag):
     new_err = np.where(limit, -err, np.where(drop, 0.0, err))
     censor = None if lim_flag == "none" else limit.astype(int)
     return new_present, new_err, censor
-
-
-def _parse_sentinel_status(key, status) -> tuple[str, float | None]:
-    """Validate one declared sentinel status; return ``(kind, n_sigma)``.
-
-    ``kind`` is ``"nodata"``, ``"upper_limit"`` or ``"lower_limit"``; ``n_sigma`` is
-    ``None`` for ``"nodata"``. A bare limit name without a depth is refused.
-    """
-    allowed = "'nodata', ('upper_limit', n_sigma), ('lower_limit', n_sigma)"
-    if isinstance(status, str):
-        if status == "nodata":
-            return "nodata", None
-        if status in LIMIT_STATUSES:
-            raise ValueError(
-                f"sentinels[{key!r}] = {status!r} gives no depth. Declare it as "
-                f"({status!r}, n_sigma), e.g. ({status!r}, 3.0): the limit flux is "
-                f"n_sigma times the error."
-            )
-        raise ValueError(f"sentinels[{key!r}] = {status!r} is not a status; allowed: {allowed}.")
-    if isinstance(status, tuple | list) and len(status) == 2 and status[0] in LIMIT_STATUSES:
-        n_sigma = float(status[1])
-        if not (np.isfinite(n_sigma) and n_sigma > 0.0):
-            raise ValueError(
-                f"sentinels[{key!r}] = {tuple(status)!r}: n_sigma must be finite and > 0; "
-                f"got {status[1]!r}."
-            )
-        return str(status[0]), n_sigma
-    raise ValueError(f"sentinels[{key!r}] = {status!r} is not a status; allowed: {allowed}.")
-
-
-def _apply_sentinels(flux, err, present, sentinels, names, err_names, flux_unit):
-    """Apply declared sentinel flux values to every band (exact ``==``); new arrays."""
-    flux = flux.copy()
-    err = err.copy()
-    present = present.copy()
-    censor = np.zeros(flux.shape, dtype=int)
-    for key, status in sentinels.items():
-        value = float(key)
-        kind, n_sigma = _parse_sentinel_status(key, status)
-        for j, band in enumerate(names):
-            if np.any(err[:, j] == value):
-                raise ValueError(
-                    f"band {band!r}: declared sentinel {key!r} appears in the error column. "
-                    f"A sentinel marks a flux cell; an error cannot be a sentinel."
-                )
-            hit = flux[:, j] == value
-            if not hit.any():
-                continue
-            if kind == "nodata":
-                flux[hit, j] = np.nan
-                err[hit, j] = np.nan
-                present[hit, j] = False
-                continue
-            if flux_unit == "ab_mag":
-                raise ValueError(
-                    f"band {band!r}: a {kind} sentinel in flux_unit='ab_mag' is not supported "
-                    f"yet; the depth must be applied in flux space, not in magnitudes."
-                )
-            e = err[:, j]
-            good = (e > 0.0) & np.isfinite(e)
-            if not good[hit].all():
-                rows = np.flatnonzero(hit & ~good).tolist()
-                raise ValueError(
-                    f"band {band!r}: {kind} sentinel {key!r} at row(s) {rows} has a "
-                    f"non-positive or non-finite error; a limit needs a positive error as "
-                    f"its sigma."
-                )
-            flux[hit, j] = n_sigma * e[hit]
-            censor[hit, j] = 1 if kind == "upper_limit" else -1
-    return flux, err, present, censor
 
 
 def _checked_flags(flags, names, n_bands, n_rows):

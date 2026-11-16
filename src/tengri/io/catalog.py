@@ -35,7 +35,13 @@ from typing import Any
 
 import numpy as np
 
-from tengri.utils.catalog_status import FLUX_UNITS, assign_cell_status
+from tengri.utils.catalog_status import (
+    FLUX_UNITS,
+    assign_cell_status,
+    flag_specs,
+    normalize_sentinels,
+    sentinel_specs,
+)
 
 __all__ = ["CANDELS_TO_TENGRI", "CIGALE_TO_TENGRI", "load_catalog"]
 
@@ -235,7 +241,9 @@ def load_catalog(
     filter_mapping: dict[str, str] | None = None,
     id_col: str | None = None,
     delimiter: str | None = None,
-    sentinels: Mapping[float, str | tuple[str, float]] | None = None,
+    sentinels: Mapping[Any, Any] | None = None,
+    flag_cols: Mapping[str, str] | None = None,
+    flag_map: Mapping[Any, Any] | None = None,
 ) -> dict[str, Any]:
     """Load a photometric catalog with auto-detected flux/error columns.
 
@@ -440,22 +448,49 @@ def load_catalog(
     # One flat column per quantity, named as ``Catalog`` reads them by default: the
     # flux under the band name, its error under ``<band>_err``, and (when sentinels
     # are declared) the censor flags under ``<band>_censor``.
+    band_sentinels = normalize_sentinels(sentinels, list(band_cols))
+    _check_flag_declaration(flag_cols, flag_map, sentinels, band_cols, by_name)
     for band, cols in band_cols.items():
         flux = np.array(by_name[cols["flux"]], dtype=float)
         err = np.array(by_name[cols["err"]], dtype=float)
+        specs = None
+        if band_sentinels is not None:
+            specs = sentinel_specs(flux, err, band_sentinels[band], band)
+        elif flag_cols is not None and band in flag_cols:
+            specs = flag_specs(by_name[flag_cols[band]], flag_map, flag_cols[band])
         status = assign_cell_status(
             flux[:, None],
             err[:, None],
             names=(band,),
             err_names=(f"{band}_err",),
             flux_unit=flux_unit,
-            sentinels=sentinels,
+            cell_status=None if specs is None else [specs],
         )
         _put_column(out, band, status.flux[:, 0])
         _put_column(out, f"{band}_err", status.err[:, 0])
-        if sentinels is not None:
-            _put_column(out, f"{band}_censor", status.censor[:, 0])
+        if band_sentinels is not None or flag_cols is not None:
+            censor = status.censor if status.censor is not None else np.zeros(flux.shape, int)
+            _put_column(out, f"{band}_censor", censor[:, 0])
     return out
+
+
+def _check_flag_declaration(flag_cols, flag_map, sentinels, band_cols, by_name) -> None:
+    """Refuse an incomplete or conflicting flag declaration before any column is read."""
+    if flag_cols is None and flag_map is None:
+        return
+    if flag_cols is None or flag_map is None:
+        raise ValueError(
+            "flag_cols and flag_map are given together: name the columns and the map."
+        )
+    if sentinels is not None:
+        raise ValueError(
+            "sentinels and flag_cols declare the same cell status in two ways; give one of them."
+        )
+    for band, column in flag_cols.items():
+        if band not in band_cols:
+            raise ValueError(f"flag_cols names band {band!r} that the table does not have.")
+        if column not in by_name:
+            raise ValueError(f"flag_cols[{band!r}] = {column!r}: no such column in the catalog.")
 
 
 def _put_column(table: dict[str, np.ndarray], key: str, values: np.ndarray) -> None:
