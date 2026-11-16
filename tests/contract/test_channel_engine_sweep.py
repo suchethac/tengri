@@ -969,6 +969,141 @@ def test_flat_line_prior_limit_is_the_log_width_asymptote():
     np.testing.assert_allclose(values[1e18] - values[1e16], expected, rtol=1e-6)
 
 
+# ── Line columns of very different norms, and a collinear pair ─────────────────────────
+
+
+def _out_of_band_lines():
+    """The marginalized-line fixture of the golden values: 11 columns, 3 of them informative.
+
+    Two columns are exactly zero (lines outside the wavelength range), five have whitened
+    norms from 1e-30 to 1e-150, and two are exactly collinear (the whitened correlation is
+    1 to the last float64 digit). The amplitude prior is a width of 100 against fluxes of 1e-10.
+    """
+    fitter = fixtures.fitter_of("spec_lines")
+    term, physical = fixtures.build_term(fitter)
+    preds = term.predictions(physical, fitter._data_args)
+    data = fitter._data_args
+    return (
+        np.asarray(preds.spec_fnu),
+        np.asarray(data["data"]),
+        np.asarray(data["noise"]),
+        np.asarray(preds.eline_design),
+        float(term.noise.lines.prior_variance),
+    )
+
+
+def _svd_line_density(model, obs, err, design, variance):
+    """Full normalized log-density of the lines marginalized under ``a ~ N(0, variance)``.
+
+    From the singular values ``s`` of ``B = G sqrt(variance) / sigma``: the data covariance is
+    ``sigma (I + B B^T) sigma``, so ``-1/2 sum log1p(s^2)`` is its log-determinant and the
+    residual is ``r^T r - sum s^2/(1+s^2) (u . r)^2``. The prior enters as ``1 + s^2``, never as
+    a difference of squares, so a null or collinear column costs nothing. Agrees with a 120-digit
+    mpmath evaluation of the dense covariance to 6e-13 nat on the fixture.
+    """
+    err = np.asarray(err, dtype=float)
+    whitened = np.asarray(design, dtype=float) * np.sqrt(variance) / err[:, None]
+    r = (np.asarray(obs, dtype=float) - np.asarray(model, dtype=float)) / err
+    u, sv, _ = np.linalg.svd(whitened, full_matrices=False)
+    chi = r @ r - np.sum(sv**2 / (1.0 + sv**2) * (u.T @ r) ** 2)
+    n = r.size
+    return float(
+        -0.5 * n * np.log(2 * np.pi)
+        - np.sum(np.log(err))
+        - 0.5 * np.sum(np.log1p(sv**2))
+        - 0.5 * chi
+    )
+
+
+def _lines_value(model, obs, err, design, variance):
+    from tengri.inference.likelihoods.terms import eline_flat_marginal_term
+
+    return eline_flat_marginal_term(model, obs, err, design, prior_variance=variance)
+
+
+def _well_conditioned_lines():
+    """Five lines with columns of comparable norm, no collinearity, a prior width of 100."""
+    rng = np.random.default_rng(3)
+    model = 1e-10 * (1.0 + 0.3 * rng.random(N_PIX))
+    err = 0.1 * model
+    design = rng.standard_normal((N_PIX, 5)) * 0.2 * model.mean()
+    obs = model * (1.0 + 0.1 * rng.standard_normal(N_PIX)) + design @ (0.5 * np.ones(5))
+    return model, obs, err, design, 1e4
+
+
+_LINE_FIXTURES = {"out_of_band": _out_of_band_lines, "well_conditioned": _well_conditioned_lines}
+
+#: Measured: the value against the stable reference, float64 and eager or jitted, is within
+#: 3e-16 relative on the first fixture; this leaves four orders of margin.
+LINES_RTOL = 1e-12
+
+
+@pytest.mark.parametrize("label", _LINE_FIXTURES)
+def test_line_marginal_matches_the_stable_reference_eager_and_jitted(label):
+    args = _LINE_FIXTURES[label]()
+    reference = _svd_line_density(*args)
+    eager = float(_lines_value(*args))
+    jitted = float(jax.jit(_lines_value)(*args))
+    np.testing.assert_allclose(eager, reference, rtol=LINES_RTOL)
+    np.testing.assert_allclose(jitted, reference, rtol=LINES_RTOL)
+    np.testing.assert_allclose(eager, jitted, rtol=LINES_RTOL)
+
+
+def _moved(args, v, a, m):
+    model, obs, err, design, variance = args
+    return model * m, obs, err * a, design, variance * v
+
+
+@pytest.mark.parametrize("label", _LINE_FIXTURES)
+def test_line_marginal_gradients_are_finite_nonzero_and_match_finite_differences(label):
+    """Gradient with respect to the prior variance, the noise scale and the model scale."""
+    args = _LINE_FIXTURES[label]()
+
+    def value(x):
+        return _lines_value(*_moved(args, *x))
+
+    point = np.ones(3)
+    grad = np.asarray(jax.grad(value)(point))
+    jitted = np.asarray(jax.jit(jax.grad(value))(point))
+    assert np.all(np.isfinite(grad)), "a non-finite gradient would break every sampler step"
+    assert np.all(grad != 0.0), "an identically zero gradient would freeze that parameter"
+    np.testing.assert_allclose(jitted, grad, rtol=1e-9)
+    step = 1e-4
+    fd = np.empty(3)
+    for k in range(3):
+        up, down = point.copy(), point.copy()
+        up[k] += step
+        down[k] -= step
+        fd[k] = (
+            _svd_line_density(*_moved(args, *up)) - _svd_line_density(*_moved(args, *down))
+        ) / (2 * step)
+    np.testing.assert_allclose(grad, fd, rtol=1e-5)
+
+
+#: Measured at float32 against the float64 reference: the value is within 1.6e-7 relative (the
+#: spacing of float32 at 857 is 6e-5 nat), the gradients within 2.9e-6. Tolerances leave a factor
+#: of 6 and 7.
+LINES_RTOL_FLOAT32 = 1e-6
+LINES_GRAD_RTOL_FLOAT32 = 2e-5
+
+
+@pytest.mark.parametrize("label", _LINE_FIXTURES)
+def test_line_marginal_in_float32_stays_within_its_measured_error(label):
+    args = _LINE_FIXTURES[label]()
+    reference = _svd_line_density(*args)
+    single = (*(np.asarray(x, dtype=np.float32) for x in args[:4]), args[4])
+    for run in (_lines_value, jax.jit(_lines_value)):
+        np.testing.assert_allclose(float(run(*single)), reference, rtol=LINES_RTOL_FLOAT32)
+
+    def value(x, inputs):
+        return _lines_value(*_moved(inputs, *x))
+
+    grad64 = np.asarray(jax.grad(value)(np.ones(3), args))
+    grad32 = np.asarray(jax.grad(value)(np.ones(3, dtype=np.float32), single))
+    assert np.all(np.isfinite(grad32)) and np.all(grad32 != 0.0)
+    np.testing.assert_allclose(grad32, grad64, rtol=LINES_GRAD_RTOL_FLOAT32)
+
+
 # ── Refusals by name ──────────────────────────────────────────────────────────────────
 
 

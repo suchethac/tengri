@@ -13,6 +13,7 @@ from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
+from jax.scipy.linalg import solve_triangular
 
 from tengri.observation.banded import BandedMatrix, banded_forward_substitution
 from tengri.observation.noise import multivariate_student_t_log_density, student_t_log_density
@@ -157,9 +158,12 @@ def marginalize_linear_nuisance(
     ``prior_precision``, not by a traced value.
 
     **Gradient-safe**: yes, with respect to ``data``, ``model0``, ``design``, ``sigma``,
-    ``prior_mean``, ``prior_precision`` and ``scale``. Solves use ``jnp.linalg.solve``
-    and the log-determinants use ``jnp.linalg.slogdet``; no matrix inverse, clamp or
-    jitter is applied.
+    ``prior_mean``, ``prior_precision`` and ``scale``. The Gaussian solve is a QR of the
+    design stacked on a factor of the prior (square-root form), so a design column that is
+    zero or collinear with another, under a wide prior, does not lose the prior in a sum of
+    squares; the log-determinant is ``2 sum ln |R_ii|``. No matrix inverse, clamp or jitter
+    is applied. A flat-prior column that is zero or collinear has no prior to regularize it
+    and the value is not finite, as for the normal equations; give it a ``col_mask`` entry.
 
     **vmap**: yes over any leading batch axis.
 
@@ -365,32 +369,40 @@ def marginalize_linear_nuisance(
         whitened = banded_forward_substitution(chol_lower, rhs)
         resid, design_w = whitened[:, 0], whitened[:, 1:]
         normalization = diag_gaussian_log_normalization(chol_lower.data[0], weight)
-    prior_s = precision * coef_scale**2
-
-    gram = design_w.T @ design_w + prior_s
-    rhs = design_w.T @ resid + coef_scale * (precision @ mean)
-    gram_m = d_mat @ gram @ d_mat + (eye - d_mat)
-    rhs_m = d_mat @ rhs
-
-    beta_s = jnp.linalg.solve(gram_m, rhs_m)
-    cov_s = jnp.linalg.solve(gram_m, eye)
-    _sign_m, logdet_m = jnp.linalg.slogdet(gram_m)
-
-    log_like = (
-        normalization - 0.5 * jnp.dot(resid, resid) + 0.5 * jnp.dot(rhs_m, beta_s) - 0.5 * logdet_m
-    )
+    # Square-root form. With ``F`` a factor of the scaled Gaussian prior (``F^T F = P'``) and
+    # ``A = [X~ D; F; I - D]``, the normal-equation matrix is ``M' = A^T A``. A QR of ``A``
+    # gives ``M' = R^T R`` without forming ``X~^T X~``: the prior stays an added block, so a
+    # null or collinear column of the design is regularized by it instead of being lost in a
+    # sum of squares that differs from it by 25 orders of magnitude.
     if prior_precision is None:
-        log_like = log_like + jnp.sum(col) * jnp.log(coef_scale)
+        gauss_rows = jnp.zeros((0, n_col), dtype=dtype)
+        target_rows = jnp.zeros((0,), dtype=dtype)
+        prior_term = jnp.zeros((), dtype=dtype)
     else:
         gaussian = (jnp.diag(precision) > 0).astype(dtype)
         flat = col * (1.0 - gaussian) if flat_mask is None else jnp.asarray(flat_mask, dtype)
+        # Positive definite: a flat or masked column is the identity, decoupled from the rest.
         prior_unscaled = d_mat @ precision @ d_mat + (eye - d_mat) + jnp.diag(flat)
-        _sign_p, logdet_p = jnp.linalg.slogdet(prior_unscaled)
-        log_like = (
-            log_like
-            + 0.5 * (logdet_p + 2.0 * jnp.sum(col) * jnp.log(coef_scale))
-            - 0.5 * jnp.dot(col * mean, precision @ (col * mean))
-        )
+        upper = jnp.linalg.cholesky(prior_unscaled).T
+        keep = col * (1.0 - flat)
+        gauss_rows = coef_scale * keep[:, None] * upper * col[None, :]
+        # F mu~ with mu~ = mu / s; the scale cancels, and a masked column carries no mean.
+        target_rows = keep * (upper @ (col * mean))
+        prior_term = 2.0 * jnp.sum(jnp.log(jnp.abs(jnp.diag(upper))))
+    stacked = jnp.concatenate([design_w * col[None, :], gauss_rows, jnp.diag(1.0 - col)], axis=0)
+    target = jnp.concatenate([resid, target_rows, jnp.zeros(n_col, dtype=dtype)])
+    q_mat, r_mat = jnp.linalg.qr(stacked)
+    beta_s = solve_triangular(r_mat, q_mat.T @ target, lower=False)
+    r_inv = solve_triangular(r_mat, eye, lower=False)
+    cov_s = r_inv @ r_inv.T
+    misfit = target - stacked @ beta_s
+    logdet_m = 2.0 * jnp.sum(jnp.log(jnp.abs(jnp.diag(r_mat))))
+
+    log_like = normalization - 0.5 * jnp.dot(misfit, misfit) - 0.5 * logdet_m
+    if prior_precision is None:
+        log_like = log_like + jnp.sum(col) * jnp.log(coef_scale)
+    else:
+        log_like = log_like + 0.5 * (prior_term + 2.0 * jnp.sum(col) * jnp.log(coef_scale))
 
     return MarginalResult(
         log_like=log_like,
