@@ -191,8 +191,8 @@ def _band_table_refusal(ctx, nebular) -> str | None:
         )
     if _dig_may_be_active(ctx.spec):
         return "the diffuse ionized gas may be active (neb_dig_frac is not pinned to zero)"
-    if "redshift" not in ctx.spec.fixed_params:
-        return "redshift is free (the band table is built at one redshift)"
+    if "redshift" not in ctx.spec.fixed_params or ctx.z_nodes is not None:
+        return "redshift is a runtime input (the band table is built at one redshift)"
     if "neb_eline_sigma_kms" not in ctx.spec.fixed_params:
         return "neb_eline_sigma_kms is free (line band coefficients are fixed at one width)"
     bad = sorted(
