@@ -14,8 +14,8 @@
   --w-ground: radial-gradient(110% 85% at 50% 50%, #17202c 0%, #0F1419 62%, #0b0f14 100%);
   --legh: 0px;
   position: relative;
-  height: min(85vh, 900px);
-  min-height: 420px;
+  height: min(94vh, 960px);
+  min-height: 600px;
   margin: 1rem 0 1.5rem;
   border-radius: 12px;
   overflow: hidden;
@@ -24,12 +24,6 @@
   font: 16px/1.5 "IBM Plex Sans", system-ui, sans-serif;
   container-type: size;
   container-name: tgwheel;
-}
-/* On wide screens, use the empty right-hand gutter (this page has no in-page TOC):
-   a landscape wheel puts the legend at the left, as in the talk figure, and gives
-   every wedge more room for its label. */
-@media (min-width: 1200px) {
-  .tg-wheel { width: min(1180px, calc(100vw - var(--sidebar-width, 15em) - 6rem)); height: min(88vh, 900px); }
 }
 .tg-wheel:focus { outline: none; }
 .tg-wheel:focus-visible { box-shadow: 0 0 0 2px #7AB8E8 inset; }
@@ -76,19 +70,13 @@ body[data-theme="light"] .tg-wheel .arc.sel { filter: brightness(.82) saturate(1
 .tg-wheel .key b { color: var(--w-ink); font-weight: 600; }
 .tg-wheel .key.off { opacity: 0; }
 
-.tg-wheel .legend { position: absolute; left: 18px; top: 50%; transform: translateY(-50%); list-style: none; margin: 0; padding: 0; font-size: clamp(14px, 1.6cqw, 20px); font-weight: 500; transition: opacity .3s; z-index: 1; }
-.tg-wheel .legend li { display: flex; align-items: center; gap: .6em; padding: .3em .5em; margin: 0; border-radius: 6px; cursor: pointer; color: var(--w-ink); }
+/* Legend: always a centered row across the top; the wheel fits below it. */
+.tg-wheel .legend { position: absolute; left: 0; right: 0; top: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 6px; list-style: none; margin: 0; padding: 12px 12px 0; font-size: clamp(13px, 2.2cqw, 18px); font-weight: 500; transition: opacity .3s; z-index: 1; }
+.tg-wheel .legend li { display: flex; align-items: center; gap: .6em; padding: .22em .5em; margin: 0; border-radius: 6px; cursor: pointer; color: var(--w-ink); }
 .tg-wheel .legend li:hover, .tg-wheel .legend li.on, .tg-wheel .legend li:focus-visible { background: var(--w-hover); outline: none; }
 .tg-wheel .legend i { width: .85em; height: .85em; border-radius: .2em; flex: none; }
+.tg-wheel .fig { top: var(--legh, 0px); bottom: var(--keyh, 0px); }
 
-@container tgwheel (max-width: 1000px) and (min-aspect-ratio: 1/1) {
-  .tg-wheel .legend { display: none; }
-}
-@container tgwheel (max-aspect-ratio: 1/1) {
-  .tg-wheel .legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 6px; left: 0; right: 0; top: 0; transform: none; padding: 12px 12px 0; font-size: clamp(13px, 3.4cqw, 18px); }
-  .tg-wheel .legend li { padding: .22em .5em; }
-  .tg-wheel .fig { top: var(--legh, 0px); }
-}
 @container tgwheel (max-width: 600px) {
   .tg-wheel .key { display: none; }
 }

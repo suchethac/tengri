@@ -130,6 +130,11 @@
 
     function colorArcs() {
       arcs.attr("fill", d => d.depth === 1 ? P.module(d.col) : d.depth === 2 ? P.group(d.col) : P.model(d.col)).attr("stroke", P.bg);
+      // Ring labels carry a halo in their ring's fill: a label that runs past its wedge edge
+      // then masks the border line under it instead of being cut by it.
+      labG.selectAll("text.ring-t")
+        .attr("stroke", d => d.depth === 1 ? P.module(d.col) : P.group(d.col))
+        .attr("stroke-width", 3.5).attr("stroke-linejoin", "round").style("paint-order", "stroke");
     }
 
     function render() {
@@ -217,18 +222,22 @@
           // Free angle on each side: up to where the neighbor's own label starts.
           const freeL = wrap(mid - midOf(prev)) - labelHalf(prev) - pad;
           const freeR = wrap(midOf(next) - mid) - labelHalf(next) - pad;
-          const room = 2 * Math.min(freeL, freeR);
+          // Free arc runs from mid-freeL to mid+freeR. The label may shift toward the roomier
+          // side, but its center stays inside its own wedge so it still reads as that wedge's.
+          const lo = mid - freeL, hi = mid + freeR;
           const g = d._g;
           const cands = [{ lines: [d.data.name] }];
           const two = splitTwo(d.data.name);
           if (two && 2.25 * target <= g.band * .82) cands.push({ lines: two });
-          if (SHORT[d.data.name] && !d._lab.short) cands.push({ lines: [SHORT[d.data.name]] });
+          const keepShort = d._lab.short && d._lab.px >= target;
+          if (SHORT[d.data.name] && !keepShort) cands.push({ lines: [SHORT[d.data.name]] });
           for (const c of cands) {
             const r = c.lines.length === 2 ? g.rm - .55 * target : g.rm;
             const need = Math.max(...c.lines.map(t => measure(t, target))) / (r * .97);
-            if (need <= room) {
-              const half = need / 2 / .88;
-              d._g = { ...g, a0: mid - half, a1: mid + half, span: 2 * half };
+            const cMin = Math.max(lo + need / 2, g.a0), cMax = Math.min(hi - need / 2, g.a1);
+            if (cMin <= cMax) {
+              const cen = Math.max(cMin, Math.min(cMax, mid)), half = need / 2 / .88;
+              d._g = { ...g, a0: cen - half, a1: cen + half, span: 2 * half };
               d._lab = { lines: c.lines, px: target };
               return;
             }
@@ -270,7 +279,7 @@
         }
         d._lab = best; fit[d.depth].push(best.px);
       });
-      if (!top) overflowNarrow(ringT.data().filter(d => d._vis), OVER);
+      if (!top) { overflowNarrow(ringT.data().filter(d => d._vis), OVER); overflowNarrow(ringT.data().filter(d => d._vis), OVER - 1); }
       const lvl = {}; [1, 2].forEach(k => { const m = fit[k].length ? Math.min(...fit[k]) : 0; lvl[k] = m >= MIN ? m : 0; });
 
       const baseOff = d => (d.depth === 1 ? R * .018 : R * .016);
@@ -374,10 +383,14 @@
     // ---- layout ---------------------------------------------------------------
     // Small screens: 1.8x in the full view to fill the width; 0.9x zoomed, which keeps the
     // ring bands tall enough for readable labels while model names use the edge room.
-    const growFor = d => Math.min(W, H) < 600 ? (d === root ? 1.8 : .9) : 1;
+    // Applies only when the wheel is width-limited (a phone), never to a short window.
+    const growFor = d => (W < 600 && W <= H) ? (d === root ? 1.8 : .9) : 1;
+    // The legend is a row across the top; the wheel area starts below it.
     function legH() {
-      const portrait = host.clientWidth <= host.clientHeight;
-      host.style.setProperty("--legh", (portrait && leg.style.opacity !== "0" ? leg.offsetHeight + 6 : 0) + "px");
+      host.style.setProperty("--legh", (leg.style.opacity !== "0" ? leg.offsetHeight + 6 : 0) + "px");
+      // The key line sits below the wheel area, never over it.
+      const keyOn = !keyEl.classList.contains("off") && getComputedStyle(keyEl).display !== "none";
+      host.style.setProperty("--keyh", (keyOn ? keyEl.offsetHeight + 14 : 0) + "px");
     }
     function size() {
       W = fig.clientWidth; H = fig.clientHeight; if (!W || !H) return;
