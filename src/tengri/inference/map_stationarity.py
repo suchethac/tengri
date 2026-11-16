@@ -191,3 +191,22 @@ def stationarity(loss: Callable, x: jax.Array, data=None) -> Stationarity:
         positive_definite=bool(positive_definite),
         hessian_finite=bool(hessian_finite),
     )
+
+
+def nonfinite_parameter_names(nonfinite_flat, unravel_fn: Callable) -> tuple[str, ...]:
+    """Names of the parameters that own a flagged coordinate of a flat vector.
+
+    Parameters
+    ----------
+    nonfinite_flat : array_like of bool, shape (D,)
+        True where a derivative with respect to that flat coordinate is non-finite.
+    unravel_fn : callable
+        Maps a flat ``(D,)`` vector to the parameter dict it was raveled from.
+
+    Returns
+    -------
+    tuple of str
+        Parameter names with at least one flagged coordinate, in dict order.
+    """
+    flagged = unravel_fn(jnp.asarray(nonfinite_flat, dtype=float))
+    return tuple(name for name, value in flagged.items() if bool(jnp.any(value > 0.0)))

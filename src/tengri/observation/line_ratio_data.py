@@ -35,9 +35,9 @@ import dataclasses
 import jax.numpy as jnp
 
 from tengri._cache_keys import KeyPolicy, content, derive_key, shape
-from tengri.observation.line_list import _DEFAULT_OPTICAL_LINES
+from tengri.observation.line_list import _CATALOG_LINES
 
-_NAME_TO_WAVELENGTH: dict[str, float] = {t[0]: t[1] for t in _DEFAULT_OPTICAL_LINES}
+_NAME_TO_WAVELENGTH: dict[str, float] = {t[0]: t[1] for t in _CATALOG_LINES}
 
 
 @dataclasses.dataclass(frozen=True)

@@ -65,7 +65,9 @@ _OBS = Observation(
 # Re-pinned 2026-11-15 after #3434 (in #3462): an undeclared metallicity scatter is now a node-
 # exact cubic-Hermite read of the SSP, +0.044% on this band; 8aff37cb3 reproduces the previous
 # value exactly.
-_OPT_EXACT_MAIN = 3.801128300673926e-27
+# Re-pinned after #3528 (PCHIP metallicity read of the SSP table in log Z):
+# 3.801128300673926e-27 -> 3.8016005414421355e-27, +1.2424e-4 relative.
+_OPT_EXACT_MAIN = 3.8016005414421355e-27
 
 
 def _build(ssp, approx):
