@@ -20,9 +20,11 @@ Live cells assert, for each channel, noise and presence variant:
 
 from __future__ import annotations
 
+import functools
 import gc
 
 import jax
+import jax.numpy as jnp
 import numpy as np
 import pytest
 import scipy.stats
@@ -972,6 +974,7 @@ def test_flat_line_prior_limit_is_the_log_width_asymptote():
 # ── Line columns of very different norms, and a collinear pair ─────────────────────────
 
 
+@functools.cache
 def _out_of_band_lines():
     """The marginalized-line fixture of the golden values: 11 columns, 3 of them informative.
 
@@ -1102,6 +1105,95 @@ def test_line_marginal_in_float32_stays_within_its_measured_error(label):
     grad32 = np.asarray(jax.grad(value)(np.ones(3, dtype=np.float32), single))
     assert np.all(np.isfinite(grad32)) and np.all(grad32 != 0.0)
     np.testing.assert_allclose(grad32, grad64, rtol=LINES_GRAD_RTOL_FLOAT32)
+
+
+def _student_lines(design, *, col_mask=None, dof=4.0, scale=(1.0, 1.0), dtype=np.float64):
+    """Student-t marginal of the lines of fixture (a); ``scale`` moves noise and residual."""
+    from tengri.observation.eline_marginalization import line_marginal
+
+    model, obs, err, _design, variance = _out_of_band_lines()
+    result, _width, _scatter = line_marginal(
+        ((obs - model) * scale[1]).astype(dtype),
+        (err * scale[0]).astype(dtype),
+        jnp.asarray(design, dtype=dtype),
+        variance,
+        col_mask=col_mask,
+        dof=dof,
+    )
+    return result.log_like
+
+
+def _fixture_variants():
+    design = _out_of_band_lines()[3]
+    whitened = np.linalg.norm(design / _out_of_band_lines()[2][:, None], axis=0)
+    projected = design.copy()
+    projected[:, 7] = design[:, 8] * (design[:, 7] @ design[:, 8]) / (design[:, 8] @ design[:, 8])
+    return {
+        "full": (design, None),
+        "col7_on_col8": (projected, None),
+        "zero_columns_masked": (design, (whitened > 0).astype(float)),
+        "negligible_columns_masked": (design, (whitened > 1e-20).astype(float)),
+        "columns_dropped": (design[:, [1, 7, 8, 9]], None),
+    }
+
+
+#: Measured on fixture (a): eager and jitted agree to 2.7e-16 relative, and each identity of the
+#: model (col 7 replaced by its projection on col 8, the null columns masked, the null columns
+#: removed) holds to 9e-14 relative. The tolerances leave two orders of margin.
+STUDENT_T_EAGER_JIT_RTOL = 1e-12
+STUDENT_T_IDENTITY_RTOL = 1e-11
+
+
+def test_student_t_line_marginal_agrees_eager_and_jitted_on_the_out_of_band_fixture():
+    design, mask = _fixture_variants()["full"]
+    eager = float(_student_lines(design, col_mask=mask))
+    jitted = float(jax.jit(lambda d: _student_lines(d, col_mask=mask))(design))
+    np.testing.assert_allclose(eager, jitted, rtol=STUDENT_T_EAGER_JIT_RTOL)
+
+
+@pytest.mark.parametrize(
+    "variant",
+    ("col7_on_col8", "zero_columns_masked", "negligible_columns_masked", "columns_dropped"),
+)
+def test_student_t_line_marginal_is_invariant_under_exact_identities_of_the_model(variant):
+    """A column replaced by an exact multiple of another's span, or a null column removed."""
+    full = float(_student_lines(*_fixture_variants()["full"][:1], col_mask=None))
+    design, mask = _fixture_variants()[variant]
+    np.testing.assert_allclose(
+        float(_student_lines(design, col_mask=mask)), full, rtol=STUDENT_T_IDENTITY_RTOL
+    )
+
+
+def test_student_t_line_marginal_tends_to_the_gaussian_density_as_dof_grows():
+    """The Laplace value is exact as the degrees of freedom grow; measured 5e-6 nat at 1e8."""
+    args = _out_of_band_lines()
+    design = args[3]
+    value = float(_student_lines(design, dof=1e8))
+    assert abs(value - _svd_line_density(*args)) < 1e-4
+
+
+#: Measured on fixture (a): float32 gradients are within 7e-8 relative of float64.
+STUDENT_T_GRAD_RTOL_FLOAT32 = 1e-5
+
+
+@pytest.mark.parametrize("dtype", (np.float64, np.float32))
+def test_student_t_line_marginal_gradients_are_finite_and_nonzero(dtype):
+    design = _out_of_band_lines()[3]
+
+    def value(x):
+        return _student_lines(design, scale=(x[0], x[1]), dtype=dtype)
+
+    point = np.ones(2, dtype=dtype)
+    grad = np.asarray(jax.grad(value)(point))
+    jitted = np.asarray(jax.jit(jax.grad(value))(point))
+    assert np.all(np.isfinite(grad)), "a non-finite gradient would break every sampler step"
+    assert np.all(grad != 0.0), "an identically zero gradient would freeze that parameter"
+    reference = np.asarray(
+        jax.grad(lambda x: _student_lines(design, scale=(x[0], x[1])))(np.ones(2))
+    )
+    rtol = 1e-9 if dtype is np.float64 else STUDENT_T_GRAD_RTOL_FLOAT32
+    np.testing.assert_allclose(grad, reference, rtol=rtol)
+    np.testing.assert_allclose(jitted, reference, rtol=rtol)
 
 
 # ── Refusals by name ──────────────────────────────────────────────────────────────────

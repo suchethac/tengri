@@ -66,6 +66,9 @@ class MarginalResult(NamedTuple):
         Student-t noise only: the number of unmasked data [dimensionless], with the number of
         coefficients (``coef_hat.shape[0]``) the size of the problem the other two diagnostics
         describe. ``None`` for the Gaussian marginal.
+    log_det_cov : ndarray, shape ()
+        Natural log of ``det(coef_cov)``, from the triangular factor of the solve
+        (``-2 sum ln |R_ii|`` plus the scale), not from a determinant of ``coef_cov``.
     """
 
     log_like: jnp.ndarray
@@ -74,6 +77,7 @@ class MarginalResult(NamedTuple):
     weight_change: jnp.ndarray | None = None
     start_gap: jnp.ndarray | None = None
     n_data: jnp.ndarray | None = None
+    log_det_cov: jnp.ndarray | None = None
 
 
 def marginalize_linear_nuisance(
@@ -408,6 +412,7 @@ def marginalize_linear_nuisance(
         log_like=log_like,
         coef_hat=coef_scale * beta_s,
         coef_cov=coef_scale**2 * cov_s,
+        log_det_cov=2.0 * n_col * jnp.log(coef_scale) - logdet_m,
     )
 
 
@@ -486,13 +491,12 @@ def _student_t_marginal(data, model0, design, *, dof, sigma, chol_lower, pix_mas
                 present=None if pix_mask is None else weight > 0,
             )
             curvature = gaussian_at((dof + 3.0) / (dof + 1.0))
-        logdet_change = (
-            jnp.linalg.slogdet(curvature.coef_cov)[1] - jnp.linalg.slogdet(final.coef_cov)[1]
-        )
+        logdet_change = curvature.log_det_cov - final.log_det_cov
         return MarginalResult(
             log_like=final.log_like + density - weighted + 0.5 * logdet_change,
             coef_hat=beta,
             coef_cov=curvature.coef_cov,
+            log_det_cov=curvature.log_det_cov,
             weight_change=jax.lax.stop_gradient(jnp.max(jnp.abs(weights(final.coef_hat) - w))),
         )
 
