@@ -2142,12 +2142,8 @@ def compute_spectrum_conserving_lsf(
     # An array resolution takes the piecewise path (rest grids are not log-uniform).
     # The line-spread convolution sums the SED over its kernel, so the SED is divided
     # by its binary peak before the broadening and the factor is restored on the pixel
-    # luminosity. The factors are stop-gradient powers of two applied as multiplies:
-    # ``jnp.ldexp`` has an inexact derivative.
-    exponent = jnp.frexp(jax.lax.stop_gradient(jnp.max(jnp.abs(sed_rest))))[1]
-    dtype = jnp.result_type(sed_rest)
-    scale_in = jax.lax.stop_gradient(jnp.ldexp(jnp.ones((), dtype), -exponent))
-    scale_out = jax.lax.stop_gradient(jnp.ldexp(jnp.ones((), dtype), exponent))
+    # luminosity (:func:`_peak_factors`).
+    scale_in, scale_out = _peak_factors(sed_rest)
     sed_broad = apply_lsf(
         sed_rest * scale_in,
         wave_rest,
