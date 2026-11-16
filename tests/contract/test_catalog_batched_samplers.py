@@ -538,9 +538,11 @@ def test_window_chains_mix_on_a_well_posed_target(sampler):
 def test_single_chain_matches_the_golden_array_from_before_multichain():
     """``n_chains=1`` is bit-identical to the array the pre-multichain engine produced.
 
-    The golden was generated at the parent of the first multi-chain commit, with the same
-    key, target and counts, and is pinned as a file so the single-chain path cannot drift
-    without the change being visible.
+    The golden was generated from the engine at 783f36911~1, the parent of the first multi-chain
+    commit for NUTS, with the same key, target and counts, on darwin-arm64 with jax 0.10.0 and
+    blackjax 1.7.1. It is pinned as a file so the single-chain path cannot drift without the
+    change being visible. A different jax, blackjax or platform can move the last bits; regenerate
+    from that commit there before reading a mismatch as a change in the sampler.
     """
     from pathlib import Path
 
