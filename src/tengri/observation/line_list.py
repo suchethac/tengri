@@ -25,7 +25,8 @@ from __future__ import annotations
 
 import dataclasses
 import numbers
-from collections.abc import Sequence
+import re
+from collections.abc import Mapping, Sequence
 
 import jax.numpy as jnp
 import numpy as np
@@ -51,7 +52,7 @@ _DOUBLET_RATIOS: dict[tuple[str, str], float] = {
 #                is_strong, plot_group)
 # is_strong and plot_group match FastSpecFit emlines.ecsv (Moustakas+2023).
 
-_DEFAULT_OPTICAL_LINES: list[tuple[str, float, str, bool, bool, bool, str]] = [
+_CATALOG_LINES: list[tuple[str, float, str, bool, bool, bool, str]] = [
     # UV lines (1200-3000 Å)
     ("Lya", 1215.67, "H1", False, False, True, "lya_nv"),
     ("NV_1240", 1240.81, "N5", False, False, True, "lya_nv"),
@@ -67,6 +68,29 @@ _DEFAULT_OPTICAL_LINES: list[tuple[str, float, str, bool, bool, bool, str]] = [
     ("MgII_2803", 2803.53, "Mg2", False, False, True, "mgii_2796_2803"),
     ("NeV_3346", 3346.79, "Ne5", False, False, False, "nev_3346"),
     ("NeV_3426", 3426.85, "Ne5", False, False, False, "nev_3426"),
+    # Resolved UV components (rows in _RESOLVED_UV below). The C IV, O III], Si III] and
+    # C III] wavelengths are the Cue line catalog's (Cloudy labels, vacuum); N V, Si IV,
+    # N IV] and N III] are NIST ASD 5.12 vacuum wavelengths rounded to 0.01 A (observed
+    # for N V and Si IV, Ritz for the intercombination multiplets, which have no observed
+    # entry). Lya, HeII_1640, SiIII_1892 and CIII_1908 (the 1908.73 A component) above
+    # serve both views.
+    ("NV_1239", 1238.80, "N5", False, False, True, "lya_nv"),
+    ("NV_1243", 1242.80, "N5", False, False, True, "lya_nv"),
+    ("SiIV_1394", 1393.76, "Si4", False, False, False, "siliv_1396"),
+    ("SiIV_1403", 1402.77, "Si4", False, False, False, "siliv_1396"),
+    ("NIV_1483", 1483.32, "N4", False, False, False, "niv_1486"),
+    ("NIV_1486", 1486.50, "N4", False, False, True, "niv_1486"),
+    ("CIV_1548", 1548.19, "C4", False, True, True, "civ_1549_heii_1640"),
+    ("CIV_1551", 1550.77, "C4", False, True, True, "civ_1549_heii_1640"),
+    ("OIII_1661", 1660.81, "O3", False, False, False, "oiii_1663"),
+    ("OIII_1666", 1666.15, "O3", False, False, True, "oiii_1663"),
+    ("NIII_1747", 1746.82, "N3", False, False, False, "niii_1750"),
+    ("NIII_1749", 1748.65, "N3", False, False, False, "niii_1750"),
+    ("NIII_1750", 1749.67, "N3", False, False, True, "niii_1750"),
+    ("NIII_1752", 1752.16, "N3", False, False, False, "niii_1750"),
+    ("NIII_1754", 1754.00, "N3", False, False, False, "niii_1750"),
+    ("SiIII_1883", 1882.71, "Si3", False, False, False, "aliii_1857_siliii_1892_ciii_1908"),
+    ("CIII_1907", 1906.68, "C3", False, True, True, "aliii_1857_siliii_1892_ciii_1908"),
     # Optical lines (3700-6800 Å)
     ("H14", 3723.00, "H1", True, False, False, "balmer_high_order"),
     ("OII_3726", 3727.09, "O2", False, False, True, "oii_3726_29"),
@@ -113,6 +137,43 @@ _DEFAULT_OPTICAL_LINES: list[tuple[str, float, str, bool, bool, bool, str]] = [
     ("SIII_9069", 9071.10, "S3", False, False, False, "siii_9069"),
     ("SIII_9532", 9533.23, "S3", False, False, False, "siii_9532"),
 ]
+
+#: Rows of the resolved ultraviolet view (``LineList.default_uv``), the components of
+#: N V, Si IV, N IV], C IV, O III], N III], Si III] and C III] with the single lines
+#: between them. Rows named here and absent from the blended view are left out of
+#: ``LineList.default_optical``, which keeps one entry per blend.
+_RESOLVED_UV: frozenset[str] = frozenset(
+    {
+        "Lya",
+        "NV_1239",
+        "NV_1243",
+        "SiIV_1394",
+        "SiIV_1403",
+        "NIV_1483",
+        "NIV_1486",
+        "CIV_1548",
+        "CIV_1551",
+        "HeII_1640",
+        "OIII_1661",
+        "OIII_1666",
+        "NIII_1747",
+        "NIII_1749",
+        "NIII_1750",
+        "NIII_1752",
+        "NIII_1754",
+        "SiIII_1883",
+        "SiIII_1892",
+        "CIII_1907",
+        "CIII_1908",
+    }
+)
+
+#: Blended UV rows of the default view, at the doublet centroid, whose components are in
+#: ``_RESOLVED_UV``. The default view's C III] row is the 1908.73 A component itself.
+_BLENDED_UV: frozenset[str] = frozenset({"NV_1240", "SiIV_1396", "CIV_1549"})
+
+#: Components that exist only in the resolved view.
+_RESOLVED_ONLY: frozenset[str] = _RESOLVED_UV - {"Lya", "HeII_1640", "SiIII_1892", "CIII_1908"}
 
 # ── 13-line catalog matching eline_marginalization.py
 # Same wavelengths and insertion order as DEFAULT_LINE_WAVELENGTHS there.
@@ -270,6 +331,15 @@ class LineList:
     is_broad_candidate: tuple[bool, ...]
     is_strong: tuple[bool, ...]
     plot_group: tuple[str, ...]
+    #: Kinematic group of each line; ``()`` puts every line in the default group ``""``.
+    kinematic_group: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.kinematic_group and len(self.kinematic_group) != len(self.names):
+            raise ValueError(
+                f"kinematic_group has {len(self.kinematic_group)} entries for "
+                f"{len(self.names)} lines; give one group name per line or leave it empty."
+            )
 
     def cache_key(self) -> tuple:
         """Return a hashable cache key for this line catalog.
@@ -304,6 +374,22 @@ class LineList:
 
         """
         return len(self.names)
+
+    @property
+    def line_groups(self) -> tuple[str, ...]:
+        """Kinematic group name of each line; ``""`` is the default group."""
+        return self.kinematic_group if self.kinematic_group else ("",) * self.n_lines
+
+    @property
+    def kinematic_groups(self) -> tuple[str, ...]:
+        """Distinct kinematic group names, in order of first appearance."""
+        return tuple(dict.fromkeys(self.line_groups))
+
+    @property
+    def group_index(self) -> np.ndarray:
+        """Index into :attr:`kinematic_groups` of each line, shape ``(n_lines,)``."""
+        order = {name: i for i, name in enumerate(self.kinematic_groups)}
+        return np.array([order[g] for g in self.line_groups], dtype=int)
 
     @property
     def n_independent(self) -> int:
@@ -368,7 +454,9 @@ class LineList:
         constraints follow the FastSpecFit standard (Moustakas et al. 2023).
 
         """
-        lines = sorted(_DEFAULT_OPTICAL_LINES, key=lambda t: t[1])
+        lines = sorted(
+            (t for t in _CATALOG_LINES if t[0] not in _RESOLVED_ONLY), key=lambda t: t[1]
+        )
         return cls._from_line_tuples(lines)
 
     @classmethod
@@ -515,7 +603,29 @@ class LineList:
             assert ll.n_lines == 4
 
         """
-        return cls.default_optical().select(names=names)
+        lines = sorted(_CATALOG_LINES, key=lambda t: t[1])
+        return cls._from_line_tuples(lines).select(names=names)
+
+    @classmethod
+    def default_uv(cls) -> LineList:
+        """Rest-frame ultraviolet catalog with doublets and multiplets resolved.
+
+        Returns
+        -------
+        LineList
+            Lines between 1215 and 1910 Angstrom, each component a separate entry.
+
+        Notes
+        -----
+        For spectra with R of about 1000 or more (JWST/NIRSpec gratings at z > 5,
+        HST/COS and STIS locally), where N V, Si IV, N IV], C IV, O III], the N III]
+        multiplet, Si III] and C III] are resolved. No ratio is tied: the C III],
+        N IV], N III] and Si III] ratios are electron-density diagnostics, and the
+        resonant doublets depart from 2:1 when optically thick. The default optical
+        catalog keeps the blended entries (``CIV_1549``, ``CIII_1908``).
+        """
+        lines = sorted((t for t in _CATALOG_LINES if t[0] in _RESOLVED_UV), key=lambda t: t[1])
+        return cls._from_line_tuples(lines)
 
     # ── Filtering ─────────────────────────────────────────────────
 
@@ -671,6 +781,11 @@ class LineList:
         new_is_broad = tuple(self.is_broad_candidate[i] for i in kept_indices_list)
         new_is_strong = tuple(self.is_strong[i] for i in kept_indices_list)
         new_plot_group = tuple(self.plot_group[i] for i in kept_indices_list)
+        new_group = (
+            tuple(self.kinematic_group[i] for i in kept_indices_list)
+            if self.kinematic_group
+            else ()
+        )
 
         # Rebuild doublets, keep only if both members survived the filter
         new_doublets: list[DoubletConstraint] = []
@@ -693,6 +808,130 @@ class LineList:
             is_broad_candidate=new_is_broad,
             is_strong=new_is_strong,
             plot_group=new_plot_group,
+            kinematic_group=new_group,
+        )
+
+    # ── Kinematic groups ──────────────────────────────────────────
+
+    def with_kinematics(self, groups: Mapping[str, Mapping]) -> LineList:
+        r"""Return a copy with lines assigned to named kinematic groups.
+
+        Every line of one group shares a velocity offset and an intrinsic width
+        (the parameters ``eline_delta_v_kms_<group>`` and ``eline_sigma_kms_<group>``).
+        Lines named in no group stay in the default group, whose parameters are
+        ``eline_delta_v_kms`` and ``eline_sigma_kms``.
+
+        Parameters
+        ----------
+        groups : mapping of str to mapping
+            ``{group: {"lines": [names], "add": bool}}``. With ``"add": False``
+            (the default) the named lines move to the group. With ``"add": True``
+            each named line gains a second component, a new catalog entry
+            ``<line>__<group>`` at the same wavelength with its own amplitude,
+            which is how a broad component under a narrow line is written.
+
+        Returns
+        -------
+        LineList
+            New catalog. Added components follow the original lines.
+
+        Raises
+        ------
+        ValueError
+            On a group name that is not lowercase letters, digits and underscores,
+            an unknown line, a line moved to two groups, or a fixed-ratio doublet
+            split across two groups.
+
+        Notes
+        -----
+        Not JIT-compatible (build-time Python). A fixed-ratio doublet stays tied
+        inside its group, and an added component of both members is tied by the
+        same ratio. The group owns the kinematics and the line owns the amplitude,
+        the tying scheme of pPXF's kinematic components, FastSpecFit and PyQSOFit.
+
+        Examples
+        --------
+        ::
+
+            cat = LineList.default_uv().with_kinematics(
+                {
+                    "lya": {"lines": ["Lya"]},
+                    "niv_broad": {"lines": ["NIV_1486"], "add": True},
+                }
+            )
+        """
+        index = {name: i for i, name in enumerate(self.names)}
+        line_group = list(self.line_groups)
+        moved: dict[str, str] = {}
+        added: list[tuple[int, str]] = []
+        for group, spec in groups.items():
+            if not re.fullmatch(r"[a-z][a-z0-9_]*", group):
+                raise ValueError(
+                    f"kinematic group name {group!r} must be lowercase letters, digits "
+                    "and underscores, starting with a letter"
+                )
+            unknown_keys = set(spec) - {"lines", "add"}
+            if unknown_keys:
+                raise ValueError(
+                    f"kinematic group {group!r} has unknown keys {sorted(unknown_keys)}; "
+                    "the keys are 'lines' and 'add'"
+                )
+            lines = list(spec.get("lines", ()))
+            if not lines:
+                raise ValueError(f"kinematic group {group!r} names no lines")
+            missing = [nm for nm in lines if nm not in index]
+            if missing:
+                raise ValueError(
+                    f"kinematic group {group!r} names lines not in the catalog: {missing}. "
+                    f"Catalog lines: {list(self.names)}"
+                )
+            for nm in lines:
+                if spec.get("add", False):
+                    added.append((index[nm], group))
+                elif nm in moved:
+                    raise ValueError(
+                        f"line {nm!r} is in kinematic groups {moved[nm]!r} and {group!r}; "
+                        "a line belongs to one group (use 'add': True for a second component)"
+                    )
+                else:
+                    moved[nm] = group
+                    line_group[index[nm]] = group
+
+        for dc in self.doublets:
+            if line_group[dc.primary_idx] != line_group[dc.secondary_idx]:
+                raise ValueError(
+                    f"doublet {self.names[dc.primary_idx]}/{self.names[dc.secondary_idx]} has "
+                    "a fixed flux ratio and must stay in one kinematic group; got "
+                    f"{line_group[dc.primary_idx]!r} and {line_group[dc.secondary_idx]!r}"
+                )
+
+        new_index = {key: self.n_lines + k for k, key in enumerate(added)}
+        doublets = list(self.doublets)
+        for dc in self.doublets:
+            for group in dict.fromkeys(g for _, g in added):
+                primary, secondary = (dc.primary_idx, group), (dc.secondary_idx, group)
+                if primary in new_index and secondary in new_index:
+                    doublets.append(
+                        DoubletConstraint(
+                            primary_idx=new_index[primary],
+                            secondary_idx=new_index[secondary],
+                            ratio=dc.ratio,
+                        )
+                    )
+
+        src = [i for i, _ in added]
+        waves = np.asarray(self.wavelengths, dtype=np.float64)
+        return LineList(
+            names=self.names + tuple(f"{self.names[i]}__{g}" for i, g in added),
+            wavelengths=jnp.array(np.concatenate([waves, waves[src]])),
+            species=self.species + tuple(self.species[i] for i in src),
+            doublets=tuple(doublets),
+            is_balmer=self.is_balmer + tuple(self.is_balmer[i] for i in src),
+            is_broad_candidate=self.is_broad_candidate
+            + tuple(self.is_broad_candidate[i] for i in src),
+            is_strong=self.is_strong + tuple(self.is_strong[i] for i in src),
+            plot_group=self.plot_group + tuple(self.plot_group[i] for i in src),
+            kinematic_group=tuple(line_group) + tuple(g for _, g in added),
         )
 
     # ── Constraint matrix ─────────────────────────────────────────
@@ -815,6 +1054,7 @@ _LINE_LIST_CACHE_KEY_POLICY: KeyPolicy = {
     "is_broad_candidate": content("broad candidate flags determine line classification"),
     "is_strong": content("strong detection flags determine line classification"),
     "plot_group": content("plot group labels determine visualization grouping"),
+    "kinematic_group": content("kinematic groups set which width and offset each line takes"),
 }
 
 
@@ -893,8 +1133,8 @@ def _is_broad_candidate(name: str, species: str) -> bool:
 def _get_doublet_ratio_by_wavelength(primary_wave: float, secondary_wave: float) -> float:
     """Look up doublet ratio by wavelength proximity to known pairs (within 5 Å)."""
     for (pname, sname), ratio in _DOUBLET_RATIOS.items():
-        pwave = next((t[1] for t in _DEFAULT_OPTICAL_LINES if t[0] == pname), None)
-        swave = next((t[1] for t in _DEFAULT_OPTICAL_LINES if t[0] == sname), None)
+        pwave = next((t[1] for t in _CATALOG_LINES if t[0] == pname), None)
+        swave = next((t[1] for t in _CATALOG_LINES if t[0] == sname), None)
         if (
             pwave is not None
             and swave is not None

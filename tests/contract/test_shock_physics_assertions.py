@@ -18,9 +18,17 @@ pytestmark = pytest.mark.contract
 @lru_cache(maxsize=1)
 def _build_shock_dust_model():
     """Build shock+two_component model once, reuse to avoid SSP download overhead."""
-    from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel, WavePrecomp
+    from tengri import (
+        DEFAULT,
+        FREE,
+        Fixed,
+        Observation,
+        Photometry,
+        SEDModel,
+        WavePrecomp,
+        download_ssp,
+    )
     from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
-    from tengri.data import download_ssp
 
     ssp_path = download_ssp("fsps_prsc_miles_chabrier")
     ssp = load_ssp_data(str(ssp_path))
@@ -66,9 +74,17 @@ class TestShockAttenuationPhysics:
         publishing the attenuated form (silently returns zeros, or
         returns unattenuated form).
         """
-        from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel, WavePrecomp
+        from tengri import (
+            DEFAULT,
+            FREE,
+            Fixed,
+            Observation,
+            Photometry,
+            SEDModel,
+            WavePrecomp,
+            download_ssp,
+        )
         from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
-        from tengri.data import download_ssp
 
         ssp_path = download_ssp("fsps_prsc_miles_chabrier")
         ssp = load_ssp_data(str(ssp_path))
@@ -137,9 +153,8 @@ class TestShockAttenuationPhysics:
 
         Post-fix: r_b must satisfy r_g < r_r < r_i and minimum spread > 5%.
         """
-        from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel
+        from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel, download_ssp
         from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
-        from tengri.data import download_ssp
 
         ssp_path = download_ssp("fsps_prsc_miles_chabrier")
         ssp = load_ssp_data(str(ssp_path))
@@ -302,9 +317,17 @@ class TestShockAttenuationPhysics:
         Assertion: precomp shock delta is nonzero and scales roughly with exact
         (within 3x measured λ_eff vs exact band-integration overhead).
         """
-        from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel, WavePrecomp
+        from tengri import (
+            DEFAULT,
+            FREE,
+            Fixed,
+            Observation,
+            Photometry,
+            SEDModel,
+            WavePrecomp,
+            download_ssp,
+        )
         from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
-        from tengri.data import download_ssp
 
         ssp_path = download_ssp("fsps_prsc_miles_chabrier")
         ssp = load_ssp_data(str(ssp_path))

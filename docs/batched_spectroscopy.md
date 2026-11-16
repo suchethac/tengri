@@ -50,7 +50,6 @@ spectroscopy = Spectroscopy(
     eline_catalog=LineList.default_optical(),
     eline_prior_sigma=1e-27,
     eline_prior_type="flat",
-    eline_broad=False,
 )
 template = SEDModel.build(
     ssp_data=ssp,
@@ -347,8 +346,9 @@ Each limit below names what to do instead.
   build the template without one.
 - **Student-t noise and a calibration floor.** The batched likelihood is Gaussian with no floor.
   Use Gaussian noise.
-- **The Cloudy line prior and broad lines.** Use `eline_prior_type="flat"` or `"model"` and
-  `eline_broad=False`, or `eline_mode="fitted"` or `"off"`.
+- **The Cloudy line prior and kinematic groups.** Use `eline_prior_type="flat"` or `"model"`, or
+  `eline_mode="fitted"` or `"off"`. Fit lines in kinematic groups (`eline_kinematics`) with the
+  per-galaxy `Fitter`.
 - **Spectral indices.** Use the per-galaxy `Fitter`.
 - **Gaussian-process star formation histories.** Use a parametric history with the batch, or the
   per-galaxy `Fitter` for a Gaussian-process history.

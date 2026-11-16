@@ -200,6 +200,26 @@ class DeadFitError(InferenceError):
         self.step_size = float(step_size)
 
 
+class NonFiniteGradientError(InferenceError):
+    """The objective's gradient or Hessian is non-finite where a fit needs it (#3546).
+
+    Raised by the scipy MAP runner when the gradient at the optimizer's stopping
+    point is non-finite, and by the Laplace approximation when the gradient or the
+    Hessian at the expansion point is non-finite. A finite objective with a NaN
+    derivative stops L-BFGS-B after 0 iterations, and the Hessian built there is
+    NaN, so there is no optimum, covariance or evidence to return.
+
+    Attributes
+    ----------
+    parameters : tuple of str
+        Names of the free parameters whose derivative is non-finite.
+    """
+
+    def __init__(self, message: str, *, parameters: tuple[str, ...] = ()):
+        super().__init__(message)
+        self.parameters = tuple(parameters)
+
+
 class TengriIOError(TengriError, OSError):
     """File I/O, missing data files, format mismatch.
 
