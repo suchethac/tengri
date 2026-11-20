@@ -25,10 +25,10 @@ h5py==3.16.0
 chex==0.1.92
 optax==0.2.8
 blackjax==1.7.1
-pytest==9.1.1
+pytest==9.2.0
 pytest-xdist==3.8.0
 pytest-timeout==2.4.0
-ruff==0.15.6
+ruff==0.17.4
 jupytext==1.19.6
 bandit==1.9.4
 pip-audit==2.10.1
