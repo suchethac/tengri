@@ -32,6 +32,7 @@
 "tests/inference/test_geovi_jit.py": 133.0,
 "tests/inference/test_ghmc.py": 29.0,
 "tests/inference/test_hierarchical_backends_actually_run.py": 56.0,
+"tests/inference/test_hierarchical_new_samplers_real_fit.py": 5.0,
 "tests/inference/test_hmc_is.py": 110.0,
 "tests/inference/test_inference_context.py": 29.0,
 "tests/inference/test_laplace.py": 65.0,
