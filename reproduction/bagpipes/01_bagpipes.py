@@ -1268,7 +1268,7 @@ caveat(
 # its implicit dust emission removed (§7), and is shown to 1.2 μm.
 
 # %%
-from tengri.dust import list_laws
+from tengri import list_dust_laws
 
 # (BAGPIPES dust block, tengri law, label) for three matched single-screen laws.
 # Charlot & Fall 2000 is excluded: it is a two-component prescription in BAGPIPES
@@ -1278,7 +1278,7 @@ _law_pairs = [
     ({"type": "Cardelli", "Av": 1.0}, "cardelli", "Cardelli+1989 (MW)"),
     ({"type": "Salim", "Av": 1.0, "delta": 0.0, "B": 0.0}, "salim_sbl18", "Salim+2018 (δ=0)"),
 ]
-_tengri_laws = list_laws(headline=False).to_dict("fn")  # {name: fn(wave_aa) -> k at tau_V=1}
+_tengri_laws = list_dust_laws().to_dict("fn")  # {name: fn(wave_aa) -> k at tau_V=1}
 wave_law = np.logspace(np.log10(1000.0), np.log10(50000.0), 2000)
 
 

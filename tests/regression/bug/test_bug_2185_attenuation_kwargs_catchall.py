@@ -63,9 +63,9 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel, SSPData
+from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel, SSPData, list_dust_laws
 from tengri.components.dust.attenuation import TWO_COMPONENT_OVERRIDE_KEYS
-from tengri.components.dust.laws._registry import law_kwarg_names, law_screen_keys, list_laws
+from tengri.components.dust.laws._registry import law_kwarg_names, law_screen_keys
 from tengri.config.exceptions import ParameterError
 from tengri.observation.photometry import FilterCurve
 
@@ -107,7 +107,7 @@ def _all_laws() -> tuple[str, ...]:
     A hardcoded menu is how #1482 and #1833 were missed; a law registered later
     is covered here without editing this file.
     """
-    return tuple(sorted(row["name"] for row in list_laws(headline=False)))
+    return tuple(sorted(row["name"] for row in list_dust_laws()))
 
 
 @pytest.fixture(scope="module")

@@ -1013,7 +1013,7 @@ save_fig("prospector_03b_met_logzsol.png")
 # **Verification Status:** CROSSVAL — Attenuation law library
 
 # %%
-from tengri.dust import list_laws
+from tengri import list_dust_laws
 
 # (sedpy name, tengri law name, label) for the three matched laws.
 _law_pairs = [
@@ -1021,7 +1021,7 @@ _law_pairs = [
     ("powerlaw", "power_law", "Charlot & Fall 2000 (power law)"),
     ("conroy", "kriek_conroy", "Kriek & Conroy 2013"),
 ]
-_tengri_laws = list_laws(headline=False).to_dict("fn")  # {name: fn(wave_aa) -> k at tau_V=1}
+_tengri_laws = list_dust_laws().to_dict("fn")  # {name: fn(wave_aa) -> k at tau_V=1}
 wave_law = np.logspace(np.log10(1000.0), np.log10(30000.0), 2000)
 
 

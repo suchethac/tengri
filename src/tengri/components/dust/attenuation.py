@@ -91,14 +91,12 @@ from tengri.components.dust._params import (
     TEA_DELTA_DEFAULT,
 )
 from tengri.components.dust.laws._registry import (
-    _HEADLINE_LAWS as _HEADLINE_LAWS,
     DUST_LAWS as DUST_LAWS,
     DustLawRegistryEntry as DustLawRegistryEntry,
     _calzetti_kprime_unnormalized as _calzetti_kprime_unnormalized,
     _calzetti_l02_kprime as _calzetti_l02_kprime,
     _drude_profile as _drude_profile,
     law_kwarg_names as law_kwarg_names,
-    list_laws as list_laws,
     register_dust_law as register_dust_law,
     reject_unread_law_kwargs as reject_unread_law_kwargs,
     resolve_dust_law as resolve_dust_law,

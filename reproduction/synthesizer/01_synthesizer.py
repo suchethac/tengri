@@ -514,9 +514,9 @@ print(
 # **Verification Status:** CROSSVAL — Attenuation law library
 
 # %%
-from tengri.dust import list_laws
+from tengri import list_dust_laws
 
-_tengri_laws = list_laws(headline=False).to_dict("fn")
+_tengri_laws = list_dust_laws().to_dict("fn")
 wave_law = np.logspace(np.log10(1000.0), np.log10(30000.0), 2000)
 
 

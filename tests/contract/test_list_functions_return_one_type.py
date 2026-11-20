@@ -64,7 +64,6 @@ FORMER_OUTLIERS = [
 #: Pinned by label so that deleting one from the census — rather than
 #: fixing it — is a failure and not a silently smaller sweep.
 FORMER_SUBMODULE_OUTLIERS = [
-    "tengri.components.dust.list_laws",
     "tengri.data.list_remote_ssps",
     "tengri.list_instruments",  # top level, but via _CURATED_DIR not __all__
     "tengri.observation.filters.list_available_filters",
@@ -289,16 +288,16 @@ def test_prefix_filtering_still_works():
 # ── the six the wider census caught (#1574) ────────────────────────────────
 
 
-def test_list_laws_still_hands_back_live_callables():
+def test_list_dust_laws_still_hands_back_live_callables():
     """The conversion must not cost the payload: ``fn`` is the whole point."""
-    mapping = tengri.dust.list_laws().to_dict("fn")
+    mapping = tengri.list_dust_laws().to_dict("fn")
     assert mapping, "no attenuation laws"
     assert all(callable(fn) for fn in mapping.values())
 
 
-def test_list_laws_does_not_print_a_callable_repr():
+def test_list_dust_laws_does_not_print_a_callable_repr():
     """``fn`` is carried in the row but hidden — its str() is an address."""
-    assert "fn" not in repr(tengri.dust.list_laws())
+    assert "fn" not in repr(tengri.list_dust_laws())
 
 
 def test_list_filter_aliases_names_are_the_short_loader_spelling():
