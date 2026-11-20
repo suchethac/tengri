@@ -46,6 +46,11 @@ _CONCRETENESS_HELPERS = frozenset(
 ALLOWLIST: dict[str, str] = {
     # ---- answered: an unknown takes the general path, or raises at build ----
     # ---- build-time host predicate, never traced ----
+    "observation/banded.py::banded_cholesky": (
+        "a traced factor skips the host-side positive-definite check and returns the NaN "
+        "factor (the loss is then NaN, which the samplers reject); a concrete factor raises "
+        "ValueError on a non-positive-definite band (#3584)"
+    ),
     "observation/batched.py::_needs_z_twin": (
         "a host-side build-time check on the template spec (a fixed or free Distribution and "
         "the WavePrecomp flag), never called on a tracer; a fixed-z WavePrecomp template gets "

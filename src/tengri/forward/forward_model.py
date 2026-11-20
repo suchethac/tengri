@@ -976,6 +976,24 @@ class ForwardModel:
         configs = getattr(inner, "approx_configs", ())
         return tuple(configs)
 
+    @property
+    def _band_tables(self) -> dict:
+        """The wrapped SED's one band-table memo, so a gate's refusal reads the same either way."""
+        return self._inner_sed_for_delegation()._band_tables
+
+    def record_decline(self, name: str, slot: str, reason: str):
+        """Record a table gate's refusal on the wrapped SED's one memo.
+
+        Delegates to :meth:`SEDModel.record_decline`; ``approx='auto'`` records the
+        ``FeaturePrecomp`` refusal through here when the model it was handed is a
+        :class:`ForwardModel`.
+        """
+        return self._inner_sed_for_delegation().record_decline(name, slot, reason)
+
+    def band_table_decline(self, name: str, slot: str):
+        """The wrapped SED's recorded refusal of one slot, or ``None``."""
+        return self._inner_sed_for_delegation().band_table_decline(name, slot)
+
     def _has_modern_approx(self) -> bool:
         """Whether the wrapped SED carries a build-time ``approx=`` LUT."""
         inner = self._inner_sed_for_delegation()
