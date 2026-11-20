@@ -35,6 +35,7 @@ import warnings
 
 import pytest
 
+from tengri.config.exceptions import PrecomputeRefusal
 from tengri.forward.sed_model import FeaturePrecomp, WavePrecomp
 from tengri.inference.fitter import Fitter, _resolve_batch_fit_approx
 
@@ -55,6 +56,11 @@ class _StubObs:
     spectral_indices = None
 
 
+class _StubDecline:
+    def __init__(self, reason):
+        self.reason = reason
+
+
 class _StubModel:
     """The minimum both resolvers read, with the build-time spelling as a knob."""
 
@@ -64,17 +70,26 @@ class _StubModel:
         self.features_tabulate = features_tabulate
         self.observation = observation if observation is not None else _StubObs()
         self.received_cfg = None
+        self.declines = {}
         self._build_time_wave = build_time_wave
 
     def _has_modern_approx(self):
         return self._build_time_wave
 
+    def record_decline(self, name, slot, reason):
+        """Record a gate's refusal, as ``SEDModel.record_decline`` does (#3561)."""
+        self.declines[(name, slot)] = reason
+
+    def band_table_decline(self, name, slot):
+        reason = self.declines.get((name, slot))
+        return None if reason is None else _StubDecline(reason)
+
     def with_approx(self, cfg):
         cfgs = cfg if isinstance(cfg, tuple) else (cfg,)
         if any(isinstance(c, FeaturePrecomp) for c in cfgs) and not self.features_tabulate:
             # The real contract: a backend with nothing to tabulate raises
-            # (measured: neb='none' -> ValueError); the raise IS the detection.
-            raise ValueError("no emission lines to tabulate")
+            # (measured: neb='none' -> PrecomputeRefusal, #3561); that refusal IS the detection.
+            raise PrecomputeRefusal("no emission lines to tabulate")
         new = _StubModel(
             features_tabulate=self.features_tabulate,
             build_time_wave=self._build_time_wave,
@@ -97,6 +112,7 @@ class _StubFitterSelf:
     _fits_line_fluxes = Fitter._fits_line_fluxes
     _line_fluxes_for = Fitter._line_fluxes_for
     _fits_lines = Fitter._fits_lines
+    _feature_precomp_has_lines = Fitter._feature_precomp_has_lines
     _auto_approx_config = Fitter._auto_approx_config
     _add_feature_precomp = Fitter._add_feature_precomp
     _warn_lines_without_lut = Fitter._warn_lines_without_lut

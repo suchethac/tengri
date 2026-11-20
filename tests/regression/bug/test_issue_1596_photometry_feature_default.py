@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import pytest
 
+from tengri.config.exceptions import PrecomputeRefusal
 from tengri.forward.sed_model import FeaturePrecomp, WavePrecomp
 from tengri.inference.fitter import Fitter
 
@@ -30,22 +31,36 @@ class _StubApprox:
     feature_precomp = False
 
 
+class _StubDecline:
+    def __init__(self, reason):
+        self.reason = reason
+
+
 class _StubModel:
     def __init__(self, *, features_tabulate):
         self.approx = _StubApprox()
         self.approx_configs = ()
         self.features_tabulate = features_tabulate
         self.received_cfg = None
+        self.declines = {}
 
     def _has_modern_approx(self):
         return False
+
+    def record_decline(self, name, slot, reason):
+        """Record a gate's refusal, as ``SEDModel.record_decline`` does (#3561)."""
+        self.declines[(name, slot)] = reason
+
+    def band_table_decline(self, name, slot):
+        reason = self.declines.get((name, slot))
+        return None if reason is None else _StubDecline(reason)
 
     def with_approx(self, cfg):
         cfgs = cfg if isinstance(cfg, tuple) else (cfg,)
         if any(isinstance(c, FeaturePrecomp) for c in cfgs) and not self.features_tabulate:
             # The real contract: a backend with nothing to tabulate raises
-            # (measured: neb='none' -> ValueError); the raise IS the detection.
-            raise ValueError("no emission lines to tabulate")
+            # (measured: neb='none' -> PrecomputeRefusal, #3561); that refusal IS the detection.
+            raise PrecomputeRefusal("no emission lines to tabulate")
         new = _StubModel(features_tabulate=self.features_tabulate)
         new.received_cfg = cfg
         return new
@@ -62,6 +77,7 @@ class _StubFitterSelf:
     _line_fluxes_for = Fitter._line_fluxes_for
     _fits_line_fluxes = Fitter._fits_line_fluxes
     _fits_lines = Fitter._fits_lines
+    _feature_precomp_has_lines = Fitter._feature_precomp_has_lines
     # The ratio/index exclusion is a module-level function, not a method, so
     # the stub does not mirror it. It reads observation.line_ratios /
     # .spectral_indices, which the stub model's observation does not define —
