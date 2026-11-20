@@ -10,6 +10,9 @@ pcigale does not normalize the curve: it applies ``10**(-0.4 * Av * att)`` with
 ``att(550 nm) = 1 + bump(550 nm)``. tengri normalizes every screen to
 k(5500 A) = 1, so ``tau_V`` keeps its meaning. The shape is therefore compared
 after dividing the pcigale curve by its own value at 550 nm.
+
+Skipped unless ``pcigale`` is installed (``pytest -m crossval``); the CI crossval
+environment does not carry it.
 """
 
 import jax.numpy as jnp
@@ -19,6 +22,8 @@ import pytest
 from tengri.components.dust.attenuation import power_law
 
 pytestmark = pytest.mark.crossval
+
+pytest.importorskip("pcigale")
 
 # Ultraviolet to near-infrared, above the Lyman limit that pcigale zeroes.
 WAVE_ANGSTROM = np.geomspace(1000.0, 22000.0, 64)
