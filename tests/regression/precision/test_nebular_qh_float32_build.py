@@ -368,7 +368,7 @@ log_age = np.asarray(ssp.ssp_lg_age_gyr) + 9.0
 tab = precompute_ionizing_params_table(
     wave, flux, lgmet, ssp_log_age_yr=log_age, max_log_age=8.0
 )
-for key in ("ionspec_table", "logqion_table", "seglum_table"):
+for key in ("ionspec_table", "logqion_table"):
     res["ion_" + key] = np.asarray(tab[key])
 np.savez(OUT, **res)
 print("WROTE", OUT, sorted(res))
@@ -382,12 +382,15 @@ _OFF_PLATFORM_RTOL = 1e-10
 
 
 def test_float64_tables_bit_identical_to_reference(tmp_path):
-    """With x64 on, the Cue ionizing tables are bit-identical to the pre-#2849 build.
+    """With x64 on, the Cue ionizing tables are bit-identical to their reference build.
 
     The reference is ``fixtures/nebular_qh_float64_unfixed.json``, written by
-    ``_BITWISE_CHILD`` on the pre-#2849 tree. Exact float64 agreement holds
-    because the power-of-two scale is exact and the log is taken in NumPy, as
-    before. Only the three tables this change touches are pinned, so unrelated
+    ``_BITWISE_CHILD``. ``ion_logqion_table`` is the pre-#2849 build: exact
+    float64 agreement holds because the power-of-two scale is exact and the log
+    is taken in NumPy, as before. ``ion_ionspec_table`` comes from the shape fit
+    and was re-pinned when the fit moved from SLSQP to the exact stationary point
+    (ionspec cache version 5): clamped shapes moved by up to 0.17, while the Q_H
+    table stayed bit-identical. Only these two tables are pinned, so unrelated
     changes to the model's spectrum do not move the reference.
 
     Exactness is asserted on the platform that wrote the reference (its

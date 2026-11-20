@@ -7,8 +7,9 @@ parameters. It equals Li et al. 2025 (ApJ 986, 9, arXiv:2405.04598), Table 1,
 except index3 [-1, 14] (paper -1.1) and logLratio1 [-1, 10.1] (paper -0.1); the
 paper's own AGN coverage (alpha 1.2-2, logLratio1 -0.86 to -0.26) needs the code
 values. tengri clamps the SSP-derived shape to that box before the
-network with a straight-through clamp and warns at build when an SSP's young
-composite shape leaves it. Tolerance: the table values are exact; in-range
+network with a straight-through clamp and warns at build when an SSP row that carries
+ionizing photons (>= 1% of a constant-SFR population's Q_H at its metallicity) has a
+shape parameter clamped to its bound. Tolerance: the table values are exact; in-range
 output is bit-identical (``==``).
 """
 
@@ -30,6 +31,7 @@ from tengri.components.nebular.ionizing_spectrum import (
     clamp_ionspec_straight_through,
 )
 from tengri.config.exceptions import CueIonizingShapeWarning
+from tests._cue_lnu import cue_lnu_age_ion
 
 pytestmark = pytest.mark.regression_paper
 
@@ -96,8 +98,9 @@ def test_dense_fsps_does_not_warn_and_weighted_shape_is_unclamped():
     ages = np.asarray(be._ssp_log_age_yr)
     w = jnp.asarray(np.where(ages <= 7.5, np.gradient(10.0**ages), 0.0))
     kw = dict(neb_logU=-2.0)
-    raw = be._weighted_cue_params_raw(w, jnp.asarray(ages), -1.7)
-    out = be._compute_weighted_cue_params(w, jnp.asarray(ages), -1.7, **kw)
+    lnu = cue_lnu_age_ion(ssp, w, -1.7)
+    raw = be._weighted_cue_params_raw(w, jnp.asarray(ages), -1.7, ssp_lnu_ion=lnu)
+    out = be._compute_weighted_cue_params(w, jnp.asarray(ages), -1.7, ssp_lnu_ion=lnu, **kw)
     for k in _TABLE_1:
         assert float(out[k]) == float(raw[k])
     # neb_logU reaches Cue as gas_logu through the clamped wrapper
@@ -110,7 +113,8 @@ def test_out_of_box_shape_warns_and_is_clamped():
     wave = np.asarray(ssp.ssp_wave)
     flux = np.array(ssp.ssp_flux)
     flux[..., wave < 504.0] *= 1e-40  # segments 1-2 vanish: logLratio3 explodes
-    be, caught = _shape_warnings(ssp._replace(ssp_flux=jnp.asarray(flux)))
+    bad = ssp._replace(ssp_flux=jnp.asarray(flux))
+    be, caught = _shape_warnings(bad)
     assert len(caught) == 1
     msg = str(caught[0].message)
     assert "ionspec_logLratio3" in msg
@@ -118,8 +122,9 @@ def test_out_of_box_shape_warns_and_is_clamped():
     assert "fsps_mist_c3k_a_chabrier" in msg
     ages = np.asarray(be._ssp_log_age_yr)
     w = jnp.asarray(np.where(ages <= 7.5, np.gradient(10.0**ages), 0.0))
-    raw = be._weighted_cue_params_raw(w, jnp.asarray(ages), -1.7)
-    out = be._compute_weighted_cue_params(w, jnp.asarray(ages), -1.7)
+    lnu = cue_lnu_age_ion(bad, w, -1.7)
+    raw = be._weighted_cue_params_raw(w, jnp.asarray(ages), -1.7, ssp_lnu_ion=lnu)
+    out = be._compute_weighted_cue_params(w, jnp.asarray(ages), -1.7, ssp_lnu_ion=lnu)
     assert float(raw["ionspec_logLratio3"]) > _TABLE_1["ionspec_logLratio3"][1]
     assert float(out["ionspec_logLratio3"]) == _TABLE_1["ionspec_logLratio3"][1]
 

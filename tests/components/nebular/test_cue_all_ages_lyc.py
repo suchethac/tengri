@@ -27,6 +27,7 @@ import pytest
 from tengri import DEFAULT, FREE, Fixed, Observation, Photometry, SEDModel
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.cosmology import age_at_z
+from tests._cue_lnu import cue_lnu_age_ion
 from tests._old_lyc_ssp import FSPS_PRSC, ssp_with_old_lyc
 
 _HALPHA_AA = 6564.61
@@ -53,23 +54,28 @@ _QUENCHED = (0.3, 10.0)
 #: the spectra'). Q_H moved by -5.7e-5, -9.1e-5 and -9.0e-5 relative; Halpha unchanged. PCHIP-only
 #: confirmed: with the metallicity read reverted to main's Hermite weights (control tree) these
 #: three Q_H values reproduce the main pins within 1e-5.
+#: Halpha re-pinned 2026-11-16: Cue's ionizing shape is the four-segment fit of the counted
+#: ages' summed spectrum (Li et al. 2025, Sec. VI.4), not the luminosity-weighted mean of the
+#: per-age slopes. Halpha moved by -0.141, -0.140, -0.140 and -0.140 % (old: 9.566780466105229e29,
+#: 1.1611200717310071e39, 4.5446609399766484e42, 8.968849307789703e40); Q_H is unchanged.
 _CUT_BASELINE = {
-    (0.3, 10.0): (9.566780466105229e29, 5.022708261307399e50),
-    (1.0, 10.0): (1.1611200717310071e39, 1.3491399391532043e51),
-    (3.0, 1.0): (4.5446609399766484e42, 3.316081435046156e54),
-    (1.0, 5.0): (8.968849307789703e40, 6.59186374342154e52),
+    (0.3, 10.0): (9.553305693376621e29, 5.022708261307399e50),
+    (1.0, 10.0): (1.1594931978863514e39, 1.3491399391532043e51),
+    (3.0, 1.0): (4.5383156915765114e42, 3.316081435046156e54),
+    (1.0, 5.0): (8.956282459558719e40, 6.59186374342154e52),
 }
-#: Combine output of the cut at the last case above (tau = 1, age = 5): frozen from the tree
-#: before the change, float64 arithmetic.
+#: Combine output of the cut at the last case above (tau = 1, age = 5), float64: the shape is
+#: the composite fit (re-pinned 2026-11-16; the weighted-mean rule gave index1..4 = 22.010,
+#: 10.797, 6.447, 2.629 and logLratio1..3 = 2.623, 0.412, 0.663). gas_logqion is unchanged.
 _CUT_COMBINE = {
     "gas_logqion": 52.81579674083042,
-    "ionspec_index1": 22.010348216280047,
-    "ionspec_index2": 10.796958660763432,
-    "ionspec_index3": 6.447468707832534,
-    "ionspec_index4": 2.629120636340638,
-    "ionspec_logLratio1": 2.6227516560031034,
-    "ionspec_logLratio2": 0.41155866134053554,
-    "ionspec_logLratio3": 0.6628467330311736,
+    "ionspec_index1": 20.692083535901862,
+    "ionspec_index2": 9.882302525315282,
+    "ionspec_index3": 6.298561790569011,
+    "ionspec_index4": 2.3997647391898367,
+    "ionspec_logLratio1": 2.638200046390864,
+    "ionspec_logLratio2": 0.41472462812336097,
+    "ionspec_logLratio3": 0.6645987907998769,
 }
 
 pytestmark = pytest.mark.skipif(
@@ -167,10 +173,10 @@ def test_default_is_all_ages_and_explicit_all_is_identical():
 @pytest.mark.regression_bug
 @pytest.mark.parametrize("case", list(_CUT_BASELINE), ids=lambda c: f"tau{c[0]}_age{c[1]}")
 def test_cut_option_reproduces_the_100_myr_result(case):
-    """``lyc_max_age_yr=1e8`` gives the pre-change Halpha and Q_H, to float noise.
+    """``lyc_max_age_yr=1e8`` gives the pinned 100 Myr-cut Halpha and Q_H, to float noise.
 
-    Pinned from the unmodified tree. The quenched case is ~zero Halpha by construction
-    (the cut leaves only the exponential tail of the star formation).
+    Q_H is pinned from the tree before every age was counted. The quenched case is ~zero
+    Halpha by construction (the cut leaves only the exponential tail of the star formation).
     """
     halpha, q_h = _halpha_and_qh(_model(1.0e8), *case)
     want_halpha, want_q_h = _CUT_BASELINE[case]
@@ -178,18 +184,29 @@ def test_cut_option_reproduces_the_100_myr_result(case):
     assert q_h == pytest.approx(want_q_h, rel=1e-5)
 
 
+#: Platform the combine pins were recorded on. Exactness (1e-13) is asserted there;
+#: elsewhere XLA rounds the Newton fit and its logs differently in the last bits (as
+#: the band-table parity goldens record), so the pins hold to 1e-9.
+_CAPTURE_PLATFORM = "darwin-arm64"
+
+
 @pytest.mark.regression_bug
-def test_cut_option_combine_is_bit_identical_to_the_old_arithmetic():
-    """The float64 Q_H and shape combine under the cut equal the frozen pre-change values."""
+def test_cut_option_combine_pins_the_composite_fit_under_the_cut():
+    """The float64 Q_H and shape combine under the cut equal the pinned composite-fit values."""
+    from tests.contract._band_table_capture import current_platform
+
+    tol = 1e-13 if current_platform() == _CAPTURE_PLATFORM else 1e-9
     model = _model(1.0e8)
     derived = model.predict_state(_params(1.0, 5.0)).derived
+    weights = jnp.asarray(derived["age_weights"])
     got = model._nebular_backend._compute_weighted_cue_params(
-        jnp.asarray(derived["age_weights"]),
+        weights,
         jnp.log10(jnp.asarray(derived["ssp_ages_yr"])),
         _LOG_Z_ABS,
+        ssp_lnu_ion=cue_lnu_age_ion(_ssp(), weights, _LOG_Z_ABS),
     )
     for key, want in _CUT_COMBINE.items():
-        assert float(got[key]) == pytest.approx(want, rel=1e-13, abs=1e-13), key
+        assert float(got[key]) == pytest.approx(want, rel=tol, abs=tol), key
 
 
 @pytest.mark.regression_bug
@@ -208,12 +225,15 @@ def test_quenched_population_has_emission_by_default_and_none_under_the_cut():
 #: The two 1 Gyr values were re-pinned after the Cue float64 move (float32 Cue gave
 #: 4.6171e-07 and 8.5761e-07). They are differences of two Halpha values that each move by
 #: ~3e-6 relative, so they sit at the Cue rounding floor; the < 0.5% bound is the physics.
+#: Re-pinned 2026-11-16 with the composite-fit shape (old: 1.39e-6, 2.46e-6, 1.22e-3; mixed
+#: 7.43e-3). The young cases now move by ~1.2e-4: old post-AGB stars carry a negligible share
+#: of Q_H but set the hard (HeII) end of the summed spectrum the shape is fitted to.
 _YOUNG_SF_CHANGE = {
-    (3.0, 1.0): 1.3909137182022135e-06,
-    (1.0, 1.0): 2.459933101217615e-06,
-    (3.0, 5.0): 0.0012222082098272136,
+    (3.0, 1.0): 0.00011721516460450054,
+    (1.0, 1.0): 0.00013072529259194887,
+    (3.0, 5.0): 0.0010295707385401531,
 }
-_MIXED_CHANGE = {(1.0, 5.0): 0.00742887834618533}
+_MIXED_CHANGE = {(1.0, 5.0): 0.007232463116588983}
 
 
 def _change_from_the_cut(case):
@@ -269,10 +289,14 @@ def test_combine_gradient_wrt_weights_is_finite_with_zero_weight_bins():
     weights = jnp.asarray(derived["age_weights"])
 
     def gas_qion(w):
-        return backend._compute_weighted_cue_params(w, log_ages, _LOG_Z_ABS)["gas_logqion"]
+        return backend._compute_weighted_cue_params(
+            w, log_ages, _LOG_Z_ABS, ssp_lnu_ion=cue_lnu_age_ion(_ssp(), w, _LOG_Z_ABS)
+        )["gas_logqion"]
 
     def shape_index(w):
-        return backend._compute_weighted_cue_params(w, log_ages, _LOG_Z_ABS)["ionspec_index4"]
+        return backend._compute_weighted_cue_params(
+            w, log_ages, _LOG_Z_ABS, ssp_lnu_ion=cue_lnu_age_ion(_ssp(), w, _LOG_Z_ABS)
+        )["ionspec_index4"]
 
     for fn in (gas_qion, shape_index):
         g = np.asarray(jax.grad(fn)(weights))
@@ -291,10 +315,12 @@ def test_cue_qh_and_stellar_log_nion_are_the_same_quantity(case):
     """
     model = _model()
     derived = model.predict_state(_params(*case)).derived
+    weights = jnp.asarray(derived["age_weights"])
     got = model._nebular_backend._compute_weighted_cue_params(
-        jnp.asarray(derived["age_weights"]),
+        weights,
         jnp.log10(jnp.asarray(derived["ssp_ages_yr"])),
         _LOG_Z_ABS,
+        ssp_lnu_ion=cue_lnu_age_ion(_ssp(), weights, _LOG_Z_ABS),
     )["gas_logqion"]
     assert float(got) == pytest.approx(float(derived["log_nion"]), abs=0.02)
 
@@ -319,7 +345,9 @@ def test_empty_population_gets_no_emission_and_a_finite_gradient():
     )
 
     def combine(w):
-        return backend._compute_weighted_cue_params(w, log_ages, _LOG_Z_ABS)
+        return backend._compute_weighted_cue_params(
+            w, log_ages, _LOG_Z_ABS, ssp_lnu_ion=cue_lnu_age_ion(_ssp(), w, _LOG_Z_ABS)
+        )
 
     zeros = jnp.zeros(log_ages.shape)
     out = combine(zeros)

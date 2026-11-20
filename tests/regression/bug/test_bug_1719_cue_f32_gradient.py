@@ -23,6 +23,7 @@ import pytest
 
 from tengri import load_ssp_data
 from tengri.components.nebular.cue import CueBackend
+from tests._cue_lnu import cue_lnu_age_ion
 
 pytestmark = pytest.mark.regression_bug
 
@@ -53,13 +54,18 @@ def test_f32_gradient_finite_on_degenerate_input():
 
     # Compute reference f64 first (outside f32 context)
     be64 = CueBackend(_CUE_WEIGHTS, ssp_data=ssp)
-    n_age = 20
+    n_age = len(np.asarray(be64._ssp_log_age_yr))
     # Degenerate: all weights are ZERO, so all log terms become -inf
     ssp_weights_f64 = jnp.zeros(n_age)
-    ssp_log_ages = np.log10(np.linspace(1e6, 1.3e10, n_age))
+    ssp_log_ages = np.asarray(be64._ssp_log_age_yr)
     log_z = -2.0
 
-    result_f64 = be64._compute_weighted_cue_params(ssp_weights_f64, ssp_log_ages, log_z)
+    result_f64 = be64._compute_weighted_cue_params(
+        ssp_weights_f64,
+        ssp_log_ages,
+        log_z,
+        ssp_lnu_ion=cue_lnu_age_ion(ssp, ssp_weights_f64, log_z),
+    )
     gas_logqion_f64 = result_f64["gas_logqion"]
 
     # Now test f32 gradient
@@ -74,7 +80,12 @@ def test_f32_gradient_finite_on_degenerate_input():
 
         def loss_fn(w):
             """Surrogate loss: just call _compute_weighted_cue_params."""
-            result = be32._compute_weighted_cue_params(w, ssp_log_ages_f32, log_z)
+            result = be32._compute_weighted_cue_params(
+                w,
+                ssp_log_ages_f32,
+                log_z,
+                ssp_lnu_ion=cue_lnu_age_ion(ssp, w, log_z),
+            )
             return result["gas_logqion"]
 
         # Compute gradient w.r.t. weights
@@ -104,13 +115,18 @@ def test_f64_guarded_expression_matches_unguarded_on_finite():
     ssp = _load_ssp()
     be64 = CueBackend(_CUE_WEIGHTS, ssp_data=ssp)
 
-    n_age = 20
+    n_age = len(np.asarray(be64._ssp_log_age_yr))
     ssp_weights = jnp.ones(n_age) / n_age
-    ssp_log_ages = np.log10(np.linspace(1e6, 1.3e10, n_age))
+    ssp_log_ages = np.asarray(be64._ssp_log_age_yr)
     log_z = -2.0
 
     # Compute a result to verify gradient
-    result = be64._compute_weighted_cue_params(ssp_weights, ssp_log_ages, log_z)
+    result = be64._compute_weighted_cue_params(
+        ssp_weights,
+        ssp_log_ages,
+        log_z,
+        ssp_lnu_ion=cue_lnu_age_ion(ssp, ssp_weights, log_z),
+    )
     gas_logqion = result["gas_logqion"]
     i7 = jnp.array(
         [
@@ -130,7 +146,12 @@ def test_f64_guarded_expression_matches_unguarded_on_finite():
 
     # Compute a gradient to verify smooth differentiation
     def loss_fn(w):
-        result = be64._compute_weighted_cue_params(w, ssp_log_ages, log_z)
+        result = be64._compute_weighted_cue_params(
+            w,
+            ssp_log_ages,
+            log_z,
+            ssp_lnu_ion=cue_lnu_age_ion(ssp, w, log_z),
+        )
         return jnp.sum(result["gas_logqion"])
 
     grad = jax.grad(loss_fn)(ssp_weights)

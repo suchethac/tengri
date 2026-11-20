@@ -158,9 +158,13 @@ def test_absolute_mode_compares_gas_logno_directly():
 #: line moves by the float32-to-float64 weight rounding, +5.6e-7 to +6.7e-7 relative at the
 #: cut (values before: 75.18923406031823, 28.4730570167633 at 0.0; 74.0586722765041,
 #: 19.449401607798606 at 0.3). Measured on this tree; the non-Cue paths are unchanged.
+#: Re-pinned 2026-11-16: Cue's ionizing shape is the four-segment fit of the counted ages'
+#: summed spectrum. H-beta moved -0.071 % (solar) and -0.093 % (0.3 Zsun); [N II] 6584 moved
+#: +2.90 % and +1.86 %, the harder composite shape (old values: [75.18929410578725,
+#: 28.47307308760556] and [74.0587312723305, 19.449414612749163]).
 _CUT_DEFAULT_FLUXES = {
-    0.0: [75.18929410578725, 28.47307308760556],
-    math.log10(0.3): [74.0587312723305, 19.449414612749163],
+    0.0: [75.13640947882801, 29.29754592977148],
+    math.log10(0.3): [73.98913466512727, 19.810888582499906],
 }
 
 #: The same fluxes with every stellar age counted (the default). This SFH forms stars
@@ -171,23 +175,38 @@ _CUT_DEFAULT_FLUXES = {
 #: is 6e-9 relative on the float32 Cue and 2e-7 on float64. The float64 value is recorded
 #: as measured; it is not separately attributed to the old-star photon share above.
 _ALL_AGES_DEFAULT_FLUXES = {
-    0.0: [75.18930949034029, 28.47308156964249],
-    math.log10(0.3): [74.05874646246772, 19.449420016537523],
+    0.0: [75.1364248834525, 29.297553642924388],
+    math.log10(0.3): [73.9891498838373, 19.81089363013963],
 }
 
 
+#: Platform the composite-fit fluxes above were recorded on. Exactness (rtol 1e-12) is
+#: asserted there; elsewhere XLA rounds the same Newton fit and its logs differently in
+#: the last bits (as the band-table parity goldens record), so the pins hold to 1e-7,
+#: still far inside the 1e-2 the composite fit moved them by.
+_CAPTURE_PLATFORM = "darwin-arm64"
+
+
+def _pin_rtol():
+    from tests.contract._band_table_capture import current_platform
+
+    return 1e-12 if current_platform() == _CAPTURE_PLATFORM else 1e-7
+
+
 @pytest.mark.parametrize("log_z", sorted(_CUT_DEFAULT_FLUXES))
-def test_cut_is_bit_identical_to_origin_main(log_z):
-    """``lyc_max_age_yr=1e8`` leaves Cue exactly as it was before every age was counted."""
+def test_cut_is_pinned(log_z):
+    """``lyc_max_age_yr=1e8`` reproduces the pinned fluxes of the 100 Myr cut."""
     flux = _line_fluxes("cue", log_z, lyc_max_age_yr=1.0e8)
-    np.testing.assert_allclose(flux, _CUT_DEFAULT_FLUXES[log_z], rtol=1e-12, atol=0)
+    np.testing.assert_allclose(flux, _CUT_DEFAULT_FLUXES[log_z], rtol=_pin_rtol(), atol=0)
 
 
 @pytest.mark.parametrize("log_z", sorted(_ALL_AGES_DEFAULT_FLUXES))
 def test_default_counts_every_age(log_z):
     """The default (nitrogen='absolute', every age counted) is pinned."""
     flux = _line_fluxes("cue", log_z)
-    np.testing.assert_allclose(flux, _ALL_AGES_DEFAULT_FLUXES[log_z], rtol=1e-9, atol=0)
+    np.testing.assert_allclose(
+        flux, _ALL_AGES_DEFAULT_FLUXES[log_z], rtol=max(_pin_rtol(), 1e-9), atol=0
+    )
 
 
 @pytest.mark.parametrize("log_z", [0.0, math.log10(0.3)])

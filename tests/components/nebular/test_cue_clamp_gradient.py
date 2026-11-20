@@ -31,6 +31,7 @@ from tengri.components.nebular.ionizing_spectrum import (
     IONSPEC_NAMES,
     clamp_ionspec_straight_through,
 )
+from tests._cue_lnu import cue_lnu_age_ion
 
 pytestmark = pytest.mark.gradient
 
@@ -129,7 +130,8 @@ def test_clamped_weighted_shape_jacobian_is_finite(synthetic_ssp_wide):
     log_z = float(jnp.asarray(synthetic_ssp_wide.ssp_lgmet)[1])
 
     def stack(method, w):
-        out = getattr(be, method)(w, log_age, log_z)
+        lnu = cue_lnu_age_ion(synthetic_ssp_wide, w, log_z)
+        out = getattr(be, method)(w, log_age, log_z, ssp_lnu_ion=lnu)
         return jnp.stack([out[k] for k in IONSPEC_NAMES])
 
     raw = np.asarray(stack("_weighted_cue_params_raw", w0))

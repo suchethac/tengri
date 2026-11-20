@@ -99,6 +99,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tests._cue_lnu import cue_lnu_age_ion
 from tests._data_skip import (
     CB19_TEMPLATES,
     CLOUDY_GRID_MIST,
@@ -237,10 +238,16 @@ _LOGU_ROWS = [
 
 
 @pytest.mark.parametrize(("backend_fixture", "logU", "eps"), _LOGU_ROWS)
-def test_logu_gradient_matches_finite_difference(request, neb_inputs, backend_fixture, logU, eps):
+def test_logu_gradient_matches_finite_difference(
+    request, neb_inputs, ssp_data_fsps, backend_fixture, logU, eps
+):
     """AD == FD for d(total nebular SED)/d(neb_logU), and the response is real."""
     backend = request.getfixturevalue(backend_fixture)
     ssp_wave, ssp_weights, ssp_log_ages = neb_inputs
+    # Only Cue reads the per-age ionizing spectrum; the other backends take weights alone.
+    extra = {}
+    if backend_fixture == "cue_backend":
+        extra["ssp_lnu_ion"] = cue_lnu_age_ion(ssp_data_fsps, ssp_weights, -1.848)
 
     def fn(neb_logU):
         return jnp.sum(
@@ -250,6 +257,7 @@ def test_logu_gradient_matches_finite_difference(request, neb_inputs, backend_fi
                 ssp_log_ages_yr=ssp_log_ages,
                 log_z=-1.848,
                 neb_logU=neb_logU,
+                **extra,
             )
         )
 
