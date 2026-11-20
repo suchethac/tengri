@@ -20,6 +20,7 @@ import warnings
 
 import pytest
 
+from tengri.config.exceptions import PrecomputeRefusal
 from tengri.forward.sed_model import SpectrumPrecomp, WavePrecomp
 from tengri.inference.hierarchical import PopulationFitter
 
@@ -34,6 +35,11 @@ class _StubApprox:
     def __init__(self, wave_precomp=False, spectrum_precomp=False):
         self.wave_precomp = wave_precomp
         self.spectrum_precomp = spectrum_precomp
+
+
+class _StubDecline:
+    def __init__(self, reason):
+        self.reason = reason
 
 
 class _StubModel:
@@ -56,6 +62,7 @@ class _StubModel:
         self.via_with_approx = via_with_approx
         self.features_tabulate = features_tabulate
         self.received_cfg = None
+        self.declines = {}
 
     def _spectrum_lut_serves_exactly(self, observation):
         return self._spectrum_serves_exactly
@@ -63,15 +70,23 @@ class _StubModel:
     def _fixed_sigma_v_kms(self):
         return None if not self._spectrum_serves_exactly else 150.0
 
+    def record_decline(self, name, slot, reason):
+        """Record a gate's refusal, as ``SEDModel.record_decline`` does (#3561)."""
+        self.declines[(name, slot)] = reason
+
+    def band_table_decline(self, name, slot):
+        reason = self.declines.get((name, slot))
+        return None if reason is None else _StubDecline(reason)
+
     def with_approx(self, cfg):
         from tengri.forward.sed_model import FeaturePrecomp
 
         cfgs = cfg if isinstance(cfg, tuple) else (cfg,)
         if any(isinstance(c, FeaturePrecomp) for c in cfgs) and not self.features_tabulate:
             # Mirrors the real contract: a backend with nothing to tabulate
-            # raises (measured: neb='none' -> ValueError "no emission lines
-            # to tabulate"), and that raise IS the detection mechanism.
-            raise ValueError("no emission lines to tabulate")
+            # raises PrecomputeRefusal (#3561: the one build-time refusal class,
+            # and the only exception approx='auto' treats as a decline).
+            raise PrecomputeRefusal("no emission lines to tabulate")
         new = _StubModel(wave_precomp=True, via_with_approx=True)
         new.received_cfg = cfg
         return new

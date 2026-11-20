@@ -1464,6 +1464,13 @@ def _quad_nodes(
     den_ok = den_edge > representable_denominator(1e-20)
     sigma_edge = jnp.where(den_ok, 1.0 / jnp.where(den_ok, den_edge, 1.0), jnp.nan)
     sigma_u = jnp.where(inside, sigma_in, sigma_edge)
+    # A far-off amplitude (a flux units mistake) makes the edge window narrower than the
+    # spacing of floats at ``center``: lo == hi, every trapezoid weight is 0 and the
+    # log-integral is -inf, so the MAP objective is inf at its start (#3403, #3546). The
+    # window keeps at least a few ulp of ``center`` so the integral stays finite.
+    ulp_floor = 4.0 * jnp.finfo(u_lo.dtype if hasattr(u_lo, "dtype") else jnp.float64).eps
+    ulp_floor = ulp_floor * jnp.maximum(1.0, jnp.abs(center))
+    sigma_u = jnp.maximum(sigma_u, ulp_floor / _QUAD_HALF_WIDTH_SIGMAS)
     lo = jnp.maximum(u_lo, center - _QUAD_HALF_WIDTH_SIGMAS * sigma_u)
     hi = jnp.minimum(u_hi, center + _QUAD_HALF_WIDTH_SIGMAS * sigma_u)
     u_nodes = jnp.linspace(lo, hi, quad_nodes)
