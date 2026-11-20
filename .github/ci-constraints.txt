@@ -15,8 +15,8 @@
 #
 # To move CI to a newer JAX, change both lines in one pull request labeled
 # `full-tests`, and re-measure any pin that fails before merging it.
-jax==0.12.0
-jaxlib==0.12.0
+jax==0.12.0.1
+jaxlib==0.12.0.1
 pyright==1.1.414
 # Toolchain versions a green main run (2026-11-07) resolved; Dependabot bumps them.
 numpy==2.5.4
